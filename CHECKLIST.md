@@ -46,12 +46,12 @@
 - [x] `4.4` Busca semântica no chat (RAG injeta contexto) — **verificado** (resposta só com o doc)
 - [x] `4.5` Memória de longo prazo (add/list/forget) — `/api/memory` + UI
 
-## Fase 5 — Voz
-- [ ] `5.1` `apps/voice` (serviço Python): STT faster-whisper
-- [ ] `5.2` TTS local humanizado (CosyVoice2/XTTS) + fallback nuvem
-- [ ] `5.3` Wake word "Ei Órbita" (openWakeWord)
-- [ ] `5.4` Pipeline de voz (STT→LLM→TTS) + barge-in
-- [ ] `5.5` Integração da voz com o Orb (estados reagindo à fala)
+## Fase 5 — Voz 🟡 (núcleo pronto)
+- [x] `5.1` `apps/voice` (FastAPI): **STT faster-whisper** — **verificado** (WAV → transcrição exata pt-BR)
+- [~] `5.2` TTS: **navegador (Web Speech)** funcionando; local Python (CosyVoice/XTTS) pendente
+- [ ] `5.3` Wake word "Ei Órbita" (openWakeWord) — pendente (modelo + mic always-on)
+- [~] `5.4` Pipeline STT→LLM→TTS (push-to-talk) funcionando; barge-in pendente
+- [x] `5.5` Orb reage à voz (listening ao gravar, speaking ao falar)
 
 ## Fase 6 — Conectores (NexConnect)
 - [ ] `6.1` Hub MCP + contrato de conector
@@ -79,4 +79,5 @@
 - _2026-07-18_ — **Fase 2 concluída**: `packages/llm` (Local/Gateway/Claude Max) + auto-router + `/api/chat` streaming + UI de chat. Verificado e2e: chat real com **Qwen 2.5 local**, streaming ao vivo, persistido no Postgres. Commit `b7c8de4`.
 - _2026-07-18_ — **Fase 3 concluída**: console ÓRBITA completo — **Orb Jarvis em React** (verificado, estado "speaking" ao responder), rails + seletor de provedor + painel de sessão/custo. typecheck limpo. Commit `d709d6d`.
 - _2026-07-18_ — **Fase 4 concluída**: RAG com pgvector + embeddings Ollama, ingestão/chunking, memória (add/forget), contexto no chat. Verificado: doc → resposta usando só o doc. OCR fica pra quando entrar upload de arquivo. Commit `1397da7`.
-- **Próximo:** Fase 5 — Voz (serviço Python: STT faster-whisper + TTS + wake word).
+- _2026-07-18_ — **Fase 5 (núcleo)**: STT local faster-whisper verificado, mic→chat→TTS(navegador), Orb reage. Pendentes: wake word, TTS local, barge-in. Commit `b8471e3`.
+- **Próximo:** Fase 6 — Tool-calling (completa 2.7) + framework de conectores (Gmail/Calendar gated em OAuth).
