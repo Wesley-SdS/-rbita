@@ -1,8 +1,16 @@
 # ÓRBITA — Assistente Pessoal de IA
 
-Assistente pessoal **local-first**: chat com IA rodando na sua máquina (Qwen 2.5 via Ollama), voz (STT local + TTS), memória/RAG com pgvector, núcleo neural holográfico estilo Jarvis, e seletor de provedor (Local / Vercel AI Gateway / Claude Max).
+Assistente pessoal **local-first** estilo Jarvis, operado por voz. Chat com IA na sua máquina (Qwen 2.5 via Ollama), núcleo neural holográfico, e seletor de provedor (Local / Vercel AI Gateway / Claude Max).
 
-> Monorepo pnpm/Turborepo · Next.js 16 · Better Auth · Drizzle/Postgres+pgvector · AI SDK 7 · FastAPI (voz).
+> Monorepo pnpm/Turborepo · Next.js 16 · Better Auth · Drizzle/Postgres+pgvector · AI SDK 7 · FastAPI (voz) · Expo (mobile).
+
+## Recursos
+- **Voz**: wake word **"Ei Órbita"** (Vosk), STT local (faster-whisper), **TTS local** (Piper pt-BR), **conversa mãos-livres** com barge-in, e **tempo real premium** (OpenAI Realtime, opcional). Enviar áudio → transcrição (fallback AssemblyAI).
+- **Memória & RAG** (pgvector): documentos, memória de longo prazo (add + **"esquece isso"**), **grafo de conhecimento**, busca semântica com citação de fonte.
+- **Conectores** (OAuth, tokens criptografados AES-256-GCM): Gmail, Google Agenda, Notion, Slack, WhatsApp. **Ações com efeito só executam após você aprovar** no painel (gate anti prompt-injection).
+- **Finanças**: gastos + contas a pagar/receber + saldo, **comprovante por foto → OCR → cadastro**, **importar extrato PDF**, alertas de vencimento.
+- **Produtividade**: to-do list (com imagem), transcrição de reunião → resumo, rotinas proativas + notificações, **dashboard/insights**.
+- **Ver a tela** (modelo de visão) · **acessar pastas** (indexa no RAG) · **PWA instalável** · **app mobile** (Expo, com voz).
 
 ## Pré-requisitos
 - **Node 20+** e **pnpm 11+**
@@ -70,10 +78,14 @@ Variáveis opcionais (Gateway/Claude/OAuth) podem ir num `.env` na raiz — o co
 orbita/
 ├─ apps/
 │  ├─ web/     Next.js 16 (UI + API + Orb) — app principal
-│  └─ voice/   FastAPI (STT faster-whisper)
+│  ├─ mobile/  Expo (iOS/Android): chat + voz — npm próprio
+│  └─ voice/   FastAPI: STT (faster-whisper) + TTS (Piper) + wake word (Vosk)
 ├─ packages/
-│  └─ llm/     provider layer (Local/Gateway/Claude) + embeddings
+│  └─ llm/     provider layer (Local/Gateway/Claude) + embeddings + visão
 └─ docker-compose.yml
 ```
+
+O app mobile é gerenciado por npm próprio (Metro não convive com os symlinks do pnpm):
+`cd apps/mobile && npm install && npm start`. Aponta para o mesmo backend (configure o IP em ⚙).
 
 Progresso do desenvolvimento em [`CHECKLIST.md`](./CHECKLIST.md).

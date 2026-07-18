@@ -112,3 +112,12 @@
 - [x] **Dashboard financeiro completo (estilo OrbitFinance)** — `expense` expandida (kind expense/payable/receivable + vencimento + pago), `/api/finance` (CRUD + totais: gastos/a pagar/a receber/saldo projetado), `FinancePanel`. Tools `adicionar_conta`, `resumo_financeiro_completo`. **Verificado** (a pagar R$1.500, a receber R$3.000, saldo R$1.500).
 - [x] **Comprovante/cupom → OCR → cadastro automático** — `/api/finance/receipt`: imagem → OCR (tesseract pt+en) → LLM extrai {descrição, valor, categoria, tipo, vencimento} → cadastra. **Verificado e2e** (cupom R$67,70 → cadastrado como gasto "Alimentos e Bebidas"). **Fix**: worker do tesseract.js não resolvia no Next/Turbopack (afetava também `/api/upload`) → `lib/ocr.ts` (workerPath robusto) + `serverExternalPackages`.
 - [x] **To-do list (com imagens)** — tabela `todo` (texto/done/vencimento/imagem data URL), `/api/todos` (CRUD), `TodoPanel` (anexar imagem), tools `adicionar_tarefa`/`listar_tarefas`. **Verificado**.
+
+## Auditoria completa vs PRD ✅ (4 auditores independentes + correções)
+Auditoria por 4 subagentes (segurança/LGPD, provider, voz/mobile, RAG/skills) contra o PRD. **Gaps resolvidos e verificados:**
+- **Segurança:** gate humano p/ ações destrutivas (fila `action_queue` + `/api/actions` — LLM só propõe, usuário aprova na UI; prompt-injection não dispara mais envio — **verificado**); export LGPD completo (+todo/routine/notif/conectores); escopo Google → `calendar.events`; SYSTEM_PROMPT anti-injection reforçado.
+- **Voz:** **bug crítico de barge-in corrigido** (LocalTTS.stop resolvia a Promise → mode preso em "speaking"); conversa contínua (re-arma escuta); eventos Realtime GA.
+- **Provider (Claude Max):** `authToken` (fim do `x-api-key:""`); identidade Claude Code no system; AUTO billing `variable`; regex do router com word-boundary.
+- **RAG/finanças:** `esquecer_memoria` (forget) + `contas_a_vencer` (alertas) + **importar extrato PDF** (`/api/finance/statement`); grafo com CTE (fim do O(n²)); OCR standalone (cachePath + Dockerfile); ingest/retrieve robustos.
+- **Mobile:** **paridade de áudio** (expo-av: gravar→STT + falar resposta via /api/tts) — resolve "tudo igual no mobile".
+- **Pendências menores conhecidas:** sync/histórico e seletor de modelo na UI mobile; reautenticação p/ apagar conta; `CONNECTORS_ENC_KEY` distinto em prod (documentar).
