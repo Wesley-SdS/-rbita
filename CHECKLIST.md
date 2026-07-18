@@ -22,14 +22,14 @@
 - [~] `1.5` Login social Google — **wired** (condicional, atrás de env); falta testar c/ credenciais reais
 - [x] `1.6` Página protegida `/app` (redirect via server session)
 
-## Fase 2 — Provider layer (Local / Gateway / Claude Max)
-- [ ] `2.1` `packages/llm` — registry de modelos (base do Vektus `providers.ts`)
-- [ ] `2.2` Adaptador **Local** (Ollama/Qwen 2.5 via AI SDK)
-- [ ] `2.3` Adaptador **Vercel AI Gateway** (BYOK)
-- [ ] `2.4` Adaptador **Claude Max** (Agent SDK / OAuth token)
-- [ ] `2.5` Catálogo de modelos (label, tier, custo, capacidades)
-- [ ] `2.6` Roteador (auto: local→max→gateway) + fallback
-- [ ] `2.7` Endpoint `/api/chat` streaming real (SSE) com tool-calling
+## Fase 2 — Provider layer (Local / Gateway / Claude Max) ✅
+- [x] `2.1` `packages/llm` — registry de modelos + resolver
+- [x] `2.2` Adaptador **Local** (Ollama/Qwen 2.5) — **verificado** (streaming real)
+- [x] `2.3` Adaptador **Vercel AI Gateway** (BYOK) — real, oculto até `AI_GATEWAY_API_KEY`
+- [x] `2.4` Adaptador **Claude Max** (OAuth token) — real, oculto até `CLAUDE_CODE_OAUTH_TOKEN`
+- [x] `2.5` Catálogo de modelos (label, tier, billing, custo)
+- [x] `2.6` Auto-router (complexidade: local→Max→Gateway) + fallback pro local — **verificado**
+- [x] `2.7` `/api/chat` streaming (AI SDK 7) autenticado + persistência _(tool-calling entra na Fase 6 c/ conectores)_
 
 ## Fase 3 — UI do app + Orb
 - [ ] `3.1` Layout do app (rails, stage, composer) — do protótipo
@@ -76,4 +76,5 @@
 - _2026-07-18_ — checklist criado; ambiente validado (Node 22, pnpm 11, Docker 29, Ollama+Qwen2.5).
 - _2026-07-18_ — **Fase 0 concluída**: monorepo + Next 16.2.10 + Postgres/pgvector (Docker) + Drizzle migration + `/api/health` OK + home renderizando (verificado por headless). Versões confirmadas: Next 16.2.10, Better Auth 1.6.23, AI SDK 7.0.31, React 19.2, Drizzle 0.45. Commit `5456f85`.
 - _2026-07-18_ — **Fase 1 concluída**: Better Auth 1.6.23 (email/senha) + sessões + `/app` protegida. Verificado e2e (signup pela UI → /app; usuário persistido no Postgres). Google OAuth wired (atrás de env). Commit `b81f217`.
-- **Próximo:** Fase 2 — Provider layer (Local/Gateway/Claude Max) + `/api/chat` streaming com Qwen 2.5.
+- _2026-07-18_ — **Fase 2 concluída**: `packages/llm` (Local/Gateway/Claude Max) + auto-router + `/api/chat` streaming + UI de chat. Verificado e2e: chat real com **Qwen 2.5 local**, streaming ao vivo, persistido no Postgres. Commit `b7c8de4`.
+- **Próximo:** Fase 3 — UI do app completa (layout do protótipo) + **Orb (núcleo neural Jarvis)** + painel de sessão/energia/custo.
