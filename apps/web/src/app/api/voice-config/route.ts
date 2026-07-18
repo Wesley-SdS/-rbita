@@ -18,17 +18,17 @@ export async function GET() {
   const httpBase = process.env.VOICE_URL ?? "http://localhost:8001";
 
   let up = false;
-  let wakeModel = "hey_jarvis";
+  let wakePhrase = "Ei Órbita";
   try {
     const res = await fetch(httpBase + "/health", { signal: AbortSignal.timeout(1500) });
     if (res.ok) {
       up = true;
       const h = await res.json().catch(() => ({}));
-      wakeModel = h.wake_model ?? wakeModel;
+      wakePhrase = h.wake_phrase ?? wakePhrase;
     }
   } catch {
     up = false;
   }
 
-  return Response.json({ up, wsWakeUrl: `${wsBase}/ws/wake`, wakeModel });
+  return Response.json({ up, wsWakeUrl: `${wsBase}/ws/wake`, wakePhrase });
 }

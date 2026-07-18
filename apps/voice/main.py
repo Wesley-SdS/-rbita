@@ -2,14 +2,16 @@
 
 - STT: faster-whisper (pt-BR).
 - TTS: Piper (local, pt-BR, licença MIT — humanizado e leve, roda em CPU).
-- Wake word: openWakeWord via WebSocket (modelo pré-treinado "hey jarvis";
-  treinar "Ei Órbita" é opcional — ver README).
+- Wake word "Ei Órbita" / "Órbita": Vosk (STT offline pt-BR leve) com gramática
+  restrita à frase-gatilho — detecta a expressão exata sem treinar modelo.
 """
 import io
+import json
 import os
 import tempfile
 import urllib.request
 import wave
+import zipfile
 
 from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -94,21 +96,38 @@ def _synthesize_wav(text: str, length_scale: float | None) -> bytes:
 
 
 # ══════════════════════════ Wake word ══════════════════════════
-_oww = None
-WAKE_MODEL = os.environ.get("WAKE_MODEL", "hey_jarvis")
-WAKE_THRESHOLD = float(os.environ.get("WAKE_THRESHOLD", "0.5"))
+# "Ei Órbita" / "Órbita" via Vosk: gramática restrita à frase, sem treinar modelo.
+_vosk_model = None
+WAKE_TRIGGER = os.environ.get("WAKE_TRIGGER", "orbita")  # termo que dispara (sem acento)
+WAKE_GRAMMAR = os.environ.get("WAKE_GRAMMAR", '["ei orbita", "orbita", "[unk]"]')
+# confiança mínima da palavra-gatilho (evita falso positivo — verificado: fala real
+# de "órbita" fica ~0.97-0.99; outras frases caem em "[unk]" com órbita=0).
+WAKE_MIN_CONF = float(os.environ.get("WAKE_MIN_CONF", "0.7"))
+VOSK_MODEL_NAME = os.environ.get("VOSK_MODEL", "vosk-model-small-pt-0.3")
+VOSK_MODEL_URL = os.environ.get(
+    "VOSK_MODEL_URL", "https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip"
+)
 
 
-def get_oww():
-    global _oww
-    if _oww is None:
-        from openwakeword.model import Model
-        import openwakeword.utils
+def _ensure_vosk_model() -> str:
+    path = os.path.join(MODELS_DIR, VOSK_MODEL_NAME)
+    if not os.path.isdir(path):
+        zp = os.path.join(MODELS_DIR, "vosk-model.zip")
+        urllib.request.urlretrieve(VOSK_MODEL_URL, zp)
+        with zipfile.ZipFile(zp) as z:
+            z.extractall(MODELS_DIR)
+        os.remove(zp)
+    return path
 
-        # baixa os modelos base (melspectrogram + embedding) e os pré-treinados
-        openwakeword.utils.download_models()
-        _oww = Model(wakeword_models=[WAKE_MODEL], inference_framework="onnx")
-    return _oww
+
+def get_vosk():
+    global _vosk_model
+    if _vosk_model is None:
+        from vosk import Model, SetLogLevel
+
+        SetLogLevel(-1)
+        _vosk_model = Model(_ensure_vosk_model())
+    return _vosk_model
 
 
 # ══════════════════════════ Endpoints ══════════════════════════
@@ -118,8 +137,9 @@ def health() -> dict:
         "status": "ok",
         "stt": _whisper is not None,
         "tts": _piper is not None,
-        "wake": _oww is not None,
-        "wake_model": WAKE_MODEL,
+        "wake": _vosk_model is not None,
+        "wake_trigger": WAKE_TRIGGER,
+        "wake_phrase": "Ei Órbita / Órbita",
         "tts_voice": PIPER_VOICE,
     }
 
@@ -150,17 +170,24 @@ async def tts(req: TTSRequest) -> Response:
 
 @app.websocket("/ws/wake")
 async def ws_wake(ws: WebSocket):
-    """Detecção de wake word em streaming.
+    """Detecção de "Ei Órbita" / "Órbita" em streaming.
 
-    O cliente envia frames PCM int16 mono 16 kHz (idealmente 1280 amostras/80 ms).
-    O servidor responde JSON {score, detected} por frame; após uma detecção,
-    zera o estado interno para evitar disparos repetidos.
+    O cliente envia frames PCM int16 mono 16 kHz. O Vosk reconhece com gramática
+    restrita à frase; quando o resultado (parcial ou final) contém o gatilho,
+    responde {detected: true, text} e reinicia o reconhecedor.
     """
     await ws.accept()
-    import numpy as np
-
     try:
-        model = get_oww()
+        from vosk import KaldiRecognizer
+
+        model = get_vosk()
+
+        def new_rec():
+            r = KaldiRecognizer(model, 16000, WAKE_GRAMMAR)
+            r.SetWords(True)  # confiança por palavra
+            return r
+
+        rec = new_rec()
     except Exception as e:  # dependência/modelo indisponível
         await ws.send_json({"error": f"wake word indisponível: {e}"})
         await ws.close()
@@ -169,15 +196,19 @@ async def ws_wake(ws: WebSocket):
     try:
         while True:
             chunk = await ws.receive_bytes()
-            audio = np.frombuffer(chunk, dtype=np.int16)
-            if audio.size == 0:
+            if not chunk:
                 continue
-            scores = model.predict(audio)
-            score = float(scores.get(WAKE_MODEL, 0.0))
-            detected = score >= WAKE_THRESHOLD
-            await ws.send_json({"score": score, "detected": detected})
-            if detected:
-                model.reset()
+            rec.AcceptWaveform(chunk)
+            # o parcial dá detecção rápida (baixa latência); o FinalResult confirma
+            # pela confiança da palavra (elimina falso positivo da gramática restrita).
+            partial = json.loads(rec.PartialResult()).get("partial", "")
+            if WAKE_TRIGGER in partial.lower():
+                res = json.loads(rec.FinalResult())
+                words = res.get("result", [])
+                conf = max((w["conf"] for w in words if w.get("word") == WAKE_TRIGGER), default=0.0)
+                detected = conf >= WAKE_MIN_CONF
+                await ws.send_json({"detected": detected, "text": res.get("text", ""), "conf": round(conf, 3)})
+                rec = new_rec()  # reinicia após avaliar o candidato
     except WebSocketDisconnect:
         return
     except Exception:
