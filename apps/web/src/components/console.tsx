@@ -9,6 +9,7 @@ import { ConnectorsPanel } from "@/components/connectors-panel";
 import { MeetingPanel } from "@/components/meeting-panel";
 import { FinancePanel } from "@/components/finance-panel";
 import { TodoPanel } from "@/components/todo-panel";
+import { FolderPanel } from "@/components/folder-panel";
 import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
 import { RealtimeSession } from "@/lib/voice/realtime";
 import { signOut } from "@/lib/auth-client";
@@ -144,6 +145,39 @@ export function Console({ userName }: { userName: string }) {
   function stopSpeaking() {
     ttsRef.current?.stop();
     if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
+  }
+
+  /** "Ver a tela": captura um frame da tela compartilhada e pede análise à Órbita. */
+  async function seeScreen() {
+    if (mode !== "standby") return;
+    let stream: MediaStream | null = null;
+    try {
+      stream = await (navigator.mediaDevices as MediaDevices & { getDisplayMedia: (c: unknown) => Promise<MediaStream> }).getDisplayMedia({ video: true });
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      await video.play();
+      await new Promise((r) => setTimeout(r, 400)); // deixa o primeiro frame chegar
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+      canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const image = canvas.toDataURL("image/jpeg", 0.6);
+      stream.getTracks().forEach((t) => t.stop());
+
+      const question = input.trim() || "O que você vê na minha tela? Me ajude com o que estou fazendo.";
+      setInput("");
+      setMessages((m) => [...m, { role: "user", content: "🖥️ " + question }, { role: "assistant", content: "" }]);
+      setMode("studying");
+      const r = await fetch("/api/vision", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image, question }) });
+      const d = await r.json();
+      setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: d.answer ?? ("⚠ " + (d.error ?? "falha")) }; return c; });
+      setMode("standby");
+      if (d.answer && voiceOn) void speak(d.answer);
+    } catch (e) {
+      stream?.getTracks().forEach((t) => t.stop());
+      setMode("standby");
+      if (!(e instanceof Error && e.name === "NotAllowedError")) setError("Não foi possível capturar a tela.");
+    }
   }
 
   /** Transcreve um arquivo de áudio enviado e coloca o texto no composer. */
@@ -496,6 +530,10 @@ export function Console({ userName }: { userName: string }) {
             style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>
             🎵
           </button>
+          <button onClick={seeScreen} title="deixar a Órbita ver sua tela" className="rounded-lg border px-2.5 py-2 text-sm"
+            style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>
+            🖥️
+          </button>
           <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder="Fale ou escreva…" className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
             style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }} />
@@ -532,6 +570,7 @@ export function Console({ userName }: { userName: string }) {
         </div>
         <FinancePanel />
         <TodoPanel />
+        <FolderPanel />
         <ConnectorsPanel />
         <RoutinesPanel />
       </aside>

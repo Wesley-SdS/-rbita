@@ -78,6 +78,7 @@ services:
       REALTIME_MODEL: ${REALTIME_MODEL:-gpt-realtime}
       REALTIME_VOICE: ${REALTIME_VOICE:-marin}
       ASSEMBLYAI_API_KEY: ${ASSEMBLYAI_API_KEY:-}
+      VISION_MODEL: ${VISION_MODEL:-moondream}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       # conectores extras (opcionais — somem da UI se vazios)

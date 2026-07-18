@@ -44,6 +44,27 @@ export function resolveModel(key: string): LanguageModel {
   }
 }
 
+/**
+ * Modelo de visão para "ver a tela": OpenAI gpt-4o se OPENAI_API_KEY estiver
+ * configurada; caso contrário, um modelo de visão local do Ollama (VISION_MODEL,
+ * ex.: moondream, qwen2.5vl). Retorna o LanguageModel do AI SDK.
+ */
+export function resolveVisionModel(): LanguageModel {
+  if (process.env.OPENAI_API_KEY) {
+    const openai = createOpenAICompatible({
+      name: "openai",
+      baseURL: "https://api.openai.com/v1",
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+    return openai.chatModel(process.env.VISION_MODEL_OPENAI ?? "gpt-4o");
+  }
+  const ollama = createOpenAICompatible({
+    name: "ollama",
+    baseURL: process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1",
+  });
+  return ollama.chatModel(process.env.VISION_MODEL ?? "moondream");
+}
+
 /** Flags de ambiente para saber quais provedores estão configurados. */
 export function providerEnv() {
   return {
