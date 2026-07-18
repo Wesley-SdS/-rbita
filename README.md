@@ -1,0 +1,57 @@
+# ÓRBITA — Assistente Pessoal de IA
+
+Assistente pessoal **local-first**: chat com IA rodando na sua máquina (Qwen 2.5 via Ollama), voz (STT local + TTS), memória/RAG com pgvector, núcleo neural holográfico estilo Jarvis, e seletor de provedor (Local / Vercel AI Gateway / Claude Max).
+
+> Monorepo pnpm/Turborepo · Next.js 16 · Better Auth · Drizzle/Postgres+pgvector · AI SDK 7 · FastAPI (voz).
+
+## Pré-requisitos
+- **Node 20+** e **pnpm 11+**
+- **Docker** (para o Postgres + pgvector)
+- **Ollama** rodando com os modelos: `qwen2.5:7b` (ou `:14b`) e `nomic-embed-text`
+- **Python 3.10–3.13** + **uv** (só para o serviço de voz)
+
+## Rodar (dev — verificado)
+
+```bash
+# 1. dependências
+pnpm install
+
+# 2. banco (Postgres + pgvector)
+docker compose up -d db
+
+# 3. modelos locais (uma vez)
+ollama pull qwen2.5:7b
+ollama pull nomic-embed-text
+
+# 4. variáveis de ambiente
+cp .env.example apps/web/.env   # ajuste BETTER_AUTH_SECRET
+
+# 5. migrations
+pnpm --filter @orbita/web db:migrate
+
+# 6. app web  →  http://localhost:3000
+pnpm dev
+
+# 7. (opcional) serviço de voz  →  http://localhost:8001
+cd apps/voice && uv sync && uv run uvicorn main:app --port 8001
+```
+
+Acesse **http://localhost:3000**, crie sua conta e vá para **/app**.
+
+## Provedores de IA
+- **Local** (Ollama/Qwen 2.5) — padrão, grátis, offline. Sempre disponível.
+- **Vercel AI Gateway** — defina `AI_GATEWAY_API_KEY` no `.env` (aparece no seletor).
+- **Claude Max** — defina `CLAUDE_CODE_OAUTH_TOKEN` (assinatura Max via OAuth).
+
+## Estrutura
+```
+orbita/
+├─ apps/
+│  ├─ web/     Next.js 16 (UI + API + Orb) — app principal
+│  └─ voice/   FastAPI (STT faster-whisper)
+├─ packages/
+│  └─ llm/     provider layer (Local/Gateway/Claude) + embeddings
+└─ docker-compose.yml
+```
+
+Progresso do desenvolvimento em [`CHECKLIST.md`](./CHECKLIST.md).

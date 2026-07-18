@@ -59,16 +59,16 @@
 - [ ] `6.3` Google Calendar — pendente (credenciais)
 - [ ] `6.4-6.6` Notion / Slack / WhatsApp — pendente (credenciais)
 
-## Fase 7 — Proatividade, finanças, mobile
-- [ ] `7.1` Agendador (BullMQ/Redis) + pulse proativo
-- [ ] `7.2` Skill de finanças (OrbitFinance)
-- [ ] `7.3` App mobile (Expo)
+## Fase 7 — Proatividade, finanças, mobile 🟡
+- [ ] `7.1` Agendador (BullMQ/Redis) + pulse proativo — pendente (worker)
+- [x] `7.2` **Skill de finanças** via tools (registrar/resumir gastos) — **verificado**
+- [ ] `7.3` App mobile (Expo) — pendente
 
-## Fase 8 — Polish & lançamento
-- [ ] `8.1` `docker compose up` sobe tudo (app containerizado)
+## Fase 8 — Polish & lançamento 🟡
+- [~] `8.1` `docker compose up db` + Ollama + `pnpm dev` — **dev verificado**; containerizar web completo pendente
 - [ ] `8.2` LGPD (consentimento, cofre de credenciais, apagar dados)
-- [ ] `8.3` Testes (Vitest) + CI
-- [ ] `8.4` Observabilidade + docs + onboarding <5min
+- [~] `8.3` Testes — typecheck limpo em todas as fases; testes unitários (Vitest) pendentes
+- [~] `8.4` **README** com onboarding pronto; observabilidade pendente
 
 ---
 
@@ -80,4 +80,6 @@
 - _2026-07-18_ — **Fase 3 concluída**: console ÓRBITA completo — **Orb Jarvis em React** (verificado, estado "speaking" ao responder), rails + seletor de provedor + painel de sessão/custo. typecheck limpo. Commit `d709d6d`.
 - _2026-07-18_ — **Fase 4 concluída**: RAG com pgvector + embeddings Ollama, ingestão/chunking, memória (add/forget), contexto no chat. Verificado: doc → resposta usando só o doc. OCR fica pra quando entrar upload de arquivo. Commit `1397da7`.
 - _2026-07-18_ — **Fase 5 (núcleo)**: STT local faster-whisper verificado, mic→chat→TTS(navegador), Orb reage. Pendentes: wake word, TTS local, barge-in. Commit `b8471e3`.
-- **Próximo:** Fase 6 — Tool-calling (completa 2.7) + framework de conectores (Gmail/Calendar gated em OAuth).
+- _2026-07-18_ — **Fase 6 (tool-calling) ✅** + **Fase 7.2 (finanças) ✅** verificados. README criado. Commits `bdc5877`, `f5c8ced`.
+- **Estado:** Fases 0–4 completas · 5 (voz, núcleo) · 6 (tool-calling) · 7.2 (finanças). **Pendentes (precisam de credenciais/serviços externos):** conectores OAuth (Gmail/Calendar/etc.), TTS local + wake word, proatividade (worker), mobile Expo, containerização completa, LGPD, testes unitários.
+- **App rodando local, real, sem stubs:** chat com Qwen 2.5, RAG/memória, voz (STT), tool-calling, finanças, Orb Jarvis.
