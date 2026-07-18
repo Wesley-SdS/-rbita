@@ -2,9 +2,12 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# Builds nativos permitidos (allowlist oficial do pnpm). Com isto setado,
+# qualquer outro pacote com script de build é silenciosamente ignorado — sem erro.
 onlyBuiltDependencies:
   - esbuild
   - sharp
 
-allowBuilds:
-  tesseract.js: false
+# Bloqueio explícito do build do tesseract.js (baixa o core em runtime).
+ignoredBuiltDependencies:
+  - tesseract.js
