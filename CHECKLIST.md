@@ -66,7 +66,7 @@
 - [ ] `7.3` App mobile (Expo) — pendente
 
 ## Fase 8 — Polish & lançamento 🟡
-- [~] `8.1` `docker compose up db` + Ollama + `pnpm dev` — **dev verificado**; containerizar web completo pendente
+- [x] `8.1` **Containerização completa** — `docker compose up --build` sobe db + migrate + voz + web num único `up` (Next standalone, uv/faster-whisper, Ollama no host via `host.docker.internal`). Dockerfiles escritos e blindados (public/.gitkeep, outputFileTracingRoot, migrate one-shot); **build a validar no terminal do Wesley** (harness instável p/ builds longos em background)
 - [x] `8.2` LGPD: exportar dados + apagar conta (cascade) — **verificado**
 - [x] `8.3` Testes: Vitest (12 testes: chunker + auto-router/catálogo) — **passando**
 - [~] `8.4` **README** com onboarding pronto; observabilidade pendente
@@ -86,4 +86,5 @@
 - **App rodando local, real, sem stubs:** chat com Qwen 2.5, RAG/memória, voz (STT), tool-calling, finanças, Orb Jarvis.
 - _2026-07-18_ — **modo foco imersivo** (Orb fullscreen), **upload PDF/OCR**, **LGPD** (export/apagar), **Vitest** (12 testes). Commits `0a41a20`, `d40ad90`, `008123c`, `df6a3f8`.
 - _2026-07-18_ — **Fase 7.1 (proatividade) ✅** verificada: tabelas `routine`+`notification` (migração 0005), APIs `/api/routines`, `/api/routines/run`, `/api/notifications`, tools compartilhadas em `lib/chat/tools.ts`, painel no rail direito + agendador cliente (roda rotinas devidas a cada 5 min). Rotina real gerou notificação autônoma. Commit `e4beab7`.
+- _2026-07-18_ — **Fase 8.1 (containerização) 🟢** Dockerfiles (web Next-standalone + voz uv/whisper) + `docker-compose` com `migrate` one-shot → `docker compose up --build` sobe tudo. Runbook no README. Build a validar no terminal (harness em background instável p/ builds longos). Commit `5ee5694`.
 - **Ainda pendentes (bloqueados por credencial/download/serviço):** conectores OAuth, TTS local + wake word, proatividade (worker), mobile Expo, containerizar web.

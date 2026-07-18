@@ -38,6 +38,28 @@ cd apps/voice && uv sync && uv run uvicorn main:app --port 8001
 
 Acesse **http://localhost:3000**, crie sua conta e vá para **/app**.
 
+## Rodar tudo em containers (um único `up`)
+
+Sobe **banco + migrations + voz + web** de uma vez. O Ollama continua no **host** (o container o alcança via `host.docker.internal`).
+
+```bash
+# 1. modelos locais no host (uma vez)
+ollama pull qwen2.5:7b
+ollama pull nomic-embed-text
+
+# 2. segredo de auth (mín. 32 chars) — export ou coloque num .env na raiz
+export BETTER_AUTH_SECRET="troque-por-um-segredo-forte-de-32+chars"
+
+# 3. build + sobe o stack completo
+docker compose up --build
+```
+
+Fluxo do compose: `db` (healthcheck) → `migrate` (aplica Drizzle e encerra) → `web` (só sobe após migrate ok) + `voice`.
+- Web → **http://localhost:3000**
+- Voz → **http://localhost:8001** (o modelo Whisper baixa na 1ª transcrição, cacheado em volume)
+
+Variáveis opcionais (Gateway/Claude/OAuth) podem ir num `.env` na raiz — o compose lê automaticamente. Para rodar em background: `docker compose up --build -d`; para derrubar: `docker compose down`.
+
 ## Provedores de IA
 - **Local** (Ollama/Qwen 2.5) — padrão, grátis, offline. Sempre disponível.
 - **Vercel AI Gateway** — defina `AI_GATEWAY_API_KEY` no `.env` (aparece no seletor).
