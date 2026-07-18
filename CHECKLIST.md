@@ -53,12 +53,16 @@
 - [~] `5.4` Pipeline STT→LLM→TTS (push-to-talk) funcionando; barge-in pendente
 - [x] `5.5` Orb reage à voz (listening ao gravar, speaking ao falar)
 
-## Fase 6 — Tool-calling & Conectores 🟡
+## Fase 6 — Tool-calling & Conectores ✅ (falta só plugar chaves OAuth)
 - [x] `6.1` **Tool-calling** no chat (memória/conhecimento/hora/finanças/web) — **verificado**
 - [x] `6.w` **Acesso à internet** (pesquisar_web DDG→Wikipedia + ler_pagina) — **verificado** (Torre Eiffel 1889 c/ fonte)
-- [ ] `6.2` Gmail (OAuth + ler/enviar) — pendente (credenciais Google Cloud)
-- [ ] `6.3` Google Calendar — pendente (credenciais)
-- [ ] `6.4-6.6` Notion / Slack / WhatsApp — pendente (credenciais)
+- [x] `6.oauth` **Infra de conectores OAuth completa** — tabela `connection` (0006) c/ tokens **criptografados AES-256-GCM** (LGPD), fluxo OAuth2 real (connect/callback/state anti-CSRF assinado HMAC), refresh automático, painel no rail direito, tools condicionais aos conectores conectados, confirmação obrigatória p/ ações destrutivas. **Verificado e2e**: painel renderiza Google/Notion/Slack; sem env → "falta configurar" (não quebra). 5 testes novos (crypto round-trip/adulteração/unicode + state). typecheck limpo.
+- [x] `6.2` **Gmail** (ler_emails/rascunhar_email/enviar_email c/ confirmação) — código real, atrás de `GOOGLE_CLIENT_ID/SECRET`
+- [x] `6.3` **Google Calendar** (listar_eventos/criar_evento c/ confirmação) — real, mesma credencial Google
+- [x] `6.4` **Notion** (buscar_notion/ler_pagina_notion) — real, atrás de `NOTION_CLIENT_ID/SECRET`
+- [x] `6.5` **Slack** (listar_canais/enviar_slack c/ confirmação) — real, atrás de `SLACK_CLIENT_ID/SECRET`
+- [ ] `6.6` WhatsApp — pendente (Business API / provider externo)
+- ⚙️ **Falta só o Wesley plugar as chaves** (Google/Notion/Slack) — estrutura 100% pronta, `.env.example` + compose atualizados
 
 ## Fase 7 — Proatividade, finanças, mobile 🟡
 - [x] `7.1` **Proatividade** — rotinas agendadas + notificações + agendador cliente — **verificado** (rotina "Curiosidade do dia" gerou notificação sozinha via `generateText`+tools; UI no rail direito com badge de não-lidas)
@@ -89,3 +93,4 @@
 - _2026-07-18_ — **Fase 8.1 (containerização) 🟢** Dockerfiles (web Next-standalone + voz uv/whisper) + `docker-compose` com `migrate` one-shot → `docker compose up --build` sobe tudo. Runbook no README. Build a validar no terminal (harness em background instável p/ builds longos). Commit `5ee5694`.
 - _2026-07-18_ — **Build Docker 1ª tentativa (terminal do Wesley):** passou por deps/apt e **falhou em `pnpm install`** com `ERR_PNPM_IGNORED_BUILDS` (esbuild/sharp). **Causa:** campo inválido `allowBuilds` no `pnpm-workspace.yaml` fazia o pnpm 11.8 ignorar a allowlist. **Fix (commit `e8a1f85`):** removido `allowBuilds`; agora `onlyBuiltDependencies:[esbuild,sharp]` + `ignoredBuiltDependencies:[tesseract.js]`. **PRÓXIMO PASSO:** Wesley rodar `docker compose up --build` de novo (cache BuildKit acelera). Verificar então `next build` (web) e `drizzle-kit migrate` (migrate).
 - **Ainda pendentes (bloqueados por credencial/download/serviço):** conectores OAuth (falta GOOGLE_CLIENT_ID/SECRET), TTS local + wake word, mobile Expo. Containerização = só concluir o build.
+- _2026-07-18_ — **Fase 6 conectores OAuth ✅ (infra 100%)** — `packages`? não: em `apps/web/src/lib/connectors/` (registry/store/state/google/notion/slack) + `lib/crypto.ts` (AES-256-GCM) + `lib/chat/connector-tools.ts` (tools condicionais c/ confirmação) + rotas `/api/connectors[/[provider]/connect|callback]` + `connectors-panel.tsx`. Migração `0006`. **Verificado e2e** no navegador (next dev :3005 sobre o db do compose): signup → /app → painel Conectores lista Google/Notion/Slack como "falta configurar" (sem env, não quebra). 21 testes passando (12+4 crypto+5 conectores... = 21). Falta só o Wesley plugar as chaves p/ o fluxo OAuth completo.

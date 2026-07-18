@@ -10,6 +10,8 @@ export * from "./knowledge-schema";
 export * from "./finance-schema";
 // Tabelas de rotinas + notificações (proatividade).
 export * from "./routine-schema";
+// Conexões OAuth com serviços externos (conectores).
+export * from "./connector-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {

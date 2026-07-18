@@ -96,7 +96,7 @@ export async function POST(req: Request) {
     // RAG é best-effort; se falhar, segue sem contexto.
   }
 
-  const tools = buildTools(userId);
+  const tools = await buildTools(userId);
 
   const started = Date.now();
 

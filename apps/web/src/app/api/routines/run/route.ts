@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     (r) => r.enabled && (force || !r.lastRunAt || now - r.lastRunAt.getTime() >= r.intervalMinutes * 60000),
   );
 
-  const tools = buildTools(uid);
+  const tools = await buildTools(uid);
   const model = resolveModel(DEFAULT_MODEL_KEY); // rotinas rodam local por padrão
   let criadas = 0;
 
