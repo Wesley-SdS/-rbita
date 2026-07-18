@@ -36,6 +36,62 @@ export function Console({ userName }: { userName: string }) {
 
   // métricas de sessão (reais / estimadas)
   const [stats, setStats] = useState({ requests: 0, tokens: 0, lastMs: 0, gpt: 0, gem: 0, saved: 0 });
+  const [voiceOn, setVoiceOn] = useState(true);
+  const [recording, setRecording] = useState(false);
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  function speak(text: string) {
+    if (!voiceOn || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text.replace(/[#*_`>]/g, ""));
+      const v = speechSynthesis.getVoices().find((x) => /pt.?BR/i.test(x.lang)) ?? null;
+      if (v) u.voice = v;
+      u.lang = v?.lang ?? "pt-BR";
+      u.rate = 1.03;
+      u.onstart = () => setMode("speaking");
+      u.onend = () => setMode("standby");
+      speechSynthesis.speak(u);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function toggleMic() {
+    if (recording) { recRef.current?.stop(); return; }
+    if (mode !== "standby") return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setRecording(false);
+        setMode("studying");
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const fd = new FormData();
+        fd.append("file", blob, "audio.webm");
+        try {
+          const r = await fetch("/api/stt", { method: "POST", body: fd });
+          const d = await r.json();
+          setMode("standby");
+          if (d.text?.trim()) void sendMessage(d.text.trim());
+          else setError("Não entendi o áudio.");
+        } catch {
+          setMode("standby");
+          setError("Falha na transcrição.");
+        }
+      };
+      recRef.current = rec;
+      rec.start();
+      setRecording(true);
+      setMode("listening");
+    } catch {
+      setError("Sem acesso ao microfone.");
+    }
+  }
 
   useEffect(() => {
     fetch("/api/models")
@@ -48,10 +104,17 @@ export function Console({ userName }: { userName: string }) {
 
   async function send() {
     const content = input.trim();
+    if (!content) return;
+    setInput("");
+    void sendMessage(content);
+  }
+
+  async function sendMessage(content: string) {
     if (!content || mode !== "standby" || !modelKey) return;
-    setInput(""); setError(null); setMode("studying");
+    setError(null); setMode("studying");
     setMessages((m) => [...m, { role: "user", content }, { role: "assistant", content: "" }]);
     const started = Date.now();
+    let spoke = false;
 
     try {
       const res = await fetch("/api/chat", {
@@ -93,11 +156,13 @@ export function Console({ userName }: { userName: string }) {
         gem: s.gem + gemCost,
         saved: s.saved + (isLocal ? gptCost : 0),
       }));
+
+      if (voiceOn && typeof window !== "undefined" && "speechSynthesis" in window) { spoke = true; speak(acc); }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro inesperado");
       setMessages((m) => { const c = [...m]; if (c[c.length - 1]?.role === "assistant" && !c[c.length - 1]?.content) c.pop(); return c; });
     } finally {
-      setMode("standby");
+      if (!spoke) setMode("standby");
     }
   }
 
@@ -167,9 +232,18 @@ export function Console({ userName }: { userName: string }) {
         {error && <p className="px-4 pb-1 text-xs" style={{ color: "#e0705a" }}>{error}</p>}
 
         <div className="flex items-center gap-2 border-t p-3" style={{ borderColor: "var(--color-line)" }}>
+          <button onClick={() => setVoiceOn(!voiceOn)} title="voz da Órbita" className="rounded-lg border px-2.5 py-2 text-sm"
+            style={{ borderColor: "var(--color-line)", color: voiceOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
+            {voiceOn ? "🔊" : "🔇"}
+          </button>
           <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()}
-            placeholder="Fale com a Órbita…" className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
+            placeholder="Fale ou escreva…" className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
             style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }} />
+          <button onClick={toggleMic} disabled={mode !== "standby" && !recording} title="falar" aria-label="microfone"
+            className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+            style={{ background: recording ? "#e0705a" : "var(--color-surface)", borderColor: "var(--color-line)" }}>
+            {recording ? "⏹" : "🎙️"}
+          </button>
           <button onClick={send} disabled={mode !== "standby" || !input.trim()}
             className="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
             style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>

@@ -39,12 +39,12 @@
 - [x] `3.5` Painel de sessão + custo vs. nuvem (req/tokens~/latência real) _(watts de GPU entram na Fase 5 c/ pynvml)_
 - [~] `3.6` Atividade: Orb reflete o estado (studying/speaking) _(timeline de tool-steps na Fase 6 com conectores)_
 
-## Fase 4 — Memória & RAG (Vektus)
-- [ ] `4.1` Schema de memória + pgvector (embeddings)
-- [ ] `4.2` Ingestão de documentos + chunking (portado do Vektus)
-- [ ] `4.3` OCR (portado do Vektus)
-- [ ] `4.4` Busca semântica + citações no chat
-- [ ] `4.5` Memória de longo prazo (fatos/preferências) + "esquece isso"
+## Fase 4 — Memória & RAG ✅
+- [x] `4.1` Schema pgvector (document/chunk/memory vector(768) + HNSW) + embeddings Ollama
+- [x] `4.2` Ingestão de documentos + chunking com sobreposição (`/api/ingest`)
+- [~] `4.3` OCR — pendente (entra ao adicionar upload de PDF/imagem; texto já ingere)
+- [x] `4.4` Busca semântica no chat (RAG injeta contexto) — **verificado** (resposta só com o doc)
+- [x] `4.5` Memória de longo prazo (add/list/forget) — `/api/memory` + UI
 
 ## Fase 5 — Voz
 - [ ] `5.1` `apps/voice` (serviço Python): STT faster-whisper
@@ -78,4 +78,5 @@
 - _2026-07-18_ — **Fase 1 concluída**: Better Auth 1.6.23 (email/senha) + sessões + `/app` protegida. Verificado e2e (signup pela UI → /app; usuário persistido no Postgres). Google OAuth wired (atrás de env). Commit `b81f217`.
 - _2026-07-18_ — **Fase 2 concluída**: `packages/llm` (Local/Gateway/Claude Max) + auto-router + `/api/chat` streaming + UI de chat. Verificado e2e: chat real com **Qwen 2.5 local**, streaming ao vivo, persistido no Postgres. Commit `b7c8de4`.
 - _2026-07-18_ — **Fase 3 concluída**: console ÓRBITA completo — **Orb Jarvis em React** (verificado, estado "speaking" ao responder), rails + seletor de provedor + painel de sessão/custo. typecheck limpo. Commit `d709d6d`.
-- **Próximo:** Fase 4 — Memória & RAG (pgvector, ingestão, OCR — portados do Vektus).
+- _2026-07-18_ — **Fase 4 concluída**: RAG com pgvector + embeddings Ollama, ingestão/chunking, memória (add/forget), contexto no chat. Verificado: doc → resposta usando só o doc. OCR fica pra quando entrar upload de arquivo. Commit `1397da7`.
+- **Próximo:** Fase 5 — Voz (serviço Python: STT faster-whisper + TTS + wake word).

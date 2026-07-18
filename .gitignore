@@ -19,3 +19,9 @@ pgdata
 .DS_Store
 Thumbs.db
 *.log
+
+# python
+.venv
+__pycache__
+*.pyc
+uv.lock
