@@ -5,14 +5,14 @@
 
 ---
 
-## Fase 0 — Fundação do monorepo
-- [ ] `0.1` Estrutura do monorepo (pnpm workspaces + Turborepo)
-- [ ] `0.2` `docker-compose.yml` com Postgres + pgvector
-- [ ] `0.3` `apps/web` — Next.js 16 (App Router, React 19, TS strict) bootando
-- [ ] `0.4` Tailwind v4 + design tokens (paleta ÓRBITA dourada)
-- [ ] `0.5` Drizzle ORM + conexão Postgres + primeira migration
-- [ ] `0.6` `/api/health` real (checa DB)
-- [ ] `0.7` Git init + primeiro commit
+## Fase 0 — Fundação do monorepo ✅
+- [x] `0.1` Estrutura do monorepo (pnpm workspaces + Turborepo 2.10)
+- [x] `0.2` `docker-compose.yml` com Postgres + pgvector (porta 5433, healthy)
+- [x] `0.3` `apps/web` — Next.js 16.2.10 (App Router, React 19.2, TS strict) bootando
+- [x] `0.4` Tailwind v4 + design tokens (paleta ÓRBITA dourada)
+- [x] `0.5` Drizzle ORM 0.45 + conexão Postgres + primeira migration (`meta`)
+- [x] `0.6` `/api/health` real (checa DB) → `{"status":"ok","db":"up"}`
+- [x] `0.7` Git init + primeiro commit (`5456f85`)
 
 ## Fase 1 — Auth (Better Auth)
 - [ ] `1.1` Better Auth 1.6 configurado (adapter Drizzle)
@@ -74,3 +74,5 @@
 
 ### Log de progresso
 - _2026-07-18_ — checklist criado; ambiente validado (Node 22, pnpm 11, Docker 29, Ollama+Qwen2.5).
+- _2026-07-18_ — **Fase 0 concluída**: monorepo + Next 16.2.10 + Postgres/pgvector (Docker) + Drizzle migration + `/api/health` OK + home renderizando (verificado por headless). Versões confirmadas: Next 16.2.10, Better Auth 1.6.23, AI SDK 7.0.31, React 19.2, Drizzle 0.45. Commit `5456f85`.
+- **Próximo:** Fase 1 — Better Auth (email/senha).

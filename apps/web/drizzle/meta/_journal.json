@@ -8,6 +8,13 @@
       "when": 1784380684897,
       "tag": "0000_perfect_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784381120906,
+      "tag": "0001_curly_tarot",
+      "breakpoints": true
     }
   ]
 }

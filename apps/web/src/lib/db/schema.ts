@@ -1,5 +1,8 @@
 import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 
+// Tabelas de autenticação (Better Auth).
+export * from "./auth-schema";
+
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {
   id: serial("id").primaryKey(),

@@ -17,6 +17,13 @@ export default function Home() {
         Assistente pessoal de IA · local-first. Fundação em pé.
       </p>
       <HealthBadge />
+      <a
+        href="/login"
+        className="rounded-lg px-5 py-3 text-sm font-semibold"
+        style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}
+      >
+        Entrar →
+      </a>
     </main>
   );
 }
