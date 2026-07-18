@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Orb, type OrbMode } from "@/components/orb";
 import { KnowledgePanel } from "@/components/knowledge-panel";
+import { PrivacyPanel } from "@/components/privacy-panel";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 
@@ -199,6 +200,7 @@ export function Console({ userName }: { userName: string }) {
         </div>
 
         <KnowledgePanel />
+        <PrivacyPanel />
 
         <button onClick={async () => { await signOut(); router.push("/login"); }}
           className="rounded-lg border px-4 py-2 text-sm" style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>
