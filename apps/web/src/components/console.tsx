@@ -6,6 +6,7 @@ import { KnowledgePanel } from "@/components/knowledge-panel";
 import { PrivacyPanel } from "@/components/privacy-panel";
 import { RoutinesPanel } from "@/components/routines-panel";
 import { ConnectorsPanel } from "@/components/connectors-panel";
+import { MeetingPanel } from "@/components/meeting-panel";
 import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
@@ -361,6 +362,7 @@ export function Console({ userName }: { userName: string }) {
         </div>
 
         <KnowledgePanel />
+        <MeetingPanel />
         <PrivacyPanel />
 
         <button onClick={async () => { await signOut(); router.push("/login"); }}

@@ -64,6 +64,9 @@
 - [x] `6.6` **WhatsApp** (enviar_whatsapp c/ confirmação) — via Cloud API da Meta, real, atrás de `WHATSAPP_TOKEN` + `WHATSAPP_PHONE_ID`
 - ⚙️ **Falta só o Wesley plugar as chaves** (Google/Notion/Slack) — estrutura 100% pronta, `.env.example` + compose atualizados
 
+## Caso-âncora — Transcrição de reunião ✅
+- [x] **"Resume essa reunião"** — `MeetingPanel` grava o mic em janelas de 8s → STT local por janela → transcrição ao vivo → `/api/meeting/summarize` resume (LLM local: Resumo/Pontos/Decisões/Ações) e **arquiva no RAG/memória**. **Verificado** (transcrição real → resumo estruturado fiel, `archived:true`).
+
 ## Fase 7 — Proatividade, finanças, mobile ✅
 - [x] `7.1` **Proatividade** — rotinas agendadas + notificações + agendador cliente — **verificado** (rotina "Curiosidade do dia" gerou notificação sozinha via `generateText`+tools; UI no rail direito com badge de não-lidas)
 - [x] `7.2` **Skill de finanças** via tools (registrar/resumir gastos) — **verificado**
