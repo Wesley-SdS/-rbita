@@ -11,7 +11,17 @@ export type OrbMode =
   | "connecting";
 
 /** Núcleo neural ÓRBITA (estilo Jarvis) — portado do design/protótipo. */
-export function Orb({ mode = "standby", height = 380 }: { mode?: OrbMode; height?: number }) {
+export function Orb({
+  mode = "standby",
+  height = 380,
+  fill = false,
+  bare = false,
+}: {
+  mode?: OrbMode;
+  height?: number;
+  fill?: boolean;
+  bare?: boolean;
+}) {
   const cvRef = useRef<HTMLCanvasElement | null>(null);
   const modeRef = useRef<OrbMode>(mode);
   modeRef.current = mode;
@@ -241,9 +251,21 @@ export function Orb({ mode = "standby", height = 380 }: { mode?: OrbMode; height
     };
   }, []);
 
+  const canvasStyle: React.CSSProperties = fill
+    ? { width: "100%", height: "100%", display: "block" }
+    : { width: "100%", height, display: "block" };
+
+  if (bare) return <canvas ref={cvRef} aria-hidden style={canvasStyle} />;
+
   return (
-    <div style={{ background: "radial-gradient(circle at 50% 46%, #1a1206 0%, #0d0904 55%, #0a0703 100%)", borderRadius: 16 }}>
-      <canvas ref={cvRef} aria-hidden style={{ width: "100%", height, display: "block" }} />
+    <div
+      style={{
+        background: "radial-gradient(circle at 50% 46%, #1a1206 0%, #0d0904 55%, #0a0703 100%)",
+        borderRadius: 16,
+        height: fill ? "100%" : undefined,
+      }}
+    >
+      <canvas ref={cvRef} aria-hidden style={canvasStyle} />
     </div>
   );
 }

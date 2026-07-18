@@ -40,6 +40,7 @@ export function Console({ userName }: { userName: string }) {
   const [recording, setRecording] = useState(false);
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const [focus, setFocus] = useState(false);
 
   function speak(text: string) {
     if (!voiceOn || typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -169,6 +170,7 @@ export function Console({ userName }: { userName: string }) {
   const brl = (n: number) => "R$" + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
+    <>
     <div className="grid w-full max-w-6xl gap-4 md:grid-cols-[210px_1fr_290px]">
       {/* LEFT RAIL */}
       <aside className="flex flex-col gap-4">
@@ -205,7 +207,12 @@ export function Console({ userName }: { userName: string }) {
       </aside>
 
       {/* CENTER STAGE */}
-      <main className="flex min-h-[640px] flex-col overflow-hidden rounded-2xl border" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+      <main className="relative flex min-h-[640px] flex-col overflow-hidden rounded-2xl border" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+        <button onClick={() => setFocus(true)} title="modo foco (tela cheia)"
+          className="absolute right-3 top-3 z-10 rounded-lg border px-2.5 py-1 text-xs"
+          style={{ borderColor: "var(--color-line)", background: "var(--color-surface)", color: "var(--color-ink-dim)" }}>
+          ⛶ Foco
+        </button>
         <div className="relative">
           <Orb mode={mode} height={300} />
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--color-ink-dim)" }}>
@@ -272,6 +279,42 @@ export function Console({ userName }: { userName: string }) {
         </div>
       </aside>
     </div>
+
+    {focus && (
+      <div className="fixed inset-0 z-50" style={{ background: "#0a0703" }}>
+        <div className="absolute inset-0">
+          <Orb mode={mode} fill bare />
+        </div>
+
+        <div className="pointer-events-none absolute left-0 right-0 top-8 z-10 text-center">
+          <div className="text-3xl" style={{ fontFamily: "var(--font-orbitron), sans-serif", fontWeight: 700, letterSpacing: "0.42em", color: "#ffd79a", textShadow: "0 0 24px rgba(255,170,60,0.55)", paddingLeft: "0.42em" }}>
+            ÓRBITA
+          </div>
+          <div className="mt-2 text-[11px]" style={{ letterSpacing: "0.5em", color: "rgba(255,190,120,0.5)", paddingLeft: "0.5em" }}>
+            ASSISTENTE · NÚCLEO NEURAL
+          </div>
+        </div>
+
+        <div className="pointer-events-none absolute bottom-14 left-0 right-0 z-10 flex items-center justify-center gap-3 font-mono text-sm uppercase" style={{ letterSpacing: "0.28em", color: "#ffcf8a", textShadow: "0 0 16px rgba(255,160,50,0.5)" }}>
+          <span className="h-2 w-2 rounded-full" style={{ background: "#ffcf8a", boxShadow: "0 0 12px #ffcf8a" }} />
+          {STATUS[mode]}
+        </div>
+
+        <button onClick={() => setVoiceOn(!voiceOn)} title="voz" className="absolute bottom-6 left-6 z-10 rounded-full border px-3 py-2 text-lg"
+          style={{ borderColor: "var(--color-line)", background: "rgba(21,16,10,0.6)", color: voiceOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
+          {voiceOn ? "🔊" : "🔇"}
+        </button>
+        <button onClick={toggleMic} title="falar com a Órbita" className="absolute bottom-6 right-6 z-10 rounded-full border px-4 py-2 text-lg"
+          style={{ borderColor: "var(--color-line)", background: recording ? "#e0705a" : "rgba(21,16,10,0.6)" }}>
+          {recording ? "⏹" : "🎙️"}
+        </button>
+        <button onClick={() => setFocus(false)} title="sair do modo foco" className="absolute right-6 top-6 z-10 rounded-lg border px-3 py-1.5 text-sm"
+          style={{ borderColor: "var(--color-line)", background: "rgba(21,16,10,0.6)", color: "var(--color-ink-dim)" }}>
+          ✕ Sair
+        </button>
+      </div>
+    )}
+    </>
   );
 }
 
