@@ -1,0 +1,99 @@
+import { useEffect, useState } from "react";
+import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, Alert } from "react-native";
+import { router, Link } from "expo-router";
+import { Orb } from "@/components/Orb";
+import { signIn, signUp, getSession } from "@/lib/auth";
+
+export default function Login() {
+  const [mode, setMode] = useState<"in" | "up">("in");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    getSession()
+      .then((u) => { if (u) router.replace("/chat"); })
+      .catch(() => {})
+      .finally(() => setChecking(false));
+  }, []);
+
+  async function submit() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (mode === "up") await signUp(name.trim(), email.trim(), password);
+      else await signIn(email.trim(), password);
+      router.replace("/chat");
+    } catch (e) {
+      Alert.alert("Ops", e instanceof Error ? e.message : "Erro");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (checking) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator color="#e0a83a" />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.center}>
+        <Orb mode="standby" size={160} />
+        <Text style={styles.title}>ÓRBITA</Text>
+        <Text style={styles.sub}>Seu assistente pessoal de IA</Text>
+      </View>
+
+      <View style={styles.form}>
+        {mode === "up" && (
+          <TextInput style={styles.input} placeholder="Nome" placeholderTextColor="#8a7a63" value={name} onChangeText={setName} />
+        )}
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          placeholderTextColor="#8a7a63"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Senha (mín. 8)"
+          placeholderTextColor="#8a7a63"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
+        <Pressable style={styles.button} onPress={submit} disabled={busy}>
+          {busy ? <ActivityIndicator color="#241403" /> : <Text style={styles.buttonText}>{mode === "up" ? "Criar conta" : "Entrar"}</Text>}
+        </Pressable>
+        <Pressable onPress={() => setMode(mode === "in" ? "up" : "in")}>
+          <Text style={styles.link}>{mode === "in" ? "Não tem conta? Criar" : "Já tem conta? Entrar"}</Text>
+        </Pressable>
+        <Link href="/settings" style={styles.serverLink}>
+          <Text style={styles.serverLinkText}>⚙ configurar servidor</Text>
+        </Link>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#120d08", padding: 24, justifyContent: "center" },
+  center: { alignItems: "center", marginBottom: 32 },
+  title: { color: "#e0a83a", fontSize: 34, fontWeight: "900", letterSpacing: 4, marginTop: 16 },
+  sub: { color: "#8a7a63", marginTop: 4 },
+  form: { gap: 12 },
+  input: { borderWidth: 1, borderColor: "#3a2f22", borderRadius: 12, padding: 14, color: "#f0e6d8", backgroundColor: "#1a130c" },
+  button: { backgroundColor: "#e0a83a", borderRadius: 12, padding: 15, alignItems: "center", marginTop: 4 },
+  buttonText: { color: "#241403", fontWeight: "700", fontSize: 16 },
+  link: { color: "#e0a83a", textAlign: "center", marginTop: 8 },
+  serverLink: { alignSelf: "center", marginTop: 16 },
+  serverLinkText: { color: "#8a7a63", fontSize: 12 },
+});

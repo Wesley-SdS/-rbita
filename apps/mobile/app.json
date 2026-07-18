@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "ÓRBITA",
+    "slug": "orbita",
+    "scheme": "orbita",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#120d08",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "backgroundColor": "#120d08",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.orbita.app"
+    },
+    "android": {
+      "package": "com.orbita.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#120d08"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

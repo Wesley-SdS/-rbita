@@ -1,6 +1,8 @@
 packages:
-  - "apps/*"
+  - "apps/web"
   - "packages/*"
+  # apps/mobile (Expo) é gerenciado por npm próprio — Metro não convive bem com
+  # os symlinks do pnpm. apps/voice é Python (sem package.json).
 
 # Builds nativos permitidos (allowlist oficial do pnpm). Com isto setado,
 # qualquer outro pacote com script de build é silenciosamente ignorado — sem erro.

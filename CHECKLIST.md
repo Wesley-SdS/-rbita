@@ -64,10 +64,10 @@
 - [ ] `6.6` WhatsApp — pendente (Business API / provider externo)
 - ⚙️ **Falta só o Wesley plugar as chaves** (Google/Notion/Slack) — estrutura 100% pronta, `.env.example` + compose atualizados
 
-## Fase 7 — Proatividade, finanças, mobile 🟡
+## Fase 7 — Proatividade, finanças, mobile ✅
 - [x] `7.1` **Proatividade** — rotinas agendadas + notificações + agendador cliente — **verificado** (rotina "Curiosidade do dia" gerou notificação sozinha via `generateText`+tools; UI no rail direito com badge de não-lidas)
 - [x] `7.2` **Skill de finanças** via tools (registrar/resumir gastos) — **verificado**
-- [ ] `7.3` App mobile (Expo) — pendente
+- [x] `7.3` **App mobile (Expo)** — `apps/mobile` (Expo Router, RN 0.76, SDK 52): login/signup (Better Auth por cookie no SecureStore), **chat com streaming** (`expo/fetch` no mesmo `/api/chat`), Orb pulsante nativo, tela de config de servidor. **Verificado de verdade**: `tsc` limpo + **bundle Metro/Hermes compila** (entry.hbc 2.5 MB, 23 assets). Fora do workspace pnpm (npm próprio) p/ não conflitar com o Metro; lockfile do web intacto.
 
 ## Fase 8 — Polish & lançamento 🟡
 - [x] `8.1` **Containerização completa** — `docker compose up --build` sobe db + migrate + voz + web num único `up` (Next standalone, uv/faster-whisper, Ollama no host via `host.docker.internal`). Dockerfiles escritos e blindados (public/.gitkeep, outputFileTracingRoot, migrate one-shot); **build a validar no terminal do Wesley** (harness instável p/ builds longos em background)
