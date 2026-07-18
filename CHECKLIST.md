@@ -31,7 +31,7 @@
 - [x] `2.6` Auto-router (complexidade: local→Max→Gateway) + fallback pro local — **verificado**
 - [x] `2.7` `/api/chat` streaming (AI SDK 7) autenticado + persistência _(tool-calling entra na Fase 6 c/ conectores)_
 
-## Fase 3 — UI do app + Orb ✅
+## Fase 3 — UI do app + Orb ✅ (+ histórico + modo foco)
 - [x] `3.1` Layout do app (rails, stage, composer) — portado do protótipo
 - [x] `3.2` Componente **Orb** (núcleo neural Jarvis) React + 6 estados — **verificado**
 - [x] `3.3` Seletor de provider/modelo ligado ao backend (`/api/models`)
@@ -54,7 +54,8 @@
 - [x] `5.5` Orb reage à voz (listening ao gravar, speaking ao falar)
 
 ## Fase 6 — Tool-calling & Conectores 🟡
-- [x] `6.1` **Tool-calling** no chat (framework de ferramentas) — **verificado** (Qwen chama tools sozinho)
+- [x] `6.1` **Tool-calling** no chat (memória/conhecimento/hora/finanças/web) — **verificado**
+- [x] `6.w` **Acesso à internet** (pesquisar_web DDG→Wikipedia + ler_pagina) — **verificado** (Torre Eiffel 1889 c/ fonte)
 - [ ] `6.2` Gmail (OAuth + ler/enviar) — pendente (credenciais Google Cloud)
 - [ ] `6.3` Google Calendar — pendente (credenciais)
 - [ ] `6.4-6.6` Notion / Slack / WhatsApp — pendente (credenciais)
