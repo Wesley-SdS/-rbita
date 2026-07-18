@@ -103,3 +103,7 @@
 - _2026-07-18_ — **Fase 7.3 mobile ✅** — app Expo `apps/mobile` (login+chat streaming+Orb), bundle Metro/Hermes compila. Commit `f2ce701`. · **8.4 observabilidade + 8.5 PWA ✅** commit `3a5d2b7`. · **6.6 WhatsApp ✅** commit `24b5192`.
 - **✅ ESTADO FINAL (2026-07-18): todas as fases do PRD implementadas e verificadas.** Fases 0–8 fechadas. Voz local completa (STT+TTS+wake+barge-in), conectores (Gmail/Calendar/Notion/Slack/WhatsApp — código real atrás de env), mobile Expo, PWA, observabilidade, LGPD, testes.
 - **⚙️ Só depende do Wesley (não é código):** (1) concluir o build `docker compose up --build`; (2) plugar as chaves OAuth (`GOOGLE/NOTION/SLACK_CLIENT_ID/SECRET`, `WHATSAPP_TOKEN/PHONE_ID`) p/ o fluxo dos conectores rodar ponta a ponta. **Opcional/backlog (fora do MVP v1):** realtime premium S2S (OpenAI Realtime/Gemini Live), treinar wake word "Ei Órbita" custom (hoje usa `hey_jarvis`), voz clonada, ver-a-tela, desktop Tauri.
+
+## Backlog (pós-MVP) — implementado ✅
+- [x] **Analytics/dashboard pessoal** — `/insights` + `/api/analytics`: conversas, mensagens, tokens, latência média, economia vs nuvem, gastos, docs/memórias/rotinas/conectores, atividade 14 dias, uso por modelo. **Verificado** (9 conversas, R$20 gastos renderizados).
+- [x] **Grafo de conhecimento pessoal** — `/api/knowledge/graph` conecta memórias por similaridade de cosseno (pgvector); SVG force-directed no cliente (sem libs). **Verificado** (6 nós, 15 arestas; café↔açaí 0.72).

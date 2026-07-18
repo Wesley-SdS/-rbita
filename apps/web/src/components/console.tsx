@@ -405,11 +405,18 @@ export function Console({ userName }: { userName: string }) {
 
       {/* CENTER STAGE */}
       <main className="relative flex min-h-[640px] flex-col overflow-hidden rounded-2xl border" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
-        <button onClick={() => setFocus(true)} title="modo foco (tela cheia)"
-          className="absolute right-3 top-3 z-10 rounded-lg border px-2.5 py-1 text-xs"
-          style={{ borderColor: "var(--color-line)", background: "var(--color-surface)", color: "var(--color-ink-dim)" }}>
-          ⛶ Foco
-        </button>
+        <div className="absolute right-3 top-3 z-10 flex gap-2">
+          <a href="/insights" title="insights e grafo de conhecimento"
+            className="rounded-lg border px-2.5 py-1 text-xs"
+            style={{ borderColor: "var(--color-line)", background: "var(--color-surface)", color: "var(--color-ink-dim)" }}>
+            📊 Insights
+          </a>
+          <button onClick={() => setFocus(true)} title="modo foco (tela cheia)"
+            className="rounded-lg border px-2.5 py-1 text-xs"
+            style={{ borderColor: "var(--color-line)", background: "var(--color-surface)", color: "var(--color-ink-dim)" }}>
+            ⛶ Foco
+          </button>
+        </div>
         <div className="relative">
           <Orb mode={mode} height={300} />
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--color-ink-dim)" }}>
