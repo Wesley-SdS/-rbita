@@ -4,8 +4,7 @@ packages:
   # apps/mobile (Expo) é gerenciado por npm próprio — Metro não convive bem com
   # os symlinks do pnpm. apps/voice é Python (sem package.json).
 
-# Builds nativos permitidos (allowlist oficial do pnpm). Com isto setado,
-# qualquer outro pacote com script de build é silenciosamente ignorado — sem erro.
+# Builds nativos permitidos (allowlist).
 onlyBuiltDependencies:
   - esbuild
   - sharp
@@ -13,3 +12,9 @@ onlyBuiltDependencies:
 # Bloqueio explícito do build do tesseract.js (baixa o core em runtime).
 ignoredBuiltDependencies:
   - tesseract.js
+
+# pnpm 11.8 trata "build scripts ignorados" como ERRO FATAL em modo não-interativo
+# (quebra o `pnpm install --frozen-lockfile` do Docker mesmo com a allowlist acima).
+# Isto rebaixa para aviso: esbuild/sharp continuam buildando; tesseract fica ignorado
+# sem abortar. Verificado: install limpo do zero passa (exit 0).
+strictDepBuilds: false
