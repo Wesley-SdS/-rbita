@@ -61,7 +61,7 @@
 - [ ] `6.4-6.6` Notion / Slack / WhatsApp — pendente (credenciais)
 
 ## Fase 7 — Proatividade, finanças, mobile 🟡
-- [ ] `7.1` Agendador (BullMQ/Redis) + pulse proativo — pendente (worker)
+- [x] `7.1` **Proatividade** — rotinas agendadas + notificações + agendador cliente — **verificado** (rotina "Curiosidade do dia" gerou notificação sozinha via `generateText`+tools; UI no rail direito com badge de não-lidas)
 - [x] `7.2` **Skill de finanças** via tools (registrar/resumir gastos) — **verificado**
 - [ ] `7.3` App mobile (Expo) — pendente
 
@@ -85,4 +85,5 @@
 - **Estado:** Fases 0–4 completas · 5 (voz, núcleo) · 6 (tool-calling) · 7.2 (finanças). **Pendentes (precisam de credenciais/serviços externos):** conectores OAuth (Gmail/Calendar/etc.), TTS local + wake word, proatividade (worker), mobile Expo, containerização completa, LGPD, testes unitários.
 - **App rodando local, real, sem stubs:** chat com Qwen 2.5, RAG/memória, voz (STT), tool-calling, finanças, Orb Jarvis.
 - _2026-07-18_ — **modo foco imersivo** (Orb fullscreen), **upload PDF/OCR**, **LGPD** (export/apagar), **Vitest** (12 testes). Commits `0a41a20`, `d40ad90`, `008123c`, `df6a3f8`.
+- _2026-07-18_ — **Fase 7.1 (proatividade) ✅** verificada: tabelas `routine`+`notification` (migração 0005), APIs `/api/routines`, `/api/routines/run`, `/api/notifications`, tools compartilhadas em `lib/chat/tools.ts`, painel no rail direito + agendador cliente (roda rotinas devidas a cada 5 min). Rotina real gerou notificação autônoma. Commit `e4beab7`.
 - **Ainda pendentes (bloqueados por credencial/download/serviço):** conectores OAuth, TTS local + wake word, proatividade (worker), mobile Expo, containerizar web.
