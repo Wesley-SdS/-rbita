@@ -1,0 +1,21 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: orbita-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orbita
+      POSTGRES_PASSWORD: orbita
+      POSTGRES_DB: orbita
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orbita -d orbita"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
