@@ -42,6 +42,32 @@ export function Console({ userName }: { userName: string }) {
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const [focus, setFocus] = useState(false);
+  const [convs, setConvs] = useState<{ id: string; title: string }[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  function loadConvs() {
+    fetch("/api/conversations").then((r) => r.json()).then((d) => setConvs(d.conversations ?? [])).catch(() => {});
+  }
+  async function loadConversation(id: string) {
+    const r = await fetch(`/api/conversations/${id}`);
+    const d = await r.json();
+    if (r.ok) {
+      convId.current = id;
+      setActiveId(id);
+      setMessages((d.messages ?? []).map((m: { role: Role; content: string }) => ({ role: m.role, content: m.content })));
+    }
+  }
+  function newConversation() {
+    convId.current = null;
+    setActiveId(null);
+    setMessages([]);
+    setError(null);
+  }
+  async function deleteConv(id: string) {
+    await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+    if (convId.current === id) newConversation();
+    loadConvs();
+  }
 
   function speak(text: string) {
     if (!voiceOn || typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -100,6 +126,7 @@ export function Console({ userName }: { userName: string }) {
       .then((r) => r.json())
       .then((d) => { setModels(d.models ?? []); setModelKey(d.defaultModel ?? d.models?.[0]?.key ?? ""); })
       .catch(() => setError("Falha ao carregar modelos"));
+    loadConvs();
   }, []);
 
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [messages]);
@@ -125,7 +152,7 @@ export function Console({ userName }: { userName: string }) {
         body: JSON.stringify({ content, modelKey, conversationId: convId.current ?? undefined }),
       });
       const cid = res.headers.get("x-conversation-id");
-      if (cid) convId.current = cid;
+      if (cid) { convId.current = cid; setActiveId(cid); }
       const usedModel = res.headers.get("x-model") ?? modelKey;
 
       if (!res.ok || !res.body) {
@@ -165,6 +192,7 @@ export function Console({ userName }: { userName: string }) {
       setMessages((m) => { const c = [...m]; if (c[c.length - 1]?.role === "assistant" && !c[c.length - 1]?.content) c.pop(); return c; });
     } finally {
       if (!spoke) setMode("standby");
+      loadConvs();
     }
   }
 
@@ -175,6 +203,23 @@ export function Console({ userName }: { userName: string }) {
     <div className="grid w-full max-w-6xl gap-4 md:grid-cols-[210px_1fr_290px]">
       {/* LEFT RAIL */}
       <aside className="flex flex-col gap-4">
+        <div className="rounded-2xl border p-3" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+          <div className="flex items-center">
+            <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Conversas</h3>
+            <button onClick={newConversation} className="ml-auto text-xs" style={{ color: "var(--color-gold)" }}>＋ Nova</button>
+          </div>
+          <div className="mt-2 flex max-h-40 flex-col gap-1 overflow-y-auto">
+            {convs.length === 0 && <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>nenhuma ainda</span>}
+            {convs.map((c) => (
+              <div key={c.id} className="group flex items-center gap-1">
+                <button onClick={() => loadConversation(c.id)} className="flex-1 truncate text-left text-xs"
+                  style={{ color: activeId === c.id ? "var(--color-gold)" : "var(--color-ink-dim)" }}>{c.title}</button>
+                <button onClick={() => deleteConv(c.id)} title="apagar" className="text-xs opacity-40 hover:opacity-100" style={{ color: "#e0705a" }}>×</button>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-full" style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", boxShadow: "0 0 22px rgba(245,181,68,.4)" }} />
