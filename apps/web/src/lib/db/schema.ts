@@ -4,6 +4,8 @@ import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 export * from "./auth-schema";
 // Tabelas de chat (conversas + mensagens).
 export * from "./chat-schema";
+// Tabelas de conhecimento (documentos + chunks + memória, com pgvector).
+export * from "./knowledge-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {

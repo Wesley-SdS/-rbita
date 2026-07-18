@@ -31,13 +31,13 @@
 - [x] `2.6` Auto-router (complexidade: local→Max→Gateway) + fallback pro local — **verificado**
 - [x] `2.7` `/api/chat` streaming (AI SDK 7) autenticado + persistência _(tool-calling entra na Fase 6 c/ conectores)_
 
-## Fase 3 — UI do app + Orb
-- [ ] `3.1` Layout do app (rails, stage, composer) — do protótipo
-- [ ] `3.2` Componente **Orb** (núcleo neural Jarvis) portado + estados
-- [ ] `3.3` Seletor de provider/modelo ligado ao backend
-- [ ] `3.4` Chat com streaming + histórico (persistido no DB)
-- [ ] `3.5` Painel de sessão/energia/custo real (tokens/latência)
-- [ ] `3.6` Visualização de atividade (tool steps)
+## Fase 3 — UI do app + Orb ✅
+- [x] `3.1` Layout do app (rails, stage, composer) — portado do protótipo
+- [x] `3.2` Componente **Orb** (núcleo neural Jarvis) React + 6 estados — **verificado**
+- [x] `3.3` Seletor de provider/modelo ligado ao backend (`/api/models`)
+- [x] `3.4` Chat com streaming + histórico persistido (conversa contínua)
+- [x] `3.5` Painel de sessão + custo vs. nuvem (req/tokens~/latência real) _(watts de GPU entram na Fase 5 c/ pynvml)_
+- [~] `3.6` Atividade: Orb reflete o estado (studying/speaking) _(timeline de tool-steps na Fase 6 com conectores)_
 
 ## Fase 4 — Memória & RAG (Vektus)
 - [ ] `4.1` Schema de memória + pgvector (embeddings)
@@ -77,4 +77,5 @@
 - _2026-07-18_ — **Fase 0 concluída**: monorepo + Next 16.2.10 + Postgres/pgvector (Docker) + Drizzle migration + `/api/health` OK + home renderizando (verificado por headless). Versões confirmadas: Next 16.2.10, Better Auth 1.6.23, AI SDK 7.0.31, React 19.2, Drizzle 0.45. Commit `5456f85`.
 - _2026-07-18_ — **Fase 1 concluída**: Better Auth 1.6.23 (email/senha) + sessões + `/app` protegida. Verificado e2e (signup pela UI → /app; usuário persistido no Postgres). Google OAuth wired (atrás de env). Commit `b81f217`.
 - _2026-07-18_ — **Fase 2 concluída**: `packages/llm` (Local/Gateway/Claude Max) + auto-router + `/api/chat` streaming + UI de chat. Verificado e2e: chat real com **Qwen 2.5 local**, streaming ao vivo, persistido no Postgres. Commit `b7c8de4`.
-- **Próximo:** Fase 3 — UI do app completa (layout do protótipo) + **Orb (núcleo neural Jarvis)** + painel de sessão/energia/custo.
+- _2026-07-18_ — **Fase 3 concluída**: console ÓRBITA completo — **Orb Jarvis em React** (verificado, estado "speaking" ao responder), rails + seletor de provedor + painel de sessão/custo. typecheck limpo. Commit `d709d6d`.
+- **Próximo:** Fase 4 — Memória & RAG (pgvector, ingestão, OCR — portados do Vektus).

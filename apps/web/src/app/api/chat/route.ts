@@ -5,6 +5,7 @@ import { resolveModel, getModelInfo, routeModelKey, providerEnv, DEFAULT_MODEL_K
 import { db } from "@/lib/db";
 import { conversation, message } from "@/lib/db/chat-schema";
 import { getSession } from "@/lib/session";
+import { retrieveContext } from "@/lib/rag/retrieve";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,11 +86,24 @@ export async function POST(req: Request) {
     model = resolveModel(effectiveKey);
   }
 
+  // RAG: recupera contexto dos documentos + memória do usuário.
+  let system = SYSTEM_PROMPT;
+  try {
+    const hits = await retrieveContext(userId, content, 4);
+    if (hits.length) {
+      system +=
+        "\n\nContexto do usuário (use quando relevante e cite a fonte entre colchetes):\n" +
+        hits.map((h, i) => `[${i + 1}] (${h.source}) ${h.content}`).join("\n\n");
+    }
+  } catch {
+    // RAG é best-effort; se falhar, segue sem contexto.
+  }
+
   const started = Date.now();
 
   const result = streamText({
     model,
-    system: SYSTEM_PROMPT,
+    system,
     messages: modelMessages,
     onFinish: async ({ text, usage }) => {
       const latencyMs = Date.now() - started;
