@@ -6,6 +6,7 @@ import { router, Stack } from "expo-router";
 import { Orb, type OrbMode } from "@/components/Orb";
 import { streamChat, fetchModels } from "@/lib/chat";
 import { getSession, signOut } from "@/lib/auth";
+import { startRecording, stopRecordingAndTranscribe, speak } from "@/lib/voice";
 
 interface Msg { role: "user" | "assistant"; content: string }
 
@@ -14,6 +15,8 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<OrbMode>("standby");
   const [modelKey, setModelKey] = useState("local/qwen2.5:7b");
+  const [recording, setRecording] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(true);
   const convId = useRef<string | undefined>(undefined);
   const scrollRef = useRef<ScrollView>(null);
 
@@ -22,14 +25,16 @@ export default function Chat() {
     fetchModels().then(({ defaultModel }) => setModelKey(defaultModel)).catch(() => {});
   }, []);
 
-  async function send() {
-    const content = input.trim();
+  async function send(text?: string) {
+    const content = (text ?? input).trim();
     if (!content || mode !== "standby") return;
     setInput("");
     setMessages((m) => [...m, { role: "user", content }, { role: "assistant", content: "" }]);
     setMode("thinking");
+    let reply = "";
     try {
       const { conversationId } = await streamChat(content, modelKey, convId.current, (full) => {
+        reply = full;
         setMode("speaking");
         setMessages((m) => {
           const c = [...m];
@@ -39,6 +44,7 @@ export default function Chat() {
         scrollRef.current?.scrollToEnd({ animated: true });
       });
       if (conversationId) convId.current = conversationId;
+      if (voiceOn && reply) void speak(reply); // fala a resposta (paridade com o web)
     } catch {
       setMessages((m) => {
         const c = [...m];
@@ -46,6 +52,30 @@ export default function Chat() {
         return c;
       });
     } finally {
+      setMode("standby");
+    }
+  }
+
+  /** Gravar por voz: toca no mic → grava → para → transcreve (STT) → envia. */
+  async function toggleMic() {
+    if (recording) {
+      setRecording(false);
+      setMode("thinking");
+      try {
+        const text = await stopRecordingAndTranscribe();
+        setMode("standby");
+        if (text) void send(text);
+      } catch {
+        setMode("standby");
+      }
+      return;
+    }
+    if (mode !== "standby") return;
+    try {
+      await startRecording();
+      setRecording(true);
+      setMode("listening");
+    } catch {
       setMode("standby");
     }
   }
@@ -77,16 +107,22 @@ export default function Chat() {
       </ScrollView>
 
       <View style={styles.composer}>
+        <Pressable onPress={() => setVoiceOn((v) => !v)} style={styles.iconBtn}>
+          <Text style={{ fontSize: 18 }}>{voiceOn ? "🔊" : "🔇"}</Text>
+        </Pressable>
         <TextInput
           style={styles.input}
           placeholder="Fale ou escreva…"
           placeholderTextColor="#8a7a63"
           value={input}
           onChangeText={setInput}
-          onSubmitEditing={send}
+          onSubmitEditing={() => send()}
           returnKeyType="send"
         />
-        <Pressable style={styles.sendBtn} onPress={send} disabled={mode !== "standby"}>
+        <Pressable onPress={toggleMic} disabled={mode !== "standby" && !recording} style={[styles.iconBtn, recording && { backgroundColor: "#e0705a" }]}>
+          <Text style={{ fontSize: 18 }}>{recording ? "⏹" : "🎙️"}</Text>
+        </Pressable>
+        <Pressable style={styles.sendBtn} onPress={() => send()} disabled={mode !== "standby"}>
           {mode !== "standby" ? <ActivityIndicator color="#241403" /> : <Text style={styles.sendText}>➤</Text>}
         </Pressable>
       </View>
@@ -107,6 +143,7 @@ const styles = StyleSheet.create({
   assistantText: { color: "#f0e6d8" },
   composer: { flexDirection: "row", gap: 8, padding: 12, borderTopWidth: 1, borderTopColor: "#2a2016" },
   input: { flex: 1, borderWidth: 1, borderColor: "#3a2f22", borderRadius: 12, padding: 12, color: "#f0e6d8", backgroundColor: "#1a130c" },
+  iconBtn: { borderWidth: 1, borderColor: "#3a2f22", borderRadius: 12, width: 44, height: 44, alignItems: "center", justifyContent: "center", backgroundColor: "#1a130c" },
   sendBtn: { backgroundColor: "#e0a83a", borderRadius: 12, width: 48, alignItems: "center", justifyContent: "center" },
   sendText: { color: "#241403", fontSize: 18, fontWeight: "700" },
   logout: { color: "#e0a83a", marginRight: 8 },
