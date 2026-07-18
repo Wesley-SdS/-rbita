@@ -73,6 +73,10 @@ services:
       # opcionais — se vazios, provedores extras somem da UI
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # voz tempo real premium (OpenAI Realtime) — opcional
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      REALTIME_MODEL: ${REALTIME_MODEL:-gpt-realtime}
+      REALTIME_VOICE: ${REALTIME_VOICE:-marin}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       # conectores extras (opcionais — somem da UI se vazios)

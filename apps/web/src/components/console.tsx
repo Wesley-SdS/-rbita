@@ -8,6 +8,7 @@ import { RoutinesPanel } from "@/components/routines-panel";
 import { ConnectorsPanel } from "@/components/connectors-panel";
 import { MeetingPanel } from "@/components/meeting-panel";
 import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
+import { RealtimeSession } from "@/lib/voice/realtime";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 
@@ -73,6 +74,9 @@ export function Console({ userName }: { userName: string }) {
   const ttsRef = useRef<LocalTTS | null>(null);
   const wakeRef = useRef<WakeListener | null>(null);
   const ttsLocalOkRef = useRef<boolean>(true); // cai p/ navegador se o TTS local falhar
+  const [realtimeEnabled, setRealtimeEnabled] = useState(false); // S2S premium disponível?
+  const [realtimeOn, setRealtimeOn] = useState(false);
+  const rtRef = useRef<RealtimeSession | null>(null);
   const [focus, setFocus] = useState(false);
   const [convs, setConvs] = useState<{ id: string; title: string }[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -159,6 +163,33 @@ export function Console({ userName }: { userName: string }) {
     }
   }
 
+  /** Modo tempo real (S2S premium via OpenAI Realtime). */
+  async function toggleRealtime() {
+    if (rtRef.current?.active) {
+      rtRef.current.stop();
+      rtRef.current = null;
+      setRealtimeOn(false);
+      setMode("standby");
+      return;
+    }
+    // não mistura com o wake word local
+    if (wakeRef.current?.active) { wakeRef.current.stop(); wakeRef.current = null; setWakeOn(false); }
+    stopSpeaking();
+    const rt = new RealtimeSession({
+      onState: (s) => setMode(s === "speaking" ? "speaking" : s === "connecting" ? "connecting" : s === "listening" ? "listening" : "standby"),
+      onError: () => { setError("Falha no modo tempo real."); rt.stop(); rtRef.current = null; setRealtimeOn(false); },
+      onTranscript: (role, text) => setMessages((m) => [...m, { role, content: text }]),
+    });
+    try {
+      setRealtimeOn(true);
+      await rt.start();
+      rtRef.current = rt;
+    } catch (e) {
+      setRealtimeOn(false);
+      setError(e instanceof Error ? e.message : "Não foi possível iniciar o tempo real.");
+    }
+  }
+
   async function toggleWake() {
     if (wakeRef.current?.active) {
       wakeRef.current.stop();
@@ -229,7 +260,8 @@ export function Console({ userName }: { userName: string }) {
       .then((d) => { setModels(d.models ?? []); setModelKey(d.defaultModel ?? d.models?.[0]?.key ?? ""); })
       .catch(() => setError("Falha ao carregar modelos"));
     loadConvs();
-    return () => { wakeRef.current?.stop(); ttsRef.current?.stop(); };
+    fetch("/api/realtime/config").then((r) => r.json()).then((d) => setRealtimeEnabled(!!d.enabled)).catch(() => {});
+    return () => { wakeRef.current?.stop(); ttsRef.current?.stop(); rtRef.current?.stop(); };
   }, []);
 
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [messages]);
@@ -424,6 +456,13 @@ export function Console({ userName }: { userName: string }) {
             style={{ borderColor: wakeOn ? "var(--color-gold)" : "var(--color-line)", color: wakeOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
             {wakeOn ? "👂" : "🕨"}
           </button>
+          {realtimeEnabled && (
+            <button onClick={toggleRealtime} title={realtimeOn ? "encerrar conversa em tempo real" : "conversa por voz em tempo real (premium)"}
+              className="rounded-lg border px-2.5 py-2 text-sm"
+              style={{ borderColor: realtimeOn ? "var(--color-gold)" : "var(--color-line)", color: realtimeOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
+              {realtimeOn ? "🔴" : "⚡"}
+            </button>
+          )}
           <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder="Fale ou escreva…" className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
             style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }} />
