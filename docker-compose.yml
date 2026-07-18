@@ -17,5 +17,65 @@ services:
       timeout: 5s
       retries: 10
 
+  voice:
+    build:
+      context: ./apps/voice
+    container_name: orbita-voice
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    volumes:
+      - whisper-models:/models
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # one-shot: aplica as migrações Drizzle e encerra
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: builder
+    container_name: orbita-migrate
+    working_dir: /repo/apps/web
+    environment:
+      DATABASE_URL: postgres://orbita:orbita@db:5432/orbita
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["pnpm", "exec", "drizzle-kit", "migrate"]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: orbita-web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+    environment:
+      # dentro da rede compose o banco é "db:5432"
+      DATABASE_URL: postgres://orbita:orbita@db:5432/orbita
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-troque-este-segredo-em-producao-min-32c}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      # Ollama roda no HOST; container alcança via host.docker.internal
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
+      VOICE_URL: http://voice:8001
+      # opcionais — se vazios, provedores extras somem da UI
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   pgdata:
+  whisper-models:

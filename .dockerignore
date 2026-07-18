@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/__pycache__
+**/.venv
+**/*.pyc
+.git
+.env
+**/.env
+*.log
+apps/web/drizzle/meta/_journal.json.lock
