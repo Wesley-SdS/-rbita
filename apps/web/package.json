@@ -21,6 +21,7 @@
     "better-auth": "^1.6.23",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
+    "duck-duck-scrape": "^2.2.7",
     "next": "^16.2.10",
     "postgres": "^3.4.9",
     "react": "^19.2.7",

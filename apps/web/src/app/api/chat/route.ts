@@ -8,6 +8,7 @@ import { memory } from "@/lib/db/knowledge-schema";
 import { expense } from "@/lib/db/finance-schema";
 import { getSession } from "@/lib/session";
 import { retrieveContext } from "@/lib/rag/retrieve";
+import { searchWeb, fetchPage } from "@/lib/tools/web";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -158,6 +159,16 @@ export async function POST(req: Request) {
         }
         return { total, moeda: "BRL", lancamentos: rows.length, porCategoria };
       },
+    }),
+    pesquisar_web: tool({
+      description: "Pesquisa na internet e retorna resultados (título, url, trecho). Use para informação atual ou que você não sabe.",
+      inputSchema: z.object({ consulta: z.string() }),
+      execute: async ({ consulta }) => await searchWeb(consulta, 5),
+    }),
+    ler_pagina: tool({
+      description: "Lê o conteúdo de texto de uma página web a partir da URL.",
+      inputSchema: z.object({ url: z.string().url() }),
+      execute: async ({ url }) => ({ conteudo: await fetchPage(url) }),
     }),
   };
 
