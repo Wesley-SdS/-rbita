@@ -1,8 +1,5 @@
 import { z } from "zod";
-import { embedTexts } from "@orbita/llm";
-import { db } from "@/lib/db";
-import { document, chunk } from "@/lib/db/knowledge-schema";
-import { chunkText } from "@/lib/rag/chunk";
+import { ingestDocument } from "@/lib/rag/ingest";
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -27,25 +24,7 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(body);
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message }, { status: 400 });
 
-  const { title, content } = parsed.data;
-  const chunks = chunkText(content);
-  if (!chunks.length) return Response.json({ error: "Conteúdo vazio" }, { status: 400 });
-
-  const userId = session.user.id;
-  const embeddings = await embedTexts(chunks);
-
-  const [doc] = await db.insert(document).values({ userId, title, source: "text" }).returning();
-  if (!doc) return Response.json({ error: "Falha ao criar documento" }, { status: 500 });
-
-  await db.insert(chunk).values(
-    chunks.map((c, i) => ({
-      documentId: doc.id,
-      userId,
-      content: c,
-      idx: i,
-      embedding: embeddings[i]!,
-    })),
-  );
-
-  return Response.json({ documentId: doc.id, title, chunks: chunks.length });
+  const res = await ingestDocument(session.user.id, parsed.data.title, parsed.data.content, "text");
+  if (!res.chunks) return Response.json({ error: "Conteúdo vazio" }, { status: 400 });
+  return Response.json({ title: parsed.data.title, ...res });
 }

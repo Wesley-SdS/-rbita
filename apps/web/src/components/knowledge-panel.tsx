@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface Counts { documents: number; chunks: number; memories: number }
 interface Mem { id: string; content: string }
@@ -47,6 +47,21 @@ export function KnowledgePanel() {
     refresh();
   }
 
+  const fileRef = useRef<HTMLInputElement>(null);
+  async function upload(f: File) {
+    setBusy(true); setMsg(`⏳ processando ${f.name}…`);
+    const fd = new FormData();
+    fd.append("file", f);
+    try {
+      const r = await fetch("/api/upload", { method: "POST", body: fd });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "falha");
+      setMsg(`✓ ${d.title}: ${d.chunks} trecho(s)`); refresh();
+    } catch (e) {
+      setMsg("✗ " + (e instanceof Error ? e.message : "erro"));
+    } finally { setBusy(false); }
+  }
+
   const input = { borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" };
 
   return (
@@ -64,6 +79,11 @@ export function KnowledgePanel() {
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título do documento" className="rounded-lg border px-2 py-1.5 text-xs outline-none" style={input} />
           <textarea value={docText} onChange={(e) => setDocText(e.target.value)} placeholder="Cole um texto para a Órbita indexar (RAG)…" rows={3} className="rounded-lg border px-2 py-1.5 text-xs outline-none" style={input} />
           <button onClick={ingest} disabled={busy} className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50" style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>Ingerir documento</button>
+
+          <input ref={fileRef} type="file" accept=".pdf,.txt,.md,image/*" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
+          <button onClick={() => fileRef.current?.click()} disabled={busy} className="rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50"
+            style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>📎 Enviar arquivo (PDF / imagem / txt)</button>
 
           <div className="mt-1 flex gap-2">
             <input value={fact} onChange={(e) => setFact(e.target.value)} onKeyDown={(e) => e.key === "Enter" && remember()} placeholder="Lembrar um fato sobre você…" className="flex-1 rounded-lg border px-2 py-1.5 text-xs outline-none" style={input} />
