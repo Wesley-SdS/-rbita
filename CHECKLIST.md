@@ -42,7 +42,7 @@
 ## Fase 4 — Memória & RAG ✅
 - [x] `4.1` Schema pgvector (document/chunk/memory vector(768) + HNSW) + embeddings Ollama
 - [x] `4.2` Ingestão de documentos + chunking com sobreposição (`/api/ingest`)
-- [~] `4.3` OCR — pendente (entra ao adicionar upload de PDF/imagem; texto já ingere)
+- [x] `4.3` Upload de arquivos (PDF via unpdf, imagem via OCR tesseract, txt) — **verificado** (PDF → citação da fonte)
 - [x] `4.4` Busca semântica no chat (RAG injeta contexto) — **verificado** (resposta só com o doc)
 - [x] `4.5` Memória de longo prazo (add/list/forget) — `/api/memory` + UI
 
@@ -66,8 +66,8 @@
 
 ## Fase 8 — Polish & lançamento 🟡
 - [~] `8.1` `docker compose up db` + Ollama + `pnpm dev` — **dev verificado**; containerizar web completo pendente
-- [ ] `8.2` LGPD (consentimento, cofre de credenciais, apagar dados)
-- [~] `8.3` Testes — typecheck limpo em todas as fases; testes unitários (Vitest) pendentes
+- [x] `8.2` LGPD: exportar dados + apagar conta (cascade) — **verificado**
+- [x] `8.3` Testes: Vitest (12 testes: chunker + auto-router/catálogo) — **passando**
 - [~] `8.4` **README** com onboarding pronto; observabilidade pendente
 
 ---
@@ -83,3 +83,5 @@
 - _2026-07-18_ — **Fase 6 (tool-calling) ✅** + **Fase 7.2 (finanças) ✅** verificados. README criado. Commits `bdc5877`, `f5c8ced`.
 - **Estado:** Fases 0–4 completas · 5 (voz, núcleo) · 6 (tool-calling) · 7.2 (finanças). **Pendentes (precisam de credenciais/serviços externos):** conectores OAuth (Gmail/Calendar/etc.), TTS local + wake word, proatividade (worker), mobile Expo, containerização completa, LGPD, testes unitários.
 - **App rodando local, real, sem stubs:** chat com Qwen 2.5, RAG/memória, voz (STT), tool-calling, finanças, Orb Jarvis.
+- _2026-07-18_ — **modo foco imersivo** (Orb fullscreen), **upload PDF/OCR**, **LGPD** (export/apagar), **Vitest** (12 testes). Commits `0a41a20`, `d40ad90`, `008123c`, `df6a3f8`.
+- **Ainda pendentes (bloqueados por credencial/download/serviço):** conectores OAuth, TTS local + wake word, proatividade (worker), mobile Expo, containerizar web.
