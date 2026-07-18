@@ -36,6 +36,13 @@
       "when": 1784385346042,
       "tag": "0004_lame_blue_shield",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784388579258,
+      "tag": "0005_vengeful_dreadnoughts",
+      "breakpoints": true
     }
   ]
 }

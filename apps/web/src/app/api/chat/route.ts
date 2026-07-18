@@ -1,14 +1,12 @@
-import { streamText, tool, stepCountIs } from "ai";
+import { streamText, stepCountIs } from "ai";
 import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { resolveModel, getModelInfo, routeModelKey, providerEnv, DEFAULT_MODEL_KEY, embedText } from "@orbita/llm";
+import { resolveModel, getModelInfo, routeModelKey, providerEnv, DEFAULT_MODEL_KEY } from "@orbita/llm";
 import { db } from "@/lib/db";
 import { conversation, message } from "@/lib/db/chat-schema";
-import { memory } from "@/lib/db/knowledge-schema";
-import { expense } from "@/lib/db/finance-schema";
 import { getSession } from "@/lib/session";
 import { retrieveContext } from "@/lib/rag/retrieve";
-import { searchWeb, fetchPage } from "@/lib/tools/web";
+import { buildTools, SYSTEM_PROMPT } from "@/lib/chat/tools";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,10 +17,6 @@ const BodySchema = z.object({
   modelKey: z.string().min(1),
   conversationId: z.string().uuid().optional(),
 });
-
-const SYSTEM_PROMPT =
-  "Você é a ÓRBITA, uma assistente pessoal de IA em português do Brasil. " +
-  "Seja direta, útil e amigável. Responda de forma concisa a menos que peçam detalhes.";
 
 export async function POST(req: Request) {
   const session = await getSession();
@@ -102,75 +96,7 @@ export async function POST(req: Request) {
     // RAG é best-effort; se falhar, segue sem contexto.
   }
 
-  // Ferramentas que a Órbita pode chamar (funcionam local, sem OAuth).
-  const tools = {
-    hora_atual: tool({
-      description: "Retorna a data e a hora atuais do sistema.",
-      inputSchema: z.object({}),
-      execute: async () => ({ agora: new Date().toLocaleString("pt-BR") }),
-    }),
-    salvar_memoria: tool({
-      description: "Salva um fato ou preferência do usuário na memória de longo prazo para lembrar depois.",
-      inputSchema: z.object({ fato: z.string().describe("o fato a memorizar") }),
-      execute: async ({ fato }) => {
-        const embedding = await embedText(fato);
-        await db.insert(memory).values({ userId, content: fato, embedding });
-        return { salvo: true, fato };
-      },
-    }),
-    buscar_conhecimento: tool({
-      description: "Busca nos documentos e na memória do usuário por informação relevante.",
-      inputSchema: z.object({ consulta: z.string() }),
-      execute: async ({ consulta }) => {
-        const hits = await retrieveContext(userId, consulta, 4);
-        return { resultados: hits.map((h) => ({ fonte: h.source, trecho: h.content })) };
-      },
-    }),
-    registrar_gasto: tool({
-      description: "Registra um gasto/despesa do usuário. Valor em reais (número).",
-      inputSchema: z.object({
-        descricao: z.string(),
-        valor: z.number().describe("valor em reais"),
-        categoria: z.string().optional(),
-      }),
-      execute: async ({ descricao, valor, categoria }) => {
-        await db.insert(expense).values({
-          userId,
-          description: descricao,
-          category: categoria ?? null,
-          amountCents: Math.round(valor * 100),
-        });
-        return { registrado: true, valor, categoria: categoria ?? "outros" };
-      },
-    }),
-    resumo_financeiro: tool({
-      description: "Resumo dos gastos do usuário: total e por categoria.",
-      inputSchema: z.object({}),
-      execute: async () => {
-        const rows = await db
-          .select({ category: expense.category, amountCents: expense.amountCents })
-          .from(expense)
-          .where(eq(expense.userId, userId));
-        const total = rows.reduce((s, r) => s + r.amountCents, 0) / 100;
-        const porCategoria: Record<string, number> = {};
-        for (const r of rows) {
-          const k = r.category ?? "outros";
-          porCategoria[k] = (porCategoria[k] ?? 0) + r.amountCents / 100;
-        }
-        return { total, moeda: "BRL", lancamentos: rows.length, porCategoria };
-      },
-    }),
-    pesquisar_web: tool({
-      description: "Pesquisa na internet e retorna resultados (título, url, trecho). Use para informação atual ou que você não sabe.",
-      inputSchema: z.object({ consulta: z.string() }),
-      execute: async ({ consulta }) => await searchWeb(consulta, 5),
-    }),
-    ler_pagina: tool({
-      description: "Lê o conteúdo de texto de uma página web a partir da URL.",
-      inputSchema: z.object({ url: z.string().url() }),
-      execute: async ({ url }) => ({ conteudo: await fetchPage(url) }),
-    }),
-  };
+  const tools = buildTools(userId);
 
   const started = Date.now();
 

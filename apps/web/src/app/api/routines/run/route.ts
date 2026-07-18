@@ -1,0 +1,54 @@
+import { generateText, stepCountIs } from "ai";
+import { eq } from "drizzle-orm";
+import { resolveModel, DEFAULT_MODEL_KEY } from "@orbita/llm";
+import { db } from "@/lib/db";
+import { routine, notification } from "@/lib/db/routine-schema";
+import { buildTools, SYSTEM_PROMPT } from "@/lib/chat/tools";
+import { getSession } from "@/lib/session";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
+/** Executa as rotinas devidas do usuário (proatividade) e cria notificações. */
+export async function POST(req: Request) {
+  const session = await getSession();
+  if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
+  const uid = session.user.id;
+
+  const { force } = (await req.json().catch(() => ({}))) as { force?: boolean };
+
+  const rows = await db.select().from(routine).where(eq(routine.userId, uid));
+  const now = Date.now();
+  const due = rows.filter(
+    (r) => r.enabled && (force || !r.lastRunAt || now - r.lastRunAt.getTime() >= r.intervalMinutes * 60000),
+  );
+
+  const tools = buildTools(uid);
+  const model = resolveModel(DEFAULT_MODEL_KEY); // rotinas rodam local por padrão
+  let criadas = 0;
+
+  for (const r of due) {
+    try {
+      const { text } = await generateText({
+        model,
+        system: SYSTEM_PROMPT + "\nVocê está executando uma rotina proativa. Produza um resultado útil e direto.",
+        prompt: r.prompt,
+        tools,
+        stopWhen: stepCountIs(5),
+      });
+      await db.insert(notification).values({
+        userId: uid,
+        routineId: r.id,
+        title: r.title,
+        content: text?.trim() || "(sem conteúdo)",
+      });
+      await db.update(routine).set({ lastRunAt: new Date() }).where(eq(routine.id, r.id));
+      criadas++;
+    } catch {
+      // rotina que falha não derruba as outras
+    }
+  }
+
+  return Response.json({ devidas: due.length, notificacoes: criadas });
+}

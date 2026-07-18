@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Orb, type OrbMode } from "@/components/orb";
 import { KnowledgePanel } from "@/components/knowledge-panel";
 import { PrivacyPanel } from "@/components/privacy-panel";
+import { RoutinesPanel } from "@/components/routines-panel";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 
@@ -324,6 +325,7 @@ export function Console({ userName }: { userName: string }) {
             <div className="mt-1 text-xl font-bold">{brl(stats.saved)} <span className="text-xs" style={{ color: "var(--color-ink-dim)" }}>vs. nuvem</span></div>
           </div>
         </div>
+        <RoutinesPanel />
       </aside>
     </div>
 

@@ -8,6 +8,8 @@ export * from "./chat-schema";
 export * from "./knowledge-schema";
 // Tabelas de finanças (skill de gastos).
 export * from "./finance-schema";
+// Tabelas de rotinas + notificações (proatividade).
+export * from "./routine-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {
