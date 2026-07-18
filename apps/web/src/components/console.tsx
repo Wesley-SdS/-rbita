@@ -75,6 +75,7 @@ export function Console({ userName }: { userName: string }) {
   const chunksRef = useRef<Blob[]>([]);
   const ttsRef = useRef<LocalTTS | null>(null);
   const wakeRef = useRef<WakeListener | null>(null);
+  const audioFileRef = useRef<HTMLInputElement | null>(null);
   const ttsLocalOkRef = useRef<boolean>(true); // cai p/ navegador se o TTS local falhar
   const [realtimeEnabled, setRealtimeEnabled] = useState(false); // S2S premium disponível?
   const [realtimeOn, setRealtimeOn] = useState(false);
@@ -143,6 +144,23 @@ export function Console({ userName }: { userName: string }) {
   function stopSpeaking() {
     ttsRef.current?.stop();
     if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
+  }
+
+  /** Transcreve um arquivo de áudio enviado e coloca o texto no composer. */
+  async function sendAudioFile(file: File) {
+    setMode("studying");
+    try {
+      const fd = new FormData();
+      fd.append("file", file, file.name || "audio.webm");
+      const r = await fetch("/api/stt", { method: "POST", body: fd });
+      const d = await r.json();
+      setMode("standby");
+      if (d.text?.trim()) setInput((prev) => (prev ? prev + " " : "") + d.text.trim());
+      else setError("Não consegui transcrever o áudio.");
+    } catch {
+      setMode("standby");
+      setError("Falha ao transcrever o áudio.");
+    }
   }
 
   /** Fluxo mãos-livres: grava o comando até o silêncio, transcreve e envia. */
@@ -472,6 +490,12 @@ export function Console({ userName }: { userName: string }) {
               {realtimeOn ? "🔴" : "⚡"}
             </button>
           )}
+          <input ref={audioFileRef} type="file" accept="audio/*" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendAudioFile(f); e.target.value = ""; }} />
+          <button onClick={() => audioFileRef.current?.click()} title="enviar áudio para transcrever" className="rounded-lg border px-2.5 py-2 text-sm"
+            style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>
+            🎵
+          </button>
           <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder="Fale ou escreva…" className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
             style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }} />

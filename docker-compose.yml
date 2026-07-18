@@ -77,6 +77,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       REALTIME_MODEL: ${REALTIME_MODEL:-gpt-realtime}
       REALTIME_VOICE: ${REALTIME_VOICE:-marin}
+      ASSEMBLYAI_API_KEY: ${ASSEMBLYAI_API_KEY:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       # conectores extras (opcionais — somem da UI se vazios)
