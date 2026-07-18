@@ -8,8 +8,8 @@ export interface ModelInfo {
   id: string;
   label: string;
   tier: "small" | "medium" | "large";
-  /** grátis (local) / assinatura (claude max) / pago (gateway) */
-  billing: "free" | "subscription" | "paid";
+  /** grátis (local) / assinatura (claude max) / pago (gateway) / variável (auto) */
+  billing: "free" | "subscription" | "paid" | "variable";
   /** custo aproximado em R$ por 1k tokens de saída (0 = local/assinatura) */
   costPer1k: number;
 }
@@ -33,7 +33,7 @@ export const AUTO_MODEL: ModelInfo = {
   id: "auto",
   label: "Auto · roteia (local → Max → Gateway)",
   tier: "medium",
-  billing: "free",
+  billing: "variable", // pode rotear p/ Max (assinatura) ou Gateway (pago)
   costPer1k: 0,
 };
 
@@ -57,7 +57,9 @@ export function availableModels(env: { gateway: boolean; claude: boolean }): Mod
  * Simples → local pequeno; complexo → local grande, ou Max/Gateway se configurados.
  */
 export function routeModelKey(content: string, env: { gateway: boolean; claude: boolean }): string {
-  const complex = content.length > 600 || /```|função|code|algoritmo|prove|demonstre|refatore|arquitetura/i.test(content);
+  const complex =
+    content.length > 600 ||
+    /```|\b(fun[çc][ãa]o|c[óo]digo|code|algoritmo|refator\w*|arquitetura|demonstre|prove|equa[çc][ãa]o|matem[áa]tic\w*|debug\w*)\b/i.test(content);
   if (complex && env.claude) return "claude/claude-opus-4-8";
   if (complex && env.gateway) return "gateway/openai/gpt-5";
   if (complex) return "local/qwen2.5:14b";

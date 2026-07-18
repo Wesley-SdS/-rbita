@@ -14,11 +14,27 @@ export function FinancePanel() {
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const pdfRef = useRef<HTMLInputElement>(null);
 
   function load() {
     fetch("/api/finance").then((r) => r.json()).then((d) => { setEntries(d.entries ?? []); setTotals(d.totals ?? null); }).catch(() => {});
   }
   useEffect(load, []);
+
+  async function importStatement(file: File) {
+    setBusy(true); setFlash("lendo extrato…");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch("/api/finance/statement", { method: "POST", body: fd });
+      const d = await r.json();
+      if (r.ok) { setFlash(`✓ ${d.importados} lançamento(s) importado(s)`); load(); }
+      else setFlash("⚠ " + (d.error ?? "falha"));
+    } finally {
+      setBusy(false);
+      setTimeout(() => setFlash(null), 6000);
+    }
+  }
 
   async function uploadReceipt(file: File) {
     setBusy(true); setFlash("lendo comprovante…");
@@ -64,10 +80,17 @@ export function FinancePanel() {
       )}
 
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadReceipt(f); e.target.value = ""; }} />
-      <button onClick={() => fileRef.current?.click()} disabled={busy} className="mt-2 w-full rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50"
-        style={{ borderColor: "color-mix(in oklab, var(--color-gold) 40%, var(--color-line))", color: "var(--color-gold)" }}>
-        📷 enviar comprovante/cupom (OCR)
-      </button>
+      <input ref={pdfRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void importStatement(f); e.target.value = ""; }} />
+      <div className="mt-2 flex gap-1.5">
+        <button onClick={() => fileRef.current?.click()} disabled={busy} className="flex-1 rounded-lg border px-2 py-1.5 text-[11px] disabled:opacity-50"
+          style={{ borderColor: "color-mix(in oklab, var(--color-gold) 40%, var(--color-line))", color: "var(--color-gold)" }}>
+          📷 comprovante
+        </button>
+        <button onClick={() => pdfRef.current?.click()} disabled={busy} className="flex-1 rounded-lg border px-2 py-1.5 text-[11px] disabled:opacity-50"
+          style={{ borderColor: "color-mix(in oklab, var(--color-gold) 40%, var(--color-line))", color: "var(--color-gold)" }}>
+          📄 extrato PDF
+        </button>
+      </div>
       {flash && <div className="mt-1 text-[10px]" style={{ color: "var(--color-ink-dim)" }}>{flash}</div>}
 
       {open && (
@@ -98,7 +121,12 @@ function Section({ title, entries, onToggle, onRemove }: { title: string; entrie
         <div key={e.id} className="flex items-center gap-1.5 py-0.5 text-[11px]" style={{ opacity: e.paid ? 0.5 : 1 }}>
           <button onClick={() => onToggle(e)} title={e.paid ? "reabrir" : "marcar quitada"}>{e.paid ? "☑" : "☐"}</button>
           <span className="flex-1 truncate" style={{ color: "var(--color-ink)", textDecoration: e.paid ? "line-through" : "none" }}>{e.description}</span>
-          {e.dueDate && <span style={{ color: "var(--color-ink-dim)" }}>{e.dueDate.slice(5, 10)}</span>}
+          {e.dueDate && (
+            <span style={{ color: !e.paid && new Date(e.dueDate) < new Date() ? "#e0705a" : "var(--color-ink-dim)" }}
+              title={!e.paid && new Date(e.dueDate) < new Date() ? "vencida" : "vencimento"}>
+              {e.dueDate.slice(5, 10)}
+            </span>
+          )}
           <span className="font-semibold" style={{ color: "var(--color-ink)" }}>R${e.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
           <button onClick={() => onRemove(e.id)} style={{ color: "#e0705a" }}>×</button>
         </div>

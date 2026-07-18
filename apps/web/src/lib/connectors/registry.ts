@@ -41,8 +41,9 @@ const DEFS: Record<ConnectorId, ConnectorDef> = {
     authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
     tokenUrl: "https://oauth2.googleapis.com/token",
     scopes: [
+      // escopos mínimos p/ as features: ler/rascunhar/enviar e-mail + eventos da agenda
       "https://www.googleapis.com/auth/gmail.modify",
-      "https://www.googleapis.com/auth/calendar",
+      "https://www.googleapis.com/auth/calendar.events",
       "openid",
       "email",
     ],

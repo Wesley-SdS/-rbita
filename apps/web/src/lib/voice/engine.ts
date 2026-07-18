@@ -9,8 +9,10 @@
 export class LocalTTS {
   private audio: HTMLAudioElement | null = null;
   private url: string | null = null;
+  // guardados para que stop() (barge-in) também finalize a fala em curso:
+  private endCurrent: (() => void) | null = null;
 
-  /** Sintetiza e toca. Resolve quando termina (ou é interrompido). */
+  /** Sintetiza e toca. Resolve quando termina OU é interrompido (barge-in). */
   async speak(text: string, opts?: { onStart?: () => void; onEnd?: () => void }): Promise<void> {
     this.stop();
     const clean = text.replace(/[#*_`>[\]]/g, "").slice(0, 2000);
@@ -26,25 +28,33 @@ export class LocalTTS {
     const audio = new Audio(this.url);
     this.audio = audio;
     return new Promise<void>((resolve) => {
-      audio.onplay = () => opts?.onStart?.();
+      let settled = false;
       const done = () => {
+        if (settled) return; // idempotente: fim natural OU stop() chamam só uma vez
+        settled = true;
+        this.endCurrent = null;
         opts?.onEnd?.();
         this.cleanup();
         resolve();
       };
+      this.endCurrent = done; // stop() usa isto para resolver + disparar onEnd
+      audio.onplay = () => opts?.onStart?.();
       audio.onended = done;
       audio.onerror = done;
       void audio.play().catch(done);
     });
   }
 
-  /** Interrompe a fala imediatamente (barge-in). */
+  /** Interrompe a fala imediatamente (barge-in) — resolve a Promise e roda onEnd. */
   stop() {
     if (this.audio) {
       this.audio.pause();
       this.audio.currentTime = 0;
       this.audio = null;
     }
+    const end = this.endCurrent;
+    this.endCurrent = null;
+    end?.(); // finaliza a fala pendente (senão o estado ficaria preso em "speaking")
     this.cleanup();
   }
 

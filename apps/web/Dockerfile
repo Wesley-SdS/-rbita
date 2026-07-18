@@ -38,6 +38,10 @@ RUN groupadd -g 1001 nodejs && useradd -u 1001 -g nodejs -m nextjs
 COPY --from=builder --chown=nextjs:nodejs /repo/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /repo/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /repo/apps/web/public ./apps/web/public
+# tesseract.js é serverExternalPackage: o worker é require dinâmico (não traçável),
+# então copiamos o pacote explicitamente para o OCR funcionar no standalone.
+COPY --from=builder --chown=nextjs:nodejs /repo/node_modules/.pnpm/tesseract.js@7.0.0 ./apps/web/node_modules/.pnpm/tesseract.js@7.0.0
+COPY --from=builder --chown=nextjs:nodejs /repo/apps/web/node_modules/tesseract.js ./apps/web/node_modules/tesseract.js
 
 USER nextjs
 EXPOSE 3000

@@ -31,13 +31,12 @@ export function resolveModel(key: string): LanguageModel {
     case "claude": {
       const token = process.env.CLAUDE_CODE_OAUTH_TOKEN;
       if (!token) throw new Error("CLAUDE_CODE_OAUTH_TOKEN não configurado");
-      // Usa a assinatura Max via token OAuth do Claude Code — NÃO via Gateway (ToS Anthropic).
+      // Assinatura Max via token OAuth do Claude Code — NÃO via Gateway (ToS Anthropic).
+      // `authToken` emite só `Authorization: Bearer` (evita o header x-api-key:"" que
+      // vazava junto com apiKey:"" e confundia a autenticação da Anthropic).
       const anthropic = createAnthropic({
-        apiKey: "",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "anthropic-beta": "oauth-2025-04-20",
-        },
+        authToken: token,
+        headers: { "anthropic-beta": "oauth-2025-04-20" },
       });
       return anthropic(info.id);
     }

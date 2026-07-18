@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 /**
@@ -34,7 +35,10 @@ function resolveWorkerPath(): string | undefined {
 export async function ocrImage(buf: Buffer): Promise<string> {
   const { createWorker } = await import("tesseract.js");
   const workerPath = resolveWorkerPath();
-  const worker = await createWorker("por+eng", 1, workerPath ? { workerPath } : undefined);
+  // cachePath gravável: as traineddata (por/eng) baixam 1x da CDN e ficam cacheadas
+  // (evita rebaixar a cada request; a 1ª vez precisa de internet).
+  const cachePath = path.join(process.env.OCR_CACHE_DIR ?? tmpdir(), "orbita-tesseract");
+  const worker = await createWorker("por+eng", 1, { ...(workerPath ? { workerPath } : {}), cachePath });
   try {
     const { data } = await worker.recognize(buf);
     return data.text;

@@ -1,10 +1,22 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
+import { db } from "@/lib/db";
+import { actionQueue } from "@/lib/db/action-schema";
 import { getAccessToken, connectedProviders } from "@/lib/connectors/store";
-import { listRecentEmails, createDraft, sendEmail, listUpcomingEvents, createEvent } from "@/lib/connectors/google";
+import { listRecentEmails, createDraft, listUpcomingEvents } from "@/lib/connectors/google";
 import { searchNotion, readNotionPage } from "@/lib/connectors/notion";
-import { listChannels, postMessage } from "@/lib/connectors/slack";
-import { whatsappConfigured, sendWhatsApp } from "@/lib/connectors/whatsapp";
+import { listChannels } from "@/lib/connectors/slack";
+import { whatsappConfigured } from "@/lib/connectors/whatsapp";
+
+/**
+ * Enfileira uma ação com efeito colateral para APROVAÇÃO HUMANA (não executa).
+ * O LLM nunca dispara e-mail/evento/mensagem direto — cria uma proposta que o
+ * usuário confirma na UI (gate contra prompt-injection).
+ */
+async function enqueue(userId: string, kind: string, summary: string, payload: Record<string, unknown>) {
+  const [row] = await db.insert(actionQueue).values({ userId, kind, summary, payload }).returning({ id: actionQueue.id });
+  return { proposta_enfileirada: true, aguardando_aprovacao: true, id: row?.id, resumo: summary };
+}
 
 /**
  * Ferramentas dos conectores — só entram no chat para os serviços que o usuário
@@ -38,15 +50,10 @@ export async function buildConnectorTools(userId: string): Promise<ToolSet> {
       },
     });
     tools.enviar_email = tool({
-      description: "ENVIA um e-mail pelo Gmail. Ação irreversível: só chame com confirmar=true DEPOIS que o usuário aprovar explicitamente o texto. Sem confirmar, devolve a proposta para revisão.",
-      inputSchema: z.object({ para: z.string(), assunto: z.string(), corpo: z.string(), confirmar: z.boolean().default(false) }),
-      execute: async ({ para, assunto, corpo, confirmar }) => {
-        if (!confirmar) return { requer_confirmacao: true, acao: "enviar_email", proposta: { para, assunto, corpo } };
-        const token = await getAccessToken("google", userId);
-        if (!token) return { erro: "Google não conectado" };
-        const r = await sendEmail(token, para, assunto, corpo);
-        return { enviado: true, id: r.id, para, assunto };
-      },
+      description: "Propõe o ENVIO de um e-mail pelo Gmail. Não envia direto: cria uma proposta que o usuário aprova no painel 'Ações a confirmar'. Informe ao usuário que a proposta foi criada.",
+      inputSchema: z.object({ para: z.string(), assunto: z.string(), corpo: z.string() }),
+      execute: async ({ para, assunto, corpo }) =>
+        enqueue(userId, "enviar_email", `Enviar e-mail para ${para}: "${assunto}"`, { para, assunto, corpo }),
     });
     tools.listar_eventos = tool({
       description: "Lista os próximos eventos da Google Agenda do usuário.",
@@ -58,22 +65,16 @@ export async function buildConnectorTools(userId: string): Promise<ToolSet> {
       },
     });
     tools.criar_evento = tool({
-      description: "Cria um evento na Google Agenda. Datas em ISO 8601 com fuso (ex: 2026-07-20T15:00:00-03:00). Ação com efeito: só com confirmar=true após o usuário aprovar. Sem confirmar, devolve a proposta.",
+      description: "Propõe a criação de um evento na Google Agenda. Datas em ISO 8601 com fuso (ex: 2026-07-20T15:00:00-03:00). Não cria direto: enfileira uma proposta para o usuário aprovar no painel 'Ações a confirmar'.",
       inputSchema: z.object({
         titulo: z.string(),
         inicio: z.string().describe("ISO 8601 com fuso"),
         fim: z.string().describe("ISO 8601 com fuso"),
         descricao: z.string().optional(),
         local: z.string().optional(),
-        confirmar: z.boolean().default(false),
       }),
-      execute: async ({ titulo, inicio, fim, descricao, local, confirmar }) => {
-        if (!confirmar) return { requer_confirmacao: true, acao: "criar_evento", proposta: { titulo, inicio, fim, local } };
-        const token = await getAccessToken("google", userId);
-        if (!token) return { erro: "Google não conectado" };
-        const e = await createEvent(token, { summary: titulo, startISO: inicio, endISO: fim, description: descricao, location: local });
-        return { criado: true, id: e.id, link: e.htmlLink };
-      },
+      execute: async ({ titulo, inicio, fim, descricao, local }) =>
+        enqueue(userId, "criar_evento", `Criar evento "${titulo}" em ${inicio}`, { titulo, inicio, fim, descricao, local }),
     });
   }
 
@@ -109,27 +110,19 @@ export async function buildConnectorTools(userId: string): Promise<ToolSet> {
       },
     });
     tools.enviar_slack = tool({
-      description: "Posta uma mensagem num canal do Slack (use o id do canal de listar_canais_slack). Ação com efeito: só com confirmar=true após o usuário aprovar. Sem confirmar, devolve a proposta.",
-      inputSchema: z.object({ canal: z.string(), texto: z.string(), confirmar: z.boolean().default(false) }),
-      execute: async ({ canal, texto, confirmar }) => {
-        if (!confirmar) return { requer_confirmacao: true, acao: "enviar_slack", proposta: { canal, texto } };
-        const token = await getAccessToken("slack", userId);
-        if (!token) return { erro: "Slack não conectado" };
-        const r = await postMessage(token, canal, texto);
-        return { enviado: true, ts: r.ts };
-      },
+      description: "Propõe postar uma mensagem num canal do Slack (id do canal de listar_canais_slack). Não posta direto: enfileira uma proposta para o usuário aprovar no painel 'Ações a confirmar'.",
+      inputSchema: z.object({ canal: z.string(), texto: z.string() }),
+      execute: async ({ canal, texto }) =>
+        enqueue(userId, "enviar_slack", `Postar no Slack (${canal}): "${texto.slice(0, 60)}"`, { canal, texto }),
     });
   }
 
   if (whatsappConfigured()) {
     tools.enviar_whatsapp = tool({
-      description: "Envia uma mensagem de WhatsApp (número no formato internacional, ex: 5511999998888). Ação com efeito: só com confirmar=true após o usuário aprovar. Sem confirmar, devolve a proposta.",
-      inputSchema: z.object({ para: z.string(), texto: z.string(), confirmar: z.boolean().default(false) }),
-      execute: async ({ para, texto, confirmar }) => {
-        if (!confirmar) return { requer_confirmacao: true, acao: "enviar_whatsapp", proposta: { para, texto } };
-        const r = await sendWhatsApp(para, texto);
-        return { enviado: true, id: r.id };
-      },
+      description: "Propõe enviar uma mensagem de WhatsApp (número internacional, ex: 5511999998888). Não envia direto: enfileira uma proposta para o usuário aprovar no painel 'Ações a confirmar'.",
+      inputSchema: z.object({ para: z.string(), texto: z.string() }),
+      execute: async ({ para, texto }) =>
+        enqueue(userId, "enviar_whatsapp", `Enviar WhatsApp para ${para}: "${texto.slice(0, 60)}"`, { para, texto }),
     });
   }
 

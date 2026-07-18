@@ -9,6 +9,10 @@ export async function ingestDocument(userId: string, title: string, content: str
   if (!chunks.length) return { documentId: null, chunks: 0 };
 
   const embeddings = await embedTexts(chunks);
+  // consistência: um embedding por chunk (senão inseriríamos vetor undefined/corrompido)
+  if (embeddings.length !== chunks.length) {
+    throw new Error(`Embeddings inconsistentes: ${embeddings.length} para ${chunks.length} chunks`);
+  }
   const [doc] = await db.insert(document).values({ userId, title, source }).returning();
   if (!doc) throw new Error("Falha ao criar documento");
 

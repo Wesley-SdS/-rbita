@@ -63,22 +63,16 @@ export class RealtimeSession {
   private handleEvent(raw: string) {
     let ev: { type?: string; transcript?: string; delta?: string };
     try { ev = JSON.parse(raw); } catch { return; }
-    switch (ev.type) {
-      case "input_audio_buffer.speech_started":
-        this.cb.onState?.("listening");
-        break;
-      case "response.audio.delta":
-        this.cb.onState?.("speaking");
-        break;
-      case "response.audio_transcript.done":
-        if (ev.transcript) this.cb.onTranscript?.("assistant", ev.transcript);
-        break;
-      case "conversation.item.input_audio_transcription.completed":
-        if (ev.transcript) this.cb.onTranscript?.("user", ev.transcript);
-        break;
-      case "error":
-        this.cb.onError?.("erro na sessão realtime");
-        break;
+    const t = ev.type ?? "";
+    // aceita tanto os nomes da fase beta quanto os do GA (gpt-realtime)
+    if (t === "input_audio_buffer.speech_started") this.cb.onState?.("listening");
+    else if (t === "response.audio.delta" || t === "response.output_audio.delta") this.cb.onState?.("speaking");
+    else if (t === "response.audio_transcript.done" || t === "response.output_audio_transcript.done") {
+      if (ev.transcript) this.cb.onTranscript?.("assistant", ev.transcript);
+    } else if (t === "conversation.item.input_audio_transcription.completed") {
+      if (ev.transcript) this.cb.onTranscript?.("user", ev.transcript);
+    } else if (t === "error") {
+      this.cb.onError?.("erro na sessão realtime");
     }
   }
 

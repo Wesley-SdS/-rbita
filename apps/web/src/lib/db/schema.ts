@@ -14,6 +14,8 @@ export * from "./routine-schema";
 export * from "./connector-schema";
 // To-do list do dia a dia.
 export * from "./todo-schema";
+// Fila de ações destrutivas (gate humano — aprovação na UI).
+export * from "./action-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {

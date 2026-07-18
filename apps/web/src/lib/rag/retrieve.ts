@@ -30,8 +30,22 @@ export async function retrieveContext(userId: string, query: string, k = 4): Pro
     .orderBy(desc(memSim))
     .limit(3);
 
-  return [
+  const hits = [
     ...mems.map((m) => ({ content: m.content, source: "memória", sim: Number(m.sim) })),
     ...chunks.map((c) => ({ content: c.content, source: c.title, sim: Number(c.sim) })),
   ];
+
+  // fallback: se nada passou do corte, traz o melhor chunk mesmo assim (evita
+  // perder o resultado logo abaixo do threshold quando havia algo relevante).
+  if (hits.length === 0) {
+    const [best] = await db
+      .select({ content: chunk.content, title: document.title, sim: chunkSim })
+      .from(chunk)
+      .innerJoin(document, eq(chunk.documentId, document.id))
+      .where(and(eq(chunk.userId, userId), gt(chunkSim, 0.2)))
+      .orderBy(desc(chunkSim))
+      .limit(1);
+    if (best) hits.push({ content: best.content, source: best.title, sim: Number(best.sim) });
+  }
+  return hits;
 }

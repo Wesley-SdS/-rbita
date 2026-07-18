@@ -24,13 +24,15 @@ export async function GET() {
 
   let edges: Array<{ source: string; target: string; sim: number }> = [];
   if (nodes.length > 1) {
-    // arestas entre memórias próximas do usuário; o cliente ignora as que
-    // referenciam nós fora do top-60.
+    // arestas SÓ entre os mesmos 60 nós exibidos (CTE) — evita o cross-join
+    // quadrático sobre todas as memórias do usuário.
     const raw = await db.execute(sql`
+      WITH n AS (
+        SELECT id, embedding FROM memory WHERE user_id = ${uid} ORDER BY created_at DESC LIMIT 60
+      )
       SELECT a.id AS source, b.id AS target, round((1 - (a.embedding <=> b.embedding))::numeric, 3) AS sim
-      FROM memory a JOIN memory b ON a.id < b.id
-      WHERE a.user_id = ${uid} AND b.user_id = ${uid}
-        AND (1 - (a.embedding <=> b.embedding)) > 0.55
+      FROM n a JOIN n b ON a.id < b.id
+      WHERE (1 - (a.embedding <=> b.embedding)) > 0.55
       ORDER BY sim DESC LIMIT 150
     `);
     edges = (raw as unknown as Array<{ source: string; target: string; sim: string }>).map((e) => ({

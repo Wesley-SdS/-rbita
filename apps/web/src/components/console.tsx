@@ -10,6 +10,7 @@ import { MeetingPanel } from "@/components/meeting-panel";
 import { FinancePanel } from "@/components/finance-panel";
 import { TodoPanel } from "@/components/todo-panel";
 import { FolderPanel } from "@/components/folder-panel";
+import { ActionsPanel } from "@/components/actions-panel";
 import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
 import { RealtimeSession } from "@/lib/voice/realtime";
 import { signOut } from "@/lib/auth-client";
@@ -18,7 +19,7 @@ import { useRouter } from "next/navigation";
 type Role = "user" | "assistant";
 interface ToolStep { name: string; done: boolean }
 interface Msg { role: Role; content: string; steps?: ToolStep[] }
-interface ModelInfo { key: string; label: string; provider: string; billing: "free" | "subscription" | "paid" }
+interface ModelInfo { key: string; label: string; provider: string; billing: "free" | "subscription" | "paid" | "variable" }
 
 // rótulos amigáveis para a timeline de atividade (o que a Órbita está fazendo).
 const TOOL_LABELS: Record<string, string> = {
@@ -141,10 +142,11 @@ export function Console({ userName }: { userName: string }) {
     speakBrowser(text);
   }
 
-  /** Para a fala imediatamente (barge-in). */
+  /** Para a fala imediatamente (barge-in) e libera o estado (evita travar em "speaking"). */
   function stopSpeaking() {
     ttsRef.current?.stop();
     if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
+    if (modeRef.current === "speaking") { modeRef.current = "standby"; setMode("standby"); }
   }
 
   /** "Ver a tela": captura um frame da tela compartilhada e pede análise à Órbita. */
@@ -256,9 +258,10 @@ export function Console({ userName }: { userName: string }) {
       if (!cfg.up) { setError("Serviço de voz offline — wake word precisa do apps/voice rodando."); return; }
       const listener = new WakeListener(cfg.wsWakeUrl, {
         onWake: () => {
-          stopSpeaking(); // barge-in ao ouvir "Ei Órbita"
+          stopSpeaking(); // barge-in ao ouvir "Ei Órbita" (libera o estado)
           if (modeRef.current === "standby") void voiceCommand();
         },
+        // marca que estamos em modo voz (para a conversa continuar sem repetir o gatilho)
         onEnergy: (rms) => {
           // barge-in por voz: se a Órbita está falando e o usuário fala alto, interrompe
           if (ttsRef.current?.speaking && rms > 0.06) stopSpeaking();
@@ -389,7 +392,14 @@ export function Console({ userName }: { userName: string }) {
         saved: s.saved + (isLocal ? gptCost : 0),
       }));
 
-      if (voiceOn) { spoke = true; void speak(acc); }
+      if (voiceOn) {
+        spoke = true;
+        void speak(acc).then(() => {
+          // conversa contínua mãos-livres: enquanto o wake está ativo, re-arma a
+          // escuta por um follow-up (sem precisar repetir "Ei Órbita" a cada turno).
+          if (wakeRef.current?.active && modeRef.current === "standby") void voiceCommand();
+        });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro inesperado");
       setMessages((m) => { const c = [...m]; if (c[c.length - 1]?.role === "assistant" && !c[c.length - 1]?.content) c.pop(); return c; });
@@ -571,6 +581,7 @@ export function Console({ userName }: { userName: string }) {
         <FinancePanel />
         <TodoPanel />
         <FolderPanel />
+        <ActionsPanel />
         <ConnectorsPanel />
         <RoutinesPanel />
       </aside>

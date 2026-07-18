@@ -88,7 +88,10 @@ export async function POST(req: Request) {
   }
 
   // RAG: recupera contexto dos documentos + memória do usuário.
-  let system = SYSTEM_PROMPT;
+  // Para o token Max (beta OAuth), a Anthropic exige que o system comece com a
+  // identidade do Claude Code, senão rejeita ("credential only for Claude Code").
+  const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.\n\n";
+  let system = (effectiveKey.startsWith("claude/") ? CLAUDE_CODE_IDENTITY : "") + SYSTEM_PROMPT;
   try {
     const hits = await retrieveContext(userId, content, 4);
     if (hits.length) {
