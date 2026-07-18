@@ -6,7 +6,7 @@ import { KnowledgePanel } from "@/components/knowledge-panel";
 import { PrivacyPanel } from "@/components/privacy-panel";
 import { RoutinesPanel } from "@/components/routines-panel";
 import { ConnectorsPanel } from "@/components/connectors-panel";
-import { LocalTTS, WakeListener } from "@/lib/voice/engine";
+import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 
@@ -34,6 +34,7 @@ export function Console({ userName }: { userName: string }) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<OrbMode>("standby");
+  const modeRef = useRef<OrbMode>("standby"); // espelho p/ callbacks (evita stale closure do wake)
   const [error, setError] = useState<string | null>(null);
   const convId = useRef<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -114,6 +115,26 @@ export function Console({ userName }: { userName: string }) {
     if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
   }
 
+  /** Fluxo mãos-livres: grava o comando até o silêncio, transcreve e envia. */
+  async function voiceCommand() {
+    if (modeRef.current !== "standby") return;
+    setMode("listening");
+    try {
+      const blob = await recordUntilSilence({ onSpeech: () => setMode("listening") });
+      if (!blob) { setMode("standby"); return; }
+      setMode("studying");
+      const fd = new FormData();
+      fd.append("file", blob, "audio.webm");
+      const r = await fetch("/api/stt", { method: "POST", body: fd });
+      const d = await r.json();
+      if (d.text?.trim()) { setMode("standby"); void sendMessage(d.text.trim()); }
+      else { setMode("standby"); }
+    } catch {
+      setMode("standby");
+      setError("Falha ao capturar o comando de voz.");
+    }
+  }
+
   async function toggleWake() {
     if (wakeRef.current?.active) {
       wakeRef.current.stop();
@@ -126,8 +147,8 @@ export function Console({ userName }: { userName: string }) {
       if (!cfg.up) { setError("Serviço de voz offline — wake word precisa do apps/voice rodando."); return; }
       const listener = new WakeListener(cfg.wsWakeUrl, {
         onWake: () => {
-          stopSpeaking(); // barge-in ao ouvir o gatilho
-          if (mode === "standby" && !recording) void toggleMic();
+          stopSpeaking(); // barge-in ao ouvir "Ei Órbita"
+          if (modeRef.current === "standby") void voiceCommand();
         },
         onEnergy: (rms) => {
           // barge-in por voz: se a Órbita está falando e o usuário fala alto, interrompe
@@ -188,6 +209,7 @@ export function Console({ userName }: { userName: string }) {
   }, []);
 
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [messages]);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
 
   async function send() {
     const content = input.trim();

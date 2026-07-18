@@ -60,7 +60,62 @@ export class LocalTTS {
   }
 }
 
-const FRAME = 1280; // 80 ms @ 16 kHz — tamanho esperado pelo openWakeWord
+/**
+ * Grava o microfone até detectar silêncio (VAD por energia) — para o fluxo
+ * mãos-livres "Ei Órbita, faça tal coisa". Espera o usuário começar a falar,
+ * e encerra após `silenceMs` de silêncio, ou no `maxMs`.
+ */
+export async function recordUntilSilence(opts?: {
+  silenceMs?: number;
+  maxMs?: number;
+  onSpeech?: () => void;
+}): Promise<Blob | null> {
+  const silenceMs = opts?.silenceMs ?? 1200;
+  const maxMs = opts?.maxMs ?? 12000;
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  const ctx = new AudioContext();
+  const src = ctx.createMediaStreamSource(stream);
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+  src.connect(analyser);
+  const buf = new Float32Array(analyser.fftSize);
+
+  const rec = new MediaRecorder(stream);
+  const chunks: Blob[] = [];
+  rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  rec.start();
+
+  const started = Date.now();
+  let speechStarted = false;
+  let lastVoice = Date.now();
+
+  return new Promise<Blob | null>((resolve) => {
+    const cleanup = () => {
+      clearInterval(timer);
+      try { rec.stop(); } catch { /* noop */ }
+      stream.getTracks().forEach((t) => t.stop());
+      void ctx.close();
+    };
+    rec.onstop = () => resolve(chunks.length ? new Blob(chunks, { type: "audio/webm" }) : null);
+
+    const timer = setInterval(() => {
+      analyser.getFloatTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+      const rms = Math.sqrt(sum / buf.length);
+      const now = Date.now();
+      if (rms > 0.02) {
+        if (!speechStarted) { speechStarted = true; opts?.onSpeech?.(); }
+        lastVoice = now;
+      }
+      const elapsed = now - started;
+      const silentFor = now - lastVoice;
+      if ((speechStarted && silentFor > silenceMs) || elapsed > maxMs) cleanup();
+    }, 100);
+  });
+}
+
+const FRAME = 1280; // 80 ms @ 16 kHz — frames PCM para o wake word
 
 export interface WakeCallbacks {
   onWake?: () => void;

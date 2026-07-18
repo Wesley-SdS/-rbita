@@ -50,7 +50,7 @@
 - [x] `5.1` `apps/voice` (FastAPI): **STT faster-whisper** — **verificado** (WAV → transcrição exata pt-BR)
 - [x] `5.2` **TTS local (Piper pt-BR, licença MIT)** — **verificado** (endpoint `/tts` → WAV 2.7s real; proxy `/api/tts` autenticado 200/RIFF no navegador). Fallback p/ Web Speech se o serviço estiver offline. Voz `pt_BR-faber-medium` baixada sob demanda.
 - [x] `5.3` **Wake word "Ei Órbita" / "Órbita"** — **verificado de verdade** via Vosk (STT offline pt-BR) com gramática restrita + **confiança por palavra** (limiar 0.7). WebSocket `/ws/wake`, cliente streama mic 16kHz. Teste e2e (Piper sintetiza a frase → Vosk): "Ei Órbita" conf **0.999**, "Órbita" **0.971**, "Ei Órbita, que horas são?" **1.0**; e **zero falso positivo** em "bom dia/vamos almoçar/que legal/me manda um email" (conf 0). Reconhece a frase EXATA, sem treinar modelo, sem "hey jarvis".
-- [x] `5.4` **Pipeline STT→LLM→TTS + barge-in** — barge-in por energia (interrompe a fala quando o usuário fala) e ao disparar o wake word. Botão 👂 no composer.
+- [x] `5.4` **Conversa mãos-livres + barge-in** — "Ei Órbita" → grava o comando **até o silêncio** (VAD por energia, `recordUntilSilence`) → STT → chat → TTS, sem clicar. Barge-in interrompe a fala ao ouvir o gatilho ou o usuário falar. Botão 👂 no composer. (Ex.: "Órbita, faça tal coisa".)
 - [x] `5.5` Orb reage à voz (listening ao gravar, speaking ao falar)
 
 ## Fase 6 — Tool-calling & Conectores ✅ (falta só plugar chaves OAuth)
