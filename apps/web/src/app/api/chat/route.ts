@@ -7,6 +7,7 @@ import { conversation, message } from "@/lib/db/chat-schema";
 import { getSession } from "@/lib/session";
 import { retrieveContext } from "@/lib/rag/retrieve";
 import { buildTools, SYSTEM_PROMPT } from "@/lib/chat/tools";
+import { log } from "@/lib/observability/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -121,6 +122,7 @@ export async function POST(req: Request) {
         .update(conversation)
         .set({ updatedAt: new Date(), modelKey: effectiveKey })
         .where(eq(conversation.id, conv.id));
+      log.info("chat", { userId, model: effectiveKey, tokens: tokens ?? 0, latencyMs, conv: conv.id });
     },
   });
 

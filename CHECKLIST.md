@@ -73,7 +73,8 @@
 - [x] `8.1` **Containerização completa** — `docker compose up --build` sobe db + migrate + voz + web num único `up` (Next standalone, uv/faster-whisper, Ollama no host via `host.docker.internal`). Dockerfiles escritos e blindados (public/.gitkeep, outputFileTracingRoot, migrate one-shot); **build a validar no terminal do Wesley** (harness instável p/ builds longos em background)
 - [x] `8.2` LGPD: exportar dados + apagar conta (cascade) — **verificado**
 - [x] `8.3` Testes: Vitest (12 testes: chunker + auto-router/catálogo) — **passando**
-- [~] `8.4` **README** com onboarding pronto; observabilidade pendente
+- [x] `8.4` **README** + **observabilidade** — logger JSON estruturado (`lib/observability/logger.ts`), middleware com `x-request-id` + log de cada req de API, `/api/health` expandido (db + voice + ollama) — **verificado** (health retornou os 3 up). Log de métricas no chat (modelo/tokens/latência).
+- [x] `8.5` **PWA instalável** — manifest + service worker (app shell offline, network-first) + ícones do Orb (192/512/maskable) — **verificado** no navegador (SW ativo, cache `orbita-v1`, manifest standalone). Presença mobile via PWA além do Expo.
 
 ---
 
