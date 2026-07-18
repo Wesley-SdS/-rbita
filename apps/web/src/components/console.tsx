@@ -11,8 +11,31 @@ import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 
 type Role = "user" | "assistant";
-interface Msg { role: Role; content: string }
+interface ToolStep { name: string; done: boolean }
+interface Msg { role: Role; content: string; steps?: ToolStep[] }
 interface ModelInfo { key: string; label: string; provider: string; billing: "free" | "subscription" | "paid" }
+
+// rótulos amigáveis para a timeline de atividade (o que a Órbita está fazendo).
+const TOOL_LABELS: Record<string, string> = {
+  hora_atual: "🕐 Consultando a hora",
+  salvar_memoria: "💾 Salvando na memória",
+  buscar_conhecimento: "📚 Buscando no seu conhecimento",
+  registrar_gasto: "💸 Registrando gasto",
+  resumo_financeiro: "📊 Resumindo finanças",
+  pesquisar_web: "🔍 Pesquisando na web",
+  ler_pagina: "🌐 Lendo página",
+  ler_emails: "✉️ Lendo e-mails",
+  rascunhar_email: "📝 Rascunhando e-mail",
+  enviar_email: "📤 Enviando e-mail",
+  listar_eventos: "📅 Consultando a agenda",
+  criar_evento: "🗓️ Criando evento",
+  buscar_notion: "📓 Buscando no Notion",
+  ler_pagina_notion: "📓 Lendo página do Notion",
+  listar_canais_slack: "💬 Listando canais do Slack",
+  enviar_slack: "💬 Enviando no Slack",
+  enviar_whatsapp: "📱 Enviando WhatsApp",
+};
+const toolLabel = (n: string) => TOOL_LABELS[n] ?? `⚙ ${n}`;
 
 const BRL = 5.35;
 const GPT_PER_1K = 0.05; // R$/1k tokens saída (referência de nuvem)
@@ -229,7 +252,7 @@ export function Console({ userName }: { userName: string }) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, modelKey, conversationId: convId.current ?? undefined }),
+        body: JSON.stringify({ content, modelKey, conversationId: convId.current ?? undefined, rich: true }),
       });
       const cid = res.headers.get("x-conversation-id");
       if (cid) { convId.current = cid; setActiveId(cid); }
@@ -240,16 +263,29 @@ export function Console({ userName }: { userName: string }) {
         throw new Error(err.error ?? "Erro no servidor");
       }
 
+      // stream NDJSON: {t:'text'|'tool'|'tool-done'}. Reconstrói texto + timeline.
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let acc = "";
-      let first = true;
+      let buf = "";
+      const steps: ToolStep[] = [];
+      const flush = () =>
+        setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: acc, steps: [...steps] }; return c; });
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        if (first) { setMode("speaking"); first = false; }
-        acc += dec.decode(value, { stream: true });
-        setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: acc }; return c; });
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let ev: { t: string; v?: string; name?: string };
+          try { ev = JSON.parse(line); } catch { continue; }
+          if (ev.t === "text") { acc += ev.v ?? ""; if (acc) setMode("speaking"); }
+          else if (ev.t === "tool" && ev.name) { setMode("searching"); steps.push({ name: ev.name, done: false }); }
+          else if (ev.t === "tool-done" && ev.name) { const s = steps.find((x) => x.name === ev.name && !x.done); if (s) s.done = true; }
+          flush();
+        }
       }
 
       // métricas (tokens estimados por chars quando o provedor não envia usage)
@@ -354,7 +390,18 @@ export function Console({ userName }: { userName: string }) {
             </p>
           )}
           {messages.map((m, i) => (
-            <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+            <div key={i} className={m.role === "user" ? "flex justify-end" : "flex flex-col items-start"}>
+              {/* timeline de atividade: o que a Órbita está fazendo (passos com ⟳ → ✓) */}
+              {m.role === "assistant" && m.steps && m.steps.length > 0 && (
+                <div className="mb-1 flex flex-col gap-0.5">
+                  {m.steps.map((s, k) => (
+                    <div key={k} className="flex items-center gap-1.5 font-mono text-[10px]" style={{ color: s.done ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
+                      <span>{s.done ? "✓" : "⟳"}</span>
+                      <span>{toolLabel(s.name)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="max-w-[85%] whitespace-pre-wrap rounded-xl px-3 py-2 text-sm"
                 style={{ background: m.role === "user" ? "color-mix(in oklab, var(--color-gold) 16%, var(--color-surface))" : "var(--color-ground)", border: "1px solid var(--color-line)", color: "var(--color-ink)" }}>
                 {m.content || (mode !== "standby" && i === messages.length - 1 ? "…" : "")}

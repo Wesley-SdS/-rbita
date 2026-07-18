@@ -37,7 +37,7 @@
 - [x] `3.3` Seletor de provider/modelo ligado ao backend (`/api/models`)
 - [x] `3.4` Chat com streaming + histórico persistido (conversa contínua)
 - [x] `3.5` Painel de sessão + custo vs. nuvem (req/tokens~/latência real) _(watts de GPU entram na Fase 5 c/ pynvml)_
-- [~] `3.6` Atividade: Orb reflete o estado (studying/speaking) _(timeline de tool-steps na Fase 6 com conectores)_
+- [x] `3.6` **Timeline de atividade ao vivo** — o chat streama NDJSON (modo `rich`) com os passos de ferramenta; a UI mostra cada passo (⟳ → ✓) com rótulo amigável ("🔍 Pesquisando na web", "🕐 Consultando a hora"…). Orb reflete o estado. **Verificado e2e** no navegador: "✓ 🕐 Consultando a hora" renderizado durante a resposta. Modo texto puro preservado p/ o mobile.
 
 ## Fase 4 — Memória & RAG ✅
 - [x] `4.1` Schema pgvector (document/chunk/memory vector(768) + HNSW) + embeddings Ollama

@@ -17,6 +17,9 @@ const BodySchema = z.object({
   content: z.string().min(1).max(8000),
   modelKey: z.string().min(1),
   conversationId: z.string().uuid().optional(),
+  // rich=true → stream NDJSON com passos de ferramenta (timeline de atividade).
+  // Ausente/false → stream de texto puro (usado pelo mobile).
+  rich: z.boolean().optional(),
 });
 
 export async function POST(req: Request) {
@@ -33,7 +36,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
   }
-  const { content, modelKey, conversationId } = parsed.data;
+  const { content, modelKey, conversationId, rich } = parsed.data;
 
   const info = getModelInfo(modelKey);
   if (!info) return Response.json({ error: "Modelo desconhecido" }, { status: 400 });
@@ -126,7 +129,30 @@ export async function POST(req: Request) {
     },
   });
 
-  return result.toTextStreamResponse({
-    headers: { "x-conversation-id": conv.id, "x-model": effectiveKey },
-  });
+  const headers = { "x-conversation-id": conv.id, "x-model": effectiveKey };
+
+  if (rich) {
+    // Stream NDJSON: intercala texto e passos de ferramenta para a timeline.
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (o: unknown) => controller.enqueue(encoder.encode(JSON.stringify(o) + "\n"));
+        try {
+          for await (const part of result.fullStream) {
+            if (part.type === "text-delta") send({ t: "text", v: part.text });
+            else if (part.type === "tool-call") send({ t: "tool", name: part.toolName, args: part.input });
+            else if (part.type === "tool-result") send({ t: "tool-done", name: part.toolName });
+            else if (part.type === "error") send({ t: "error" });
+          }
+        } catch {
+          send({ t: "error" });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+    return new Response(stream, { headers: { ...headers, "Content-Type": "application/x-ndjson", "Cache-Control": "no-store" } });
+  }
+
+  return result.toTextStreamResponse({ headers });
 }
