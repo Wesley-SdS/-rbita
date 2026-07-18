@@ -12,6 +12,8 @@ export * from "./finance-schema";
 export * from "./routine-schema";
 // Conexões OAuth com serviços externos (conectores).
 export * from "./connector-schema";
+// To-do list do dia a dia.
+export * from "./todo-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {

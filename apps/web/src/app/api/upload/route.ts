@@ -28,11 +28,8 @@ export async function POST(req: Request) {
       text = Array.isArray(r.text) ? r.text.join("\n") : r.text;
       source = "pdf";
     } else if (type.startsWith("image/")) {
-      const { createWorker } = await import("tesseract.js");
-      const worker = await createWorker("por+eng");
-      const { data } = await worker.recognize(buf);
-      await worker.terminate();
-      text = data.text;
+      const { ocrImage } = await import("@/lib/ocr");
+      text = await ocrImage(buf);
       source = "ocr";
     } else {
       text = buf.toString("utf-8");

@@ -3,7 +3,8 @@ import { fileURLToPath } from "node:url";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  serverExternalPackages: ["postgres"],
+  // tesseract.js precisa ficar fora do bundle p/ o worker-script resolver (OCR).
+  serverExternalPackages: ["postgres", "tesseract.js"],
   transpilePackages: ["@orbita/llm"],
   // Imagem Docker enxuta: empacota só o necessário (traça a raiz do monorepo pnpm).
   output: "standalone",

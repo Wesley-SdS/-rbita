@@ -5,6 +5,8 @@ import { embedText } from "@orbita/llm";
 import { db } from "@/lib/db";
 import { memory } from "@/lib/db/knowledge-schema";
 import { expense } from "@/lib/db/finance-schema";
+import { todo } from "@/lib/db/todo-schema";
+import { and } from "drizzle-orm";
 import { retrieveContext } from "@/lib/rag/retrieve";
 import { searchWeb, fetchPage } from "@/lib/tools/web";
 import { buildConnectorTools } from "./connector-tools";
@@ -56,6 +58,57 @@ export async function buildTools(userId: string) {
           porCategoria[k] = (porCategoria[k] ?? 0) + r.amountCents / 100;
         }
         return { total, moeda: "BRL", lancamentos: rows.length, porCategoria };
+      },
+    }),
+    adicionar_conta: tool({
+      description: "Cadastra uma conta a pagar ou a receber (com vencimento opcional). Para gastos já feitos use registrar_gasto.",
+      inputSchema: z.object({
+        descricao: z.string(),
+        valor: z.number().describe("valor em reais"),
+        tipo: z.enum(["a_pagar", "a_receber"]),
+        categoria: z.string().optional(),
+        vencimento: z.string().optional().describe("data ISO YYYY-MM-DD"),
+      }),
+      execute: async ({ descricao, valor, tipo, categoria, vencimento }) => {
+        const due = vencimento ? new Date(vencimento) : null;
+        await db.insert(expense).values({
+          userId,
+          description: descricao,
+          category: categoria ?? null,
+          amountCents: Math.round(valor * 100),
+          kind: tipo === "a_pagar" ? "payable" : "receivable",
+          dueDate: due && !isNaN(due.getTime()) ? due : null,
+          paid: false,
+        });
+        return { cadastrado: true, tipo, valor, vencimento: vencimento ?? null };
+      },
+    }),
+    resumo_financeiro_completo: tool({
+      description: "Resumo financeiro completo: total de gastos, contas a pagar e a receber em aberto, e saldo projetado.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const rows = await db.select().from(expense).where(eq(expense.userId, userId));
+        const sum = (k: string, onlyOpen = false) =>
+          rows.filter((r) => r.kind === k && (!onlyOpen || !r.paid)).reduce((s, r) => s + r.amountCents, 0) / 100;
+        const aPagar = sum("payable", true), aReceber = sum("receivable", true);
+        return { gastos: sum("expense"), aPagar, aReceber, saldoProjetado: aReceber - aPagar, moeda: "BRL" };
+      },
+    }),
+    adicionar_tarefa: tool({
+      description: "Adiciona uma tarefa (to-do) do usuário, com vencimento opcional.",
+      inputSchema: z.object({ texto: z.string(), vencimento: z.string().optional().describe("data ISO") }),
+      execute: async ({ texto, vencimento }) => {
+        const due = vencimento ? new Date(vencimento) : null;
+        await db.insert(todo).values({ userId, text: texto, dueDate: due && !isNaN(due.getTime()) ? due : null });
+        return { adicionada: true, texto };
+      },
+    }),
+    listar_tarefas: tool({
+      description: "Lista as tarefas (to-dos) pendentes do usuário.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const rows = await db.select().from(todo).where(and(eq(todo.userId, userId), eq(todo.done, false)));
+        return { tarefas: rows.map((t) => ({ texto: t.text, vencimento: t.dueDate?.toISOString().slice(0, 10) ?? null })) };
       },
     }),
     pesquisar_web: tool({

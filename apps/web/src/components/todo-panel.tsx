@@ -1,0 +1,76 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
+interface Todo { id: string; text: string; done: boolean; dueDate: string | null; imageUrl: string | null }
+
+export function TodoPanel() {
+  const [open, setOpen] = useState(false);
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [text, setText] = useState("");
+  const [image, setImage] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function load() {
+    fetch("/api/todos").then((r) => r.json()).then((d) => setTodos(d.todos ?? [])).catch(() => {});
+  }
+  useEffect(load, []);
+
+  const pending = todos.filter((t) => !t.done).length;
+
+  async function add() {
+    if (!text.trim() && !image) return;
+    await fetch("/api/todos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text.trim() || "(imagem)", imageUrl: image ?? undefined }),
+    });
+    setText(""); setImage(null); load();
+  }
+  async function toggle(t: Todo) {
+    await fetch("/api/todos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id, done: !t.done }) });
+    load();
+  }
+  async function remove(id: string) {
+    await fetch(`/api/todos?id=${id}`, { method: "DELETE" });
+    load();
+  }
+  function pickImage(f: File) {
+    const reader = new FileReader();
+    reader.onload = () => setImage(typeof reader.result === "string" ? reader.result : null);
+    reader.readAsDataURL(f);
+  }
+
+  return (
+    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+      <button onClick={() => setOpen(!open)} className="flex w-full items-center">
+        <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Tarefas</h3>
+        {pending > 0 && <span className="ml-2 rounded-full px-1.5 text-[10px] font-bold" style={{ background: "var(--color-gold)", color: "#241403" }}>{pending}</span>}
+        <span className="ml-auto text-xs" style={{ color: "var(--color-ink-dim)" }}>{open ? "▾" : "▸"}</span>
+      </button>
+
+      <div className="mt-2 flex flex-col gap-1">
+        {todos.slice(0, open ? 20 : 4).map((t) => (
+          <div key={t.id} className="flex items-center gap-1.5 text-[11px]" style={{ opacity: t.done ? 0.5 : 1 }}>
+            <button onClick={() => toggle(t)}>{t.done ? "☑" : "☐"}</button>
+            {t.imageUrl && <img src={t.imageUrl} alt="" className="h-5 w-5 rounded object-cover" />}
+            <span className="flex-1 truncate" style={{ color: "var(--color-ink)", textDecoration: t.done ? "line-through" : "none" }}>{t.text}</span>
+            {t.dueDate && <span style={{ color: "var(--color-ink-dim)" }}>{t.dueDate.slice(5, 10)}</span>}
+            <button onClick={() => remove(t.id)} style={{ color: "#e0705a" }}>×</button>
+          </div>
+        ))}
+        {todos.length === 0 && <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>nenhuma tarefa</span>}
+      </div>
+
+      {open && (
+        <div className="mt-2 flex items-center gap-1">
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) pickImage(f); e.target.value = ""; }} />
+          <button onClick={() => fileRef.current?.click()} title="anexar imagem" className="rounded border px-1.5 py-1 text-xs" style={{ borderColor: image ? "var(--color-gold)" : "var(--color-line)", color: image ? "var(--color-gold)" : "var(--color-ink-dim)" }}>📎</button>
+          <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="Nova tarefa…"
+            className="flex-1 rounded-lg border px-2 py-1 text-xs outline-none" style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }} />
+          <button onClick={add} className="rounded-lg px-2 py-1 text-xs font-semibold" style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>+</button>
+        </div>
+      )}
+    </div>
+  );
+}

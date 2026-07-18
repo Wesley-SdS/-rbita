@@ -107,3 +107,8 @@
 ## Backlog (pós-MVP) — implementado ✅
 - [x] **Analytics/dashboard pessoal** — `/insights` + `/api/analytics`: conversas, mensagens, tokens, latência média, economia vs nuvem, gastos, docs/memórias/rotinas/conectores, atividade 14 dias, uso por modelo. **Verificado** (9 conversas, R$20 gastos renderizados).
 - [x] **Grafo de conhecimento pessoal** — `/api/knowledge/graph` conecta memórias por similaridade de cosseno (pgvector); SVG force-directed no cliente (sem libs). **Verificado** (6 nós, 15 arestas; café↔açaí 0.72).
+
+## Requisitos adicionais (pedido do Wesley) 🟢
+- [x] **Dashboard financeiro completo (estilo OrbitFinance)** — `expense` expandida (kind expense/payable/receivable + vencimento + pago), `/api/finance` (CRUD + totais: gastos/a pagar/a receber/saldo projetado), `FinancePanel`. Tools `adicionar_conta`, `resumo_financeiro_completo`. **Verificado** (a pagar R$1.500, a receber R$3.000, saldo R$1.500).
+- [x] **Comprovante/cupom → OCR → cadastro automático** — `/api/finance/receipt`: imagem → OCR (tesseract pt+en) → LLM extrai {descrição, valor, categoria, tipo, vencimento} → cadastra. **Verificado e2e** (cupom R$67,70 → cadastrado como gasto "Alimentos e Bebidas"). **Fix**: worker do tesseract.js não resolvia no Next/Turbopack (afetava também `/api/upload`) → `lib/ocr.ts` (workerPath robusto) + `serverExternalPackages`.
+- [x] **To-do list (com imagens)** — tabela `todo` (texto/done/vencimento/imagem data URL), `/api/todos` (CRUD), `TodoPanel` (anexar imagem), tools `adicionar_tarefa`/`listar_tarefas`. **Verificado**.
