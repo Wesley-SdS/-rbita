@@ -4,6 +4,7 @@ import { getAccessToken, connectedProviders } from "@/lib/connectors/store";
 import { listRecentEmails, createDraft, sendEmail, listUpcomingEvents, createEvent } from "@/lib/connectors/google";
 import { searchNotion, readNotionPage } from "@/lib/connectors/notion";
 import { listChannels, postMessage } from "@/lib/connectors/slack";
+import { whatsappConfigured, sendWhatsApp } from "@/lib/connectors/whatsapp";
 
 /**
  * Ferramentas dos conectores — só entram no chat para os serviços que o usuário
@@ -116,6 +117,18 @@ export async function buildConnectorTools(userId: string): Promise<ToolSet> {
         if (!token) return { erro: "Slack não conectado" };
         const r = await postMessage(token, canal, texto);
         return { enviado: true, ts: r.ts };
+      },
+    });
+  }
+
+  if (whatsappConfigured()) {
+    tools.enviar_whatsapp = tool({
+      description: "Envia uma mensagem de WhatsApp (número no formato internacional, ex: 5511999998888). Ação com efeito: só com confirmar=true após o usuário aprovar. Sem confirmar, devolve a proposta.",
+      inputSchema: z.object({ para: z.string(), texto: z.string(), confirmar: z.boolean().default(false) }),
+      execute: async ({ para, texto, confirmar }) => {
+        if (!confirmar) return { requer_confirmacao: true, acao: "enviar_whatsapp", proposta: { para, texto } };
+        const r = await sendWhatsApp(para, texto);
+        return { enviado: true, id: r.id };
       },
     });
   }

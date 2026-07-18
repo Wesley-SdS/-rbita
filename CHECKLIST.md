@@ -61,7 +61,7 @@
 - [x] `6.3` **Google Calendar** (listar_eventos/criar_evento c/ confirmação) — real, mesma credencial Google
 - [x] `6.4` **Notion** (buscar_notion/ler_pagina_notion) — real, atrás de `NOTION_CLIENT_ID/SECRET`
 - [x] `6.5` **Slack** (listar_canais/enviar_slack c/ confirmação) — real, atrás de `SLACK_CLIENT_ID/SECRET`
-- [ ] `6.6` WhatsApp — pendente (Business API / provider externo)
+- [x] `6.6` **WhatsApp** (enviar_whatsapp c/ confirmação) — via Cloud API da Meta, real, atrás de `WHATSAPP_TOKEN` + `WHATSAPP_PHONE_ID`
 - ⚙️ **Falta só o Wesley plugar as chaves** (Google/Notion/Slack) — estrutura 100% pronta, `.env.example` + compose atualizados
 
 ## Fase 7 — Proatividade, finanças, mobile ✅

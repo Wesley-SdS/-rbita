@@ -80,6 +80,8 @@ services:
       NOTION_CLIENT_SECRET: ${NOTION_CLIENT_SECRET:-}
       SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
       SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_ID: ${WHATSAPP_PHONE_ID:-}
       CONNECTORS_ENC_KEY: ${CONNECTORS_ENC_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
