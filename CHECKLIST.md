@@ -14,13 +14,13 @@
 - [x] `0.6` `/api/health` real (checa DB) → `{"status":"ok","db":"up"}`
 - [x] `0.7` Git init + primeiro commit (`5456f85`)
 
-## Fase 1 — Auth (Better Auth)
-- [ ] `1.1` Better Auth 1.6 configurado (adapter Drizzle)
-- [ ] `1.2` Schema de auth (users/sessions/accounts/verification)
-- [ ] `1.3` Rota `/api/auth/[...all]` + client
-- [ ] `1.4` Email/senha funcionando (signup/login/logout)
-- [ ] `1.5` Login social Google (opcional, atrás de env)
-- [ ] `1.6` Middleware de sessão + página protegida `/app`
+## Fase 1 — Auth (Better Auth) ✅
+- [x] `1.1` Better Auth 1.6.23 configurado (adapter Drizzle)
+- [x] `1.2` Schema de auth (user/session/account/verification) + migration
+- [x] `1.3` Rota `/api/auth/[...all]` + auth-client + getSession
+- [x] `1.4` Email/senha funcionando (signup/login/logout) — **verificado e2e**
+- [~] `1.5` Login social Google — **wired** (condicional, atrás de env); falta testar c/ credenciais reais
+- [x] `1.6` Página protegida `/app` (redirect via server session)
 
 ## Fase 2 — Provider layer (Local / Gateway / Claude Max)
 - [ ] `2.1` `packages/llm` — registry de modelos (base do Vektus `providers.ts`)
@@ -75,4 +75,5 @@
 ### Log de progresso
 - _2026-07-18_ — checklist criado; ambiente validado (Node 22, pnpm 11, Docker 29, Ollama+Qwen2.5).
 - _2026-07-18_ — **Fase 0 concluída**: monorepo + Next 16.2.10 + Postgres/pgvector (Docker) + Drizzle migration + `/api/health` OK + home renderizando (verificado por headless). Versões confirmadas: Next 16.2.10, Better Auth 1.6.23, AI SDK 7.0.31, React 19.2, Drizzle 0.45. Commit `5456f85`.
-- **Próximo:** Fase 1 — Better Auth (email/senha).
+- _2026-07-18_ — **Fase 1 concluída**: Better Auth 1.6.23 (email/senha) + sessões + `/app` protegida. Verificado e2e (signup pela UI → /app; usuário persistido no Postgres). Google OAuth wired (atrás de env). Commit `b81f217`.
+- **Próximo:** Fase 2 — Provider layer (Local/Gateway/Claude Max) + `/api/chat` streaming com Qwen 2.5.

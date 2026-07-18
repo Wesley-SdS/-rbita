@@ -15,6 +15,13 @@
       "when": 1784381120906,
       "tag": "0001_curly_tarot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784381622027,
+      "tag": "0002_warm_sugar_man",
+      "breakpoints": true
     }
   ]
 }
