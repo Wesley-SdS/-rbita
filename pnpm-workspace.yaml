@@ -5,3 +5,6 @@ packages:
 onlyBuiltDependencies:
   - esbuild
   - sharp
+
+allowBuilds:
+  tesseract.js: false
