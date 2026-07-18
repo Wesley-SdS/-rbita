@@ -5,6 +5,7 @@ import { resolveModel, getModelInfo, routeModelKey, providerEnv, DEFAULT_MODEL_K
 import { db } from "@/lib/db";
 import { conversation, message } from "@/lib/db/chat-schema";
 import { memory } from "@/lib/db/knowledge-schema";
+import { expense } from "@/lib/db/finance-schema";
 import { getSession } from "@/lib/session";
 import { retrieveContext } from "@/lib/rag/retrieve";
 
@@ -122,6 +123,40 @@ export async function POST(req: Request) {
       execute: async ({ consulta }) => {
         const hits = await retrieveContext(userId, consulta, 4);
         return { resultados: hits.map((h) => ({ fonte: h.source, trecho: h.content })) };
+      },
+    }),
+    registrar_gasto: tool({
+      description: "Registra um gasto/despesa do usuário. Valor em reais (número).",
+      inputSchema: z.object({
+        descricao: z.string(),
+        valor: z.number().describe("valor em reais"),
+        categoria: z.string().optional(),
+      }),
+      execute: async ({ descricao, valor, categoria }) => {
+        await db.insert(expense).values({
+          userId,
+          description: descricao,
+          category: categoria ?? null,
+          amountCents: Math.round(valor * 100),
+        });
+        return { registrado: true, valor, categoria: categoria ?? "outros" };
+      },
+    }),
+    resumo_financeiro: tool({
+      description: "Resumo dos gastos do usuário: total e por categoria.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const rows = await db
+          .select({ category: expense.category, amountCents: expense.amountCents })
+          .from(expense)
+          .where(eq(expense.userId, userId));
+        const total = rows.reduce((s, r) => s + r.amountCents, 0) / 100;
+        const porCategoria: Record<string, number> = {};
+        for (const r of rows) {
+          const k = r.category ?? "outros";
+          porCategoria[k] = (porCategoria[k] ?? 0) + r.amountCents / 100;
+        }
+        return { total, moeda: "BRL", lancamentos: rows.length, porCategoria };
       },
     }),
   };

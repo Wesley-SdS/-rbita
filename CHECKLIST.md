@@ -53,11 +53,11 @@
 - [~] `5.4` Pipeline STT→LLM→TTS (push-to-talk) funcionando; barge-in pendente
 - [x] `5.5` Orb reage à voz (listening ao gravar, speaking ao falar)
 
-## Fase 6 — Conectores (NexConnect)
-- [ ] `6.1` Hub MCP + contrato de conector
-- [ ] `6.2` Gmail (OAuth + ler/enviar com confirmação)
-- [ ] `6.3` Google Calendar (criar/listar eventos)
-- [ ] `6.4` Notion · `6.5` Slack · `6.6` WhatsApp
+## Fase 6 — Tool-calling & Conectores 🟡
+- [x] `6.1` **Tool-calling** no chat (framework de ferramentas) — **verificado** (Qwen chama tools sozinho)
+- [ ] `6.2` Gmail (OAuth + ler/enviar) — pendente (credenciais Google Cloud)
+- [ ] `6.3` Google Calendar — pendente (credenciais)
+- [ ] `6.4-6.6` Notion / Slack / WhatsApp — pendente (credenciais)
 
 ## Fase 7 — Proatividade, finanças, mobile
 - [ ] `7.1` Agendador (BullMQ/Redis) + pulse proativo

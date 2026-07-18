@@ -6,6 +6,8 @@ export * from "./auth-schema";
 export * from "./chat-schema";
 // Tabelas de conhecimento (documentos + chunks + memória, com pgvector).
 export * from "./knowledge-schema";
+// Tabelas de finanças (skill de gastos).
+export * from "./finance-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {
