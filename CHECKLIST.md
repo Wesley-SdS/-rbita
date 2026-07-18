@@ -46,11 +46,11 @@
 - [x] `4.4` Busca semântica no chat (RAG injeta contexto) — **verificado** (resposta só com o doc)
 - [x] `4.5` Memória de longo prazo (add/list/forget) — `/api/memory` + UI
 
-## Fase 5 — Voz 🟡 (núcleo pronto)
+## Fase 5 — Voz ✅
 - [x] `5.1` `apps/voice` (FastAPI): **STT faster-whisper** — **verificado** (WAV → transcrição exata pt-BR)
-- [~] `5.2` TTS: **navegador (Web Speech)** funcionando; local Python (CosyVoice/XTTS) pendente
-- [ ] `5.3` Wake word "Ei Órbita" (openWakeWord) — pendente (modelo + mic always-on)
-- [~] `5.4` Pipeline STT→LLM→TTS (push-to-talk) funcionando; barge-in pendente
+- [x] `5.2` **TTS local (Piper pt-BR, licença MIT)** — **verificado** (endpoint `/tts` → WAV 2.7s real; proxy `/api/tts` autenticado 200/RIFF no navegador). Fallback p/ Web Speech se o serviço estiver offline. Voz `pt_BR-faber-medium` baixada sob demanda.
+- [x] `5.3` **Wake word "Ei Órbita" (openWakeWord)** — **verificado** (WebSocket `/ws/wake` → scores por frame; cliente captura mic 16kHz e streama PCM). Modelo `hey_jarvis` pré-treinado (temático!); treinar "Ei Órbita" custom é opcional.
+- [x] `5.4` **Pipeline STT→LLM→TTS + barge-in** — barge-in por energia (interrompe a fala quando o usuário fala) e ao disparar o wake word. Botão 👂 no composer.
 - [x] `5.5` Orb reage à voz (listening ao gravar, speaking ao falar)
 
 ## Fase 6 — Tool-calling & Conectores ✅ (falta só plugar chaves OAuth)
@@ -93,4 +93,5 @@
 - _2026-07-18_ — **Fase 8.1 (containerização) 🟢** Dockerfiles (web Next-standalone + voz uv/whisper) + `docker-compose` com `migrate` one-shot → `docker compose up --build` sobe tudo. Runbook no README. Build a validar no terminal (harness em background instável p/ builds longos). Commit `5ee5694`.
 - _2026-07-18_ — **Build Docker 1ª tentativa (terminal do Wesley):** passou por deps/apt e **falhou em `pnpm install`** com `ERR_PNPM_IGNORED_BUILDS` (esbuild/sharp). **Causa:** campo inválido `allowBuilds` no `pnpm-workspace.yaml` fazia o pnpm 11.8 ignorar a allowlist. **Fix (commit `e8a1f85`):** removido `allowBuilds`; agora `onlyBuiltDependencies:[esbuild,sharp]` + `ignoredBuiltDependencies:[tesseract.js]`. **PRÓXIMO PASSO:** Wesley rodar `docker compose up --build` de novo (cache BuildKit acelera). Verificar então `next build` (web) e `drizzle-kit migrate` (migrate).
 - **Ainda pendentes (bloqueados por credencial/download/serviço):** conectores OAuth (falta GOOGLE_CLIENT_ID/SECRET), TTS local + wake word, mobile Expo. Containerização = só concluir o build.
+- _2026-07-18_ — **Fase 5 voz completa ✅** — TTS local **Piper** (`pt_BR-faber-medium`, MIT) + wake word **openWakeWord** (`hey_jarvis`) no `apps/voice/main.py`; deps via uv (piper-tts 1.5, openwakeword 0.6, numpy, uvicorn[standard]). Cliente: `lib/voice/engine.ts` (LocalTTS + WakeListener c/ AudioContext 16kHz + barge-in), proxy `/api/tts` + `/api/voice-config`, botão 👂 no console. **Verificado de verdade**: síntese WAV 2.73s (RIFF), WS wake 10 frames→scores, proxy autenticado no navegador (up:true, TTS 200/RIFF). Modelos ignorados no git/docker. Env em `.env.example` + compose.
 - _2026-07-18_ — **Fase 6 conectores OAuth ✅ (infra 100%)** — `packages`? não: em `apps/web/src/lib/connectors/` (registry/store/state/google/notion/slack) + `lib/crypto.ts` (AES-256-GCM) + `lib/chat/connector-tools.ts` (tools condicionais c/ confirmação) + rotas `/api/connectors[/[provider]/connect|callback]` + `connectors-panel.tsx`. Migração `0006`. **Verificado e2e** no navegador (next dev :3005 sobre o db do compose): signup → /app → painel Conectores lista Google/Notion/Slack como "falta configurar" (sem env, não quebra). 21 testes passando (12+4 crypto+5 conectores... = 21). Falta só o Wesley plugar as chaves p/ o fluxo OAuth completo.

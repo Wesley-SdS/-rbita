@@ -68,6 +68,8 @@ services:
       # Ollama roda no HOST; container alcança via host.docker.internal
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
       VOICE_URL: http://voice:8001
+      # WebSocket de wake word acessado pelo BROWSER (não pela rede interna do compose)
+      VOICE_PUBLIC_WS_URL: ${VOICE_PUBLIC_WS_URL:-ws://localhost:8001}
       # opcionais — se vazios, provedores extras somem da UI
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

@@ -6,6 +6,7 @@ import { KnowledgePanel } from "@/components/knowledge-panel";
 import { PrivacyPanel } from "@/components/privacy-panel";
 import { RoutinesPanel } from "@/components/routines-panel";
 import { ConnectorsPanel } from "@/components/connectors-panel";
+import { LocalTTS, WakeListener } from "@/lib/voice/engine";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 
@@ -41,8 +42,12 @@ export function Console({ userName }: { userName: string }) {
   const [stats, setStats] = useState({ requests: 0, tokens: 0, lastMs: 0, gpt: 0, gem: 0, saved: 0 });
   const [voiceOn, setVoiceOn] = useState(true);
   const [recording, setRecording] = useState(false);
+  const [wakeOn, setWakeOn] = useState(false);
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const ttsRef = useRef<LocalTTS | null>(null);
+  const wakeRef = useRef<WakeListener | null>(null);
+  const ttsLocalOkRef = useRef<boolean>(true); // cai p/ navegador se o TTS local falhar
   const [focus, setFocus] = useState(false);
   const [convs, setConvs] = useState<{ id: string; title: string }[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -71,8 +76,8 @@ export function Console({ userName }: { userName: string }) {
     loadConvs();
   }
 
-  function speak(text: string) {
-    if (!voiceOn || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  function speakBrowser(text: string) {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) { setMode("standby"); return; }
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text.replace(/[#*_`>]/g, ""));
@@ -84,7 +89,57 @@ export function Console({ userName }: { userName: string }) {
       u.onend = () => setMode("standby");
       speechSynthesis.speak(u);
     } catch {
-      /* ignore */
+      setMode("standby");
+    }
+  }
+
+  /** Fala preferindo o TTS local (Piper); cai para o navegador se indisponível. */
+  async function speak(text: string) {
+    if (!voiceOn) { setMode("standby"); return; }
+    if (ttsLocalOkRef.current) {
+      try {
+        if (!ttsRef.current) ttsRef.current = new LocalTTS();
+        await ttsRef.current.speak(text, { onStart: () => setMode("speaking"), onEnd: () => setMode("standby") });
+        return;
+      } catch {
+        ttsLocalOkRef.current = false; // uma falha → usa navegador daqui pra frente
+      }
+    }
+    speakBrowser(text);
+  }
+
+  /** Para a fala imediatamente (barge-in). */
+  function stopSpeaking() {
+    ttsRef.current?.stop();
+    if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
+  }
+
+  async function toggleWake() {
+    if (wakeRef.current?.active) {
+      wakeRef.current.stop();
+      wakeRef.current = null;
+      setWakeOn(false);
+      return;
+    }
+    try {
+      const cfg = await fetch("/api/voice-config").then((r) => r.json());
+      if (!cfg.up) { setError("Serviço de voz offline — wake word precisa do apps/voice rodando."); return; }
+      const listener = new WakeListener(cfg.wsWakeUrl, {
+        onWake: () => {
+          stopSpeaking(); // barge-in ao ouvir o gatilho
+          if (mode === "standby" && !recording) void toggleMic();
+        },
+        onEnergy: (rms) => {
+          // barge-in por voz: se a Órbita está falando e o usuário fala alto, interrompe
+          if (ttsRef.current?.speaking && rms > 0.06) stopSpeaking();
+        },
+        onError: () => setError("Falha no wake word (serviço de voz)."),
+      });
+      await listener.start();
+      wakeRef.current = listener;
+      setWakeOn(true);
+    } catch {
+      setError("Sem acesso ao microfone para wake word.");
     }
   }
 
@@ -129,6 +184,7 @@ export function Console({ userName }: { userName: string }) {
       .then((d) => { setModels(d.models ?? []); setModelKey(d.defaultModel ?? d.models?.[0]?.key ?? ""); })
       .catch(() => setError("Falha ao carregar modelos"));
     loadConvs();
+    return () => { wakeRef.current?.stop(); ttsRef.current?.stop(); };
   }, []);
 
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [messages]);
@@ -188,7 +244,7 @@ export function Console({ userName }: { userName: string }) {
         saved: s.saved + (isLocal ? gptCost : 0),
       }));
 
-      if (voiceOn && typeof window !== "undefined" && "speechSynthesis" in window) { spoke = true; speak(acc); }
+      if (voiceOn) { spoke = true; void speak(acc); }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro inesperado");
       setMessages((m) => { const c = [...m]; if (c[c.length - 1]?.role === "assistant" && !c[c.length - 1]?.content) c.pop(); return c; });
@@ -291,6 +347,11 @@ export function Console({ userName }: { userName: string }) {
           <button onClick={() => setVoiceOn(!voiceOn)} title="voz da Órbita" className="rounded-lg border px-2.5 py-2 text-sm"
             style={{ borderColor: "var(--color-line)", color: voiceOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
             {voiceOn ? "🔊" : "🔇"}
+          </button>
+          <button onClick={toggleWake} title={wakeOn ? "wake word ativo — diga 'Ei Órbita'" : "ativar wake word 'Ei Órbita'"}
+            className="rounded-lg border px-2.5 py-2 text-sm"
+            style={{ borderColor: wakeOn ? "var(--color-gold)" : "var(--color-line)", color: wakeOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
+            {wakeOn ? "👂" : "🕨"}
           </button>
           <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder="Fale ou escreva…" className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none"

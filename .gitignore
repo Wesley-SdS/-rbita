@@ -25,3 +25,8 @@ Thumbs.db
 __pycache__
 *.pyc
 uv.lock
+
+# voz — modelos baixados sob demanda + amostras de áudio
+apps/voice/models_test
+apps/voice/models
+*.wav

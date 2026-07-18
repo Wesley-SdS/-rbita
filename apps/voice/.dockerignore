@@ -1,0 +1,6 @@
+.venv
+__pycache__
+*.pyc
+models_test
+models
+*.wav
