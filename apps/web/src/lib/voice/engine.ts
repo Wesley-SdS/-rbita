@@ -11,17 +11,30 @@ export class LocalTTS {
   private url: string | null = null;
   // guardados para que stop() (barge-in) também finalize a fala em curso:
   private endCurrent: (() => void) | null = null;
+  private abort: AbortController | null = null;
 
   /** Sintetiza e toca. Resolve quando termina OU é interrompido (barge-in). */
   async speak(text: string, opts?: { onStart?: () => void; onEnd?: () => void }): Promise<void> {
     this.stop();
     const clean = text.replace(/[#*_`>[\]]/g, "").slice(0, 2000);
     if (!clean.trim()) return;
-    const res = await fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: clean }),
-    });
+    // barge-in durante a síntese também aborta o fetch (senão o áudio ainda
+    // chegaria e poderia tocar depois de o usuário já ter interrompido).
+    const ctrl = new AbortController();
+    this.abort = ctrl;
+    let res: Response;
+    try {
+      res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: clean }),
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return; // interrompido: ok
+      throw e;
+    }
+    if (this.abort !== ctrl) return; // já foi interrompido enquanto sintetizava
     if (!res.ok) throw new Error("tts_indisponivel");
     const blob = await res.blob();
     this.url = URL.createObjectURL(blob);
@@ -47,6 +60,10 @@ export class LocalTTS {
 
   /** Interrompe a fala imediatamente (barge-in) — resolve a Promise e roda onEnd. */
   stop() {
+    if (this.abort) {
+      this.abort.abort();
+      this.abort = null;
+    }
     if (this.audio) {
       this.audio.pause();
       this.audio.currentTime = 0;

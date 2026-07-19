@@ -5,20 +5,40 @@
 - Wake word "Ei Órbita" / "Órbita": Vosk (STT offline pt-BR leve) com gramática
   restrita à frase-gatilho — detecta a expressão exata sem treinar modelo.
 """
+import asyncio
 import io
 import json
 import os
 import tempfile
+import threading
 import urllib.request
 import wave
 import zipfile
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-app = FastAPI(title="ÓRBITA Voice")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Pré-carrega os modelos no startup (fora do caminho de request), em paralelo.
+    Assim o 1º /stt|/tts|/ws/wake não congela por dezenas de segundos carregando/
+    baixando modelo. Best-effort: se algum falhar (offline), o lazy-load cobre.
+    """
+    async def _safe(fn):
+        try:
+            await asyncio.to_thread(fn)
+        except Exception as e:  # noqa: BLE001
+            print(json.dumps({"level": "warn", "msg": f"preload falhou: {fn.__name__}: {e}"}))
+
+    await asyncio.gather(_safe(get_whisper), _safe(get_piper), _safe(get_vosk))
+    yield
+
+
+app = FastAPI(title="ÓRBITA Voice", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -32,15 +52,18 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 
 # ══════════════════════════════ STT ══════════════════════════════
 _whisper = None
+_whisper_lock = threading.Lock()
 
 
 def get_whisper():
     global _whisper
     if _whisper is None:
-        from faster_whisper import WhisperModel
+        with _whisper_lock:
+            if _whisper is None:  # dupla checagem: evita carregar 2x sob concorrência
+                from faster_whisper import WhisperModel
 
-        size = os.environ.get("WHISPER_MODEL", "base")
-        _whisper = WhisperModel(size, device="cpu", compute_type="int8")
+                size = os.environ.get("WHISPER_MODEL", "base")
+                _whisper = WhisperModel(size, device="cpu", compute_type="int8")
     return _whisper
 
 
@@ -64,13 +87,18 @@ def _ensure_piper_model() -> str:
     return onnx_path
 
 
+_piper_lock = threading.Lock()
+
+
 def get_piper():
     global _piper
     if _piper is None:
-        from piper import PiperVoice
+        with _piper_lock:
+            if _piper is None:
+                from piper import PiperVoice
 
-        model_path = _ensure_piper_model()
-        _piper = PiperVoice.load(model_path)
+                model_path = _ensure_piper_model()
+                _piper = PiperVoice.load(model_path)
     return _piper
 
 
@@ -120,13 +148,18 @@ def _ensure_vosk_model() -> str:
     return path
 
 
+_vosk_lock = threading.Lock()
+
+
 def get_vosk():
     global _vosk_model
     if _vosk_model is None:
-        from vosk import Model, SetLogLevel
+        with _vosk_lock:
+            if _vosk_model is None:
+                from vosk import Model, SetLogLevel
 
-        SetLogLevel(-1)
-        _vosk_model = Model(_ensure_vosk_model())
+                SetLogLevel(-1)
+                _vosk_model = Model(_ensure_vosk_model())
     return _vosk_model
 
 
@@ -144,6 +177,13 @@ def health() -> dict:
     }
 
 
+def _transcribe(path: str) -> dict:
+    """Trabalho CPU-bound do Whisper — roda numa thread (não no event loop)."""
+    segments, info = get_whisper().transcribe(path, language="pt", vad_filter=True)
+    text = " ".join(s.text for s in segments).strip()
+    return {"text": text, "language": info.language, "duration": info.duration}
+
+
 @app.post("/stt")
 async def stt(file: UploadFile = File(...)) -> dict:
     data = await file.read()
@@ -152,9 +192,9 @@ async def stt(file: UploadFile = File(...)) -> dict:
     try:
         tmp.write(data)
         tmp.close()
-        segments, info = get_whisper().transcribe(tmp.name, language="pt", vad_filter=True)
-        text = " ".join(s.text for s in segments).strip()
-        return {"text": text, "language": info.language, "duration": info.duration}
+        # offload p/ threadpool: senão o transcribe serializa TODAS as requisições
+        # (inclusive o WebSocket de wake word) no event loop do FastAPI.
+        return await asyncio.to_thread(_transcribe, tmp.name)
     finally:
         os.unlink(tmp.name)
 
@@ -164,7 +204,7 @@ async def tts(req: TTSRequest) -> Response:
     text = (req.text or "").strip()
     if not text:
         return Response(content=b"", status_code=400)
-    audio = _synthesize_wav(text[:2000], req.length_scale)
+    audio = await asyncio.to_thread(_synthesize_wav, text[:2000], req.length_scale)
     return Response(content=audio, media_type="audio/wav")
 
 
