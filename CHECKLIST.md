@@ -5,6 +5,26 @@
 
 ---
 
+## 🔎 Auditoria completa + endurecimento (2026-07-19)
+5 subagentes auditaram todo o app (chat/LLM/prompt, RAG/finanças, voz, segurança, UI) + estudo profundo dos repos da **Adalink** (padrões portados como código original; **não** se usou o prompt vazado da Anthropic). Correções aplicadas e verificadas (commits `44162f6`→`62ab3f2`):
+
+**Segurança** — [x] **SSRF** (`lib/net/ssrf.ts`): `fetchPage`/MCP bloqueiam loopback/rede interna/link-local/metadata cloud (IPv4+IPv6), redirects validados. 8 testes. · [x] **Rate limiting** (`lib/ratelimit.ts`): 10/min auth (anti brute force), 30/min chat, 6/min routines, 20/min ingest — verificado (11º login→429). · [x] **Push anti-sequestro** (não reatribui endpoint de outro usuário). · [x] **Cripto** falha em prod sem `CONNECTORS_ENC_KEY`. · [x] **Export LGPD** completo (+profile/widget/skill/mcp).
+**Chat/LLM** — [x] Janela de histórico (24 msgs) + clamp de `maxOutputTokens` por porte + `maxRetries:2` + erro amigável pt-BR na UI. · [x] **Roteamento de skills por embeddings** (cosseno; migração 0014) — removeu o classificador LLM de 12s; verificado. · [x] **Prompt caching** do Claude (`cache_control` no bloco estável; observabilidade de cacheRead) — ⚠️ inerte até o SYSTEM_PROMPT passar de ~1024 tokens (hoje ~866).
+**RAG/finanças** — [x] **Prefixos de tarefa** no nomic (`search_query`/`search_document`) — ⚠️ **requer reindexar o corpus existente**. · [x] Retrieval sem fallback ruidoso a 0.2 + ranking conjunto doc+memória. · [x] Dedup de memória (>0.92) — verificado. · [x] **Extração financeira via `generateObject`** (schema Zod, verificado ao vivo c/ ollama) + extrato por blocos + dedup + OCR→visão + `parseYmd` sem shift de fuso.
+**Voz** — [x] FastAPI não bloqueia mais o event loop (`asyncio.to_thread` no STT/TTS) + **preload dos modelos no startup** (verificado: /health stt+tts+wake=true) + locks thread-safe. · [x] `AbortController` no TTS (barge-in aborta o fetch).
+**UI** — [x] Token `--color-danger` (13 arquivos), `:focus-visible`, `aria-live`/`role=alert` no chat, guarda de IME no Enter, **toggle otimista** de tarefas com rollback. Verificado no navegador.
+
+**Próximos passos documentados (refactors grandes, NÃO feitos — não são stubs, são escopo maior):**
+- [ ] **Failover cross-model + circuit breaker** por provedor (hoje só `maxRetries`; padrão `resilient-provider-factory` da Adalink).
+- [ ] **Reindexar o corpus** após os prefixos de embedding (docs/memórias antigos estão sem prefixo).
+- [ ] **Split do `console.tsx`** (831 linhas → hooks `useChatStream`/`useVoice`/`useConversations` + painéis) e **design system** (`components/ui/*`, skeletons, estados de erro/retry em TODOS os painéis).
+- [ ] **Orçamento do PromptComposer por TOKENS** (hoje por chars) + `ContextChunk`/`BudgetAllocator` tipados (padrão Adalink).
+- [ ] **Voz streaming**: STT parcial ao vivo + TTS em chunks + `silero-vad` (endpointing) no lugar do VAD por energia; reunião com buffer contínuo (hoje perde áudio entre janelas de 8s).
+- [ ] **Reranking** (cross-encoder) + hybrid search (BM25+vetor) no RAG; chunking por token com offset/página p/ citação real.
+- [ ] Headers de segurança (helmet/CSP/HSTS) + validação de `Origin` nas rotas mutantes.
+
+---
+
 ## Fase 0 — Fundação do monorepo ✅
 - [x] `0.1` Estrutura do monorepo (pnpm workspaces + Turborepo 2.10)
 - [x] `0.2` `docker-compose.yml` com Postgres + pgvector (porta 5433, healthy)
