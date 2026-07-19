@@ -132,7 +132,16 @@ export async function POST(req: Request) {
       log.info("chat", { userId, model: effectiveKey, tokens: tokens ?? 0, latencyMs, conv: conv.id });
       await cleanup(); // fecha conexões MCP
     },
-    onError: () => { void cleanup(); },
+    onError: (e) => {
+      const outer = (e as { error?: Record<string, unknown> })?.error ?? {};
+      const inner = (outer.lastError as Record<string, unknown>) ?? outer; // desembrulha RetryError
+      log.error("chat.stream", {
+        model: effectiveKey,
+        status: inner.statusCode ?? outer.statusCode,
+        body: String(inner.responseBody ?? inner.message ?? "").slice(0, 400),
+      });
+      void cleanup();
+    },
   });
 
   const headers = { "x-conversation-id": conv.id, "x-model": effectiveKey };

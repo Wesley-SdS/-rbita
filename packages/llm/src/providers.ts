@@ -32,12 +32,39 @@ export function resolveModel(key: string): LanguageModel {
       const token = process.env.CLAUDE_CODE_OAUTH_TOKEN;
       if (!token) throw new Error("CLAUDE_CODE_OAUTH_TOKEN não configurado");
       // Assinatura Max via token OAuth do Claude Code — NÃO via Gateway (ToS Anthropic).
-      // `authToken` emite só `Authorization: Bearer` (evita o header x-api-key:"" que
-      // vazava junto com apiKey:"" e confundia a autenticação da Anthropic).
-      const anthropic = createAnthropic({
-        authToken: token,
-        headers: { "anthropic-beta": "oauth-2025-04-20" },
-      });
+      // Fetch customizado força EXATAMENTE os headers OAuth que a API aceita: o SDK
+      // sobrescreve/mescla `anthropic-beta` com betas próprios (tools/caching), o que
+      // faz a API OAuth rejeitar (429 rate_limit_error mascarado). Aqui garantimos o
+      // beta OAuth e a auth por Bearer, removendo o x-api-key.
+      const IDENT = "You are Claude Code, Anthropic's official CLI for Claude.";
+      const oauthFetch: typeof fetch = async (input, init) => {
+        const headers = new Headers(init?.headers);
+        headers.set("authorization", `Bearer ${token}`);
+        headers.set("anthropic-beta", "oauth-2025-04-20");
+        headers.delete("x-api-key");
+        let body = init?.body;
+        // A API OAuth EXIGE que o 1º bloco de system seja EXATAMENTE a identidade
+        // do Claude Code (senão rejeita com 429 mascarado). O AI SDK manda o system
+        // como string única — reescrevemos para [identidade, resto] em blocos.
+        if (typeof body === "string") {
+          try {
+            const j = JSON.parse(body);
+            const restStr = typeof j.system === "string"
+              ? (j.system.startsWith(IDENT) ? j.system.slice(IDENT.length).trim() : j.system)
+              : null;
+            if (typeof j.system === "string") {
+              j.system = [{ type: "text", text: IDENT }, ...(restStr ? [{ type: "text", text: restStr }] : [])];
+            } else if (Array.isArray(j.system)) {
+              if (j.system[0]?.text !== IDENT) j.system = [{ type: "text", text: IDENT }, ...j.system];
+            } else {
+              j.system = [{ type: "text", text: IDENT }];
+            }
+            body = JSON.stringify(j);
+          } catch { /* mantém o body original */ }
+        }
+        return fetch(input, { ...init, headers, body });
+      };
+      const anthropic = createAnthropic({ apiKey: "placeholder", fetch: oauthFetch });
       return anthropic(info.id);
     }
   }
