@@ -7,6 +7,7 @@ import { Orb, type OrbMode } from "@/components/Orb";
 import { streamChat, fetchModels, fetchConversations, fetchConversationMessages, deleteConversation, type ConversationSummary } from "@/lib/chat";
 import { getSession, signOut } from "@/lib/auth";
 import { startRecording, stopRecordingAndTranscribe, speak } from "@/lib/voice";
+import { theme } from "@/lib/theme";
 
 interface Msg { role: "user" | "assistant"; content: string }
 
@@ -140,7 +141,7 @@ export default function Chat() {
               <Pressable onPress={newConversation}><Text style={styles.newChat}>＋ Nova</Text></Pressable>
             </View>
             {loadingConvs ? (
-              <ActivityIndicator color="#e0a83a" style={{ marginTop: 24 }} />
+              <ActivityIndicator color={theme.gold} style={{ marginTop: 24 }} />
             ) : convs.length === 0 ? (
               <Text style={styles.empty}>Nenhuma conversa ainda.</Text>
             ) : (
@@ -199,17 +200,17 @@ export default function Chat() {
         <TextInput
           style={styles.input}
           placeholder="Fale ou escreva…"
-          placeholderTextColor="#8a7a63"
+          placeholderTextColor={theme.inkDim}
           value={input}
           onChangeText={setInput}
           onSubmitEditing={() => send()}
           returnKeyType="send"
         />
-        <Pressable onPress={toggleMic} disabled={mode !== "standby" && !recording} style={[styles.iconBtn, recording && { backgroundColor: "#e0705a" }]}>
+        <Pressable onPress={toggleMic} disabled={mode !== "standby" && !recording} style={[styles.iconBtn, recording && { backgroundColor: theme.danger }]}>
           <Text style={{ fontSize: 18 }}>{recording ? "⏹" : "🎙️"}</Text>
         </Pressable>
         <Pressable style={styles.sendBtn} onPress={() => send()} disabled={mode !== "standby"}>
-          {mode !== "standby" ? <ActivityIndicator color="#241403" /> : <Text style={styles.sendText}>➤</Text>}
+          {mode !== "standby" ? <ActivityIndicator color={theme.onGold} /> : <Text style={styles.sendText}>➤</Text>}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -217,32 +218,32 @@ export default function Chat() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#120d08" },
-  orbBar: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderBottomWidth: 1, borderBottomColor: "#2a2016" },
-  status: { color: "#8a7a63", fontSize: 13 },
-  modelPick: { color: "#e0a83a", fontSize: 11, marginTop: 2 },
+  container: { flex: 1, backgroundColor: theme.ground },
+  orbBar: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderBottomWidth: 1, borderBottomColor: theme.line },
+  status: { color: theme.inkDim, fontSize: 13 },
+  modelPick: { color: theme.gold, fontSize: 11, marginTop: 2 },
   log: { flex: 1 },
-  empty: { color: "#8a7a63", textAlign: "center", marginTop: 40 },
+  empty: { color: theme.inkDim, textAlign: "center", marginTop: 40 },
   bubble: { padding: 12, borderRadius: 14, maxWidth: "85%" },
-  user: { backgroundColor: "#e0a83a", alignSelf: "flex-end" },
-  assistant: { backgroundColor: "#1a130c", borderWidth: 1, borderColor: "#2a2016", alignSelf: "flex-start" },
-  userText: { color: "#241403" },
-  assistantText: { color: "#f0e6d8" },
-  composer: { flexDirection: "row", gap: 8, padding: 12, borderTopWidth: 1, borderTopColor: "#2a2016" },
-  input: { flex: 1, borderWidth: 1, borderColor: "#3a2f22", borderRadius: 12, padding: 12, color: "#f0e6d8", backgroundColor: "#1a130c" },
-  iconBtn: { borderWidth: 1, borderColor: "#3a2f22", borderRadius: 12, width: 44, height: 44, alignItems: "center", justifyContent: "center", backgroundColor: "#1a130c" },
-  sendBtn: { backgroundColor: "#e0a83a", borderRadius: 12, width: 48, alignItems: "center", justifyContent: "center" },
-  sendText: { color: "#241403", fontSize: 18, fontWeight: "700" },
-  logout: { color: "#e0a83a", marginRight: 8 },
-  headerBtn: { color: "#e0a83a", fontSize: 20, marginLeft: 8 },
+  user: { backgroundColor: theme.gold, alignSelf: "flex-end" },
+  assistant: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.line, alignSelf: "flex-start" },
+  userText: { color: theme.onGold },
+  assistantText: { color: theme.ink },
+  composer: { flexDirection: "row", gap: 8, padding: 12, borderTopWidth: 1, borderTopColor: theme.line },
+  input: { flex: 1, borderWidth: 1, borderColor: theme.line, borderRadius: 12, padding: 12, color: theme.ink, backgroundColor: theme.surface },
+  iconBtn: { borderWidth: 1, borderColor: theme.line, borderRadius: 12, width: 44, height: 44, alignItems: "center", justifyContent: "center", backgroundColor: theme.surface },
+  sendBtn: { backgroundColor: theme.gold, borderRadius: 12, width: 48, alignItems: "center", justifyContent: "center" },
+  sendText: { color: theme.onGold, fontSize: 18, fontWeight: "700" },
+  logout: { color: theme.gold, marginRight: 8 },
+  headerBtn: { color: theme.gold, fontSize: 20, marginLeft: 8 },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
-  sheet: { backgroundColor: "#161009", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, borderTopWidth: 1, borderColor: "#2a2016" },
+  sheet: { backgroundColor: theme.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, borderTopWidth: 1, borderColor: theme.line },
   sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
-  sheetTitle: { color: "#f0e6d8", fontSize: 16, fontWeight: "700" },
-  newChat: { color: "#e0a83a", fontSize: 14, fontWeight: "600" },
-  convRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#241b11" },
-  convRowActive: { backgroundColor: "#1e160d", borderRadius: 10, paddingHorizontal: 8 },
-  convTitle: { color: "#f0e6d8", fontSize: 14 },
-  convMeta: { color: "#8a7a63", fontSize: 11, marginTop: 2 },
+  sheetTitle: { color: theme.ink, fontSize: 16, fontWeight: "700" },
+  newChat: { color: theme.gold, fontSize: 14, fontWeight: "600" },
+  convRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.line },
+  convRowActive: { backgroundColor: theme.surface, borderRadius: 10, paddingHorizontal: 8 },
+  convTitle: { color: theme.ink, fontSize: 14 },
+  convMeta: { color: theme.inkDim, fontSize: 11, marginTop: 2 },
   convDelete: { fontSize: 16 },
 });

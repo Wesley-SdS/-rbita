@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { theme } from "@/lib/theme";
 
 export default function RootLayout() {
   return (
@@ -8,9 +9,9 @@ export default function RootLayout() {
       <StatusBar style="light" />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: "#120d08" },
-          headerTintColor: "#e0a83a",
-          contentStyle: { backgroundColor: "#120d08" },
+          headerStyle: { backgroundColor: theme.ground },
+          headerTintColor: theme.gold,
+          contentStyle: { backgroundColor: theme.ground },
         }}
       >
         <Stack.Screen name="index" options={{ title: "ÓRBITA", headerShown: false }} />
