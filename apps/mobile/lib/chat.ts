@@ -77,3 +77,20 @@ export async function deleteConversation(id: string): Promise<boolean> {
   const { ok } = await api(`/api/conversations/${id}`, { method: "DELETE" });
   return ok;
 }
+
+// ── Persona configurável (mesma API do web; aplica a todos os chats) ─────────
+export interface ProfileData { assistantName: string; userName: string | null; persona: string | null }
+
+export async function getProfile(): Promise<ProfileData> {
+  const { data } = await api<{ profile?: Partial<ProfileData> }>("/api/profile");
+  const p = data?.profile ?? {};
+  return { assistantName: p.assistantName ?? "Órbita", userName: p.userName ?? null, persona: p.persona ?? null };
+}
+
+export async function putProfile(p: ProfileData): Promise<boolean> {
+  const { ok } = await api("/api/profile", {
+    method: "PUT",
+    json: { assistantName: p.assistantName || "Órbita", userName: p.userName || null, persona: p.persona || null },
+  });
+  return ok;
+}

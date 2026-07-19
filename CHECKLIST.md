@@ -46,6 +46,7 @@
 - [x] `4.3` Upload de arquivos (PDF via unpdf, imagem via OCR tesseract, txt) — **verificado** (PDF → citação da fonte)
 - [x] `4.4` Busca semântica no chat (RAG injeta contexto) — **verificado** (resposta só com o doc)
 - [x] `4.5` Memória de longo prazo (add/list/forget) — `/api/memory` + UI
+- [x] `4.5b` **Persona configurável e persistente** — tabela `profile` (migração 0012: nome da assistente, como te chamar, tom/preferências), `/api/profile` (GET/PUT), injetada no system prompt como chunk de prioridade 120 (abaixo só da segurança) via `buildPersonaContext`. Editável no web (bloco "Persona") **e no mobile** (settings — mesma persona no PC e no celular, §4.5/§47). **Verificado e2e**: definido {Aurora, Wesley} → chat respondeu "Sou a Aurora e chamo você de Wesley".
 - [x] `4.6` **Anexo de imagem no chat (multimodal)** — botão 🖼️ no compositor (preview + remover, envia com ou sem texto), `/api/chat` aceita `image` (data URL), monta a última mensagem multimodal `[{text},{image}]` e roteia para o **modelo de visão** (`resolveVisionModel` → moondream local / gpt-4o se `OPENAI_API_KEY`). Sem ferramentas nessa rota (moondream não faz function-calling). **Verificado e2e** (cupom → "The bill… prices of items from 2 through 6 dollars", `x-model: vision`).
 
 ## Fase 5 — Voz ✅

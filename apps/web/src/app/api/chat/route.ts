@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { conversation, message } from "@/lib/db/chat-schema";
 import { getSession } from "@/lib/session";
 import { retrieveContext } from "@/lib/rag/retrieve";
-import { buildAllTools, SYSTEM_PROMPT, buildTemporalContext } from "@/lib/chat/tools";
+import { buildAllTools, SYSTEM_PROMPT, buildTemporalContext, buildPersonaContext } from "@/lib/chat/tools";
 import { composeSystem, type Chunk } from "@/lib/chat/compose";
 import { log } from "@/lib/observability/logger";
 
@@ -99,6 +99,10 @@ export async function POST(req: Request) {
     { content: (effectiveKey.startsWith("claude/") ? CLAUDE_CODE_IDENTITY : "") + SYSTEM_PROMPT, priority: 130 },
     { content: buildTemporalContext(), priority: 90 },
   ];
+
+  // Persona configurável do usuário (abaixo só das regras de segurança).
+  const personaCtx = await buildPersonaContext(userId);
+  if (personaCtx) chunks.push({ content: personaCtx, priority: 120 });
 
   const { tools, cleanup, skillInstructions } = await buildAllTools(userId, content);
   if (skillInstructions) chunks.push({ content: skillInstructions, priority: 70 });

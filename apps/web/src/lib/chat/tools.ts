@@ -7,6 +7,7 @@ import { memory } from "@/lib/db/knowledge-schema";
 import { expense } from "@/lib/db/finance-schema";
 import { todo } from "@/lib/db/todo-schema";
 import { widget } from "@/lib/db/widget-schema";
+import { profile } from "@/lib/db/profile-schema";
 import { retrieveContext } from "@/lib/rag/retrieve";
 import { searchWeb, fetchPage } from "@/lib/tools/web";
 import { getWeather } from "@/lib/tools/weather";
@@ -194,6 +195,23 @@ export async function buildTools(userId: string) {
 export function buildTemporalContext(): string {
   const agora = new Date().toLocaleString("pt-BR", { dateStyle: "full", timeStyle: "short" });
   return `\n\n<contexto_temporal>Agora é ${agora}. Use esta data como referência para "hoje", "amanhã", "atual", "recente".</contexto_temporal>`;
+}
+
+/**
+ * Persona configurável do usuário (PRD §4.5): nome da assistente, como chamar o
+ * usuário e instruções de tom/estilo. Ajusta a personalização SEM sobrepor as
+ * regras de segurança (entra como chunk de prioridade abaixo da segurança).
+ */
+export async function buildPersonaContext(userId: string): Promise<string> {
+  const [p] = await db.select().from(profile).where(eq(profile.userId, userId)).limit(1);
+  if (!p) return "";
+  const name = (p.assistantName ?? "Órbita").trim();
+  const parts: string[] = [];
+  if (name && name !== "Órbita") parts.push(`Seu nome é "${name}" — responda a esse nome.`);
+  if (p.userName?.trim()) parts.push(`Trate o usuário por "${p.userName.trim()}".`);
+  if (p.persona?.trim()) parts.push(`Preferências de personalização definidas pelo usuário: ${p.persona.trim()}`);
+  if (!parts.length) return "";
+  return `\n\n<persona>${parts.join(" ")} Estas preferências ajustam tom e estilo, mas nunca anulam as regras de segurança.</persona>`;
 }
 
 /**

@@ -51,11 +51,12 @@ const toolLabel = (n: string) => TOOL_LABELS[n] ?? `⚙ ${n}`;
 const BLOCKS = [
   { id: "widgets", label: "Meus cards" },
   { id: "provedor", label: "Provedor de IA" },
+  { id: "persona", label: "Persona" },
   { id: "memoria", label: "Memória & Docs" },
   { id: "reuniao", label: "Reunião" },
   { id: "privacidade", label: "Privacidade (LGPD)" },
   { id: "sessao", label: "Sessão" },
-  { id: "custo", label: "Custo vs. nuvem" },
+  { id: "custo", label: "Economia vs. nuvem" },
   { id: "financas", label: "Finanças" },
   { id: "tarefas", label: "Tarefas" },
   { id: "arquivos", label: "Arquivos" },
@@ -628,6 +629,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
       {/* RIGHT RAIL */}
       <aside className="flex flex-col gap-3 md:min-h-0 md:overflow-y-auto md:pl-1">
         <Block id="widgets" hidden={hidden} toggle={toggle}><Widgets /></Block>
+        <Block id="persona" hidden={hidden} toggle={toggle}><PersonaPanel /></Block>
         <Block id="sessao" hidden={hidden} toggle={toggle}>
           <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
             <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Sessão</h3>
@@ -690,6 +692,58 @@ function Stat({ label, value, accent, good }: { label: string; value: string; ac
     <div className="flex items-baseline justify-between py-1 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
       <span>{label}</span>
       <b className="font-mono" style={{ color: good ? "#8ac98f" : accent ? "var(--color-gold)" : "var(--color-ink)" }}>{value}</b>
+    </div>
+  );
+}
+
+type ProfileT = { assistantName: string; userName: string | null; persona: string | null };
+
+/** Persona configurável: nome da assistente, como te chamar e tom/estilo. */
+function PersonaPanel() {
+  const [p, setP] = useState<ProfileT | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    fetch("/api/profile").then((r) => (r.ok ? r.json() : null)).then((d) => {
+      if (d?.profile) setP({ assistantName: d.profile.assistantName ?? "Órbita", userName: d.profile.userName ?? "", persona: d.profile.persona ?? "" });
+    }).catch(() => {});
+  }, []);
+  async function save() {
+    if (!p) return;
+    setSaving(true); setSaved(false);
+    try {
+      const r = await fetch("/api/profile", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assistantName: p.assistantName || "Órbita", userName: p.userName || null, persona: p.persona || null }),
+      });
+      if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 2000); }
+    } finally { setSaving(false); }
+  }
+  const field = { borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" };
+  return (
+    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+      <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Persona</h3>
+      {!p ? (
+        <div className="py-2 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>—</div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <label className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>Nome da assistente</label>
+          <input value={p.assistantName} onChange={(e) => setP({ ...p, assistantName: e.target.value })} maxLength={40}
+            className="rounded-lg border px-3 py-2 text-sm outline-none" style={field} placeholder="Órbita" />
+          <label className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>Como te chamar</label>
+          <input value={p.userName ?? ""} onChange={(e) => setP({ ...p, userName: e.target.value })} maxLength={40}
+            className="rounded-lg border px-3 py-2 text-sm outline-none" style={field} placeholder="opcional" />
+          <label className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>Tom & preferências</label>
+          <textarea value={p.persona ?? ""} onChange={(e) => setP({ ...p, persona: e.target.value })} maxLength={2000} rows={3}
+            className="resize-y rounded-lg border px-3 py-2 text-sm outline-none" style={field}
+            placeholder="Ex.: seja direto e objetivo; me trate por você; evite jargão." />
+          <button onClick={save} disabled={saving}
+            className="mt-1 rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50"
+            style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>
+            {saving ? "Salvando…" : saved ? "Salvo ✓" : "Salvar persona"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -20,6 +20,8 @@ export * from "./action-schema";
 export * from "./extension-schema";
 // Widgets do dashboard (cards pináveis: cotação, clima, nota, checklist).
 export * from "./widget-schema";
+// Perfil/persona configurável do usuário (personalização persistente).
+export * from "./profile-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {
