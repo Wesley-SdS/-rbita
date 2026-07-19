@@ -1,7 +1,7 @@
-import { tool, generateText, type ToolSet } from "ai";
+import { tool, type ToolSet } from "ai";
 import { and, cosineDistance, desc, eq, gt, lte, sql } from "drizzle-orm";
 import { z } from "zod";
-import { embedText, resolveModel } from "@orbita/llm";
+import { embedText } from "@orbita/llm";
 import { db } from "@/lib/db";
 import { memory } from "@/lib/db/knowledge-schema";
 import { expense } from "@/lib/db/finance-schema";
@@ -228,65 +228,53 @@ export async function buildPersonaContext(userId: string): Promise<string> {
  * Precedência declarada (padrão aprendido): a skill ajusta TOM/ESTILO/CONTEÚDO,
  * mas NUNCA sobrepõe as regras de segurança nem o comportamento das ferramentas.
  */
-type SkillRow = { name: string; instructions: string; keywords: string | null };
+type SkillRow = { id: string; name: string; instructions: string; keywords: string | null; embedding: number[] | null };
 
-/**
- * Fallback de roteamento por LLM: um modelo pequeno e rápido (llama 1B) escolhe
- * quais skills se aplicam à mensagem quando o keyword não casa nada. Barato e
- * best-effort — se demorar/falhar, o chamador usa um fallback simples.
- */
-async function routeSkillsByLLM(query: string, rows: SkillRow[]): Promise<SkillRow[] | null> {
-  try {
-    const catalog = rows.map((r, i) => `${i + 1}. ${r.name} — ${(r.keywords ?? r.instructions).slice(0, 80)}`).join("\n");
-    // qwen 7b é bem mais confiável que o 1B para classificar; só roda no caso
-    // ambíguo (keyword não casou), então a latência extra é aceitável.
-    const model = resolveModel("local/qwen2.5:7b");
-    const { text } = await generateText({
-      model,
-      system:
-        "Você é um classificador de intenção. Dada a mensagem do usuário e uma lista numerada de skills " +
-        "(cada uma com nome e palavras-chave/tema), responda APENAS com os números das skills cujo TEMA " +
-        "combina com a mensagem, separados por vírgula (ex.: 1,3). Considere sinônimos e o assunto geral, " +
-        "não só palavras iguais. Se nenhuma combinar, responda 0. Não explique, responda só os números.",
-      prompt: `Mensagem: "${query}"\n\nSkills:\n${catalog}\n\nNúmeros das skills relevantes:`,
-      abortSignal: AbortSignal.timeout(12000),
-    });
-    const idx = (text.match(/\d+/g) ?? []).map((n) => parseInt(n, 10)).filter((n) => n >= 1 && n <= rows.length);
-    const uniq = [...new Set(idx)].slice(0, 3);
-    if (!uniq.length) return null;
-    return uniq.map((n) => rows[n - 1]);
-  } catch {
-    return null; // timeout/erro → deixa o chamador decidir o fallback
+/** Similaridade de cosseno entre dois vetores. */
+function cosine(a: number[], b: number[]): number {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
   }
+  return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
 }
 
 export async function getSkillInstructions(userId: string, query = ""): Promise<string> {
-  const rows = await db
-    .select({ name: skill.name, instructions: skill.instructions, keywords: skill.keywords })
+  const rows: SkillRow[] = await db
+    .select({ id: skill.id, name: skill.name, instructions: skill.instructions, keywords: skill.keywords, embedding: skill.embedding })
     .from(skill)
     .where(and(eq(skill.userId, userId), eq(skill.enabled, true)));
   if (!rows.length) return "";
 
-  // Roteamento em cascata (padrão Adalink): com poucas skills, usa todas; com
-  // muitas, seleciona por palavra-chave (barato); se o keyword não casar nada,
-  // um modelo pequeno e rápido classifica quais skills se aplicam (fallback LLM).
+  // Roteamento por EMBEDDINGS (rápido, semântico — sem LLM no hot path): com
+  // poucas skills usa todas; com muitas, ranqueia por cosseno query↔skill.
   let chosen = rows;
   if (rows.length > 3 && query.trim()) {
-    const q = query.toLowerCase();
-    const scored = rows
-      .map((r) => {
-        const kws = (r.keywords ?? r.name).toLowerCase().split(/[,\s]+/).filter((k) => k.length >= 3);
-        const score = kws.filter((k) => q.includes(k)).length;
-        return { r, score };
-      })
-      .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
-    if (scored.length) {
-      chosen = scored.map((x) => x.r);
-    } else {
-      // keyword não achou nada → tenta o LLM; se falhar, cai nas 2 primeiras.
-      chosen = (await routeSkillsByLLM(query, rows)) ?? rows.slice(0, 2);
+    try {
+      const q = await embedText(query, "query");
+      // backfill preguiçoso do vetor de skills legadas (sem embedding gravado).
+      await Promise.all(
+        rows
+          .filter((r) => !r.embedding)
+          .map(async (r) => {
+            const v = await embedText(`${r.name}. ${r.keywords ?? ""}. ${r.instructions}`.slice(0, 1500), "document").catch(() => null);
+            if (v) {
+              r.embedding = v;
+              await db.update(skill).set({ embedding: v }).where(eq(skill.id, r.id)).catch(() => {});
+            }
+          }),
+      );
+      const ranked = rows
+        .filter((r) => r.embedding)
+        .map((r) => ({ r, sim: cosine(q, r.embedding!) }))
+        .sort((a, b) => b.sim - a.sim)
+        .slice(0, 3);
+      if (ranked.length) chosen = ranked.map((x) => x.r);
+    } catch {
+      // embeddings indisponíveis → usa as primeiras como último recurso.
+      chosen = rows.slice(0, 3);
     }
   }
 

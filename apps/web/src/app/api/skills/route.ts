@@ -1,8 +1,18 @@
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
+import { embedText } from "@orbita/llm";
 import { db } from "@/lib/db";
 import { skill } from "@/lib/db/extension-schema";
 import { getSession } from "@/lib/session";
+
+/** Vetor da skill p/ roteamento semântico (nome + palavras-chave + instruções). */
+async function skillEmbedding(name: string, keywords: string | undefined, instructions: string): Promise<number[] | null> {
+  try {
+    return await embedText(`${name}. ${keywords ?? ""}. ${instructions}`.slice(0, 1500), "document");
+  } catch {
+    return null; // embedding é best-effort; roteamento cai para keyword se faltar
+  }
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +31,8 @@ export async function POST(req: Request) {
   if (!s) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const p = Body.safeParse(await req.json().catch(() => null));
   if (!p.success) return Response.json({ error: p.error.issues[0]?.message }, { status: 400 });
-  const [row] = await db.insert(skill).values({ userId: s.user.id, ...p.data }).returning({ id: skill.id });
+  const embedding = await skillEmbedding(p.data.name, p.data.keywords, p.data.instructions);
+  const [row] = await db.insert(skill).values({ userId: s.user.id, ...p.data, embedding }).returning({ id: skill.id });
   return Response.json({ id: row?.id });
 }
 

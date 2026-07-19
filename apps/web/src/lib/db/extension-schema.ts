@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, boolean, jsonb, vector } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -14,6 +14,8 @@ export const skill = pgTable("skill", {
   name: text("name").notNull(),
   instructions: text("instructions").notNull(),
   keywords: text("keywords"), // CSV — usado no roteamento por palavra-chave
+  // vetor da skill (nome+keywords+instruções) p/ roteamento semântico por cosseno.
+  embedding: vector("embedding", { dimensions: 768 }),
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
