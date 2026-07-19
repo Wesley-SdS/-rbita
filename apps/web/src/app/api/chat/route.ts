@@ -1,7 +1,7 @@
 import { streamText, stepCountIs } from "ai";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { resolveModel, resolveVisionModel, getModelInfo, routeModelKey, providerEnv, DEFAULT_MODEL_KEY } from "@orbita/llm";
+import { resolveModel, resolveVisionModel, getModelInfo, routeModelKey, providerEnv, DEFAULT_MODEL_KEY, CACHE_BREAK } from "@orbita/llm";
 import { db } from "@/lib/db";
 import { conversation, message } from "@/lib/db/chat-schema";
 import { getSession } from "@/lib/session";
@@ -139,7 +139,15 @@ export async function POST(req: Request) {
     // RAG é best-effort; se falhar, segue sem contexto.
   }
 
-  const system = composeSystem(chunks);
+  // Separa o núcleo ESTÁVEL (SYSTEM_PROMPT + identidade) do contexto VOLÁTIL para
+  // permitir prompt caching no Claude: só o estável leva cache_control (via o
+  // marcador CACHE_BREAK, que o oauthFetch interpreta). Nos demais modelos o
+  // marcador não é inserido.
+  const coreContent = chunks[0].content;
+  const restSystem = composeSystem(chunks.slice(1));
+  const system = effectiveKey.startsWith("claude/")
+    ? coreContent + CACHE_BREAK + restSystem
+    : coreContent + restSystem;
 
   const started = Date.now();
 
@@ -158,9 +166,11 @@ export async function POST(req: Request) {
     maxOutputTokens,
     maxRetries: 2, // backoff automático em 429/5xx transitório do provedor
     onAbort: () => void cleanup(),
-    onFinish: async ({ text, usage }) => {
+    onFinish: async ({ text, usage, providerMetadata }) => {
       const latencyMs = Date.now() - started;
       const tokens = usage?.outputTokens ?? usage?.totalTokens ?? null;
+      // tokens de prompt cache do Anthropic (verifica a eficácia do cache_control)
+      const anth = providerMetadata?.anthropic as { cacheReadInputTokens?: number; cacheCreationInputTokens?: number } | undefined;
       await db.insert(message).values({
         conversationId: conv.id,
         role: "assistant",
@@ -173,7 +183,10 @@ export async function POST(req: Request) {
         .update(conversation)
         .set({ updatedAt: new Date(), modelKey: effectiveKey })
         .where(eq(conversation.id, conv.id));
-      log.info("chat", { userId, model: effectiveKey, tokens: tokens ?? 0, latencyMs, conv: conv.id });
+      log.info("chat", {
+        userId, model: effectiveKey, tokens: tokens ?? 0, latencyMs, conv: conv.id,
+        cacheRead: anth?.cacheReadInputTokens ?? 0, cacheWrite: anth?.cacheCreationInputTokens ?? 0,
+      });
       await cleanup(); // fecha conexões MCP
     },
     onError: (e) => {
