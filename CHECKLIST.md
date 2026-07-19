@@ -16,8 +16,8 @@
 
 **Próximos passos documentados (refactors grandes, NÃO feitos — não são stubs, são escopo maior):**
 - [ ] **Failover cross-model + circuit breaker** por provedor (hoje só `maxRetries`; padrão `resilient-provider-factory` da Adalink).
-- [ ] **Reindexar o corpus** após os prefixos de embedding (docs/memórias antigos estão sem prefixo).
-- [ ] **Split do `console.tsx`** (831 linhas → hooks `useChatStream`/`useVoice`/`useConversations` + painéis) e **design system** (`components/ui/*`, skeletons, estados de erro/retry em TODOS os painéis).
+- [x] **Reindex do corpus** — `/api/account/reindex` (POST) re-embeda docs+memórias com prefixo `search_document`. Verificado (1 chunk + 7 memórias). ✅
+- [~] **Split do `console.tsx`** — painéis extraídos p/ `side-panels.tsx` (833→692 linhas, verificado). **Falta**: hooks `useChatStream`/`useVoice`/`useConversations` + **design system** (`components/ui/*`, skeletons, estados de erro/retry em TODOS os painéis).
 - [ ] **Orçamento do PromptComposer por TOKENS** (hoje por chars) + `ContextChunk`/`BudgetAllocator` tipados (padrão Adalink).
 - [ ] **Voz streaming**: STT parcial ao vivo + TTS em chunks + `silero-vad` (endpointing) no lugar do VAD por energia; reunião com buffer contínuo (hoje perde áudio entre janelas de 8s).
 - [ ] **Reranking** (cross-encoder) + hybrid search (BM25+vetor) no RAG; chunking por token com offset/página p/ citação real.
