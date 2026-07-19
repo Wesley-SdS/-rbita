@@ -7,7 +7,7 @@ export default async function AppPage() {
   if (!s) redirect("/login");
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-6xl flex-col items-center px-4 py-6">
+    <main className="flex min-h-screen w-full flex-col px-3 py-4 md:h-screen md:min-h-0">
       <Console userName={s.user.name} userEmail={s.user.email} />
     </main>
   );

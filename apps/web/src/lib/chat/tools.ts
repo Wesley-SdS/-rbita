@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { memory } from "@/lib/db/knowledge-schema";
 import { expense } from "@/lib/db/finance-schema";
 import { todo } from "@/lib/db/todo-schema";
+import { widget } from "@/lib/db/widget-schema";
 import { retrieveContext } from "@/lib/rag/retrieve";
 import { searchWeb, fetchPage } from "@/lib/tools/web";
 import { getWeather } from "@/lib/tools/weather";
@@ -152,6 +153,23 @@ export async function buildTools(userId: string) {
       execute: async () => {
         const rows = await db.select().from(todo).where(and(eq(todo.userId, userId), eq(todo.done, false)));
         return { tarefas: rows.map((t) => ({ texto: t.text, vencimento: t.dueDate?.toISOString().slice(0, 10) ?? null })) };
+      },
+    }),
+    criar_widget: tool({
+      description: "Fixa/pina um CARD no dashboard do usuário para acompanhar algo no dia a dia: cotação de moeda, clima de uma cidade, uma nota ou um checklist. Use quando o usuário disser 'pina', 'fixa', 'cria um card', 'quero acompanhar'.",
+      inputSchema: z.object({
+        tipo: z.enum(["cotacao", "clima", "nota", "checklist"]),
+        titulo: z.string(),
+        par: z.string().optional().describe("par de moeda p/ cotação, ex: USD-BRL, EUR-BRL, BTC-BRL"),
+        cidade: z.string().optional().describe("cidade p/ o widget de clima"),
+      }),
+      execute: async ({ tipo, titulo, par, cidade }) => {
+        const config =
+          tipo === "cotacao" ? { par: (par || "USD-BRL").toUpperCase() } :
+          tipo === "clima" ? { cidade: cidade || "São Paulo" } :
+          tipo === "nota" ? { text: "" } : { items: [] };
+        await db.insert(widget).values({ userId, type: tipo, title: titulo, config });
+        return { pinado: true, tipo, titulo };
       },
     }),
     previsao_tempo: tool({

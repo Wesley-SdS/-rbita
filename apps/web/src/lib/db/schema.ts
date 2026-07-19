@@ -18,6 +18,8 @@ export * from "./todo-schema";
 export * from "./action-schema";
 // Extensões: skills (comportamentos) + servidores MCP (ferramentas externas).
 export * from "./extension-schema";
+// Widgets do dashboard (cards pináveis: cotação, clima, nota, checklist).
+export * from "./widget-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {

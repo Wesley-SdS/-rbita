@@ -13,6 +13,8 @@ import { FolderPanel } from "@/components/folder-panel";
 import { ActionsPanel } from "@/components/actions-panel";
 import { Markdown } from "@/components/markdown";
 import { ExtensionsPanel } from "@/components/extensions-panel";
+import { Widgets } from "@/components/widgets";
+import { Block, BlocksManager, useHiddenBlocks } from "@/components/block";
 import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
 import { RealtimeSession } from "@/lib/voice/realtime";
 import { signOut } from "@/lib/auth-client";
@@ -44,6 +46,23 @@ const TOOL_LABELS: Record<string, string> = {
   enviar_whatsapp: "📱 Enviando WhatsApp",
 };
 const toolLabel = (n: string) => TOOL_LABELS[n] ?? `⚙ ${n}`;
+
+// blocos ocultáveis do dashboard (id → rótulo no gerenciador)
+const BLOCKS = [
+  { id: "widgets", label: "Meus cards" },
+  { id: "provedor", label: "Provedor de IA" },
+  { id: "memoria", label: "Memória & Docs" },
+  { id: "reuniao", label: "Reunião" },
+  { id: "privacidade", label: "Privacidade (LGPD)" },
+  { id: "sessao", label: "Sessão" },
+  { id: "custo", label: "Custo vs. nuvem" },
+  { id: "financas", label: "Finanças" },
+  { id: "tarefas", label: "Tarefas" },
+  { id: "arquivos", label: "Arquivos" },
+  { id: "extensoes", label: "Extensões" },
+  { id: "conectores", label: "Conectores" },
+  { id: "proatividade", label: "Proatividade" },
+];
 
 const BRL = 5.35;
 const GPT_PER_1K = 0.05; // R$/1k tokens saída (referência de nuvem)
@@ -81,6 +100,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
   const wakeRef = useRef<WakeListener | null>(null);
   const audioFileRef = useRef<HTMLInputElement | null>(null);
   const ttsLocalOkRef = useRef<boolean>(true); // cai p/ navegador se o TTS local falhar
+  const { hidden, toggle } = useHiddenBlocks(); // blocos que o usuário ocultou
   const [privacyMode, setPrivacyMode] = useState(false); // força tudo local (nada vai p/ nuvem)
   const [realtimeEnabled, setRealtimeEnabled] = useState(false); // S2S premium disponível?
   const [realtimeOn, setRealtimeOn] = useState(false);
@@ -418,9 +438,9 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
 
   return (
     <>
-    <div className="grid w-full max-w-6xl gap-4 md:h-[calc(100dvh-3rem)] md:grid-cols-[210px_1fr_290px]">
+    <div className="grid w-full flex-1 gap-3 md:min-h-0 md:grid-cols-[220px_1fr_300px] xl:grid-cols-[260px_1fr_340px]">
       {/* LEFT RAIL */}
-      <aside className="flex flex-col gap-4 md:min-h-0 md:overflow-y-auto md:pr-1">
+      <aside className="flex flex-col gap-3 md:min-h-0 md:overflow-y-auto md:pr-1">
         <div className="rounded-2xl border p-3" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
           <div className="flex items-center">
             <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Conversas</h3>
@@ -451,6 +471,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
           </p>
         </div>
 
+        <Block id="provedor" hidden={hidden} toggle={toggle}>
         <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
           <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Provedor de IA</h3>
           <select value={privacyMode ? "local/qwen2.5:7b" : modelKey} disabled={privacyMode} onChange={(e) => setModelKey(e.target.value)}
@@ -477,10 +498,11 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
             🔒 Modo privacidade (força tudo local — nada sai da máquina)
           </label>
         </div>
+        </Block>
 
-        <KnowledgePanel />
-        <MeetingPanel />
-        <PrivacyPanel email={userEmail} />
+        <Block id="memoria" hidden={hidden} toggle={toggle}><KnowledgePanel /></Block>
+        <Block id="reuniao" hidden={hidden} toggle={toggle}><MeetingPanel /></Block>
+        <Block id="privacidade" hidden={hidden} toggle={toggle}><PrivacyPanel email={userEmail} /></Block>
 
         <button onClick={async () => { await signOut(); router.push("/login"); }}
           className="rounded-lg border px-4 py-2 text-sm" style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>
@@ -491,6 +513,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
       {/* CENTER STAGE */}
       <main className="relative flex h-[82vh] flex-col overflow-hidden rounded-2xl border md:h-full md:min-h-0" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
         <div className="absolute right-3 top-3 z-10 flex gap-2">
+          <BlocksManager blocks={BLOCKS} hidden={hidden} toggle={toggle} />
           <a href="/insights" title="insights e grafo de conhecimento"
             className="rounded-lg border px-2.5 py-1 text-xs"
             style={{ borderColor: "var(--color-line)", background: "var(--color-surface)", color: "var(--color-ink-dim)" }}>
@@ -586,30 +609,35 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
       </main>
 
       {/* RIGHT RAIL */}
-      <aside className="flex flex-col gap-4 md:min-h-0 md:overflow-y-auto md:pl-1">
-        <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
-          <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Sessão</h3>
-          <Stat label="Requisições" value={String(stats.requests)} />
-          <Stat label="Tokens (~saída)" value={stats.tokens.toLocaleString("pt-BR")} />
-          <Stat label="Latência (última)" value={stats.lastMs ? stats.lastMs + "ms" : "—"} accent />
-        </div>
-        <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
-          <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Custo vs. nuvem</h3>
-          <Stat label="Órbita (local)" value="R$0,00" good />
-          <Stat label="GPT-5 (ref.)" value={brl(stats.gpt)} />
-          <Stat label="Gemini (ref.)" value={brl(stats.gem)} />
-          <div className="mt-3 rounded-xl border p-3" style={{ borderColor: "color-mix(in oklab, var(--color-gold) 30%, transparent)", background: "color-mix(in oklab, var(--color-gold) 12%, transparent)" }}>
-            <div className="font-mono text-[10px] uppercase" style={{ color: "var(--color-gold)" }}>você economizou</div>
-            <div className="mt-1 text-xl font-bold">{brl(stats.saved)} <span className="text-xs" style={{ color: "var(--color-ink-dim)" }}>vs. nuvem</span></div>
+      <aside className="flex flex-col gap-3 md:min-h-0 md:overflow-y-auto md:pl-1">
+        <Block id="widgets" hidden={hidden} toggle={toggle}><Widgets /></Block>
+        <Block id="sessao" hidden={hidden} toggle={toggle}>
+          <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Sessão</h3>
+            <Stat label="Requisições" value={String(stats.requests)} />
+            <Stat label="Tokens (~saída)" value={stats.tokens.toLocaleString("pt-BR")} />
+            <Stat label="Latência (última)" value={stats.lastMs ? stats.lastMs + "ms" : "—"} accent />
           </div>
-        </div>
-        <FinancePanel />
-        <TodoPanel />
-        <FolderPanel />
-        <ExtensionsPanel />
+        </Block>
+        <Block id="custo" hidden={hidden} toggle={toggle}>
+          <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Custo vs. nuvem</h3>
+            <Stat label="Órbita (local)" value="R$0,00" good />
+            <Stat label="GPT-5 (ref.)" value={brl(stats.gpt)} />
+            <Stat label="Gemini (ref.)" value={brl(stats.gem)} />
+            <div className="mt-3 rounded-xl border p-3" style={{ borderColor: "color-mix(in oklab, var(--color-gold) 30%, transparent)", background: "color-mix(in oklab, var(--color-gold) 12%, transparent)" }}>
+              <div className="font-mono text-[10px] uppercase" style={{ color: "var(--color-gold)" }}>você economizou</div>
+              <div className="mt-1 text-xl font-bold">{brl(stats.saved)} <span className="text-xs" style={{ color: "var(--color-ink-dim)" }}>vs. nuvem</span></div>
+            </div>
+          </div>
+        </Block>
+        <Block id="financas" hidden={hidden} toggle={toggle}><FinancePanel /></Block>
+        <Block id="tarefas" hidden={hidden} toggle={toggle}><TodoPanel /></Block>
+        <Block id="arquivos" hidden={hidden} toggle={toggle}><FolderPanel /></Block>
+        <Block id="extensoes" hidden={hidden} toggle={toggle}><ExtensionsPanel /></Block>
         <ActionsPanel />
-        <ConnectorsPanel />
-        <RoutinesPanel />
+        <Block id="conectores" hidden={hidden} toggle={toggle}><ConnectorsPanel /></Block>
+        <Block id="proatividade" hidden={hidden} toggle={toggle}><RoutinesPanel /></Block>
       </aside>
     </div>
 
