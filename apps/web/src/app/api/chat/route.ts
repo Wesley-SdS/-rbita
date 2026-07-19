@@ -5,7 +5,7 @@ import { resolveModel, resolveVisionModel, getModelInfo, routeModelKey, provider
 import { db } from "@/lib/db";
 import { conversation, message } from "@/lib/db/chat-schema";
 import { getSession } from "@/lib/session";
-import { retrieveContext } from "@/lib/rag/retrieve";
+import { retrieveContext, type RagHit } from "@/lib/rag/retrieve";
 import { buildAllTools, SYSTEM_PROMPT, buildTemporalContext, buildPersonaContext } from "@/lib/chat/tools";
 import { composeSystem, type Chunk } from "@/lib/chat/compose";
 import { log } from "@/lib/observability/logger";
@@ -117,32 +117,37 @@ export async function POST(req: Request) {
     { content: buildTemporalContext(), priority: 90 },
   ];
 
-  // Persona configurável do usuário (abaixo só das regras de segurança).
-  const personaCtx = await buildPersonaContext(userId);
+  // PRÉ-PROCESSAMENTO EM PARALELO (padrão Adalink): persona + ferramentas + RAG
+  // rodam concorrentes e fail-soft, em vez de em série. Antes o RAG (embedding no
+  // ollama local) travava até Claude/Gateway (nuvem). Agora o pré-processo ≈ o
+  // mais lento dos três, com teto no RAG.
+  const RAG_TIMEOUT = 3500;
+  // Turno trivial (saudação curta, sem imagem) → pula o RAG (economiza o embedding).
+  const trivial = !image && content.trim().length < 14;
+  const ragTask: Promise<RagHit[]> = trivial
+    ? Promise.resolve([])
+    : Promise.race([
+        retrieveContext(userId, content, 4).catch(() => [] as RagHit[]),
+        new Promise<RagHit[]>((res) => setTimeout(() => res([]), RAG_TIMEOUT)),
+      ]);
+
+  const [personaCtx, toolsRes, ragHits] = await Promise.all([
+    buildPersonaContext(userId).catch(() => ""),
+    buildAllTools(userId, content),
+    ragTask,
+  ]);
+  const { tools, cleanup, skillInstructions } = toolsRes;
+
   if (personaCtx) chunks.push({ content: personaCtx, priority: 120 });
-
-  const { tools, cleanup, skillInstructions } = await buildAllTools(userId, content);
   if (skillInstructions) chunks.push({ content: skillInstructions, priority: 70 });
-
-  try {
-    // RAG é best-effort E NÃO PODE bloquear a resposta: o embedding roda no
-    // ollama local (mesmo com LLM na nuvem) e, se o modelo de embedding for
-    // recarregado (cold), leva ~20s. Timeout curto → responde sem contexto.
-    const hits = await Promise.race([
-      retrieveContext(userId, content, 4),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("rag_timeout")), 3500)),
-    ]);
-    if (hits.length) {
-      chunks.push({
-        content:
-          "\n\nContexto do usuário (use quando relevante e cite a fonte entre colchetes):\n" +
-          hits.map((h, i) => `[${i + 1}] (${h.source}) ${h.content}`).join("\n\n"),
-        priority: 50,
-        compressible: true, // RAG é cortado primeiro se faltar orçamento
-      });
-    }
-  } catch {
-    // timeout ou falha → segue sem contexto (não trava a resposta).
+  if (ragHits.length) {
+    chunks.push({
+      content:
+        "\n\nContexto do usuário (use quando relevante e cite a fonte entre colchetes):\n" +
+        ragHits.map((h, i) => `[${i + 1}] (${h.source}) ${h.content}`).join("\n\n"),
+      priority: 50,
+      compressible: true, // RAG é cortado primeiro se faltar orçamento
+    });
   }
 
   // Separa o núcleo ESTÁVEL (SYSTEM_PROMPT + identidade) do contexto VOLÁTIL para
