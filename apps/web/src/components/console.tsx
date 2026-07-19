@@ -91,6 +91,8 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
 
   // métricas de sessão (reais / estimadas)
   const [stats, setStats] = useState({ requests: 0, tokens: 0, lastMs: 0 });
+  const [elapsed, setElapsed] = useState(0); // segundos desde o envio (feedback ao vivo)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [voiceOn, setVoiceOn] = useState(true);
   const [recording, setRecording] = useState(false);
   const [wakeOn, setWakeOn] = useState(false);
@@ -110,6 +112,8 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
   const [focus, setFocus] = useState(false);
   const [convs, setConvs] = useState<{ id: string; title: string }[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []); // limpa o cronômetro no unmount
 
   function loadConvs() {
     fetch("/api/conversations").then((r) => r.json()).then((d) => setConvs(d.conversations ?? [])).catch(() => {});
@@ -366,6 +370,11 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
     setMessages((m) => [...m, { role: "user", content }, { role: "assistant", content: "" }]);
     const started = Date.now();
     let spoke = false;
+    // cronômetro ao vivo: mostra os segundos correndo enquanto a Órbita processa
+    setElapsed(0);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 500);
+    const stopTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
 
     try {
       const res = await fetch("/api/chat", {
@@ -429,6 +438,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
       setError(e instanceof Error ? e.message : "Erro inesperado");
       setMessages((m) => { const c = [...m]; if (c[c.length - 1]?.role === "assistant" && !c[c.length - 1]?.content) c.pop(); return c; });
     } finally {
+      stopTimer();
       if (!spoke) setMode("standby");
       loadConvs();
     }
@@ -526,8 +536,8 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
         <div className="relative shrink-0 h-[42vh] min-h-[300px]"
           style={{ background: "radial-gradient(circle at 50% 48%, #1a1206 0%, #0d0904 55%, transparent 100%)" }}>
           <Orb mode={mode} fill bare />
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--color-ink-dim)" }}>
-            {STATUS[mode]}
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.16em]" style={{ color: mode !== "standby" ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
+            {STATUS[mode]}{mode !== "standby" && elapsed > 0 ? ` · ${elapsed}s` : ""}
           </div>
         </div>
 
@@ -554,8 +564,14 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
                 style={{ background: m.role === "user" ? "color-mix(in oklab, var(--color-gold) 16%, var(--color-surface))" : "var(--color-ground)", border: "1px solid var(--color-line)", color: "var(--color-ink)" }}>
                 {m.role === "assistant" && m.content ? (
                   <Markdown>{m.content}</Markdown>
+                ) : mode !== "standby" && i === messages.length - 1 ? (
+                  <span className="flex items-center gap-2" style={{ color: "var(--color-ink-dim)" }}>
+                    <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--color-gold)" }} />
+                    <span>{STATUS[mode]}</span>
+                    {elapsed > 0 && <span className="font-mono text-xs" style={{ color: "var(--color-ink-dim)" }}>{elapsed}s</span>}
+                  </span>
                 ) : (
-                  <span className="whitespace-pre-wrap">{m.content || (mode !== "standby" && i === messages.length - 1 ? "…" : "")}</span>
+                  <span className="whitespace-pre-wrap">{m.content}</span>
                 )}
               </div>
             </div>
