@@ -11,12 +11,26 @@ function ollama() {
 export const EMBED_MODEL = "nomic-embed-text";
 export const EMBED_DIMS = 768;
 
-export async function embedText(value: string): Promise<number[]> {
-  const { embedding } = await embed({ model: ollama().textEmbeddingModel(EMBED_MODEL), value });
+/**
+ * O nomic-embed-text foi treinado com prefixos de tarefa e depende deles para o
+ * recall assimétrico query↔documento. Sem os prefixos, a busca perde qualidade.
+ * `query` = texto de busca; `document` = conteúdo indexado.
+ */
+export type EmbedKind = "query" | "document";
+const PREFIX: Record<EmbedKind, string> = {
+  query: "search_query: ",
+  document: "search_document: ",
+};
+
+export async function embedText(value: string, kind: EmbedKind = "query"): Promise<number[]> {
+  const { embedding } = await embed({ model: ollama().textEmbeddingModel(EMBED_MODEL), value: PREFIX[kind] + value });
   return embedding;
 }
 
-export async function embedTexts(values: string[]): Promise<number[][]> {
-  const { embeddings } = await embedMany({ model: ollama().textEmbeddingModel(EMBED_MODEL), values });
+export async function embedTexts(values: string[], kind: EmbedKind = "document"): Promise<number[][]> {
+  const { embeddings } = await embedMany({
+    model: ollama().textEmbeddingModel(EMBED_MODEL),
+    values: values.map((v) => PREFIX[kind] + v),
+  });
   return embeddings;
 }

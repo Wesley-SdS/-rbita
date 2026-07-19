@@ -29,7 +29,16 @@ export async function buildTools(userId: string) {
       description: "Salva um fato ou preferência do usuário na memória de longo prazo.",
       inputSchema: z.object({ fato: z.string().describe("o fato a memorizar") }),
       execute: async ({ fato }) => {
-        const embedding = await embedText(fato);
+        const embedding = await embedText(fato, "document");
+        // dedup: se já existe memória quase idêntica (sim > 0.92), não duplica.
+        const sim = sql<number>`1 - (${cosineDistance(memory.embedding, embedding)})`;
+        const [dup] = await db
+          .select({ id: memory.id, sim })
+          .from(memory)
+          .where(and(eq(memory.userId, userId), gt(sim, 0.92)))
+          .orderBy(desc(sim))
+          .limit(1);
+        if (dup) return { salvo: false, motivo: "já memorizado", fato };
         await db.insert(memory).values({ userId, content: fato, embedding });
         return { salvo: true, fato };
       },

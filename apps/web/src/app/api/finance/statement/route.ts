@@ -1,32 +1,45 @@
-import { generateText } from "ai";
+import { generateObject } from "ai";
+import { z } from "zod";
 import { resolveModel, DEFAULT_MODEL_KEY } from "@orbita/llm";
 import { db } from "@/lib/db";
 import { expense } from "@/lib/db/finance-schema";
 import { getSession } from "@/lib/session";
 import { log } from "@/lib/observability/logger";
+import { parseYmd } from "@/lib/finance/date";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const PROMPT =
-  "Você recebe o texto de um EXTRATO bancário/cartão. Extraia TODOS os lançamentos e responda APENAS um array JSON, " +
-  "sem texto extra, no formato: " +
-  '[{"descricao": string, "valor": number (reais, positivo), "tipo": "expense"|"receivable", "data": "YYYY-MM-DD"|null, "categoria": string}]. ' +
-  'Débitos/compras = "expense"; créditos/entradas = "receivable". Ignore saldos e cabeçalhos. Extrato:\n\n';
+const ItemSchema = z.object({
+  descricao: z.string(),
+  valor: z.number().describe("valor em reais, positivo"),
+  tipo: z.enum(["expense", "receivable"]).describe("débito/compra=expense; crédito/entrada=receivable"),
+  data: z.string().nullable().describe("YYYY-MM-DD ou null"),
+  categoria: z.string(),
+});
 
-function parseArray(text: string): unknown[] | null {
-  const m = text.match(/\[[\s\S]*\]/);
-  if (!m) return null;
-  try {
-    const v = JSON.parse(m[0]);
-    return Array.isArray(v) ? v : null;
-  } catch {
-    return null;
+const INSTRUCAO =
+  "Você recebe um trecho de EXTRATO bancário/cartão. Extraia TODOS os lançamentos deste trecho. " +
+  "Débitos/compras = expense; créditos/entradas = receivable. Ignore saldos e cabeçalhos.\n\nTrecho:\n\n";
+
+/** Divide o texto em blocos que cabem no contexto, cortando em quebras de linha. */
+function splitBlocks(text: string, size = 6000): string[] {
+  const blocks: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    let end = Math.min(i + size, text.length);
+    if (end < text.length) {
+      const nl = text.lastIndexOf("\n", end);
+      if (nl > i + size / 2) end = nl;
+    }
+    blocks.push(text.slice(i, end));
+    i = end;
   }
+  return blocks;
 }
 
-/** Importa um extrato PDF → extrai o texto → LLM lista os lançamentos → cadastra em lote. */
+/** Importa um extrato PDF → texto → LLM lista os lançamentos (por blocos) → cadastra. */
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
@@ -53,32 +66,37 @@ export async function POST(req: Request) {
   }
   if (!text.trim()) return Response.json({ error: "PDF sem texto extraível (é uma imagem? use o comprovante por foto)" }, { status: 422 });
 
-  // 2) LLM extrai o array de lançamentos
-  let items: unknown[] | null = null;
-  try {
-    const { text: out } = await generateText({ model: resolveModel(DEFAULT_MODEL_KEY), prompt: PROMPT + text.slice(0, 8000) });
-    items = parseArray(out);
-  } catch (e) {
-    log.error("finance.statement.llm", { error: e instanceof Error ? e.message : String(e) });
+  // 2) LLM extrai por blocos (extratos longos não são truncados) — structured output
+  const model = resolveModel(DEFAULT_MODEL_KEY);
+  const blocks = splitBlocks(text, 6000).slice(0, 12); // teto de segurança
+  const all: z.infer<typeof ItemSchema>[] = [];
+  for (const block of blocks) {
+    try {
+      const { object } = await generateObject({ model, output: "array", schema: ItemSchema, prompt: INSTRUCAO + block });
+      all.push(...object);
+    } catch (e) {
+      log.error("finance.statement.llm", { error: e instanceof Error ? e.message : String(e) });
+    }
   }
-  if (!items || items.length === 0) return Response.json({ error: "Não consegui extrair lançamentos do extrato" }, { status: 422 });
+  if (all.length === 0) return Response.json({ error: "Não consegui extrair lançamentos do extrato" }, { status: 422 });
 
-  // 3) cadastra em lote
-  const rows = items
-    .map((it) => {
-      const o = it as Record<string, unknown>;
+  // 3) dedup (data+valor+descrição) e cadastro em lote
+  const seen = new Set<string>();
+  const rows = all
+    .map((o) => {
       const valor = Number(o.valor) || 0;
       if (valor <= 0) return null;
-      const kind = o.tipo === "receivable" ? "receivable" : "expense";
-      const d = o.data ? new Date(String(o.data)) : null;
+      const key = `${o.data ?? ""}|${valor}|${(o.descricao ?? "").toLowerCase().slice(0, 40)}`;
+      if (seen.has(key)) return null;
+      seen.add(key);
       return {
         userId: session.user.id,
-        description: String(o.descricao ?? "Lançamento"),
-        category: o.categoria ? String(o.categoria) : null,
+        description: o.descricao || "Lançamento",
+        category: o.categoria || null,
         amountCents: Math.round(valor * 100),
-        kind: kind as "expense" | "receivable",
-        dueDate: d && !isNaN(d.getTime()) ? d : null,
-        paid: kind === "expense",
+        kind: o.tipo === "receivable" ? ("receivable" as const) : ("expense" as const),
+        dueDate: parseYmd(o.data),
+        paid: o.tipo !== "receivable",
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);

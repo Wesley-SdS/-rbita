@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gt, sql, cosineDistance } from "drizzle-orm";
 import { embedText } from "@orbita/llm";
 import { db } from "@/lib/db";
 import { memory } from "@/lib/db/knowledge-schema";
@@ -34,7 +34,17 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(body);
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message }, { status: 400 });
 
-  const embedding = await embedText(parsed.data.content);
+  const embedding = await embedText(parsed.data.content, "document");
+  // dedup: não grava memória quase idêntica a uma existente
+  const sim = sql<number>`1 - (${cosineDistance(memory.embedding, embedding)})`;
+  const [dup] = await db
+    .select({ id: memory.id, sim })
+    .from(memory)
+    .where(and(eq(memory.userId, session.user.id), gt(sim, 0.92)))
+    .orderBy(desc(sim))
+    .limit(1);
+  if (dup) return Response.json({ id: dup.id, deduped: true });
+
   const [row] = await db
     .insert(memory)
     .values({ userId: session.user.id, content: parsed.data.content, embedding })
