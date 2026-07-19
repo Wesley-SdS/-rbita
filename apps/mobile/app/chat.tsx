@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
+  View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Modal,
 } from "react-native";
 import { router, Stack } from "expo-router";
 import { Orb, type OrbMode } from "@/components/Orb";
-import { streamChat, fetchModels } from "@/lib/chat";
+import { streamChat, fetchModels, fetchConversations, fetchConversationMessages, deleteConversation, type ConversationSummary } from "@/lib/chat";
 import { getSession, signOut } from "@/lib/auth";
 import { startRecording, stopRecordingAndTranscribe, speak } from "@/lib/voice";
 
@@ -18,6 +18,9 @@ export default function Chat() {
   const [models, setModels] = useState<{ key: string; label: string }[]>([]);
   const [recording, setRecording] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [convs, setConvs] = useState<ConversationSummary[]>([]);
+  const [loadingConvs, setLoadingConvs] = useState(false);
   const convId = useRef<string | undefined>(undefined);
   const scrollRef = useRef<ScrollView>(null);
 
@@ -25,6 +28,38 @@ export default function Chat() {
     getSession().then((u) => { if (!u) router.replace("/"); });
     fetchModels().then(({ models, defaultModel }) => { setModels(models); setModelKey(defaultModel); }).catch(() => {});
   }, []);
+
+  async function openHistory() {
+    setHistoryOpen(true);
+    setLoadingConvs(true);
+    try { setConvs(await fetchConversations()); } catch { /* segue vazio */ } finally { setLoadingConvs(false); }
+  }
+
+  async function openConversation(id: string) {
+    setHistoryOpen(false);
+    if (mode !== "standby") return;
+    setMode("thinking");
+    try {
+      const msgs = await fetchConversationMessages(id);
+      setMessages(msgs);
+      convId.current = id;
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 50);
+    } catch { /* ignora */ } finally { setMode("standby"); }
+  }
+
+  function newConversation() {
+    setHistoryOpen(false);
+    convId.current = undefined;
+    setMessages([]);
+  }
+
+  async function removeConversation(id: string) {
+    const ok = await deleteConversation(id);
+    if (ok) {
+      setConvs((c) => c.filter((x) => x.id !== id));
+      if (convId.current === id) newConversation();
+    }
+  }
 
   async function send(text?: string) {
     const content = (text ?? input).trim();
@@ -83,11 +118,49 @@ export default function Chat() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <Stack.Screen options={{ headerRight: () => (
-        <Pressable onPress={async () => { await signOut(); router.replace("/"); }}>
-          <Text style={styles.logout}>Sair</Text>
+      <Stack.Screen options={{
+        headerLeft: () => (
+          <View style={{ flexDirection: "row", gap: 14 }}>
+            <Pressable onPress={openHistory}><Text style={styles.headerBtn}>☰</Text></Pressable>
+            <Pressable onPress={newConversation}><Text style={styles.headerBtn}>＋</Text></Pressable>
+          </View>
+        ),
+        headerRight: () => (
+          <Pressable onPress={async () => { await signOut(); router.replace("/"); }}>
+            <Text style={styles.logout}>Sair</Text>
+          </Pressable>
+        ),
+      }} />
+
+      <Modal visible={historyOpen} animationType="slide" transparent onRequestClose={() => setHistoryOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setHistoryOpen(false)}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.sheetHead}>
+              <Text style={styles.sheetTitle}>Conversas</Text>
+              <Pressable onPress={newConversation}><Text style={styles.newChat}>＋ Nova</Text></Pressable>
+            </View>
+            {loadingConvs ? (
+              <ActivityIndicator color="#e0a83a" style={{ marginTop: 24 }} />
+            ) : convs.length === 0 ? (
+              <Text style={styles.empty}>Nenhuma conversa ainda.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 420 }}>
+                {convs.map((c) => (
+                  <View key={c.id} style={[styles.convRow, convId.current === c.id && styles.convRowActive]}>
+                    <Pressable style={{ flex: 1 }} onPress={() => openConversation(c.id)}>
+                      <Text style={styles.convTitle} numberOfLines={1}>{c.title || "Sem título"}</Text>
+                      <Text style={styles.convMeta}>{new Date(c.updatedAt).toLocaleString("pt-BR")}</Text>
+                    </Pressable>
+                    <Pressable onPress={() => removeConversation(c.id)} hitSlop={8}>
+                      <Text style={styles.convDelete}>🗑</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </Pressable>
         </Pressable>
-      ) }} />
+      </Modal>
 
       <View style={styles.orbBar}>
         <Orb mode={mode} size={72} />
@@ -161,4 +234,15 @@ const styles = StyleSheet.create({
   sendBtn: { backgroundColor: "#e0a83a", borderRadius: 12, width: 48, alignItems: "center", justifyContent: "center" },
   sendText: { color: "#241403", fontSize: 18, fontWeight: "700" },
   logout: { color: "#e0a83a", marginRight: 8 },
+  headerBtn: { color: "#e0a83a", fontSize: 20, marginLeft: 8 },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
+  sheet: { backgroundColor: "#161009", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, borderTopWidth: 1, borderColor: "#2a2016" },
+  sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  sheetTitle: { color: "#f0e6d8", fontSize: 16, fontWeight: "700" },
+  newChat: { color: "#e0a83a", fontSize: 14, fontWeight: "600" },
+  convRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#241b11" },
+  convRowActive: { backgroundColor: "#1e160d", borderRadius: 10, paddingHorizontal: 8 },
+  convTitle: { color: "#f0e6d8", fontSize: 14 },
+  convMeta: { color: "#8a7a63", fontSize: 11, marginTop: 2 },
+  convDelete: { fontSize: 16 },
 });

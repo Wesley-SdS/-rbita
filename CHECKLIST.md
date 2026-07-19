@@ -36,7 +36,8 @@
 - [x] `3.2` Componente **Orb** (núcleo neural Jarvis) React + 6 estados — **verificado**
 - [x] `3.3` Seletor de provider/modelo ligado ao backend (`/api/models`)
 - [x] `3.4` Chat com streaming + histórico persistido (conversa contínua)
-- [x] `3.5` Painel de sessão + custo vs. nuvem (req/tokens~/latência real) _(watts de GPU entram na Fase 5 c/ pynvml)_
+- [x] `3.5` Painel de sessão + **economia vs. nuvem** (req/tokens~/latência real)
+- [x] `3.5b` **Painel "Economia vs. nuvem" real e persistido** — `/api/usage` agrega as respostas do assistente (`message.modelKey/tokens/latencyMs` reais) → `lib/usage/economics.ts` calcula custo de nuvem **evitado** (locais + Max), gasto real em nuvem paga (gateway), e **energia estimada** (transparente: 45W·R$0,95/kWh configuráveis — esta máquina só tem Intel UHD, sem GPU dedicada p/ medir watts). Componente `EconomyPanel` no rail (refetch a cada resposta). **Verificado e2e**: `/api/usage` → 10 locais + 4 Max, economia R$0,06, energia ~8 Wh; `/app` renderiza "Economia vs. nuvem". 5 testes novos. Substituiu as estimativas efêmeras client-side.
 - [x] `3.6` **Timeline de atividade ao vivo** — o chat streama NDJSON (modo `rich`) com os passos de ferramenta; a UI mostra cada passo (⟳ → ✓) com rótulo amigável ("🔍 Pesquisando na web", "🕐 Consultando a hora"…). Orb reflete o estado. **Verificado e2e** no navegador: "✓ 🕐 Consultando a hora" renderizado durante a resposta. Modo texto puro preservado p/ o mobile.
 
 ## Fase 4 — Memória & RAG ✅
@@ -45,6 +46,7 @@
 - [x] `4.3` Upload de arquivos (PDF via unpdf, imagem via OCR tesseract, txt) — **verificado** (PDF → citação da fonte)
 - [x] `4.4` Busca semântica no chat (RAG injeta contexto) — **verificado** (resposta só com o doc)
 - [x] `4.5` Memória de longo prazo (add/list/forget) — `/api/memory` + UI
+- [x] `4.6` **Anexo de imagem no chat (multimodal)** — botão 🖼️ no compositor (preview + remover, envia com ou sem texto), `/api/chat` aceita `image` (data URL), monta a última mensagem multimodal `[{text},{image}]` e roteia para o **modelo de visão** (`resolveVisionModel` → moondream local / gpt-4o se `OPENAI_API_KEY`). Sem ferramentas nessa rota (moondream não faz function-calling). **Verificado e2e** (cupom → "The bill… prices of items from 2 through 6 dollars", `x-model: vision`).
 
 ## Fase 5 — Voz ✅
 - [x] `5.1` `apps/voice` (FastAPI): **STT faster-whisper** — **verificado** (WAV → transcrição exata pt-BR)
@@ -72,6 +74,7 @@
 - [x] `7.1` **Proatividade** — rotinas agendadas + notificações + agendador cliente — **verificado** (rotina "Curiosidade do dia" gerou notificação sozinha via `generateText`+tools; UI no rail direito com badge de não-lidas)
 - [x] `7.2` **Skill de finanças** via tools (registrar/resumir gastos) — **verificado**
 - [x] `7.3` **App mobile (Expo)** — `apps/mobile` (Expo Router, RN 0.76, SDK 52): login/signup (Better Auth por cookie no SecureStore), **chat com streaming** (`expo/fetch` no mesmo `/api/chat`), Orb pulsante nativo, tela de config de servidor. **Verificado de verdade**: `tsc` limpo + **bundle Metro/Hermes compila** (entry.hbc 2.5 MB, 23 assets). Fora do workspace pnpm (npm próprio) p/ não conflitar com o Metro; lockfile do web intacto.
+- [x] `7.3b` **Histórico de conversas sincronizado no mobile** — `lib/chat.ts` ganhou `fetchConversations`/`fetchConversationMessages`/`deleteConversation` (mesma API do web); `chat.tsx` tem botão ☰ (abre Modal com a lista, retoma uma conversa carregando suas mensagens), ＋ (nova) e 🗑 (apagar). Mesma persona/memória/conversas em PC e celular (§4.8/§47). **Verificado**: `tsc` limpo + bundle Metro/Hermes exit 0; `/api/conversations` e `/api/conversations/[id]` retornam conversas/mensagens reais do usuário de teste.
 
 ## Fase 8 — Polish & lançamento 🟡
 - [x] `8.1` **Containerização completa** — `docker compose up --build` sobe db + migrate + voz + web num único `up` (Next standalone, uv/faster-whisper, Ollama no host via `host.docker.internal`). Dockerfiles escritos e blindados (public/.gitkeep, outputFileTracingRoot, migrate one-shot); **build a validar no terminal do Wesley** (harness instável p/ builds longos em background)

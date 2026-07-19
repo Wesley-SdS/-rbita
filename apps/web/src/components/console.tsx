@@ -64,9 +64,6 @@ const BLOCKS = [
   { id: "proatividade", label: "Proatividade" },
 ];
 
-const BRL = 5.35;
-const GPT_PER_1K = 0.05; // R$/1k tokens saída (referência de nuvem)
-const GEM_PER_1K = 0.01;
 
 const STATUS: Record<OrbMode, string> = {
   standby: 'em espera · diga "Ei Órbita"',
@@ -90,7 +87,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
   const logRef = useRef<HTMLDivElement>(null);
 
   // métricas de sessão (reais / estimadas)
-  const [stats, setStats] = useState({ requests: 0, tokens: 0, lastMs: 0, gpt: 0, gem: 0, saved: 0 });
+  const [stats, setStats] = useState({ requests: 0, tokens: 0, lastMs: 0 });
   const [voiceOn, setVoiceOn] = useState(true);
   const [recording, setRecording] = useState(false);
   const [wakeOn, setWakeOn] = useState(false);
@@ -99,6 +96,8 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
   const ttsRef = useRef<LocalTTS | null>(null);
   const wakeRef = useRef<WakeListener | null>(null);
   const audioFileRef = useRef<HTMLInputElement | null>(null);
+  const imageFileRef = useRef<HTMLInputElement | null>(null);
+  const [imageAttach, setImageAttach] = useState<string | null>(null); // data URL da imagem anexada
   const ttsLocalOkRef = useRef<boolean>(true); // cai p/ navegador se o TTS local falhar
   const { hidden, toggle } = useHiddenBlocks(); // blocos que o usuário ocultou
   const [privacyMode, setPrivacyMode] = useState(false); // força tudo local (nada vai p/ nuvem)
@@ -349,15 +348,17 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
 
   async function send() {
     const content = input.trim();
-    if (!content) return;
+    if (!content && !imageAttach) return;
     setInput("");
-    void sendMessage(content);
+    void sendMessage(content || "O que há nesta imagem?");
   }
 
   async function sendMessage(content: string) {
     if (!content || mode !== "standby" || !modelKey) return;
     // modo privacidade: força modelo local, nada é enviado para nuvem
     const effectiveModelKey = privacyMode && !modelKey.startsWith("local/") ? "local/qwen2.5:7b" : modelKey;
+    const imgToSend = imageAttach; // imagem anexada (uma vez); limpa o anexo
+    if (imgToSend) setImageAttach(null);
     setError(null); setMode("studying");
     setMessages((m) => [...m, { role: "user", content }, { role: "assistant", content: "" }]);
     const started = Date.now();
@@ -367,7 +368,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, modelKey: effectiveModelKey, conversationId: convId.current ?? undefined, rich: true }),
+        body: JSON.stringify({ content, modelKey: effectiveModelKey, conversationId: convId.current ?? undefined, rich: true, image: imgToSend ?? undefined }),
       });
       const cid = res.headers.get("x-conversation-id");
       if (cid) { convId.current = cid; setActiveId(cid); }
@@ -403,18 +404,13 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
         }
       }
 
-      // métricas (tokens estimados por chars quando o provedor não envia usage)
+      // métricas da sessão (tokens estimados por chars quando não há usage do provedor).
+      // A economia acumulada/persistida vem do EconomyPanel (/api/usage) — refetch via requests.
       const outTokens = Math.max(1, Math.ceil(acc.length / 4));
-      const isLocal = usedModel.startsWith("local/");
-      const gptCost = (outTokens / 1000) * GPT_PER_1K * BRL;
-      const gemCost = (outTokens / 1000) * GEM_PER_1K * BRL;
       setStats((s) => ({
         requests: s.requests + 1,
         tokens: s.tokens + outTokens,
         lastMs: Date.now() - started,
-        gpt: s.gpt + gptCost,
-        gem: s.gem + gemCost,
-        saved: s.saved + (isLocal ? gptCost : 0),
       }));
 
       if (voiceOn) {
@@ -433,8 +429,6 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
       loadConvs();
     }
   }
-
-  const brl = (n: number) => "R$" + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <>
@@ -592,6 +586,29 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
             style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>
             🖥️
           </button>
+          <input ref={imageFileRef} type="file" accept="image/*" className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0]; e.target.value = "";
+              if (!f) return;
+              if (f.size > 6_000_000) { setError("Imagem muito grande (máx. ~6 MB)."); return; }
+              const r = new FileReader();
+              r.onload = () => setImageAttach(String(r.result));
+              r.readAsDataURL(f);
+            }} />
+          <button onClick={() => imageFileRef.current?.click()} title="anexar imagem (a Órbita responde sobre ela com o modelo de visão)"
+            className="rounded-lg border px-2.5 py-2 text-sm"
+            style={{ borderColor: imageAttach ? "var(--color-gold)" : "var(--color-line)", color: imageAttach ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
+            🖼️
+          </button>
+          {imageAttach && (
+            <span className="relative inline-block shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imageAttach} alt="anexo" className="h-9 w-9 rounded-lg border object-cover" style={{ borderColor: "var(--color-gold)" }} />
+              <button onClick={() => setImageAttach(null)} title="remover imagem" aria-label="remover imagem"
+                className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-[10px] leading-none"
+                style={{ background: "#e0705a", color: "#fff" }}>×</button>
+            </span>
+          )}
           <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder="Fale ou escreva…" className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
             style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }} />
@@ -600,7 +617,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
             style={{ background: recording ? "#e0705a" : "var(--color-surface)", borderColor: "var(--color-line)" }}>
             {recording ? "⏹" : "🎙️"}
           </button>
-          <button onClick={send} disabled={mode !== "standby" || !input.trim()}
+          <button onClick={send} disabled={mode !== "standby" || (!input.trim() && !imageAttach)}
             className="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
             style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>
             {mode !== "standby" ? "…" : "Enviar"}
@@ -619,18 +636,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
             <Stat label="Latência (última)" value={stats.lastMs ? stats.lastMs + "ms" : "—"} accent />
           </div>
         </Block>
-        <Block id="custo" hidden={hidden} toggle={toggle}>
-          <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
-            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Custo vs. nuvem</h3>
-            <Stat label="Órbita (local)" value="R$0,00" good />
-            <Stat label="GPT-5 (ref.)" value={brl(stats.gpt)} />
-            <Stat label="Gemini (ref.)" value={brl(stats.gem)} />
-            <div className="mt-3 rounded-xl border p-3" style={{ borderColor: "color-mix(in oklab, var(--color-gold) 30%, transparent)", background: "color-mix(in oklab, var(--color-gold) 12%, transparent)" }}>
-              <div className="font-mono text-[10px] uppercase" style={{ color: "var(--color-gold)" }}>você economizou</div>
-              <div className="mt-1 text-xl font-bold">{brl(stats.saved)} <span className="text-xs" style={{ color: "var(--color-ink-dim)" }}>vs. nuvem</span></div>
-            </div>
-          </div>
-        </Block>
+        <Block id="custo" hidden={hidden} toggle={toggle}><EconomyPanel refreshKey={stats.requests} /></Block>
         <Block id="financas" hidden={hidden} toggle={toggle}><FinancePanel /></Block>
         <Block id="tarefas" hidden={hidden} toggle={toggle}><TodoPanel /></Block>
         <Block id="arquivos" hidden={hidden} toggle={toggle}><FolderPanel /></Block>
@@ -684,6 +690,48 @@ function Stat({ label, value, accent, good }: { label: string; value: string; ac
     <div className="flex items-baseline justify-between py-1 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
       <span>{label}</span>
       <b className="font-mono" style={{ color: good ? "#8ac98f" : accent ? "var(--color-gold)" : "var(--color-ink)" }}>{value}</b>
+    </div>
+  );
+}
+
+type Usage = {
+  requests: number; tokensTotal: number; localRequests: number; cloudRequests: number;
+  economiaBRL: number; cloudSpentBRL: number; energyWhEstimate: number; energyCostBRL: number; liquidoBRL: number;
+  assumptions: { LOCAL_WATTS: number; KWH_PRICE_BRL: number };
+};
+
+/** Economia acumulada vs. nuvem — dados reais persistidos (/api/usage). */
+function EconomyPanel({ refreshKey }: { refreshKey: number }) {
+  const [u, setU] = useState<Usage | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/usage").then((r) => (r.ok ? r.json() : null)).then((d) => { if (alive && d) setU(d); }).catch(() => {});
+    return () => { alive = false; };
+  }, [refreshKey]);
+  const money = (n: number) => "R$" + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const pctLocal = u && u.requests ? Math.round((u.localRequests / u.requests) * 100) : 0;
+  return (
+    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+      <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Economia vs. nuvem</h3>
+      {!u ? (
+        <div className="py-2 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>—</div>
+      ) : (
+        <>
+          <Stat label="Respostas locais" value={`${u.localRequests}/${u.requests} (${pctLocal}%)`} />
+          <Stat label="Tokens (~saída)" value={u.tokensTotal.toLocaleString("pt-BR")} />
+          <Stat label="Energia local (est.)" value={`${u.energyWhEstimate.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} Wh`} />
+          <Stat label="Custo da energia (est.)" value={money(u.energyCostBRL)} />
+          {u.cloudSpentBRL > 0 && <Stat label="Gasto em nuvem paga" value={money(u.cloudSpentBRL)} accent />}
+          <div className="mt-3 rounded-xl border p-3" style={{ borderColor: "color-mix(in oklab, var(--color-gold) 30%, transparent)", background: "color-mix(in oklab, var(--color-gold) 12%, transparent)" }}>
+            <div className="font-mono text-[10px] uppercase" style={{ color: "var(--color-gold)" }}>você economizou</div>
+            <div className="mt-1 text-xl font-bold">{money(u.economiaBRL)} <span className="text-xs" style={{ color: "var(--color-ink-dim)" }}>vs. pagar por uso</span></div>
+            <div className="mt-1 text-[11px]" style={{ color: "var(--color-ink-dim)" }}>líquido de energia: <b>{money(u.liquidoBRL)}</b></div>
+          </div>
+          <p className="mt-2 text-[10px] leading-snug" style={{ color: "var(--color-ink-dim)" }}>
+            Estimativa: energia a {u.assumptions.LOCAL_WATTS}W · {money(u.assumptions.KWH_PRICE_BRL)}/kWh (sem GPU dedicada, valor configurável). Economia = preço de referência da nuvem para respostas locais/Max.
+          </p>
+        </>
+      )}
     </div>
   );
 }

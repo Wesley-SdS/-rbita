@@ -1,7 +1,7 @@
 import { streamText, stepCountIs } from "ai";
 import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { resolveModel, getModelInfo, routeModelKey, providerEnv, DEFAULT_MODEL_KEY } from "@orbita/llm";
+import { resolveModel, resolveVisionModel, getModelInfo, routeModelKey, providerEnv, DEFAULT_MODEL_KEY } from "@orbita/llm";
 import { db } from "@/lib/db";
 import { conversation, message } from "@/lib/db/chat-schema";
 import { getSession } from "@/lib/session";
@@ -21,6 +21,8 @@ const BodySchema = z.object({
   // rich=true → stream NDJSON com passos de ferramenta (timeline de atividade).
   // Ausente/false → stream de texto puro (usado pelo mobile).
   rich: z.boolean().optional(),
+  // imagem anexada (data URL) — ativa o modelo de visão para responder sobre ela.
+  image: z.string().max(8_000_000).optional(),
 });
 
 export async function POST(req: Request) {
@@ -37,7 +39,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
   }
-  const { content, modelKey, conversationId, rich } = parsed.data;
+  const { content, modelKey, conversationId, rich, image } = parsed.data;
 
   const info = getModelInfo(modelKey);
   if (!info) return Response.json({ error: "Modelo desconhecido" }, { status: 400 });
@@ -68,21 +70,22 @@ export async function POST(req: Request) {
     .where(eq(message.conversationId, conv.id))
     .orderBy(asc(message.createdAt));
 
-  // persiste a mensagem do usuário
-  await db.insert(message).values({ conversationId: conv.id, role: "user", content });
+  // persiste a mensagem do usuário (marca se veio com imagem)
+  await db.insert(message).values({ conversationId: conv.id, role: "user", content: image ? content + " [imagem anexada]" : content });
 
-  const modelMessages = [
-    ...history.map((m) => ({ role: m.role, content: m.content })),
-    { role: "user" as const, content },
-  ];
+  // última mensagem do usuário: multimodal se houver imagem
+  const lastUser = image
+    ? { role: "user" as const, content: [{ type: "text" as const, text: content }, { type: "image" as const, image }] }
+    : { role: "user" as const, content };
+  const modelMessages = [...history.map((m) => ({ role: m.role, content: m.content })), lastUser];
 
-  // Auto-router: resolve "auto" para um modelo concreto por complexidade.
-  let effectiveKey = modelKey === "auto" ? routeModelKey(content, providerEnv()) : modelKey;
+  // Com imagem, usa o modelo de VISÃO (o modelo de texto selecionado não "vê").
+  let effectiveKey = image ? "vision" : modelKey === "auto" ? routeModelKey(content, providerEnv()) : modelKey;
 
   // Resolve o modelo; se o provedor não estiver disponível, faz fallback pro local.
   let model;
   try {
-    model = resolveModel(effectiveKey);
+    model = image ? resolveVisionModel() : resolveModel(effectiveKey);
   } catch {
     effectiveKey = DEFAULT_MODEL_KEY;
     model = resolveModel(effectiveKey);
@@ -123,7 +126,9 @@ export async function POST(req: Request) {
     model,
     system,
     messages: modelMessages,
-    tools,
+    // O modelo de visão local (moondream) não faz function-calling: com imagem,
+    // respondemos sem ferramentas para não retornar vazio.
+    tools: image ? undefined : tools,
     stopWhen: stepCountIs(5),
     onFinish: async ({ text, usage }) => {
       const latencyMs = Date.now() - started;

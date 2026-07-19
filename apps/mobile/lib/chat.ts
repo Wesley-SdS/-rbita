@@ -1,6 +1,6 @@
 import { fetch as expoFetch } from "expo/fetch";
 import * as SecureStore from "expo-secure-store";
-import { getBaseUrl } from "./api";
+import { getBaseUrl, api } from "./api";
 
 /**
  * Envia uma mensagem e faz streaming da resposta (mesma API /api/chat do web).
@@ -53,4 +53,27 @@ export async function fetchModels(): Promise<{ models: ModelOption[]; defaultMod
   const res = await fetch(base + "/api/models", { headers: cookie ? { Cookie: cookie } : {} });
   const data = (await res.json()) as { models?: ModelOption[]; defaultModel?: string };
   return { models: data.models ?? [], defaultModel: data.defaultModel ?? "local/qwen2.5:7b" };
+}
+
+// ── Histórico de conversas (sincronizado com o web, mesma API) ──────────────
+export interface ConversationSummary { id: string; title: string; modelKey: string; updatedAt: string }
+export interface ChatMsg { role: "user" | "assistant"; content: string }
+
+/** Lista as conversas do usuário (mais recentes primeiro). */
+export async function fetchConversations(): Promise<ConversationSummary[]> {
+  const { data } = await api<{ conversations?: ConversationSummary[] }>("/api/conversations");
+  return data?.conversations ?? [];
+}
+
+/** Carrega as mensagens de uma conversa para retomá-la. */
+export async function fetchConversationMessages(id: string): Promise<ChatMsg[]> {
+  const { data } = await api<{ messages?: { role: string; content: string }[] }>(`/api/conversations/${id}`);
+  return (data?.messages ?? [])
+    .filter((m): m is ChatMsg => m.role === "user" || m.role === "assistant");
+}
+
+/** Apaga uma conversa. */
+export async function deleteConversation(id: string): Promise<boolean> {
+  const { ok } = await api(`/api/conversations/${id}`, { method: "DELETE" });
+  return ok;
 }
