@@ -8,7 +8,7 @@ export default async function AppPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-6xl flex-col items-center px-4 py-6">
-      <Console userName={s.user.name} />
+      <Console userName={s.user.name} userEmail={s.user.email} />
     </main>
   );
 }

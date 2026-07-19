@@ -56,7 +56,7 @@ const STATUS: Record<OrbMode, string> = {
   connecting: "conectando…",
 };
 
-export function Console({ userName }: { userName: string }) {
+export function Console({ userName, userEmail }: { userName: string; userEmail: string }) {
   const router = useRouter();
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelKey, setModelKey] = useState("");
@@ -459,7 +459,7 @@ export function Console({ userName }: { userName: string }) {
 
         <KnowledgePanel />
         <MeetingPanel />
-        <PrivacyPanel />
+        <PrivacyPanel email={userEmail} />
 
         <button onClick={async () => { await signOut(); router.push("/login"); }}
           className="rounded-lg border px-4 py-2 text-sm" style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>

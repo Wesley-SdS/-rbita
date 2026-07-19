@@ -8,12 +8,19 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:
  * dela, de BETTER_AUTH_SECRET — assim o desenvolvedor não precisa configurar mais
  * um segredo para começar, mas pode isolar a chave dos conectores em produção.
  */
+let warnedFallback = false;
 function encKey(): Buffer {
-  const secret = process.env.CONNECTORS_ENC_KEY ?? process.env.BETTER_AUTH_SECRET;
+  const dedicated = process.env.CONNECTORS_ENC_KEY;
+  const secret = dedicated ?? process.env.BETTER_AUTH_SECRET;
   if (!secret || secret.length < 16) {
     throw new Error(
       "CONNECTORS_ENC_KEY (ou BETTER_AUTH_SECRET) ausente/curto — necessário para criptografar tokens dos conectores.",
     );
+  }
+  // Em produção, a chave dos conectores deve ser distinta do segredo de auth.
+  if (!dedicated && process.env.NODE_ENV === "production" && !warnedFallback) {
+    warnedFallback = true;
+    console.warn(JSON.stringify({ level: "warn", msg: "CONNECTORS_ENC_KEY ausente — usando BETTER_AUTH_SECRET como fallback. Defina uma chave dedicada em produção." }));
   }
   // sal fixo derivado do nome do produto: a chave é determinística por segredo.
   return scryptSync(secret, "orbita.connectors.v1", 32);
