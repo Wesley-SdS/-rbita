@@ -523,9 +523,10 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
             ⛶ Foco
           </button>
         </div>
-        <div className="relative shrink-0">
-          <Orb mode={mode} height={210} />
-          <div className="absolute bottom-1 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--color-ink-dim)" }}>
+        <div className="relative shrink-0 h-[42vh] min-h-[300px]"
+          style={{ background: "radial-gradient(circle at 50% 48%, #1a1206 0%, #0d0904 55%, transparent 100%)" }}>
+          <Orb mode={mode} fill bare />
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--color-ink-dim)" }}>
             {STATUS[mode]}
           </div>
         </div>
