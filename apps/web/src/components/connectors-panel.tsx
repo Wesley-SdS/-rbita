@@ -78,7 +78,7 @@ export function ConnectorsPanel() {
                   ⚙ falta configurar as credenciais no servidor
                 </span>
               ) : c.connected ? (
-                <button onClick={() => disconnect(c.id)} className="text-[11px]" style={{ color: "#e0705a" }}>desconectar</button>
+                <button onClick={() => disconnect(c.id)} className="text-[11px]" style={{ color: "var(--color-danger)" }}>desconectar</button>
               ) : (
                 <a href={`/api/connectors/${c.id}/connect`} className="inline-block rounded-lg px-3 py-1 text-[11px] font-semibold"
                   style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>

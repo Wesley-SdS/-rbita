@@ -46,7 +46,7 @@ export function ActionsPanel() {
                 style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>
                 {busy === a.id ? "…" : "✓ confirmar"}
               </button>
-              <button onClick={() => reject(a.id)} className="rounded border px-2 py-0.5 text-[11px]" style={{ borderColor: "var(--color-line)", color: "#e0705a" }}>
+              <button onClick={() => reject(a.id)} className="rounded border px-2 py-0.5 text-[11px]" style={{ borderColor: "var(--color-line)", color: "var(--color-danger)" }}>
                 ✕ cancelar
               </button>
             </div>

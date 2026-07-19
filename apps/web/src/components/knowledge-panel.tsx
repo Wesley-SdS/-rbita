@@ -90,14 +90,14 @@ export function KnowledgePanel() {
             <button onClick={remember} disabled={busy} className="rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50" style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>Lembrar</button>
           </div>
 
-          {msg && <div className="text-[10px]" style={{ color: msg.startsWith("✓") ? "#8ac98f" : "#e0705a" }}>{msg}</div>}
+          {msg && <div className="text-[10px]" style={{ color: msg.startsWith("✓") ? "#8ac98f" : "var(--color-danger)" }}>{msg}</div>}
 
           {mems.length > 0 && (
             <div className="mt-1 flex flex-col gap-1">
               {mems.map((m) => (
                 <div key={m.id} className="flex items-start gap-1 text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
                   <span className="flex-1">• {m.content}</span>
-                  <button onClick={() => forget(m.id)} title="esquecer" style={{ color: "#e0705a" }}>×</button>
+                  <button onClick={() => forget(m.id)} title="esquecer" style={{ color: "var(--color-danger)" }}>×</button>
                 </div>
               ))}
             </div>

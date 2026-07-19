@@ -86,7 +86,7 @@ export function MeetingPanel() {
     <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
       <button onClick={() => setOpen(!open)} className="flex w-full items-center">
         <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Reunião</h3>
-        {active && <span className="ml-2 h-2 w-2 animate-pulse rounded-full" style={{ background: "#e0705a" }} />}
+        {active && <span className="ml-2 h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--color-danger)" }} />}
         <span className="ml-auto text-xs" style={{ color: "var(--color-ink-dim)" }}>{open ? "▾" : "▸"}</span>
       </button>
 
@@ -98,7 +98,7 @@ export function MeetingPanel() {
               {busy ? "resumindo…" : "● iniciar transcrição"}
             </button>
           ) : (
-            <button onClick={stop} className="rounded-lg border px-3 py-1.5 text-xs" style={{ borderColor: "#e0705a", color: "#e0705a" }}>
+            <button onClick={stop} className="rounded-lg border px-3 py-1.5 text-xs" style={{ borderColor: "var(--color-danger)", color: "var(--color-danger)" }}>
               ⏹ encerrar e resumir
             </button>
           )}

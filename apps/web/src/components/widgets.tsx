@@ -74,11 +74,11 @@ function WidgetCard({ w, onRemove, onPatch }: { w: W; onRemove: () => void; onPa
     <div className="rounded-xl border p-2" style={{ borderColor: "var(--color-line)", background: "var(--color-ground)" }}>
       <div className="flex items-center">
         <span className="truncate text-[11px] font-semibold" style={{ color: "var(--color-ink)" }}>{w.title}</span>
-        <button onClick={onRemove} className="ml-auto text-[11px]" style={{ color: "#e0705a" }}>×</button>
+        <button onClick={onRemove} className="ml-auto text-[11px]" style={{ color: "var(--color-danger)" }}>×</button>
       </div>
       {w.type === "cotacao" && <LiveCard url={`/api/widgets/data?type=cotacao&par=${w.config.par ?? "USD-BRL"}`} render={(d) => (
         <div><span className="text-lg font-bold" style={{ color: "var(--color-gold)" }}>R${brl(d.valor)}</span>
-          <span className="ml-1 text-[10px]" style={{ color: (d.variacao ?? 0) >= 0 ? "#7ad08a" : "#e0705a" }}>{(d.variacao ?? 0) >= 0 ? "▲" : "▼"} {Math.abs(d.variacao ?? 0)}%</span></div>
+          <span className="ml-1 text-[10px]" style={{ color: (d.variacao ?? 0) >= 0 ? "#7ad08a" : "var(--color-danger)" }}>{(d.variacao ?? 0) >= 0 ? "▲" : "▼"} {Math.abs(d.variacao ?? 0)}%</span></div>
       )} />}
       {w.type === "clima" && <LiveCard url={`/api/widgets/data?type=clima&cidade=${encodeURIComponent(String(w.config.cidade ?? "São Paulo"))}`} render={(d) => (
         d.agora ? <div><span className="text-lg font-bold" style={{ color: "var(--color-gold)" }}>{Math.round(d.agora.temperatura)}°</span>
@@ -116,7 +116,7 @@ function ChecklistCard({ items, onSave }: { items: { text: string; done: boolean
         <div key={i} className="flex items-center gap-1 text-[11px]">
           <button onClick={() => onSave(items.map((x, j) => j === i ? { ...x, done: !x.done } : x))}>{it.done ? "☑" : "☐"}</button>
           <span className="flex-1 truncate" style={{ textDecoration: it.done ? "line-through" : "none", color: "var(--color-ink)" }}>{it.text}</span>
-          <button onClick={() => onSave(items.filter((_, j) => j !== i))} style={{ color: "#e0705a" }}>×</button>
+          <button onClick={() => onSave(items.filter((_, j) => j !== i))} style={{ color: "var(--color-danger)" }}>×</button>
         </div>
       ))}
       <input value={txt} onChange={(e) => setTxt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && txt.trim()) { onSave([...items, { text: txt.trim(), done: false }]); setTxt(""); } }}

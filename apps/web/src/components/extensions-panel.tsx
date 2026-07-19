@@ -70,7 +70,7 @@ export function ExtensionsPanel() {
                 <div key={s.id} className="flex items-center gap-1.5 text-[11px]">
                   <button onClick={() => toggle("skills", s.id, !s.enabled)}>{s.enabled ? "🟢" : "⚪"}</button>
                   <span className="flex-1 truncate" style={{ color: "var(--color-ink)" }} title={s.instructions}>{s.name}</span>
-                  <button onClick={() => remove("skills", s.id)} style={{ color: "#e0705a" }}>×</button>
+                  <button onClick={() => remove("skills", s.id)} style={{ color: "var(--color-danger)" }}>×</button>
                 </div>
               ))}
               <input value={sName} onChange={(e) => setSName(e.target.value)} placeholder="Nome da skill (ex: Modo dev)" className="rounded-lg border px-2 py-1 text-xs outline-none" style={input} />
@@ -88,7 +88,7 @@ export function ExtensionsPanel() {
                 <div key={m.id} className="flex items-center gap-1.5 text-[11px]">
                   <button onClick={() => toggle("mcp", m.id, !m.enabled)}>{m.enabled ? "🟢" : "⚪"}</button>
                   <span className="flex-1 truncate" style={{ color: "var(--color-ink)" }} title={m.url}>{m.name}</span>
-                  <button onClick={() => remove("mcp", m.id)} style={{ color: "#e0705a" }}>×</button>
+                  <button onClick={() => remove("mcp", m.id)} style={{ color: "var(--color-danger)" }}>×</button>
                 </div>
               ))}
               <input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="Nome (ex: GitHub)" className="rounded-lg border px-2 py-1 text-xs outline-none" style={input} />

@@ -16,7 +16,7 @@ export function HealthBadge() {
   }, []);
 
   const ok = h?.status === "ok";
-  const color = err || h?.status === "error" ? "#e0705a" : ok ? "#8ac98f" : "#b8a98d";
+  const color = err || h?.status === "error" ? "var(--color-danger)" : ok ? "#8ac98f" : "#b8a98d";
   const label = err
     ? "API indisponível"
     : !h

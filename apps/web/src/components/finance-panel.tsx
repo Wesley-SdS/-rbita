@@ -108,7 +108,7 @@ function Mini({ label, value, good, warn }: { label: string; value: string; good
   return (
     <div className="rounded-lg border p-1.5" style={{ borderColor: "var(--color-line)" }}>
       <div className="font-mono text-[8px] uppercase" style={{ color: "var(--color-ink-dim)" }}>{label}</div>
-      <div className="font-bold" style={{ color: good ? "var(--color-gold)" : warn ? "#e0705a" : "var(--color-ink)" }}>{value}</div>
+      <div className="font-bold" style={{ color: good ? "var(--color-gold)" : warn ? "var(--color-danger)" : "var(--color-ink)" }}>{value}</div>
     </div>
   );
 }
@@ -122,13 +122,13 @@ function Section({ title, entries, onToggle, onRemove }: { title: string; entrie
           <button onClick={() => onToggle(e)} title={e.paid ? "reabrir" : "marcar quitada"}>{e.paid ? "☑" : "☐"}</button>
           <span className="flex-1 truncate" style={{ color: "var(--color-ink)", textDecoration: e.paid ? "line-through" : "none" }}>{e.description}</span>
           {e.dueDate && (
-            <span style={{ color: !e.paid && new Date(e.dueDate) < new Date() ? "#e0705a" : "var(--color-ink-dim)" }}
+            <span style={{ color: !e.paid && new Date(e.dueDate) < new Date() ? "var(--color-danger)" : "var(--color-ink-dim)" }}
               title={!e.paid && new Date(e.dueDate) < new Date() ? "vencida" : "vencimento"}>
               {e.dueDate.slice(5, 10)}
             </span>
           )}
           <span className="font-semibold" style={{ color: "var(--color-ink)" }}>R${e.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-          <button onClick={() => onRemove(e.id)} style={{ color: "#e0705a" }}>×</button>
+          <button onClick={() => onRemove(e.id)} style={{ color: "var(--color-danger)" }}>×</button>
         </div>
       ))}
     </div>

@@ -42,7 +42,7 @@ export function PrivacyPanel({ email }: { email: string }) {
 
         {!confirming ? (
           <button onClick={() => setConfirming(true)} className="rounded-lg border px-3 py-1.5 text-xs"
-            style={{ borderColor: "color-mix(in oklab, #e0705a 40%, var(--color-line))", color: "#e0705a" }}>
+            style={{ borderColor: "color-mix(in oklab, var(--color-danger) 40%, var(--color-line))", color: "var(--color-danger)" }}>
             Apagar minha conta
           </button>
         ) : (
@@ -52,10 +52,10 @@ export function PrivacyPanel({ email }: { email: string }) {
             </p>
             <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder="seu e-mail"
               className="rounded-lg border px-2 py-1 text-xs outline-none" style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }} />
-            {err && <span className="text-[10px]" style={{ color: "#e0705a" }}>{err}</span>}
+            {err && <span className="text-[10px]" style={{ color: "var(--color-danger)" }}>{err}</span>}
             <div className="mt-1 flex gap-2">
               <button onClick={del} disabled={busy || confirmText.trim().toLowerCase() !== email.toLowerCase()} className="flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
-                style={{ background: "#e0705a", color: "#1a0a06" }}>
+                style={{ background: "var(--color-danger)", color: "#1a0a06" }}>
                 {busy ? "…" : "Apagar tudo"}
               </button>
               <button onClick={() => { setConfirming(false); setConfirmText(""); setErr(null); }} className="rounded-lg border px-3 py-1.5 text-xs"

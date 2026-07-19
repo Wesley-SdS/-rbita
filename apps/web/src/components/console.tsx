@@ -449,7 +449,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
               <div key={c.id} className="group flex items-center gap-1">
                 <button onClick={() => loadConversation(c.id)} className="flex-1 truncate text-left text-xs"
                   style={{ color: activeId === c.id ? "var(--color-gold)" : "var(--color-ink-dim)" }}>{c.title}</button>
-                <button onClick={() => deleteConv(c.id)} title="apagar" className="text-xs opacity-40 hover:opacity-100" style={{ color: "#e0705a" }}>×</button>
+                <button onClick={() => deleteConv(c.id)} title="apagar" className="text-xs opacity-40 hover:opacity-100" style={{ color: "var(--color-danger)" }}>×</button>
               </div>
             ))}
           </div>
@@ -529,7 +529,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
           </div>
         </div>
 
-        <div ref={logRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+        <div ref={logRef} aria-live="polite" aria-atomic="false" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {messages.length === 0 && (
             <p className="mt-6 text-center text-sm" style={{ color: "var(--color-ink-dim)" }}>
               Converse com a Órbita — rodando no seu Qwen 2.5 local.
@@ -560,7 +560,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
           ))}
         </div>
 
-        {error && <p className="px-4 pb-1 text-xs" style={{ color: "#e0705a" }}>{error}</p>}
+        {error && <p role="alert" className="px-4 pb-1 text-xs" style={{ color: "var(--color-danger)" }}>{error}</p>}
 
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t p-3" style={{ borderColor: "var(--color-line)" }}>
           <button onClick={() => setVoiceOn(!voiceOn)} title="voz da Órbita" className="rounded-lg border px-2.5 py-2 text-sm"
@@ -609,15 +609,15 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
               <img src={imageAttach} alt="anexo" className="h-9 w-9 rounded-lg border object-cover" style={{ borderColor: "var(--color-gold)" }} />
               <button onClick={() => setImageAttach(null)} title="remover imagem" aria-label="remover imagem"
                 className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-[10px] leading-none"
-                style={{ background: "#e0705a", color: "#fff" }}>×</button>
+                style={{ background: "var(--color-danger)", color: "#fff" }}>×</button>
             </span>
           )}
-          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()}
+          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) send(); }}
             placeholder="Fale ou escreva…" className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
             style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }} />
           <button onClick={toggleMic} disabled={mode !== "standby" && !recording} title="falar" aria-label="microfone"
             className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
-            style={{ background: recording ? "#e0705a" : "var(--color-surface)", borderColor: "var(--color-line)" }}>
+            style={{ background: recording ? "var(--color-danger)" : "var(--color-surface)", borderColor: "var(--color-line)" }}>
             {recording ? "⏹" : "🎙️"}
           </button>
           <button onClick={send} disabled={mode !== "standby" || (!input.trim() && !imageAttach)}
@@ -677,7 +677,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
           {voiceOn ? "🔊" : "🔇"}
         </button>
         <button onClick={toggleMic} title="falar com a Órbita" className="absolute bottom-6 right-6 z-10 rounded-full border px-4 py-2 text-lg"
-          style={{ borderColor: "var(--color-line)", background: recording ? "#e0705a" : "rgba(21,16,10,0.6)" }}>
+          style={{ borderColor: "var(--color-line)", background: recording ? "var(--color-danger)" : "rgba(21,16,10,0.6)" }}>
           {recording ? "⏹" : "🎙️"}
         </button>
         <button onClick={() => setFocus(false)} title="sair do modo foco" className="absolute right-6 top-6 z-10 rounded-lg border px-3 py-1.5 text-sm"

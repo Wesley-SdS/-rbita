@@ -100,7 +100,7 @@ export function RoutinesPanel() {
               {routines.map((r) => (
                 <div key={r.id} className="flex items-center gap-1 text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
                   <span className="flex-1 truncate">• {r.title}</span>
-                  <button onClick={() => deleteRoutine(r.id)} style={{ color: "#e0705a" }}>×</button>
+                  <button onClick={() => deleteRoutine(r.id)} style={{ color: "var(--color-danger)" }}>×</button>
                 </div>
               ))}
               <button onClick={runNow} disabled={busy} className="mt-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50" style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>

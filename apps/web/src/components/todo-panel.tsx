@@ -9,10 +9,11 @@ export function TodoPanel() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [text, setText] = useState("");
   const [image, setImage] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function load() {
-    fetch("/api/todos").then((r) => r.json()).then((d) => setTodos(d.todos ?? [])).catch(() => {});
+    fetch("/api/todos").then((r) => r.json()).then((d) => setTodos(d.todos ?? [])).catch(() => setErr("Falha ao carregar tarefas."));
   }
   useEffect(load, []);
 
@@ -20,20 +21,39 @@ export function TodoPanel() {
 
   async function add() {
     if (!text.trim() && !image) return;
-    await fetch("/api/todos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: text.trim() || "(imagem)", imageUrl: image ?? undefined }),
-    });
-    setText(""); setImage(null); load();
+    setErr(null);
+    try {
+      await fetch("/api/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text.trim() || "(imagem)", imageUrl: image ?? undefined }),
+      });
+      setText(""); setImage(null); load();
+    } catch { setErr("Não consegui adicionar."); }
   }
+  // otimista: reflete o toggle na hora e reverte se a API falhar (sem piscar a lista).
   async function toggle(t: Todo) {
-    await fetch("/api/todos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id, done: !t.done }) });
-    load();
+    setErr(null);
+    setTodos((prev) => prev.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)));
+    try {
+      const r = await fetch("/api/todos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id, done: !t.done }) });
+      if (!r.ok) throw new Error();
+    } catch {
+      setTodos((prev) => prev.map((x) => (x.id === t.id ? { ...x, done: t.done } : x))); // rollback
+      setErr("Não consegui atualizar a tarefa.");
+    }
   }
   async function remove(id: string) {
-    await fetch(`/api/todos?id=${id}`, { method: "DELETE" });
-    load();
+    setErr(null);
+    const snapshot = todos;
+    setTodos((prev) => prev.filter((x) => x.id !== id)); // otimista
+    try {
+      const r = await fetch(`/api/todos?id=${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error();
+    } catch {
+      setTodos(snapshot); // rollback
+      setErr("Não consegui remover.");
+    }
   }
   function pickImage(f: File) {
     const reader = new FileReader();
@@ -52,14 +72,15 @@ export function TodoPanel() {
       <div className="mt-2 flex flex-col gap-1">
         {todos.slice(0, open ? 20 : 4).map((t) => (
           <div key={t.id} className="flex items-center gap-1.5 text-[11px]" style={{ opacity: t.done ? 0.5 : 1 }}>
-            <button onClick={() => toggle(t)}>{t.done ? "☑" : "☐"}</button>
+            <button onClick={() => toggle(t)} aria-label={t.done ? "marcar como pendente" : "concluir tarefa"}>{t.done ? "☑" : "☐"}</button>
             {t.imageUrl && <img src={t.imageUrl} alt="" className="h-5 w-5 rounded object-cover" />}
             <span className="flex-1 truncate" style={{ color: "var(--color-ink)", textDecoration: t.done ? "line-through" : "none" }}>{t.text}</span>
             {t.dueDate && <span style={{ color: "var(--color-ink-dim)" }}>{t.dueDate.slice(5, 10)}</span>}
-            <button onClick={() => remove(t.id)} style={{ color: "#e0705a" }}>×</button>
+            <button onClick={() => remove(t.id)} aria-label="remover tarefa" style={{ color: "var(--color-danger)" }}>×</button>
           </div>
         ))}
         {todos.length === 0 && <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>nenhuma tarefa</span>}
+        {err && <span role="alert" className="text-[10px]" style={{ color: "var(--color-danger)" }}>{err}</span>}
       </div>
 
       {open && (
