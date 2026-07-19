@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { conversation, message } from "@/lib/db/chat-schema";
 import { getSession } from "@/lib/session";
 import { retrieveContext } from "@/lib/rag/retrieve";
-import { buildTools, SYSTEM_PROMPT } from "@/lib/chat/tools";
+import { buildAllTools, SYSTEM_PROMPT } from "@/lib/chat/tools";
 import { log } from "@/lib/observability/logger";
 
 export const runtime = "nodejs";
@@ -103,7 +103,8 @@ export async function POST(req: Request) {
     // RAG é best-effort; se falhar, segue sem contexto.
   }
 
-  const tools = await buildTools(userId);
+  const { tools, cleanup, skillInstructions } = await buildAllTools(userId);
+  if (skillInstructions) system += skillInstructions;
 
   const started = Date.now();
 
@@ -129,7 +130,9 @@ export async function POST(req: Request) {
         .set({ updatedAt: new Date(), modelKey: effectiveKey })
         .where(eq(conversation.id, conv.id));
       log.info("chat", { userId, model: effectiveKey, tokens: tokens ?? 0, latencyMs, conv: conv.id });
+      await cleanup(); // fecha conexões MCP
     },
+    onError: () => { void cleanup(); },
   });
 
   const headers = { "x-conversation-id": conv.id, "x-model": effectiveKey };

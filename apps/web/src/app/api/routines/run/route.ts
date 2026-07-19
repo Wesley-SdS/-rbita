@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { resolveModel, DEFAULT_MODEL_KEY } from "@orbita/llm";
 import { db } from "@/lib/db";
 import { routine, notification } from "@/lib/db/routine-schema";
-import { buildTools, SYSTEM_PROMPT } from "@/lib/chat/tools";
+import { buildAllTools, SYSTEM_PROMPT } from "@/lib/chat/tools";
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     (r) => r.enabled && (force || !r.lastRunAt || now - r.lastRunAt.getTime() >= r.intervalMinutes * 60000),
   );
 
-  const tools = await buildTools(uid);
+  const { tools, cleanup, skillInstructions } = await buildAllTools(uid);
   const model = resolveModel(DEFAULT_MODEL_KEY); // rotinas rodam local por padrão
   let criadas = 0;
 
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     try {
       const { text } = await generateText({
         model,
-        system: SYSTEM_PROMPT + "\nVocê está executando uma rotina proativa. Produza um resultado útil e direto.",
+        system: SYSTEM_PROMPT + skillInstructions + "\nVocê está executando uma rotina proativa. Produza um resultado útil e direto.",
         prompt: r.prompt,
         tools,
         stopWhen: stepCountIs(5),
@@ -50,5 +50,6 @@ export async function POST(req: Request) {
     }
   }
 
+  await cleanup(); // fecha conexões MCP
   return Response.json({ devidas: due.length, notificacoes: criadas });
 }

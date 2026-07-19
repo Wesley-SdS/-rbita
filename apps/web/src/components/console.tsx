@@ -12,6 +12,7 @@ import { TodoPanel } from "@/components/todo-panel";
 import { FolderPanel } from "@/components/folder-panel";
 import { ActionsPanel } from "@/components/actions-panel";
 import { Markdown } from "@/components/markdown";
+import { ExtensionsPanel } from "@/components/extensions-panel";
 import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
 import { RealtimeSession } from "@/lib/voice/realtime";
 import { signOut } from "@/lib/auth-client";
@@ -591,6 +592,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
         <FinancePanel />
         <TodoPanel />
         <FolderPanel />
+        <ExtensionsPanel />
         <ActionsPanel />
         <ConnectorsPanel />
         <RoutinesPanel />

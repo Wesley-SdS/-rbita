@@ -1,4 +1,4 @@
-import { tool } from "ai";
+import { tool, type ToolSet } from "ai";
 import { and, cosineDistance, desc, eq, gt, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { embedText } from "@orbita/llm";
@@ -10,6 +10,8 @@ import { retrieveContext } from "@/lib/rag/retrieve";
 import { searchWeb, fetchPage } from "@/lib/tools/web";
 import { getWeather } from "@/lib/tools/weather";
 import { buildConnectorTools } from "./connector-tools";
+import { buildMcpTools } from "@/lib/mcp/client";
+import { skill } from "@/lib/db/extension-schema";
 
 /** Ferramentas que a Órbita pode chamar (compartilhadas entre chat e rotinas). */
 export async function buildTools(userId: string) {
@@ -168,6 +170,29 @@ export async function buildTools(userId: string) {
       execute: async ({ url }) => ({ conteudo: await fetchPage(url) }),
     }),
   };
+}
+
+/** Instruções das skills ativas do usuário, para injetar no system prompt. */
+export async function getSkillInstructions(userId: string): Promise<string> {
+  const rows = await db
+    .select({ name: skill.name, instructions: skill.instructions })
+    .from(skill)
+    .where(and(eq(skill.userId, userId), eq(skill.enabled, true)));
+  if (!rows.length) return "";
+  return "\n\nSkills ativas (siga estas instruções adicionais):\n" + rows.map((r) => `- ${r.name}: ${r.instructions}`).join("\n");
+}
+
+/**
+ * Todas as ferramentas + extensões do usuário: tools base + conectores + MCP,
+ * mais as instruções das skills. Retorna um cleanup que fecha as conexões MCP.
+ */
+export async function buildAllTools(userId: string): Promise<{ tools: ToolSet; cleanup: () => Promise<void>; skillInstructions: string }> {
+  const [base, mcp, skillInstructions] = await Promise.all([
+    buildTools(userId),
+    buildMcpTools(userId),
+    getSkillInstructions(userId),
+  ]);
+  return { tools: { ...(base as ToolSet), ...mcp.tools }, cleanup: mcp.cleanup, skillInstructions };
 }
 
 export const SYSTEM_PROMPT =

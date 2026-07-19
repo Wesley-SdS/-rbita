@@ -16,6 +16,8 @@ export * from "./connector-schema";
 export * from "./todo-schema";
 // Fila de ações destrutivas (gate humano — aprovação na UI).
 export * from "./action-schema";
+// Extensões: skills (comportamentos) + servidores MCP (ferramentas externas).
+export * from "./extension-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {

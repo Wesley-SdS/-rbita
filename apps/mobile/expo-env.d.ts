@@ -1,3 +1,3 @@
 /// <reference types="expo/types" />
 
-// Tipos gerados pelo Expo Router (typedRoutes) ficam em .expo/types após o start.
+// NOTE: This file should not be edited and should be in your git ignore
