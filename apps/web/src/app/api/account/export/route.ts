@@ -6,6 +6,9 @@ import { expense } from "@/lib/db/finance-schema";
 import { todo } from "@/lib/db/todo-schema";
 import { routine, notification } from "@/lib/db/routine-schema";
 import { connection } from "@/lib/db/connector-schema";
+import { profile } from "@/lib/db/profile-schema";
+import { widget } from "@/lib/db/widget-schema";
+import { skill, mcpServer } from "@/lib/db/extension-schema";
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -17,7 +20,7 @@ export async function GET() {
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const uid = session.user.id;
 
-  const [convs, msgs, docs, chunks, mems, exps, todos, rotinas, notifs, conexoes] = await Promise.all([
+  const [convs, msgs, docs, chunks, mems, exps, todos, rotinas, notifs, conexoes, perfil, widgets, skills, mcps] = await Promise.all([
     db.select().from(conversation).where(eq(conversation.userId, uid)),
     db
       .select({ id: message.id, conversationId: message.conversationId, role: message.role, content: message.content, createdAt: message.createdAt })
@@ -33,6 +36,11 @@ export async function GET() {
     db.select().from(notification).where(eq(notification.userId, uid)),
     // metadados dos conectores SEM os tokens (que são criptografados e não devem sair)
     db.select({ provider: connection.provider, accountLabel: connection.accountLabel, scope: connection.scope, createdAt: connection.createdAt }).from(connection).where(eq(connection.userId, uid)),
+    db.select().from(profile).where(eq(profile.userId, uid)),
+    db.select().from(widget).where(eq(widget.userId, uid)),
+    db.select().from(skill).where(eq(skill.userId, uid)),
+    // servidores MCP SEM os headers (podem conter segredos)
+    db.select({ id: mcpServer.id, name: mcpServer.name, url: mcpServer.url, enabled: mcpServer.enabled, createdAt: mcpServer.createdAt }).from(mcpServer).where(eq(mcpServer.userId, uid)),
   ]);
 
   const payload = {
@@ -48,6 +56,10 @@ export async function GET() {
     rotinas: rotinas,
     notificacoes: notifs,
     conectores: conexoes,
+    perfil: perfil,
+    widgets: widgets,
+    skills: skills,
+    servidoresMcp: mcps,
   };
 
   return new Response(JSON.stringify(payload, null, 2), {

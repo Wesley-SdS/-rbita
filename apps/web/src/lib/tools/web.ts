@@ -1,4 +1,5 @@
 import { search as ddgSearch, SafeSearchType } from "duck-duck-scrape";
+import { safeFetch, SsrfError } from "@/lib/net/ssrf";
 
 export interface WebResult {
   titulo: string;
@@ -38,10 +39,24 @@ export async function searchWeb(query: string, max = 5): Promise<{ fonte: string
   return { fonte: "wikipedia", resultados: await wikipediaSearch(query, max) };
 }
 
-/** Lê o conteúdo textual de uma página web. */
+/**
+ * Lê o conteúdo textual de uma página web. Usa safeFetch (defesa SSRF): a URL
+ * é dirigida pelo LLM a partir de conteúdo não confiável (e-mails/páginas), então
+ * bloqueamos loopback/rede interna/metadata da cloud e limitamos o tamanho lido.
+ */
 export async function fetchPage(url: string, maxChars = 3500): Promise<string> {
-  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; OrbitaBot/1.0)" } });
-  const html = await res.text();
+  let res: Response;
+  try {
+    res = await safeFetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; OrbitaBot/1.0)" } });
+  } catch (e) {
+    if (e instanceof SsrfError) return `Não posso acessar essa URL (${e.message}).`;
+    throw e;
+  }
+  const ctype = res.headers.get("content-type") ?? "";
+  if (ctype && !/text|html|xml|json/i.test(ctype)) return `Conteúdo não textual (${ctype.split(";")[0]}).`;
+  // limita a leitura para não puxar páginas gigantes
+  const raw = await res.text();
+  const html = raw.slice(0, 200_000);
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")

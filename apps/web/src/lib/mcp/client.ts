@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { mcpServer } from "@/lib/db/extension-schema";
 import { log } from "@/lib/observability/logger";
+import { assertPublicUrl } from "@/lib/net/ssrf";
 
 type McpClient = { close: () => Promise<void> };
 
@@ -27,6 +28,8 @@ export async function buildMcpTools(userId: string): Promise<{ tools: ToolSet; c
   await Promise.all(
     servers.map(async (s) => {
       try {
+        // defesa SSRF: um MCP do usuário não pode apontar para a rede interna
+        await assertPublicUrl(s.url);
         const transport = new StreamableHTTPClientTransport(new URL(s.url), {
           requestInit: { headers: (s.headers as Record<string, string>) ?? undefined },
         });

@@ -6,6 +6,7 @@ import { routine, notification } from "@/lib/db/routine-schema";
 import { buildAllTools, SYSTEM_PROMPT } from "@/lib/chat/tools";
 import { getSession } from "@/lib/session";
 import { sendPush } from "@/lib/push/send";
+import { rateLimit, tooMany } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,10 @@ export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const uid = session.user.id;
+
+  // rotinas rodam generateText+tools por rotina devida (maxDuration 300s) — limita.
+  const rl = rateLimit(`routines:${uid}`, 6, 60_000);
+  if (!rl.ok) return tooMany(rl.retryAfterSec);
 
   const { force } = (await req.json().catch(() => ({}))) as { force?: boolean };
 

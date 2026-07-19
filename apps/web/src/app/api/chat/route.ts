@@ -9,6 +9,7 @@ import { retrieveContext } from "@/lib/rag/retrieve";
 import { buildAllTools, SYSTEM_PROMPT, buildTemporalContext, buildPersonaContext } from "@/lib/chat/tools";
 import { composeSystem, type Chunk } from "@/lib/chat/compose";
 import { log } from "@/lib/observability/logger";
+import { rateLimit, tooMany } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +29,10 @@ const BodySchema = z.object({
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
+
+  // rate limit por usuário: cada turno dispara LLM+RAG+embeddings (custo-DoS).
+  const rl = rateLimit(`chat:${session.user.id}`, 30, 60_000);
+  if (!rl.ok) return tooMany(rl.retryAfterSec);
 
   let body: unknown;
   try {

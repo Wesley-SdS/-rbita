@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ingestDocument } from "@/lib/rag/ingest";
 import { getSession } from "@/lib/session";
+import { rateLimit, tooMany } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,9 @@ const Body = z.object({
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
+
+  const rl = rateLimit(`ingest:${session.user.id}`, 20, 60_000);
+  if (!rl.ok) return tooMany(rl.retryAfterSec);
 
   let body: unknown;
   try {

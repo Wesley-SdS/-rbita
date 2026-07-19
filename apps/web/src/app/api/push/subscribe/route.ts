@@ -29,12 +29,23 @@ export async function POST(req: Request) {
   if (!parsed.success) return Response.json({ error: "Inscrição inválida" }, { status: 400 });
 
   const { endpoint, keys } = parsed.data;
+  // Anti-sequestro: se o endpoint já existe e pertence a OUTRO usuário, recusa —
+  // senão bastaria conhecer o endpoint de push da vítima para reassociá-lo.
+  const [existing] = await db
+    .select({ userId: pushSubscription.userId })
+    .from(pushSubscription)
+    .where(eq(pushSubscription.endpoint, endpoint))
+    .limit(1);
+  if (existing && existing.userId !== session.user.id) {
+    return Response.json({ error: "Endpoint já registrado" }, { status: 409 });
+  }
   await db
     .insert(pushSubscription)
     .values({ endpoint, userId: session.user.id, p256dh: keys.p256dh, auth: keys.auth })
     .onConflictDoUpdate({
       target: pushSubscription.endpoint,
-      set: { userId: session.user.id, p256dh: keys.p256dh, auth: keys.auth },
+      // só atualiza as chaves quando o dono é o próprio usuário (garantido acima)
+      set: { p256dh: keys.p256dh, auth: keys.auth },
     });
   return Response.json({ ok: true });
 }
