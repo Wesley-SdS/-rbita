@@ -125,7 +125,13 @@ export async function POST(req: Request) {
   if (skillInstructions) chunks.push({ content: skillInstructions, priority: 70 });
 
   try {
-    const hits = await retrieveContext(userId, content, 4);
+    // RAG é best-effort E NÃO PODE bloquear a resposta: o embedding roda no
+    // ollama local (mesmo com LLM na nuvem) e, se o modelo de embedding for
+    // recarregado (cold), leva ~20s. Timeout curto → responde sem contexto.
+    const hits = await Promise.race([
+      retrieveContext(userId, content, 4),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("rag_timeout")), 3500)),
+    ]);
     if (hits.length) {
       chunks.push({
         content:
@@ -136,7 +142,7 @@ export async function POST(req: Request) {
       });
     }
   } catch {
-    // RAG é best-effort; se falhar, segue sem contexto.
+    // timeout ou falha → segue sem contexto (não trava a resposta).
   }
 
   // Separa o núcleo ESTÁVEL (SYSTEM_PROMPT + identidade) do contexto VOLÁTIL para
