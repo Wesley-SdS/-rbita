@@ -11,6 +11,7 @@ import { FinancePanel } from "@/components/finance-panel";
 import { TodoPanel } from "@/components/todo-panel";
 import { FolderPanel } from "@/components/folder-panel";
 import { ActionsPanel } from "@/components/actions-panel";
+import { Markdown } from "@/components/markdown";
 import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
 import { RealtimeSession } from "@/lib/voice/realtime";
 import { signOut } from "@/lib/auth-client";
@@ -79,6 +80,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
   const wakeRef = useRef<WakeListener | null>(null);
   const audioFileRef = useRef<HTMLInputElement | null>(null);
   const ttsLocalOkRef = useRef<boolean>(true); // cai p/ navegador se o TTS local falhar
+  const [privacyMode, setPrivacyMode] = useState(false); // força tudo local (nada vai p/ nuvem)
   const [realtimeEnabled, setRealtimeEnabled] = useState(false); // S2S premium disponível?
   const [realtimeOn, setRealtimeOn] = useState(false);
   const rtRef = useRef<RealtimeSession | null>(null);
@@ -333,6 +335,8 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
 
   async function sendMessage(content: string) {
     if (!content || mode !== "standby" || !modelKey) return;
+    // modo privacidade: força modelo local, nada é enviado para nuvem
+    const effectiveModelKey = privacyMode && !modelKey.startsWith("local/") ? "local/qwen2.5:7b" : modelKey;
     setError(null); setMode("studying");
     setMessages((m) => [...m, { role: "user", content }, { role: "assistant", content: "" }]);
     const started = Date.now();
@@ -342,7 +346,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, modelKey, conversationId: convId.current ?? undefined, rich: true }),
+        body: JSON.stringify({ content, modelKey: effectiveModelKey, conversationId: convId.current ?? undefined, rich: true }),
       });
       const cid = res.headers.get("x-conversation-id");
       if (cid) { convId.current = cid; setActiveId(cid); }
@@ -448,13 +452,15 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
 
         <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
           <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Provedor de IA</h3>
-          <select value={modelKey} onChange={(e) => setModelKey(e.target.value)} className="w-full rounded-lg border px-2 py-2 text-xs"
+          <select value={privacyMode ? "local/qwen2.5:7b" : modelKey} disabled={privacyMode} onChange={(e) => setModelKey(e.target.value)}
+            className="w-full rounded-lg border px-2 py-2 text-xs disabled:opacity-60"
             style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }}>
-            {models.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+            {(privacyMode ? models.filter((m) => m.key.startsWith("local/")) : models).map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
           </select>
-          <p className="mt-2 font-mono text-[10px]" style={{ color: "var(--color-ink-dim)" }}>
-            Gateway/Claude aparecem ao configurar as chaves no .env
-          </p>
+          <label className="mt-2 flex cursor-pointer items-center gap-2 text-[11px]" style={{ color: privacyMode ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
+            <input type="checkbox" checked={privacyMode} onChange={(e) => setPrivacyMode(e.target.checked)} />
+            🔒 Modo privacidade (força tudo local — nada sai da máquina)
+          </label>
         </div>
 
         <KnowledgePanel />
@@ -507,9 +513,13 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
                   ))}
                 </div>
               )}
-              <div className="max-w-[85%] whitespace-pre-wrap rounded-xl px-3 py-2 text-sm"
+              <div className="max-w-[85%] rounded-xl px-3 py-2 text-sm"
                 style={{ background: m.role === "user" ? "color-mix(in oklab, var(--color-gold) 16%, var(--color-surface))" : "var(--color-ground)", border: "1px solid var(--color-line)", color: "var(--color-ink)" }}>
-                {m.content || (mode !== "standby" && i === messages.length - 1 ? "…" : "")}
+                {m.role === "assistant" && m.content ? (
+                  <Markdown>{m.content}</Markdown>
+                ) : (
+                  <span className="whitespace-pre-wrap">{m.content || (mode !== "standby" && i === messages.length - 1 ? "…" : "")}</span>
+                )}
               </div>
             </div>
           ))}
@@ -527,7 +537,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
             style={{ borderColor: wakeOn ? "var(--color-gold)" : "var(--color-line)", color: wakeOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
             {wakeOn ? "👂" : "🕨"}
           </button>
-          {realtimeEnabled && (
+          {realtimeEnabled && !privacyMode && (
             <button onClick={toggleRealtime} title={realtimeOn ? "encerrar conversa em tempo real" : "conversa por voz em tempo real (premium)"}
               className="rounded-lg border px-2.5 py-2 text-sm"
               style={{ borderColor: realtimeOn ? "var(--color-gold)" : "var(--color-line)", color: realtimeOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>

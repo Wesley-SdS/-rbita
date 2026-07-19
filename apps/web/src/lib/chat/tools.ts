@@ -8,6 +8,7 @@ import { expense } from "@/lib/db/finance-schema";
 import { todo } from "@/lib/db/todo-schema";
 import { retrieveContext } from "@/lib/rag/retrieve";
 import { searchWeb, fetchPage } from "@/lib/tools/web";
+import { getWeather } from "@/lib/tools/weather";
 import { buildConnectorTools } from "./connector-tools";
 
 /** Ferramentas que a Órbita pode chamar (compartilhadas entre chat e rotinas). */
@@ -150,6 +151,11 @@ export async function buildTools(userId: string) {
         const rows = await db.select().from(todo).where(and(eq(todo.userId, userId), eq(todo.done, false)));
         return { tarefas: rows.map((t) => ({ texto: t.text, vencimento: t.dueDate?.toISOString().slice(0, 10) ?? null })) };
       },
+    }),
+    previsao_tempo: tool({
+      description: "Previsão do tempo de uma cidade (temperatura, sensação, condição, mín/máx, chuva). Use no briefing 'bom dia'.",
+      inputSchema: z.object({ cidade: z.string() }),
+      execute: async ({ cidade }) => await getWeather(cidade),
     }),
     pesquisar_web: tool({
       description: "Pesquisa na internet e retorna resultados (título, url, trecho). Use para informação atual.",
