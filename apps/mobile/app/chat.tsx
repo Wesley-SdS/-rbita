@@ -15,6 +15,7 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<OrbMode>("standby");
   const [modelKey, setModelKey] = useState("local/qwen2.5:7b");
+  const [models, setModels] = useState<{ key: string; label: string }[]>([]);
   const [recording, setRecording] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
   const convId = useRef<string | undefined>(undefined);
@@ -22,7 +23,7 @@ export default function Chat() {
 
   useEffect(() => {
     getSession().then((u) => { if (!u) router.replace("/"); });
-    fetchModels().then(({ defaultModel }) => setModelKey(defaultModel)).catch(() => {});
+    fetchModels().then(({ models, defaultModel }) => { setModels(models); setModelKey(defaultModel); }).catch(() => {});
   }, []);
 
   async function send(text?: string) {
@@ -90,9 +91,21 @@ export default function Chat() {
 
       <View style={styles.orbBar}>
         <Orb mode={mode} size={72} />
-        <Text style={styles.status}>
-          {mode === "standby" ? "em espera" : mode === "thinking" ? "pensando…" : mode === "speaking" ? "respondendo…" : "ouvindo…"}
-        </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.status}>
+            {mode === "standby" ? "em espera" : mode === "thinking" ? "pensando…" : mode === "speaking" ? "respondendo…" : "ouvindo…"}
+          </Text>
+          {/* seletor de modelo: toca para alternar entre os modelos disponíveis */}
+          <Pressable
+            onPress={() => {
+              if (models.length < 2) return;
+              const i = models.findIndex((m) => m.key === modelKey);
+              setModelKey(models[(i + 1) % models.length].key);
+            }}
+          >
+            <Text style={styles.modelPick}>{models.find((m) => m.key === modelKey)?.label ?? modelKey} ▾</Text>
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView ref={scrollRef} style={styles.log} contentContainerStyle={{ padding: 16, gap: 12 }}>
@@ -134,6 +147,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#120d08" },
   orbBar: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderBottomWidth: 1, borderBottomColor: "#2a2016" },
   status: { color: "#8a7a63", fontSize: 13 },
+  modelPick: { color: "#e0a83a", fontSize: 11, marginTop: 2 },
   log: { flex: 1 },
   empty: { color: "#8a7a63", textAlign: "center", marginTop: 40 },
   bubble: { padding: 12, borderRadius: 14, maxWidth: "85%" },
