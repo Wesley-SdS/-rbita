@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { conversation, message } from "@/lib/db/chat-schema";
 import { getSession } from "@/lib/session";
 import { retrieveContext } from "@/lib/rag/retrieve";
-import { buildAllTools, SYSTEM_PROMPT } from "@/lib/chat/tools";
+import { buildAllTools, SYSTEM_PROMPT, buildTemporalContext } from "@/lib/chat/tools";
 import { log } from "@/lib/observability/logger";
 
 export const runtime = "nodejs";
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
   // Para o token Max (beta OAuth), a Anthropic exige que o system comece com a
   // identidade do Claude Code, senão rejeita ("credential only for Claude Code").
   const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.\n\n";
-  let system = (effectiveKey.startsWith("claude/") ? CLAUDE_CODE_IDENTITY : "") + SYSTEM_PROMPT;
+  let system = (effectiveKey.startsWith("claude/") ? CLAUDE_CODE_IDENTITY : "") + SYSTEM_PROMPT + buildTemporalContext();
   try {
     const hits = await retrieveContext(userId, content, 4);
     if (hits.length) {
