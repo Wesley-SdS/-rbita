@@ -5,6 +5,28 @@
 
 ---
 
+## 🐞 BUGS ABERTOS (reportados pelo Wesley — 2026-07-19, PRIORIDADE)
+Retomar por aqui na próxima sessão. Cada item tem o ponteiro de arquivo.
+
+**Chat / LLM**
+- [ ] **Responde em INGLÊS** — o Claude às vezes responde em inglês. Reforçar pt-BR SEMPRE no `SYSTEM_PROMPT` (`apps/web/src/lib/chat/tools.ts`), e como o prefixo de identidade Claude Code é em inglês (`route.ts` `CLAUDE_CODE_IDENTITY`), adicionar regra explícita "responda SEMPRE em português do Brasil, independentemente do idioma do system".
+- [ ] **Excesso de travessões (—)** — o modelo enche os textos de em-dash. Adicionar regra no SYSTEM_PROMPT: "não use travessões (—/–); use vírgula, parênteses ou ponto".
+- [ ] **Não dá pra PARAR a resposta** — falta botão "parar" + `AbortController` no cliente (`console.tsx` `sendMessage` — abortar o `fetch`/reader; o server já tem `onAbort`).
+- [ ] **Lentidão intermitente (40s no Claude)** — mesmo com as correções de RAG (paralelo/timeout/keep_alive), houve pico de 40s. Investigar: cold do `next dev`, carga da máquina, ou o embedding local. Considerar build de produção. Ver commits `e2315d1`/`869ee36`/`0d37dfe`.
+
+**UI / Compositor** (`apps/web/src/components/console.tsx`)
+- [ ] **Vários botões soltos ao lado da barra** — consolidar num único **"+"** que abre um menu com as opções (voz, áudio, ver-tela, imagem/arquivo), no estilo do **adalink-pipeline** (`Adalink-Agents-Pipeline/apps/web` — estudar o composer deles).
+- [ ] **Campo de escrita deveria ser TEXTAREA** (multi-linha, auto-grow), não `<input>`. Enter envia, Shift+Enter quebra linha (respeitando a guarda de IME já existente).
+- [ ] **Miniatura do upload não aparece** — ao anexar imagem/arquivo, a bolha da mensagem do usuário não mostra o thumbnail. Renderizar a imagem anexada na mensagem (hoje só há preview no compositor via `imageAttach`, some ao enviar).
+
+**Auth / Mobile**
+- [ ] **No iPhone não consegui criar conta** — signup falha no Safari (PWA/web em `http://192.168.15.8:3000`). Investigar cookie de sessão do Better Auth no Safari sobre HTTP/IP (flags Secure/SameSite; Safari bloqueia cookie sem HTTPS?) em `apps/web/src/lib/auth.ts` + `app/login/page.tsx`.
+
+**Voz**
+- [ ] **Wake word "Ei Órbita" não ouve** — o `apps/voice` (FastAPI :8001) precisa estar RODANDO. Foi PARADO nesta sessão pra liberar CPU. Documentar/robustecer o feedback "Serviço de voz offline" e subir o serviço quando for usar voz: `cd apps/voice && .venv/Scripts/python.exe -m uvicorn main:app --host 0.0.0.0 --port 8001`.
+
+---
+
 ## 🔎 Auditoria completa + endurecimento (2026-07-19)
 5 subagentes auditaram todo o app (chat/LLM/prompt, RAG/finanças, voz, segurança, UI) + estudo profundo dos repos da **Adalink** (padrões portados como código original; **não** se usou o prompt vazado da Anthropic). Correções aplicadas e verificadas (commits `44162f6`→`62ab3f2`):
 
