@@ -397,11 +397,12 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
         buf = lines.pop() ?? "";
         for (const line of lines) {
           if (!line.trim()) continue;
-          let ev: { t: string; v?: string; name?: string };
+          let ev: { t: string; v?: string; name?: string; msg?: string };
           try { ev = JSON.parse(line); } catch { continue; }
           if (ev.t === "text") { acc += ev.v ?? ""; if (acc) setMode("speaking"); }
           else if (ev.t === "tool" && ev.name) { setMode("searching"); steps.push({ name: ev.name, done: false }); }
           else if (ev.t === "tool-done" && ev.name) { const s = steps.find((x) => x.name === ev.name && !x.done); if (s) s.done = true; }
+          else if (ev.t === "error") { setError(ev.msg ?? "Falha ao gerar a resposta."); }
           flush();
         }
       }

@@ -1,5 +1,5 @@
 import { streamText, stepCountIs } from "ai";
-import { and, asc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resolveModel, resolveVisionModel, getModelInfo, routeModelKey, providerEnv, DEFAULT_MODEL_KEY } from "@orbita/llm";
 import { db } from "@/lib/db";
@@ -25,6 +25,14 @@ const BodySchema = z.object({
   // imagem anexada (data URL) — ativa o modelo de visão para responder sobre ela.
   image: z.string().max(8_000_000).optional(),
 });
+
+/** Mensagem amigável em pt-BR para falha de stream (não vaza detalhe do provedor). */
+function errorMessage(key: string, gotText: boolean): string {
+  if (gotText) return "A resposta foi interrompida. Tente reenviar.";
+  if (key.startsWith("claude/")) return "O Claude Max está indisponível no momento (limite ou instabilidade). Tente o modelo local ou aguarde um pouco.";
+  if (key.startsWith("gateway/")) return "O provedor de nuvem falhou. Tente o modelo local.";
+  return "Não consegui gerar a resposta agora. Tente de novo.";
+}
 
 export async function POST(req: Request) {
   const session = await getSession();
@@ -68,12 +76,16 @@ export async function POST(req: Request) {
   }
   if (!conv) return Response.json({ error: "Falha ao criar conversa" }, { status: 500 });
 
-  // histórico
-  const history = await db
+  // histórico: janela das últimas mensagens (evita estourar contexto/custo em
+  // conversas longas — o modelo recebe um teto fixo de turnos recentes).
+  const HISTORY_WINDOW = 24;
+  const recent = await db
     .select({ role: message.role, content: message.content })
     .from(message)
     .where(eq(message.conversationId, conv.id))
-    .orderBy(asc(message.createdAt));
+    .orderBy(desc(message.createdAt))
+    .limit(HISTORY_WINDOW);
+  const history = recent.reverse(); // volta à ordem cronológica
 
   // persiste a mensagem do usuário (marca se veio com imagem)
   await db.insert(message).values({ conversationId: conv.id, role: "user", content: image ? content + " [imagem anexada]" : content });
@@ -131,6 +143,10 @@ export async function POST(req: Request) {
 
   const started = Date.now();
 
+  // Teto de saída por porte do modelo (evita geração desgovernada/custo).
+  const OUT_CAP: Record<string, number> = { small: 1024, medium: 2048, large: 4096 };
+  const maxOutputTokens = image ? 1024 : OUT_CAP[getModelInfo(effectiveKey)?.tier ?? "medium"] ?? 2048;
+
   const result = streamText({
     model,
     system,
@@ -139,6 +155,9 @@ export async function POST(req: Request) {
     // respondemos sem ferramentas para não retornar vazio.
     tools: image ? undefined : tools,
     stopWhen: stepCountIs(5),
+    maxOutputTokens,
+    maxRetries: 2, // backoff automático em 429/5xx transitório do provedor
+    onAbort: () => void cleanup(),
     onFinish: async ({ text, usage }) => {
       const latencyMs = Date.now() - started;
       const tokens = usage?.outputTokens ?? usage?.totalTokens ?? null;
@@ -177,15 +196,16 @@ export async function POST(req: Request) {
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         const send = (o: unknown) => controller.enqueue(encoder.encode(JSON.stringify(o) + "\n"));
+        let gotText = false;
         try {
           for await (const part of result.fullStream) {
-            if (part.type === "text-delta") send({ t: "text", v: part.text });
+            if (part.type === "text-delta") { gotText = true; send({ t: "text", v: part.text }); }
             else if (part.type === "tool-call") send({ t: "tool", name: part.toolName, args: part.input });
             else if (part.type === "tool-result") send({ t: "tool-done", name: part.toolName });
-            else if (part.type === "error") send({ t: "error" });
+            else if (part.type === "error") send({ t: "error", msg: errorMessage(effectiveKey, gotText) });
           }
         } catch {
-          send({ t: "error" });
+          send({ t: "error", msg: errorMessage(effectiveKey, gotText) });
         } finally {
           controller.close();
         }
