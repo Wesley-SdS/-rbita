@@ -7,6 +7,7 @@ import { conversation, message } from "@/lib/db/chat-schema";
 import { getSession } from "@/lib/session";
 import { retrieveContext } from "@/lib/rag/retrieve";
 import { buildAllTools, SYSTEM_PROMPT, buildTemporalContext } from "@/lib/chat/tools";
+import { composeSystem, type Chunk } from "@/lib/chat/compose";
 import { log } from "@/lib/observability/logger";
 
 export const runtime = "nodejs";
@@ -87,24 +88,34 @@ export async function POST(req: Request) {
     model = resolveModel(effectiveKey);
   }
 
-  // RAG: recupera contexto dos documentos + memória do usuário.
-  // Para o token Max (beta OAuth), a Anthropic exige que o system comece com a
-  // identidade do Claude Code, senão rejeita ("credential only for Claude Code").
+  // Monta o system por CHUNKS tipados com prioridade + orçamento (PromptComposer).
+  // Para o token Max (beta OAuth), o system precisa começar com a identidade do
+  // Claude Code (o oauthFetch garante isso como 1º bloco; aqui só o prefixamos).
   const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.\n\n";
-  let system = (effectiveKey.startsWith("claude/") ? CLAUDE_CODE_IDENTITY : "") + SYSTEM_PROMPT + buildTemporalContext();
+  const chunks: Chunk[] = [
+    { content: (effectiveKey.startsWith("claude/") ? CLAUDE_CODE_IDENTITY : "") + SYSTEM_PROMPT, priority: 130 },
+    { content: buildTemporalContext(), priority: 90 },
+  ];
+
+  const { tools, cleanup, skillInstructions } = await buildAllTools(userId, content);
+  if (skillInstructions) chunks.push({ content: skillInstructions, priority: 70 });
+
   try {
     const hits = await retrieveContext(userId, content, 4);
     if (hits.length) {
-      system +=
-        "\n\nContexto do usuário (use quando relevante e cite a fonte entre colchetes):\n" +
-        hits.map((h, i) => `[${i + 1}] (${h.source}) ${h.content}`).join("\n\n");
+      chunks.push({
+        content:
+          "\n\nContexto do usuário (use quando relevante e cite a fonte entre colchetes):\n" +
+          hits.map((h, i) => `[${i + 1}] (${h.source}) ${h.content}`).join("\n\n"),
+        priority: 50,
+        compressible: true, // RAG é cortado primeiro se faltar orçamento
+      });
     }
   } catch {
     // RAG é best-effort; se falhar, segue sem contexto.
   }
 
-  const { tools, cleanup, skillInstructions } = await buildAllTools(userId);
-  if (skillInstructions) system += skillInstructions;
+  const system = composeSystem(chunks);
 
   const started = Date.now();
 

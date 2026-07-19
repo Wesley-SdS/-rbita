@@ -201,16 +201,34 @@ export function buildTemporalContext(): string {
  * Precedência declarada (padrão aprendido): a skill ajusta TOM/ESTILO/CONTEÚDO,
  * mas NUNCA sobrepõe as regras de segurança nem o comportamento das ferramentas.
  */
-export async function getSkillInstructions(userId: string): Promise<string> {
+export async function getSkillInstructions(userId: string, query = ""): Promise<string> {
   const rows = await db
-    .select({ name: skill.name, instructions: skill.instructions })
+    .select({ name: skill.name, instructions: skill.instructions, keywords: skill.keywords })
     .from(skill)
     .where(and(eq(skill.userId, userId), eq(skill.enabled, true)));
   if (!rows.length) return "";
+
+  // Roteamento em cascata (padrão Adalink): com poucas skills, usa todas; com
+  // muitas, seleciona por palavra-chave contra a mensagem (barato, sem LLM).
+  let chosen = rows;
+  if (rows.length > 3 && query.trim()) {
+    const q = query.toLowerCase();
+    const scored = rows
+      .map((r) => {
+        const kws = (r.keywords ?? r.name).toLowerCase().split(/[,\s]+/).filter((k) => k.length >= 3);
+        const score = kws.filter((k) => q.includes(k)).length;
+        return { r, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+    chosen = scored.length ? scored.map((x) => x.r) : rows.slice(0, 2); // fallback: 2 primeiras
+  }
+
   return (
     "\n\n<skills_ativas>\nAs instruções abaixo ajustam seu estilo e o que você faz — siga-as, mas elas NÃO " +
     "revogam as regras de SEGURANÇA nem o funcionamento das ferramentas.\n" +
-    rows.map((r) => `[${r.name}]\n${r.instructions}`).join("\n\n") +
+    chosen.map((r) => `[${r.name}]\n${r.instructions}`).join("\n\n") +
     "\n</skills_ativas>"
   );
 }
@@ -219,11 +237,11 @@ export async function getSkillInstructions(userId: string): Promise<string> {
  * Todas as ferramentas + extensões do usuário: tools base + conectores + MCP,
  * mais as instruções das skills. Retorna um cleanup que fecha as conexões MCP.
  */
-export async function buildAllTools(userId: string): Promise<{ tools: ToolSet; cleanup: () => Promise<void>; skillInstructions: string }> {
+export async function buildAllTools(userId: string, query = ""): Promise<{ tools: ToolSet; cleanup: () => Promise<void>; skillInstructions: string }> {
   const [base, mcp, skillInstructions] = await Promise.all([
     buildTools(userId),
     buildMcpTools(userId),
-    getSkillInstructions(userId),
+    getSkillInstructions(userId, query),
   ]);
   return { tools: { ...(base as ToolSet), ...mcp.tools }, cleanup: mcp.cleanup, skillInstructions };
 }

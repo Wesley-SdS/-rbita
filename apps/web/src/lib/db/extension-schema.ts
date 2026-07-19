@@ -13,6 +13,7 @@ export const skill = pgTable("skill", {
     .references(() => user.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   instructions: text("instructions").notNull(),
+  keywords: text("keywords"), // CSV — usado no roteamento por palavra-chave
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

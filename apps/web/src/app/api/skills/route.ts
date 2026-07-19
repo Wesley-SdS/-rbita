@@ -7,7 +7,7 @@ import { getSession } from "@/lib/session";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const Body = z.object({ name: z.string().min(1).max(80), instructions: z.string().min(1).max(4000) });
+const Body = z.object({ name: z.string().min(1).max(80), instructions: z.string().min(1).max(4000), keywords: z.string().max(300).optional() });
 
 export async function GET() {
   const s = await getSession();

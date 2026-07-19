@@ -11,8 +11,11 @@ export function ExtensionsPanel() {
   const [tab, setTab] = useState<"skills" | "mcp">("skills");
   const [skills, setSkills] = useState<Skill[]>([]);
   const [mcps, setMcps] = useState<Mcp[]>([]);
-  const [sName, setSName] = useState(""); const [sInstr, setSInstr] = useState("");
+  const [sName, setSName] = useState(""); const [sInstr, setSInstr] = useState(""); const [sKw, setSKw] = useState("");
   const [mName, setMName] = useState(""); const [mUrl, setMUrl] = useState("");
+
+  // template estruturado (padrão Adalink) — ajuda a escrever skills melhores
+  const SKILL_TEMPLATE = "## Quando usar\n(situações em que esta skill deve agir)\n\n## Quando NÃO usar\n(delegue a outra skill ou responda normal)\n\n## Princípios\n- \n\n## Como responder\n- ";
 
   function load() {
     fetch("/api/skills").then((r) => r.json()).then((d) => setSkills(d.skills ?? [])).catch(() => {});
@@ -22,8 +25,8 @@ export function ExtensionsPanel() {
 
   async function addSkill() {
     if (!sName.trim() || !sInstr.trim()) return;
-    await fetch("/api/skills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: sName, instructions: sInstr }) });
-    setSName(""); setSInstr(""); load();
+    await fetch("/api/skills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: sName, instructions: sInstr, keywords: sKw || undefined }) });
+    setSName(""); setSInstr(""); setSKw(""); load();
   }
   async function addMcp() {
     if (!mName.trim() || !mUrl.trim()) return;
@@ -71,7 +74,12 @@ export function ExtensionsPanel() {
                 </div>
               ))}
               <input value={sName} onChange={(e) => setSName(e.target.value)} placeholder="Nome da skill (ex: Modo dev)" className="rounded-lg border px-2 py-1 text-xs outline-none" style={input} />
-              <textarea value={sInstr} onChange={(e) => setSInstr(e.target.value)} placeholder="Instruções (ex: responda sempre com código comentado)" rows={2} className="rounded-lg border px-2 py-1 text-xs outline-none" style={input} />
+              <input value={sKw} onChange={(e) => setSKw(e.target.value)} placeholder="Palavras-chave p/ ativar (ex: código, bug, deploy)" className="rounded-lg border px-2 py-1 text-xs outline-none" style={input} />
+              <div className="flex items-center gap-1">
+                <span className="text-[9px]" style={{ color: "var(--color-ink-dim)" }}>Instruções</span>
+                <button onClick={() => setSInstr(SKILL_TEMPLATE)} className="text-[9px]" style={{ color: "var(--color-gold)" }}>usar template</button>
+              </div>
+              <textarea value={sInstr} onChange={(e) => setSInstr(e.target.value)} placeholder="Como a Órbita deve agir. Dica: use o template (Quando usar / Quando NÃO usar / Princípios)." rows={3} className="rounded-lg border px-2 py-1 text-xs outline-none" style={input} />
               <button onClick={addSkill} className="rounded-lg px-3 py-1 text-xs font-semibold" style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>+ skill</button>
             </>
           ) : (
