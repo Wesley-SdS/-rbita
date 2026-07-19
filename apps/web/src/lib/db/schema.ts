@@ -22,6 +22,8 @@ export * from "./extension-schema";
 export * from "./widget-schema";
 // Perfil/persona configurável do usuário (personalização persistente).
 export * from "./profile-schema";
+// Inscrições Web Push (notificações do navegador).
+export * from "./push-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {

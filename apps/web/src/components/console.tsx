@@ -63,6 +63,7 @@ const BLOCKS = [
   { id: "extensoes", label: "Extensões" },
   { id: "conectores", label: "Conectores" },
   { id: "proatividade", label: "Proatividade" },
+  { id: "push", label: "Notificações push" },
 ];
 
 
@@ -646,6 +647,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
         <ActionsPanel />
         <Block id="conectores" hidden={hidden} toggle={toggle}><ConnectorsPanel /></Block>
         <Block id="proatividade" hidden={hidden} toggle={toggle}><RoutinesPanel /></Block>
+        <Block id="push" hidden={hidden} toggle={toggle}><PushToggle /></Block>
       </aside>
     </div>
 
@@ -692,6 +694,44 @@ function Stat({ label, value, accent, good }: { label: string; value: string; ac
     <div className="flex items-baseline justify-between py-1 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
       <span>{label}</span>
       <b className="font-mono" style={{ color: good ? "#8ac98f" : accent ? "var(--color-gold)" : "var(--color-ink)" }}>{value}</b>
+    </div>
+  );
+}
+
+/** Liga/desliga notificações push do navegador (proatividade). */
+function PushToggle() {
+  const [status, setStatus] = useState<"unsupported" | "denied" | "off" | "on" | "loading">("loading");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { import("@/lib/push/client").then((m) => m.pushStatus()).then(setStatus).catch(() => setStatus("unsupported")); }, []);
+  async function toggle() {
+    setBusy(true);
+    try {
+      const m = await import("@/lib/push/client");
+      if (status === "on") { await m.disablePush(); setStatus("off"); }
+      else { const r = await m.enablePush(); setStatus(r.ok ? "on" : "off"); }
+    } finally { setBusy(false); }
+  }
+  async function test() { await fetch("/api/push/test", { method: "POST" }); }
+  if (status === "unsupported") return null;
+  return (
+    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+      <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Notificações push</h3>
+      {status === "denied" ? (
+        <p className="text-[12px]" style={{ color: "var(--color-ink-dim)" }}>Permissão bloqueada no navegador. Libere nas configurações do site para receber avisos.</p>
+      ) : (
+        <div className="flex items-center gap-2">
+          <button onClick={toggle} disabled={busy || status === "loading"}
+            className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+            style={{ borderColor: status === "on" ? "var(--color-gold)" : "var(--color-line)", color: status === "on" ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
+            {busy ? "…" : status === "on" ? "🔔 Ativas" : "🔕 Ativar"}
+          </button>
+          {status === "on" && (
+            <button onClick={test} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>
+              Testar
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

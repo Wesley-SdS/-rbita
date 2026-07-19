@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { routine, notification } from "@/lib/db/routine-schema";
 import { buildAllTools, SYSTEM_PROMPT } from "@/lib/chat/tools";
 import { getSession } from "@/lib/session";
+import { sendPush } from "@/lib/push/send";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,13 +38,11 @@ export async function POST(req: Request) {
         tools,
         stopWhen: stepCountIs(5),
       });
-      await db.insert(notification).values({
-        userId: uid,
-        routineId: r.id,
-        title: r.title,
-        content: text?.trim() || "(sem conteúdo)",
-      });
+      const body = text?.trim() || "(sem conteúdo)";
+      await db.insert(notification).values({ userId: uid, routineId: r.id, title: r.title, content: body });
       await db.update(routine).set({ lastRunAt: new Date() }).where(eq(routine.id, r.id));
+      // também dispara push (best-effort; no-op se VAPID ausente ou sem inscrição)
+      void sendPush(uid, { title: r.title, body: body.slice(0, 180), url: "/app" });
       criadas++;
     } catch {
       // rotina que falha não derruba as outras
