@@ -418,9 +418,9 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
 
   return (
     <>
-    <div className="grid w-full max-w-6xl gap-4 md:grid-cols-[210px_1fr_290px]">
+    <div className="grid w-full max-w-6xl gap-4 md:h-[calc(100dvh-3rem)] md:grid-cols-[210px_1fr_290px]">
       {/* LEFT RAIL */}
-      <aside className="flex flex-col gap-4">
+      <aside className="flex flex-col gap-4 md:min-h-0 md:overflow-y-auto md:pr-1">
         <div className="rounded-2xl border p-3" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
           <div className="flex items-center">
             <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Conversas</h3>
@@ -456,7 +456,21 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
           <select value={privacyMode ? "local/qwen2.5:7b" : modelKey} disabled={privacyMode} onChange={(e) => setModelKey(e.target.value)}
             className="w-full rounded-lg border px-2 py-2 text-xs disabled:opacity-60"
             style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }}>
-            {(privacyMode ? models.filter((m) => m.key.startsWith("local/")) : models).map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+            {/* Auto primeiro, depois cada provedor em seu grupo separado */}
+            {!privacyMode && models.filter((m) => m.key === "auto").map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+            {[
+              { p: "local", label: "⚡ Local (grátis)" },
+              { p: "claude", label: "🟠 Claude Max (assinatura)" },
+              { p: "gateway", label: "☁ Gateway (pago)" },
+            ].map((g) => {
+              const opts = models.filter((m) => m.key !== "auto" && m.provider === g.p);
+              if (!opts.length || (privacyMode && g.p !== "local")) return null;
+              return (
+                <optgroup key={g.p} label={g.label}>
+                  {opts.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+                </optgroup>
+              );
+            })}
           </select>
           <label className="mt-2 flex cursor-pointer items-center gap-2 text-[11px]" style={{ color: privacyMode ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
             <input type="checkbox" checked={privacyMode} onChange={(e) => setPrivacyMode(e.target.checked)} />
@@ -475,7 +489,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
       </aside>
 
       {/* CENTER STAGE */}
-      <main className="relative flex min-h-[640px] flex-col overflow-hidden rounded-2xl border" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+      <main className="relative flex h-[82vh] flex-col overflow-hidden rounded-2xl border md:h-full md:min-h-0" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
         <div className="absolute right-3 top-3 z-10 flex gap-2">
           <a href="/insights" title="insights e grafo de conhecimento"
             className="rounded-lg border px-2.5 py-1 text-xs"
@@ -488,14 +502,14 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
             ⛶ Foco
           </button>
         </div>
-        <div className="relative">
-          <Orb mode={mode} height={300} />
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--color-ink-dim)" }}>
+        <div className="relative shrink-0">
+          <Orb mode={mode} height={210} />
+          <div className="absolute bottom-1 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--color-ink-dim)" }}>
             {STATUS[mode]}
           </div>
         </div>
 
-        <div ref={logRef} className="flex-1 space-y-3 overflow-y-auto p-4">
+        <div ref={logRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {messages.length === 0 && (
             <p className="mt-6 text-center text-sm" style={{ color: "var(--color-ink-dim)" }}>
               Converse com a Órbita — rodando no seu Qwen 2.5 local.
@@ -528,7 +542,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
 
         {error && <p className="px-4 pb-1 text-xs" style={{ color: "#e0705a" }}>{error}</p>}
 
-        <div className="flex items-center gap-2 border-t p-3" style={{ borderColor: "var(--color-line)" }}>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t p-3" style={{ borderColor: "var(--color-line)" }}>
           <button onClick={() => setVoiceOn(!voiceOn)} title="voz da Órbita" className="rounded-lg border px-2.5 py-2 text-sm"
             style={{ borderColor: "var(--color-line)", color: voiceOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
             {voiceOn ? "🔊" : "🔇"}
@@ -572,7 +586,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
       </main>
 
       {/* RIGHT RAIL */}
-      <aside className="flex flex-col gap-4">
+      <aside className="flex flex-col gap-4 md:min-h-0 md:overflow-y-auto md:pl-1">
         <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
           <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Sessão</h3>
           <Stat label="Requisições" value={String(stats.requests)} />
