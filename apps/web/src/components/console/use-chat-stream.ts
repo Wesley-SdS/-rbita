@@ -86,8 +86,18 @@ export function useChatStream(p: Params) {
       let acc = "";
       let buf = "";
       const steps: ToolStep[] = [];
-      const flush = () =>
+      // O stream entrega muitos pedaços por segundo. Re-renderizar o React a
+      // cada pedaço engasgava a animação do Orb (medido: 47fps parado contra
+      // 27fps respondendo). Agrupamos as atualizações em ~60ms: o texto segue
+      // aparecendo fluido para o olho, com uma fração das renderizações.
+      const FLUSH_MS = 60;
+      let lastFlush = 0;
+      const paint = () =>
         p.setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: acc, steps: [...steps] }; return c; });
+      const flush = (force = false) => {
+        const now = Date.now();
+        if (force || now - lastFlush >= FLUSH_MS) { lastFlush = now; paint(); }
+      };
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -98,13 +108,21 @@ export function useChatStream(p: Params) {
           if (!line.trim()) continue;
           let ev: { t: string; v?: string; name?: string; msg?: string };
           try { ev = JSON.parse(line); } catch { continue; }
-          if (ev.t === "text") { acc += ev.v ?? ""; if (acc) p.setMode("speaking"); }
-          else if (ev.t === "tool" && ev.name) { p.setMode("searching"); steps.push({ name: ev.name, done: false }); }
-          else if (ev.t === "tool-done" && ev.name) { const s = steps.find((x) => x.name === ev.name && !x.done); if (s) s.done = true; }
-          else if (ev.t === "error") { p.setError(ev.msg ?? "Falha ao gerar a resposta."); }
-          flush();
+          if (ev.t === "text") {
+            acc += ev.v ?? "";
+            // só troca o estado uma vez, não a cada token
+            if (acc && p.modeRef.current !== "speaking") p.setMode("speaking");
+            flush();
+          } else if (ev.t === "tool" && ev.name) {
+            p.setMode("searching"); steps.push({ name: ev.name, done: false }); flush(true);
+          } else if (ev.t === "tool-done" && ev.name) {
+            const s = steps.find((x) => x.name === ev.name && !x.done); if (s) s.done = true; flush(true);
+          } else if (ev.t === "error") {
+            p.setError(ev.msg ?? "Falha ao gerar a resposta."); flush(true);
+          }
         }
       }
+      flush(true); // garante que o texto final apareça inteiro
 
       // métricas da sessão (tokens estimados por chars quando não há usage do provedor).
       // A economia acumulada/persistida vem do EconomyPanel (/api/usage) — refetch via requests.
