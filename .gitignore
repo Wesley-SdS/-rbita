@@ -12,6 +12,9 @@ coverage
 .env.local
 .env.*.local
 
+# MCP local — contém chaves de API (Render etc). NUNCA commitar: o repo é público.
+.mcp.json
+
 # db
 pgdata
 
