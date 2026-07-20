@@ -70,7 +70,7 @@ export const AUTO_MODEL: ModelInfo = {
   key: "auto",
   provider: "local",
   id: "auto",
-  label: "Auto · roteia (local → Max → Gateway)",
+  label: "Auto · escolhe o melhor modelo disponível",
   tier: "medium",
   billing: "variable", // pode rotear p/ Max (assinatura) ou Gateway (pago)
   costPer1k: 0,
