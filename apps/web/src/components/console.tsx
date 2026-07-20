@@ -176,9 +176,6 @@ export function Console({
     if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) setFocus(true);
   }, []);
 
-  // última resposta da Órbita (mostrada no centro quando o painel está fechado)
-  const lastReply = [...messages].reverse().find((m) => m.role === "assistant" && m.content)?.content ?? "";
-
   // rola o painel lateral para a mensagem mais recente
   useEffect(() => {
     if (focusChat) focusLogRef.current?.scrollTo({ top: focusLogRef.current.scrollHeight });
@@ -461,14 +458,6 @@ export function Console({
 
           <GhostBtn className="absolute left-5 top-6 z-20" onClick={() => setFocus(false)} label="abrir painéis"><IconMenu /></GhostBtn>
           <GhostBtn className="absolute right-5 top-6 z-20" onClick={() => setFocus(false)} label="sair do modo foco"><IconClose /></GhostBtn>
-
-          {/* resposta mais recente ao centro — só quando o painel está recolhido */}
-          {lastReply && !focusChat && (
-            <div className="absolute left-6 right-6 top-1/2 z-10 max-h-[26vh] -translate-y-1/2 overflow-y-auto rounded-2xl px-5 py-4 text-center text-[15px] leading-relaxed"
-              style={{ color: "var(--color-ink)", background: "rgba(8,5,2,0.5)", backdropFilter: "blur(6px)" }}>
-              {lastReply}
-            </div>
-          )}
 
           <div className="pointer-events-none absolute bottom-28 left-0 right-0 z-10 flex items-center justify-center gap-3 font-mono text-xs uppercase" style={{ letterSpacing: "0.28em", color: "#ffcf8a", textShadow: "0 0 16px rgba(255,160,50,0.5)" }}>
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#ffcf8a", boxShadow: "0 0 10px #ffcf8a" }} />
