@@ -6,7 +6,6 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"],
-      "//": "O Turborepo isola o ambiente: variáveis NÃO declaradas aqui não chegam ao build (mesmo estando na Vercel). Declare toda env nova também aqui.",
       "env": [
         "DATABASE_URL",
         "BETTER_AUTH_SECRET",
