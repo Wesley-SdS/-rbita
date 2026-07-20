@@ -98,7 +98,7 @@ function GhostBtn({ children, onClick, label, active, className = "" }: {
 }) {
   return (
     <button onClick={onClick} title={label} aria-label={label}
-      className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 hover:scale-105 ${className}`}
+      className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 hover:scale-105 ${className}`}
       style={{
         background: active ? "color-mix(in oklab, var(--color-gold) 16%, transparent)" : "rgba(255,255,255,0.05)",
         border: `1px solid ${active ? "color-mix(in oklab, var(--color-gold) 45%, transparent)" : "rgba(255,255,255,0.09)"}`,
@@ -481,13 +481,13 @@ export function Console({
             </GhostBtn>
             <button onClick={mode !== "standby" ? chat.stopGenerating : voice.toggleMic}
               title={mode !== "standby" ? "parar" : "falar com a Órbita"} aria-label={mode !== "standby" ? "parar" : "microfone"}
-              className="flex h-[68px] w-[68px] items-center justify-center rounded-full transition-transform duration-200 hover:scale-105"
+              className="flex h-[54px] w-[54px] items-center justify-center rounded-full transition-transform duration-200 hover:scale-105"
               style={{
                 background: voice.recording || mode !== "standby" ? "var(--color-danger)" : "linear-gradient(135deg, var(--color-amber), var(--color-gold))",
                 color: voice.recording || mode !== "standby" ? "#fff" : "#241403",
                 boxShadow: voice.recording || mode !== "standby" ? "0 0 26px rgba(224,112,90,0.45)" : "0 0 26px rgba(245,181,68,0.4)",
               }}>
-              {voice.recording || mode !== "standby" ? <IconStop size={22} /> : <IconMic size={26} />}
+              {voice.recording || mode !== "standby" ? <IconStop size={17} /> : <IconMic size={21} />}
             </button>
             <GhostBtn onClick={() => setFocusChat((v) => !v)} active={focusChat} label="conversa"><IconChat /></GhostBtn>
           </div>
