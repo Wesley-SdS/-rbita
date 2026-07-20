@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,6 +9,7 @@ import { Markdown } from "@/components/markdown";
 import { Block, BlocksManager, useHiddenBlocks } from "@/components/block";
 import { Stat } from "@/components/stat";
 import { Card, PanelTitle, Skeleton } from "@/components/ui";
+import { IconVolume, IconVolumeOff, IconMic, IconStop, IconChat, IconMenu, IconClose, IconSend } from "@/components/ui/icons";
 import { signOut } from "@/lib/auth-client";
 import type { ModelInfo, VoiceBridge } from "@/components/console/types";
 import { useOrbMode } from "@/components/console/use-orb-mode";
@@ -88,6 +89,27 @@ const STATUS: Record<OrbMode, string> = {
   connecting: "conectando…",
 };
 
+/**
+ * Botão circular translúcido do modo foco. Vidro fosco + traço fino em vez de
+ * caixa com borda e emoji, que dava aparência datada.
+ */
+function GhostBtn({ children, onClick, label, active, className = "" }: {
+  children: ReactNode; onClick: () => void; label: string; active?: boolean; className?: string;
+}) {
+  return (
+    <button onClick={onClick} title={label} aria-label={label}
+      className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200 hover:scale-105 ${className}`}
+      style={{
+        background: active ? "color-mix(in oklab, var(--color-gold) 16%, transparent)" : "rgba(255,255,255,0.05)",
+        border: `1px solid ${active ? "color-mix(in oklab, var(--color-gold) 45%, transparent)" : "rgba(255,255,255,0.09)"}`,
+        color: active ? "var(--color-gold)" : "rgba(255,236,205,0.62)",
+        backdropFilter: "blur(10px)",
+      }}>
+      {children}
+    </button>
+  );
+}
+
 /** Item do menu "+" do compositor. */
 function MenuItem({ icon, label, onClick, active }: { icon: string; label: string; onClick: () => void; active?: boolean }) {
   return (
@@ -119,7 +141,8 @@ export function Console({
   const [error, setError] = useState<string | null>(null);
   const [privacyMode, setPrivacyMode] = useState(false); // força tudo local (nada vai p/ nuvem)
   const [focus, setFocus] = useState(false);
-  const [focusKbd, setFocusKbd] = useState(false); // teclado no modo foco (voz-primeiro no celular)
+  const [focusChat, setFocusChat] = useState(false); // painel de conversa lateral (modo foco)
+  const focusLogRef = useRef<HTMLDivElement>(null);
   const [plusOpen, setPlusOpen] = useState(false); // menu "+" do compositor
   const imageFileRef = useRef<HTMLInputElement | null>(null);
   const { hidden, toggle } = useHiddenBlocks(); // blocos que o usuário ocultou
@@ -152,8 +175,13 @@ export function Console({
     if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) setFocus(true);
   }, []);
 
-  // última resposta da Órbita (mostrada de forma sutil no modo foco)
+  // última resposta da Órbita (mostrada no centro quando o painel está fechado)
   const lastReply = [...messages].reverse().find((m) => m.role === "assistant" && m.content)?.content ?? "";
+
+  // rola o painel lateral para a mensagem mais recente
+  useEffect(() => {
+    if (focusChat) focusLogRef.current?.scrollTo({ top: focusLogRef.current.scrollHeight });
+  }, [messages, focusChat]);
 
   return (
     <>
@@ -413,74 +441,110 @@ export function Console({
     </div>
 
     {focus && (
-      <div className="fixed inset-0 z-50" style={{ background: "#0a0703" }}>
-        <div className="absolute inset-0">
-          <Orb mode={mode} fill bare />
-        </div>
-
-        {/* topo: nome + sair (☰ abre os painéis saindo do foco) */}
-        <div className="pointer-events-none absolute left-0 right-0 top-8 z-10 text-center">
-          <div className="text-3xl" style={{ fontFamily: "var(--font-orbitron), sans-serif", fontWeight: 700, letterSpacing: "0.42em", color: "#ffd79a", textShadow: "0 0 24px rgba(255,170,60,0.55)", paddingLeft: "0.42em" }}>
-            ÓRBITA
+      <div className="fixed inset-0 z-50 flex" style={{ background: "#0a0703" }}>
+        {/* palco do Orb — encolhe quando o painel de conversa abre */}
+        <div className="relative min-w-0 flex-1">
+          <div className="absolute inset-0">
+            <Orb mode={mode} fill bare />
           </div>
-          <div className="mt-2 text-[11px]" style={{ letterSpacing: "0.5em", color: "rgba(255,190,120,0.5)", paddingLeft: "0.5em" }}>
-            ASSISTENTE · NÚCLEO NEURAL
+
+          <div className="pointer-events-none absolute left-0 right-0 top-8 z-10 text-center">
+            <div className="text-3xl" style={{ fontFamily: "var(--font-orbitron), sans-serif", fontWeight: 700, letterSpacing: "0.42em", color: "#ffd79a", textShadow: "0 0 24px rgba(255,170,60,0.55)", paddingLeft: "0.42em" }}>
+              ÓRBITA
+            </div>
+            <div className="mt-2 text-[11px]" style={{ letterSpacing: "0.5em", color: "rgba(255,190,120,0.5)", paddingLeft: "0.5em" }}>
+              ASSISTENTE · NÚCLEO NEURAL
+            </div>
           </div>
-        </div>
-        <button onClick={() => setFocus(false)} title="abrir painéis" aria-label="abrir painéis" className="absolute left-5 top-6 z-20 rounded-lg border px-3 py-1.5 text-sm"
-          style={{ borderColor: "var(--color-line)", background: "rgba(21,16,10,0.6)", color: "var(--color-ink-dim)" }}>
-          ☰
-        </button>
-        <button onClick={() => setFocus(false)} title="sair do modo foco" className="absolute right-5 top-6 z-20 rounded-lg border px-3 py-1.5 text-sm"
-          style={{ borderColor: "var(--color-line)", background: "rgba(21,16,10,0.6)", color: "var(--color-ink-dim)" }}>
-          ✕ Sair
-        </button>
 
-        {/* última resposta da Órbita (sutil, rolável) */}
-        {lastReply && (
-          <div className="absolute left-4 right-4 top-1/2 z-10 max-h-[26vh] -translate-y-1/2 overflow-y-auto rounded-2xl px-4 py-3 text-center text-[15px] leading-relaxed"
-            style={{ color: "var(--color-ink)", background: "rgba(8,5,2,0.45)" }}>
-            {lastReply}
+          <GhostBtn className="absolute left-5 top-6 z-20" onClick={() => setFocus(false)} label="abrir painéis"><IconMenu /></GhostBtn>
+          <GhostBtn className="absolute right-5 top-6 z-20" onClick={() => setFocus(false)} label="sair do modo foco"><IconClose /></GhostBtn>
+
+          {/* resposta mais recente ao centro — só quando o painel está recolhido */}
+          {lastReply && !focusChat && (
+            <div className="absolute left-6 right-6 top-1/2 z-10 max-h-[26vh] -translate-y-1/2 overflow-y-auto rounded-2xl px-5 py-4 text-center text-[15px] leading-relaxed"
+              style={{ color: "var(--color-ink)", background: "rgba(8,5,2,0.5)", backdropFilter: "blur(6px)" }}>
+              {lastReply}
+            </div>
+          )}
+
+          <div className="pointer-events-none absolute bottom-28 left-0 right-0 z-10 flex items-center justify-center gap-3 font-mono text-xs uppercase" style={{ letterSpacing: "0.28em", color: "#ffcf8a", textShadow: "0 0 16px rgba(255,160,50,0.5)" }}>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#ffcf8a", boxShadow: "0 0 10px #ffcf8a" }} />
+            {STATUS[mode]}{mode !== "standby" && chat.elapsed > 0 ? ` · ${chat.elapsed}s` : ""}
           </div>
-        )}
 
-        {/* status */}
-        <div className="pointer-events-none absolute bottom-28 left-0 right-0 z-10 flex items-center justify-center gap-3 font-mono text-sm uppercase" style={{ letterSpacing: "0.28em", color: "#ffcf8a", textShadow: "0 0 16px rgba(255,160,50,0.5)" }}>
-          <span className="h-2 w-2 rounded-full" style={{ background: "#ffcf8a", boxShadow: "0 0 12px #ffcf8a" }} />
-          {STATUS[mode]}{mode !== "standby" && chat.elapsed > 0 ? ` · ${chat.elapsed}s` : ""}
-        </div>
-
-        {/* controles: voz · microfone grande (ou parar) · teclado */}
-        <div className="absolute bottom-8 left-0 right-0 z-20 flex items-center justify-center gap-8">
-          <button onClick={() => voice.setVoiceOn(!voice.voiceOn)} title="voz da Órbita" aria-label="voz" className="rounded-full border px-3 py-2 text-lg"
-            style={{ borderColor: "var(--color-line)", background: "rgba(21,16,10,0.6)", color: voice.voiceOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
-            {voice.voiceOn ? "🔊" : "🔇"}
-          </button>
-          <button onClick={mode !== "standby" ? chat.stopGenerating : voice.toggleMic} title={mode !== "standby" ? "parar" : "falar com a Órbita"} aria-label="microfone"
-            className="flex h-[72px] w-[72px] items-center justify-center rounded-full text-3xl"
-            style={{ background: voice.recording || mode !== "standby" ? "var(--color-danger)" : "linear-gradient(120deg, var(--color-amber), var(--color-gold))", boxShadow: "0 0 22px rgba(245,181,68,0.45)" }}>
-            {voice.recording || mode !== "standby" ? "⏹" : "🎙️"}
-          </button>
-          <button onClick={() => setFocusKbd((v) => !v)} title="teclado" aria-label="teclado" className="rounded-full border px-3 py-2 text-lg"
-            style={{ borderColor: focusKbd ? "var(--color-gold)" : "var(--color-line)", background: "rgba(21,16,10,0.6)", color: focusKbd ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
-            ⌨
-          </button>
-        </div>
-
-        {/* teclado: aparece ao tocar em ⌨ */}
-        {focusKbd && (
-          <div className="absolute bottom-0 left-0 right-0 z-30 flex items-end gap-2 border-t p-3" style={{ borderColor: "var(--color-line)", background: "rgba(8,5,2,0.94)" }}>
-            <textarea value={chat.input} rows={1} autoFocus placeholder="Escreva para a Órbita…"
-              onChange={(e) => { chat.setInput(e.target.value); chat.autoGrow(e.target); }}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); chat.send(); setFocusKbd(false); } }}
-              className="max-h-32 min-h-[42px] flex-1 resize-none rounded-lg border px-3 py-2.5 text-sm outline-none"
-              style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }} />
-            <button onClick={() => { chat.send(); setFocusKbd(false); }} disabled={!chat.input.trim()} aria-label="enviar"
-              className="shrink-0 rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
-              style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>
-              ➤
+          {/* controles: voz · microfone (ou parar) · conversa */}
+          <div className="absolute bottom-8 left-0 right-0 z-20 flex items-center justify-center gap-7">
+            <GhostBtn onClick={() => voice.setVoiceOn(!voice.voiceOn)} active={voice.voiceOn}
+              label={voice.voiceOn ? "desligar a voz" : "ligar a voz"}>
+              {voice.voiceOn ? <IconVolume /> : <IconVolumeOff />}
+            </GhostBtn>
+            <button onClick={mode !== "standby" ? chat.stopGenerating : voice.toggleMic}
+              title={mode !== "standby" ? "parar" : "falar com a Órbita"} aria-label={mode !== "standby" ? "parar" : "microfone"}
+              className="flex h-[68px] w-[68px] items-center justify-center rounded-full transition-transform duration-200 hover:scale-105"
+              style={{
+                background: voice.recording || mode !== "standby" ? "var(--color-danger)" : "linear-gradient(135deg, var(--color-amber), var(--color-gold))",
+                color: voice.recording || mode !== "standby" ? "#fff" : "#241403",
+                boxShadow: voice.recording || mode !== "standby" ? "0 0 26px rgba(224,112,90,0.45)" : "0 0 26px rgba(245,181,68,0.4)",
+              }}>
+              {voice.recording || mode !== "standby" ? <IconStop size={22} /> : <IconMic size={26} />}
             </button>
+            <GhostBtn onClick={() => setFocusChat((v) => !v)} active={focusChat} label="conversa"><IconChat /></GhostBtn>
           </div>
+        </div>
+
+        {/* painel de conversa: transcrições + digitação, recolhível */}
+        {focusChat && (
+          <aside className="flex w-full max-w-[380px] shrink-0 flex-col border-l"
+            style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(8,5,2,0.92)", backdropFilter: "blur(14px)" }}>
+            <header className="flex shrink-0 items-center border-b px-4 py-3" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+              <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Conversa</span>
+              <button onClick={() => setFocusChat(false)} aria-label="recolher conversa" title="recolher"
+                className="ml-auto rounded-full p-1.5" style={{ color: "var(--color-ink-dim)" }}>
+                <IconClose size={16} />
+              </button>
+            </header>
+
+            <div ref={focusLogRef} aria-live="polite" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+              {messages.length === 0 && (
+                <p className="mt-8 text-center text-sm" style={{ color: "var(--color-ink-dim)" }}>Fale ou escreva para começar.</p>
+              )}
+              {messages.map((m, i) => (
+                <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                  <div className="max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed"
+                    style={{
+                      background: m.role === "user" ? "color-mix(in oklab, var(--color-gold) 15%, transparent)" : "rgba(255,255,255,0.05)",
+                      color: "var(--color-ink)",
+                    }}>
+                    {m.image && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.image} alt="anexo" className="mb-2 max-h-40 rounded-lg object-contain" />
+                    )}
+                    {m.role === "assistant" && m.content ? (
+                      <Markdown>{m.content}</Markdown>
+                    ) : m.content ? (
+                      <span className="whitespace-pre-wrap">{m.content}</span>
+                    ) : (
+                      <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--color-gold)" }} />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex shrink-0 items-end gap-2 border-t p-3" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+              <textarea value={chat.input} rows={1} autoFocus placeholder="Escreva para a Órbita…"
+                onChange={(e) => { chat.setInput(e.target.value); chat.autoGrow(e.target); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); chat.send(); } }}
+                className="max-h-32 min-h-[42px] flex-1 resize-none rounded-xl px-3.5 py-2.5 text-sm outline-none"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", color: "var(--color-ink)" }} />
+              <button onClick={() => chat.send()} disabled={!chat.input.trim()} aria-label="enviar" title="enviar"
+                className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl transition-transform hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
+                style={{ background: "linear-gradient(135deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>
+                <IconSend />
+              </button>
+            </div>
+          </aside>
         )}
       </div>
     )}
