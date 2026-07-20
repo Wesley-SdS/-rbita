@@ -10,6 +10,7 @@ import { Block, BlocksManager, useHiddenBlocks } from "@/components/block";
 import { Stat } from "@/components/stat";
 import { Card, PanelTitle, Skeleton } from "@/components/ui";
 import { IconVolume, IconVolumeOff, IconMic, IconStop, IconChat, IconMenu, IconClose, IconSend } from "@/components/ui/icons";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { signOut } from "@/lib/auth-client";
 import type { ModelInfo, VoiceBridge } from "@/components/console/types";
 import { useOrbMode } from "@/components/console/use-orb-mode";
@@ -265,6 +266,7 @@ export function Console({
       <main className="relative flex h-[82vh] flex-col overflow-hidden rounded-2xl border md:h-full md:min-h-0" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
         <div className="absolute right-3 top-3 z-10 flex gap-2">
           <BlocksManager blocks={BLOCKS} hidden={hidden} toggle={toggle} />
+          <ThemeToggle />
           <Link href="/insights" prefetch title="insights e grafo de conhecimento"
             className="rounded-lg border px-2.5 py-1 text-xs"
             style={{ borderColor: "var(--color-line)", background: "var(--color-surface)", color: "var(--color-ink-dim)" }}>

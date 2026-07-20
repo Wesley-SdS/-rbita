@@ -29,6 +29,14 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className={orbitron.variable}>
+      <head>
+        {/* Aplica o tema salvo ANTES do primeiro paint (evita flash de tema errado). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem('orbita.theme');if(t==='light')document.documentElement.dataset.theme='light'}catch(e){}`,
+          }}
+        />
+      </head>
       <body>
         {children}
         <PWARegister />

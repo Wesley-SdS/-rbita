@@ -15,6 +15,28 @@
    poderia tree-shakear a var do @theme por não detectá-la nas utilities). */
 :root { --color-danger: #e0705a; }
 
+/* ── Tema claro ─────────────────────────────────────────────────────────────
+   Só SUPERFÍCIES e TEXTO mudam. Os palcos do Orb continuam escuros de
+   propósito: ele é um núcleo luminoso desenhado em canvas com rastro escuro,
+   sobre fundo claro viraria um borrão. Fica como um "herói" escuro na página
+   clara. O dourado é aprofundado para ter contraste legível sobre o branco,
+   sem quebrar os botões que usam texto escuro sobre o gradiente. */
+[data-theme="light"] {
+  --color-ground: #f6f2ea;
+  --color-surface: #ffffff;
+  --color-line: #e3dacb;
+  --color-ink: #221a10;
+  --color-ink-dim: #6d6051;
+  --color-gold: #b57e0f;
+  --color-amber: #c8912a;
+  --color-danger: #bf4a33;
+}
+
+[data-theme="light"] body {
+  background: radial-gradient(circle at 50% 30%, #fffdf8 0%, #f6f2ea 55%, #efe8dc 100%);
+  color: var(--color-ink);
+}
+
 /* Foco visível por teclado (acessibilidade) — antes não havia nenhum. */
 :focus-visible {
   outline: 2px solid var(--color-gold);
