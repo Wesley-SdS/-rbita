@@ -44,10 +44,23 @@ async function sendMagicLink(email: string, url: string) {
  * LAN é aceitável. Extra: `TRUSTED_ORIGINS` (lista separada por vírgula).
  */
 const LAN_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/;
+/** Remove barra final: o Better Auth compara origens como string exata. */
+const cleanOrigin = (u: string) => u.trim().replace(/\/+$/, "");
+
 function trustedOrigins(request?: Request): string[] {
   const list = new Set<string>(["http://localhost:3000", "http://127.0.0.1:3000"]);
-  if (process.env.BETTER_AUTH_URL) list.add(process.env.BETTER_AUTH_URL);
-  for (const o of (process.env.TRUSTED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean)) list.add(o);
+  if (process.env.BETTER_AUTH_URL) list.add(cleanOrigin(process.env.BETTER_AUTH_URL));
+  // Vercel: a MESMA app responde por vários domínios (produção, branch e cada
+  // deploy). Sem isso, acessar por um alias diferente do BETTER_AUTH_URL dá
+  // "Invalid origin". Estas variáveis são fornecidas pela Vercel em runtime.
+  for (const host of [
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+    process.env.VERCEL_URL,
+    process.env.VERCEL_BRANCH_URL,
+  ]) {
+    if (host) list.add(`https://${cleanOrigin(host)}`);
+  }
+  for (const o of (process.env.TRUSTED_ORIGINS ?? "").split(",").map(cleanOrigin).filter(Boolean)) list.add(o);
   const origin = request?.headers.get("origin");
   if (origin && LAN_ORIGIN.test(origin)) list.add(origin);
   return [...list];
