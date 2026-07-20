@@ -16,10 +16,18 @@ import wave
 import zipfile
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
+
+
+# O whisper local (faster-whisper 'small') sozinho consome perto de 1 GB ao
+# carregar, o que estoura instâncias pequenas de nuvem (ex.: 512 MB). Onde a
+# transcrição vai para a nuvem (ASSEMBLYAI_API_KEY no app web), ele é
+# dispensável: basta VOICE_WHISPER=0 e sobram só wake word (vosk) e TTS (piper),
+# que cabem folgado. No self-host local, mantenha ligado (padrão).
+WHISPER_ENABLED = os.environ.get("VOICE_WHISPER", "1").lower() not in ("0", "false", "no")
 
 
 @asynccontextmanager
@@ -34,7 +42,12 @@ async def lifespan(_app: FastAPI):
         except Exception as e:  # noqa: BLE001
             print(json.dumps({"level": "warn", "msg": f"preload falhou: {fn.__name__}: {e}"}))
 
-    await asyncio.gather(_safe(get_whisper), _safe(get_piper), _safe(get_vosk))
+    jobs = [_safe(get_piper), _safe(get_vosk)]
+    if WHISPER_ENABLED:
+        jobs.insert(0, _safe(get_whisper))
+    else:
+        print(json.dumps({"level": "info", "msg": "whisper local desabilitado (VOICE_WHISPER=0); use STT de nuvem"}))
+    await asyncio.gather(*jobs)
     yield
 
 
@@ -206,6 +219,13 @@ def _transcribe(path: str) -> dict:
 
 @app.post("/stt")
 async def stt(file: UploadFile = File(...)) -> dict:
+    # Sem whisper local (instância pequena), a transcrição é responsabilidade da
+    # nuvem: respondemos explícito em vez de tentar carregar 1 GB e derrubar o processo.
+    if not WHISPER_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail="STT local desabilitado (VOICE_WHISPER=0). Configure ASSEMBLYAI_API_KEY no app web.",
+        )
     data = await file.read()
     suffix = os.path.splitext(file.filename or "")[1] or ".wav"
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
