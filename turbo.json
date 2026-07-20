@@ -18,6 +18,7 @@
         "DATABASE_URL",
         "BETTER_AUTH_SECRET",
         "BETTER_AUTH_URL",
+        "ALLOWED_EMAILS",
         "CONNECTORS_ENC_KEY",
         "OLLAMA_BASE_URL",
         "EMBED_MODEL",

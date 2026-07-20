@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { magicLink } from "better-auth/plugins";
 import { db } from "@/lib/db";
@@ -66,10 +67,41 @@ function trustedOrigins(request?: Request): string[] {
   return [...list];
 }
 
+/**
+ * Allowlist de CADASTRO. Sem ela, qualquer pessoa com a URL cria conta num
+ * assistente pessoal (que acessa e-mail, agenda e finanças) e ainda consome a
+ * assinatura de IA do dono. Defina `ALLOWED_EMAILS` (separados por vírgula) em
+ * qualquer deploy público. Lista vazia = aberto, aceitável só no self-host local.
+ * Vale para todos os caminhos (senha, social e magic link), pois todos passam
+ * pela criação do usuário.
+ */
+const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS ?? "")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
+function signupAllowed(email: string): boolean {
+  if (!ALLOWED_EMAILS.length) return true;
+  return ALLOWED_EMAILS.includes(email.trim().toLowerCase());
+}
+
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL,
   trustedOrigins,
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (newUser) => {
+          if (!signupAllowed(newUser.email)) {
+            log.warn("auth.signup_blocked", { email: newUser.email });
+            throw new APIError("FORBIDDEN", { message: "Cadastro restrito ao dono desta instância." });
+          }
+          return { data: newUser };
+        },
+      },
+    },
+  },
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: { user, session, account, verification },
