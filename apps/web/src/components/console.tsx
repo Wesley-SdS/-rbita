@@ -289,7 +289,7 @@ export function Console({
         <div ref={chat.logRef} aria-live="polite" aria-atomic="false" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {messages.length === 0 && (
             <p className="mt-6 text-center text-sm" style={{ color: "var(--color-ink-dim)" }}>
-              Converse com a Órbita — rodando no seu Qwen 2.5 local.
+              Converse com a Órbita. Fale pelo microfone ou escreva abaixo.
             </p>
           )}
           {messages.map((m, i) => (

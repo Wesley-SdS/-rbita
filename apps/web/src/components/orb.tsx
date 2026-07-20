@@ -59,6 +59,27 @@ export function Orb({
         const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (d < _THR) je.push({ a: i, b: j, d });
       }
+    /**
+     * Sprite de brilho pré-renderizado. Antes cada nó criava um
+     * `createRadialGradient` por frame: 150 nós x 60fps = ~9.000 objetos de
+     * gradiente por segundo, o que engasgava a animação. Agora o brilho é
+     * desenhado UMA vez e reaproveitado com drawImage (escalado por nó).
+     */
+    const glowSprite = (rgb: string) => {
+      const S = 48;
+      const c = document.createElement("canvas");
+      c.width = c.height = S * 2;
+      const g2 = c.getContext("2d")!;
+      const grad = g2.createRadialGradient(S, S, 0, S, S, S);
+      grad.addColorStop(0, `rgba(${rgb},1)`);
+      grad.addColorStop(1, `rgba(${rgb},0)`);
+      g2.fillStyle = grad;
+      g2.fillRect(0, 0, S * 2, S * 2);
+      return c;
+    };
+    const SPRITE_BIG = glowSprite("255,215,150");
+    const SPRITE_SMALL = glowSprite("255,180,90");
+
     const orbits = [
       { ax: 0, ay: 0.9, rr: 1.3, rz: 0.55, spd: 0.5 },
       { ax: 0.7, ay: 0.2, rr: 1.42, rz: 0.42, spd: -0.35 },
@@ -156,11 +177,10 @@ export function Orb({
         for (const rp of ripples) { const d = Math.abs(dist2d - rp.r); if (d < 0.09) { br += (1 - d / 0.09) * 1.6 * E; sz *= 1 + (1 - d / 0.09) * 0.9; } }
         if (mode === "speaking" || mode === "listening") br += beatEnv * 0.4 * E;
         br = Math.max(0, Math.min(2.2, br));
-        const col = n.big ? "255,215,150" : "255,180,90";
-        const g = ctx.createRadialGradient(p.px, p.py, 0, p.px, p.py, sz * 5);
-        g.addColorStop(0, "rgba(" + col + "," + (0.5 * br).toFixed(3) + ")");
-        g.addColorStop(1, "rgba(" + col + ",0)");
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.px, p.py, sz * 5, 0, 6.2832); ctx.fill();
+        const rad = sz * 5;
+        ctx.globalAlpha = Math.min(1, 0.5 * br);
+        ctx.drawImage(n.big ? SPRITE_BIG : SPRITE_SMALL, p.px - rad, p.py - rad, rad * 2, rad * 2);
+        ctx.globalAlpha = 1;
         ctx.fillStyle = "rgba(255,236,205," + Math.min(1, 0.6 * br + 0.2).toFixed(3) + ")";
         ctx.beginPath(); ctx.arc(p.px, p.py, sz, 0, 6.2832); ctx.fill();
       }
