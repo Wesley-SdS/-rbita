@@ -22,9 +22,11 @@ const KEEP_ALIVE = process.env.OLLAMA_EMBED_KEEP_ALIVE || "60m";
 
 /**
  * Embedding de NUVEM, para deploys sem Ollama (ex.: Vercel). Usa a API
- * OpenAI-compatible de embeddings. Ambos os modelos entregam mais dimensões do
- * que a coluna do banco (768), então SEMPRE pedimos `dimensions: 768`:
- *   - Gemini `gemini-embedding-001`: 3072 por padrão, truncável (MRL) para 768.
+ * OpenAI-compatible de embeddings. Os modelos entregam mais dimensões do que a
+ * coluna do banco (768), então SEMPRE pedimos `dimensions: 768`:
+ *   - Gemini `gemini-embedding-2` (padrão): GA, grátis no free tier, #1 no MTEB,
+ *     8192 tokens de contexto e — importante — NORMALIZA sozinho ao truncar.
+ *     O `gemini-embedding-001` exigiria normalização MANUAL abaixo de 3072.
  *   - OpenAI `text-embedding-3-small`: 1536 por padrão, reduzível para 768.
  *
  * ⚠️ Trocar de provedor de embedding INVALIDA os vetores já gravados: modelos
@@ -37,7 +39,7 @@ function cloudConfig(): { baseURL: string; apiKey: string; model: string; dimens
     return {
       baseURL: process.env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta/openai/",
       apiKey: gemini,
-      model: process.env.EMBED_MODEL_CLOUD ?? "gemini-embedding-001",
+      model: process.env.EMBED_MODEL_CLOUD ?? "gemini-embedding-2",
       dimensions: EMBED_DIMS, // 3072 por padrão; truncamos p/ bater com a coluna
     };
   }
