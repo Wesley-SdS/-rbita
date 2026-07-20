@@ -5,6 +5,7 @@ export const EMBED_DIMS = 768;
  * O nomic-embed-text foi treinado com prefixos de tarefa e depende deles para o
  * recall assimétrico query↔documento. Sem os prefixos, a busca perde qualidade.
  * `query` = texto de busca; `document` = conteúdo indexado.
+ * ATENÇÃO: os prefixos são específicos do nomic (local); modelos de nuvem não os usam.
  */
 export type EmbedKind = "query" | "document";
 const PREFIX: Record<EmbedKind, string> = {
@@ -18,6 +19,42 @@ const OLLAMA = (process.env.OLLAMA_BASE_URL ?? "http://localhost:11434").replace
 // Mantém o modelo de embedding RESIDENTE — sem isso o ollama descarrega o nomic
 // entre turnos e o próximo embedding paga um cold-start de ~20s (sem GPU).
 const KEEP_ALIVE = process.env.OLLAMA_EMBED_KEEP_ALIVE || "60m";
+
+/**
+ * Embedding de NUVEM, para deploys sem Ollama (ex.: Vercel). Usa a API
+ * OpenAI-compatible de embeddings:
+ *   - Gemini `text-embedding-004`: 768 dimensões NATIVAS (bate com a coluna).
+ *   - OpenAI `text-embedding-3-small`: 1536 nativo, reduzido a 768 via `dimensions`.
+ *
+ * ⚠️ Trocar de provedor de embedding INVALIDA os vetores já gravados: modelos
+ * diferentes vivem em espaços vetoriais distintos, e a similaridade entre eles
+ * não significa nada. Ao migrar um corpus existente, é preciso REINDEXAR.
+ */
+function cloudConfig(): { baseURL: string; apiKey: string; model: string; dimensions?: number } | null {
+  const gemini = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+  if (gemini) {
+    return {
+      baseURL: process.env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta/openai/",
+      apiKey: gemini,
+      model: process.env.EMBED_MODEL_CLOUD ?? "text-embedding-004",
+    };
+  }
+  const openai = process.env.OPENAI_API_KEY;
+  if (openai) {
+    return {
+      baseURL: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+      apiKey: openai,
+      model: process.env.EMBED_MODEL_CLOUD ?? "text-embedding-3-small",
+      dimensions: EMBED_DIMS,
+    };
+  }
+  return null;
+}
+
+/** Qual caminho de embedding está ativo (diagnóstico / health). */
+export function embedProvider(): "cloud" | "local" {
+  return cloudConfig() ? "cloud" : "local";
+}
 
 // Cache LRU em memória: query/doc idênticos = 0 chamadas ao modelo.
 const cache = new Map<string, number[]>();
@@ -44,21 +81,47 @@ async function ollamaEmbed(inputs: string[]): Promise<number[][]> {
   return j.embeddings;
 }
 
+async function cloudEmbed(inputs: string[], cfg: NonNullable<ReturnType<typeof cloudConfig>>): Promise<number[][]> {
+  const url = cfg.baseURL.replace(/\/+$/, "") + "/embeddings";
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.apiKey}` },
+    body: JSON.stringify({
+      model: cfg.model,
+      input: inputs,
+      ...(cfg.dimensions ? { dimensions: cfg.dimensions } : {}),
+    }),
+  });
+  if (!r.ok) throw new Error(`embed_cloud_failed:${r.status}:${(await r.text()).slice(0, 200)}`);
+  const j = (await r.json()) as { data?: { embedding: number[]; index: number }[] };
+  if (!j.data?.length) throw new Error("embed_cloud_empty");
+  return [...j.data].sort((a, b) => a.index - b.index).map((d) => d.embedding);
+}
+
+/** Roteia para a nuvem (quando há chave) ou para o Ollama local. */
+async function embed(inputs: string[], kind: EmbedKind): Promise<number[][]> {
+  const cfg = cloudConfig();
+  if (cfg) return cloudEmbed(inputs, cfg); // nuvem: sem prefixo de tarefa
+  return ollamaEmbed(inputs.map((v) => PREFIX[kind] + v));
+}
+
 export async function embedText(value: string, kind: EmbedKind = "query"): Promise<number[]> {
   const key = `${kind}:${value}`;
   const hit = cacheGet(key);
   if (hit) return hit;
-  const [emb] = await ollamaEmbed([PREFIX[kind] + value]);
+  const [emb] = await embed([value], kind);
   cacheSet(key, emb);
   return emb;
 }
 
 export async function embedTexts(values: string[], kind: EmbedKind = "document"): Promise<number[][]> {
   if (!values.length) return [];
-  return ollamaEmbed(values.map((v) => PREFIX[kind] + v));
+  return embed(values, kind);
 }
 
-/** Aquece o modelo de embedding (chamar no boot evita o cold-start no 1º uso). */
+/** Aquece o modelo de embedding (chamar no boot evita o cold-start no 1º uso).
+ *  Só faz sentido no local: na nuvem não há cold-start de modelo residente. */
 export async function warmupEmbedding(): Promise<void> {
+  if (embedProvider() === "cloud") return;
   try { await embedText("warmup", "query"); } catch { /* best-effort */ }
 }
