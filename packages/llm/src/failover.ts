@@ -1,4 +1,4 @@
-import { getModelInfo, DEFAULT_MODEL_KEY, type ProviderId } from "./catalog";
+import { getModelInfo, localAvailable, DEFAULT_MODEL_KEY, type ProviderId } from "./catalog";
 
 export interface ProviderFlags {
   gateway: boolean;
@@ -54,8 +54,14 @@ export function buildModelChain(requestedKey: string, env: ProviderFlags): strin
     if (getModelInfo(k) && !chain.includes(k)) chain.push(k);
   };
   if (getModelInfo(requestedKey)) add(requestedKey);
-  add(DEFAULT_MODEL_KEY);
-  if (env.claude) add("claude/claude-opus-4-8");
+  // Local só entra na cadeia quando há Ollama alcançável (não na Vercel).
+  if (localAvailable()) add(DEFAULT_MODEL_KEY);
+  // Fallbacks de NUVEM: sem isso, um deploy só com Groq ficava sem alternativa.
+  if (env.claude) add("claude/claude-sonnet-5");
+  if (env.groq) add("groq/llama-3.3-70b-versatile");
+  if (env.google) add("google/gemini-2.5-flash");
+  if (env.openai) add("openai/gpt-5-mini");
+  if (env.cohere) add("cohere/command-a-03-2025");
   if (env.gateway) add("gateway/openai/gpt-5");
   const configured = chain.filter((k) => {
     const p = getModelInfo(k)!.provider;
@@ -65,7 +71,7 @@ export function buildModelChain(requestedKey: string, env: ProviderFlags): strin
     if (p === "google") return Boolean(env.google);
     if (p === "openai") return Boolean(env.openai);
     if (p === "cohere") return Boolean(env.cohere);
-    return true; // local
+    return localAvailable(); // local
   });
   // pula provedores em cooldown (disjuntor aberto); se todos abertos, mantém a
   // cadeia completa (melhor tentar um "aberto" do que ficar sem resposta).

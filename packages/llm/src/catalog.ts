@@ -59,6 +59,9 @@ export const DEFAULT_MODEL_KEY = "local/qwen2.5:7b";
  */
 export function defaultModelKey(env: ProviderEnv): string {
   if (env.claude) return "claude/claude-sonnet-5";
+  // Sem Ollama alcançável (ex.: Vercel), o padrão TEM que ser de nuvem, senão
+  // o modelo pré-selecionado nasce quebrado.
+  if (!localAvailable()) return firstCloudKey(env) ?? DEFAULT_MODEL_KEY;
   return DEFAULT_MODEL_KEY;
 }
 
@@ -78,8 +81,31 @@ export function getModelInfo(key: string): ModelInfo | undefined {
   return CATALOG.find((m) => m.key === key);
 }
 
+/**
+ * O Ollama local é alcançável? Em serverless (Vercel) com `OLLAMA_BASE_URL`
+ * apontando para localhost não existe Ollama nenhum, então os modelos locais
+ * seriam escolhas quebradas: escondemos. Self-host (ou Ollama remoto) mantém.
+ */
+export function localAvailable(): boolean {
+  const base = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1";
+  const pointsToLocalhost = /localhost|127\.0\.0\.1|host\.docker\.internal/.test(base);
+  return !(process.env.VERCEL && pointsToLocalhost);
+}
+
+/** 1º provedor de NUVEM configurado, em ordem de custo/velocidade. */
+function firstCloudKey(env: ProviderEnv): string | undefined {
+  if (env.claude) return "claude/claude-sonnet-5";
+  if (env.groq) return "groq/llama-3.3-70b-versatile";
+  if (env.google) return "google/gemini-2.5-flash";
+  if (env.openai) return "openai/gpt-5-mini";
+  if (env.cohere) return "cohere/command-a-03-2025";
+  if (env.gateway) return "gateway/google/gemini-2.5-flash";
+  return undefined;
+}
+
 /** Modelos disponíveis dado o ambiente (esconde os que exigem env ausente). */
 export function availableModels(env: ProviderEnv): ModelInfo[] {
+  const local = localAvailable();
   const list = CATALOG.filter((m) => {
     if (m.provider === "gateway") return env.gateway;
     if (m.provider === "claude") return env.claude;
@@ -87,7 +113,7 @@ export function availableModels(env: ProviderEnv): ModelInfo[] {
     if (m.provider === "google") return Boolean(env.google);
     if (m.provider === "openai") return Boolean(env.openai);
     if (m.provider === "cohere") return Boolean(env.cohere);
-    return true; // local sempre
+    return local; // local só quando há Ollama alcançável
   });
   return [AUTO_MODEL, ...list];
 }
@@ -102,6 +128,8 @@ export function routeModelKey(content: string, env: ProviderEnv): string {
     /```|\b(fun[çc][ãa]o|c[óo]digo|code|algoritmo|refator\w*|arquitetura|demonstre|prove|equa[çc][ãa]o|matem[áa]tic\w*|debug\w*)\b/i.test(content);
   if (complex && env.claude) return "claude/claude-opus-4-8";
   if (complex && env.gateway) return "gateway/openai/gpt-5";
+  // Sem Ollama alcançável, nunca rotear para local: cai no 1º provedor de nuvem.
+  if (!localAvailable()) return firstCloudKey(env) ?? DEFAULT_MODEL_KEY;
   if (complex) return "local/qwen2.5:14b";
   return "local/qwen2.5:7b";
 }
