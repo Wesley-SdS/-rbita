@@ -85,6 +85,7 @@ export function useChatStream(p: Params) {
       const dec = new TextDecoder();
       let acc = "";
       let buf = "";
+      let speakingSet = false; // evita um setState de modo por token
       const steps: ToolStep[] = [];
       // O stream entrega muitos pedaços por segundo. Re-renderizar o React a
       // cada pedaço engasgava a animação do Orb (medido: 47fps parado contra
@@ -110,8 +111,8 @@ export function useChatStream(p: Params) {
           try { ev = JSON.parse(line); } catch { continue; }
           if (ev.t === "text") {
             acc += ev.v ?? "";
-            // só troca o estado uma vez, não a cada token
-            if (acc && p.modeRef.current !== "speaking") p.setMode("speaking");
+            // troca o estado UMA vez por resposta, não a cada token
+            if (acc && !speakingSet) { speakingSet = true; p.setMode("speaking"); }
             flush();
           } else if (ev.t === "tool" && ev.name) {
             p.setMode("searching"); steps.push({ name: ev.name, done: false }); flush(true);
