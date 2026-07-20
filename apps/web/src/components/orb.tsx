@@ -77,6 +77,19 @@ export function Orb({
       g2.fillRect(0, 0, S * 2, S * 2);
       return c;
     };
+    // Faixas de opacidade das arestas: cor e espessura pré-calculadas por faixa
+    // (a espessura acompanha a profundidade, que é o que também define a opacidade).
+    const EDGE_BUCKETS = 10;
+    const EDGE_MAX_AL = 0.34;
+    const EDGE_STYLE: string[] = [];
+    const EDGE_WIDTH: number[] = [];
+    for (let i = 0; i < EDGE_BUCKETS; i++) {
+      const al = ((i + 0.5) / EDGE_BUCKETS) * EDGE_MAX_AL;
+      EDGE_STYLE.push("rgba(255,168,74," + al.toFixed(3) + ")");
+      EDGE_WIDTH.push(Math.max(0.6, Math.min(1.1, 0.6 + ((al - 0.05) / 0.16) * 0.5)));
+    }
+    const edgeBuf: number[][] = Array.from({ length: EDGE_BUCKETS }, () => []);
+
     const SPRITE_BIG = glowSprite("255,215,150");
     const SPRITE_SMALL = glowSprite("255,180,90");
     const SPRITE_PACKET = glowSprite("170,255,150"); // partículas do "pensando"
@@ -163,14 +176,28 @@ export function Orb({
       const cx = W / 2, cy = H * 0.46, R = Math.min(W, H) * 0.3;
       const P = jn.map((n) => jproj(jrot(n), R, cx, cy));
 
+      // Arestas agrupadas por faixa de opacidade. Antes era um stroke() e uma
+      // string de cor POR ARESTA: 248 arestas x 60fps = ~15.000 chamadas de
+      // desenho por segundo, o maior custo do frame em TODOS os estados.
+      // Agora são no máximo EDGE_BUCKETS strokes por frame.
+      for (const b of edgeBuf) b.length = 0;
       for (const e of je) {
         const a = P[e.a], b = P[e.b], depth = (a.depth + b.depth) / 2;
         let al = 0.05 + depth * 0.16;
         if (mode === "studying") al += 0.1 * Math.max(0, Math.sin(jt * 2 + e.a * 0.3)) * E;
         if (mode === "connecting") al += 0.06 * E;
-        ctx.strokeStyle = "rgba(255,168,74," + al.toFixed(3) + ")";
-        ctx.lineWidth = 0.6 + depth * 0.5;
-        ctx.beginPath(); ctx.moveTo(a.px, a.py); ctx.lineTo(b.px, b.py); ctx.stroke();
+        let bi = ((al / EDGE_MAX_AL) * EDGE_BUCKETS) | 0;
+        if (bi < 0) bi = 0; else if (bi >= EDGE_BUCKETS) bi = EDGE_BUCKETS - 1;
+        edgeBuf[bi].push(a.px, a.py, b.px, b.py);
+      }
+      for (let i = 0; i < EDGE_BUCKETS; i++) {
+        const seg = edgeBuf[i];
+        if (!seg.length) continue;
+        ctx.strokeStyle = EDGE_STYLE[i];
+        ctx.lineWidth = EDGE_WIDTH[i];
+        ctx.beginPath();
+        for (let k = 0; k < seg.length; k += 4) { ctx.moveTo(seg[k], seg[k + 1]); ctx.lineTo(seg[k + 2], seg[k + 3]); }
+        ctx.stroke();
       }
 
       let sweepA = 0;
