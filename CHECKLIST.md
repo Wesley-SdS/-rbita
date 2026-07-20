@@ -78,6 +78,13 @@ Levantamento do que ainda está aberto no PRD + melhorias de código/performance
 - [ ] **I1. Plugar OAuth** Google/Notion/Slack/WhatsApp + login Google/GitHub + `RESEND_API_KEY` p/ magic link por email real.
 - [ ] **I2. Mobile OAuth social nativo** (deep-link p/ capturar a sessão no app).
 
+**☁️ P7 — Deploy na nuvem** (guia completo em [`DEPLOY.md`](./DEPLOY.md))
+- [x] **Provedores de nuvem prontos** (Groq/Gemini/OpenAI/Cohere) + Sonnet 5 default + web responsivo (foco no celular) + projeto no GitHub.
+- [ ] **R1 (embedding de nuvem)** é o bloqueador do RAG na Vercel (sem Ollama lá). Chat/finanças/tarefas já sobem sem ele.
+- [ ] **Provedor Anthropic por API key** (o token Max OAuth não pode em servidor público — ToS).
+- [ ] **Serviço de voz hospedado** (Render/Fly) p/ wake word/STT/TTS na nuvem, ou versão cloud sem voz.
+- [ ] **Postgres gerenciado** (Neon/Supabase com pgvector) + migrações apontando pra ele.
+
 ---
 
 ## 💡 NOVAS FUNCIONALIDADES CANDIDATAS (pesquisa web 2026-07-20)
