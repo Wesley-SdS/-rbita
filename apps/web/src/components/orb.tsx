@@ -79,6 +79,28 @@ export function Orb({
     };
     const SPRITE_BIG = glowSprite("255,215,150");
     const SPRITE_SMALL = glowSprite("255,180,90");
+    const SPRITE_PACKET = glowSprite("170,255,150"); // partículas do "pensando"
+
+    /**
+     * Núcleo: as 4 paradas de cor são todas proporcionais à intensidade, então
+     * dá para assar o gradiente uma vez com intensidade 1 e modular o brilho
+     * com globalAlpha. Remove o último createRadialGradient por frame, que
+     * acontecia em TODOS os estados.
+     */
+    const SPRITE_CORE = (() => {
+      const S = 96;
+      const c = document.createElement("canvas");
+      c.width = c.height = S * 2;
+      const g2 = c.getContext("2d")!;
+      const grad = g2.createRadialGradient(S, S, 0, S, S, S);
+      grad.addColorStop(0, "rgba(255,244,220,1)");
+      grad.addColorStop(0.25, "rgba(255,190,90,0.7)");
+      grad.addColorStop(0.6, "rgba(255,140,50,0.25)");
+      grad.addColorStop(1, "rgba(255,120,40,0)");
+      g2.fillStyle = grad;
+      g2.fillRect(0, 0, S * 2, S * 2);
+      return c;
+    })();
 
     const orbits = [
       { ax: 0, ay: 0.9, rr: 1.3, rz: 0.55, spd: 0.5 },
@@ -223,20 +245,19 @@ export function Orb({
         const pk = packets[i]; pk.t += dt * pk.sp;
         if (pk.t >= 1) { packets.splice(i, 1); continue; }
         const e = je[pk.e], a = P[e.a], b = P[e.b], x = a.px + (b.px - a.px) * pk.t, y = a.py + (b.py - a.py) * pk.t;
-        const g = ctx.createRadialGradient(x, y, 0, x, y, 6);
-        g.addColorStop(0, "rgba(180,255,160,0.9)"); g.addColorStop(1, "rgba(160,255,140,0)");
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 6, 0, 6.2832); ctx.fill();
+        // sprite em vez de gradiente por partícula (até 70 por frame no "pensando")
+        ctx.globalAlpha = 0.9;
+        ctx.drawImage(SPRITE_PACKET, x - 6, y - 6, 12, 12);
+        ctx.globalAlpha = 1;
       }
 
       const beat = mode === "speaking" ? beatEnv : 0;
       const coreR = R * (0.2 + 0.03 * Math.sin(jt * 2) + beat * 0.06);
-      const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 3.4);
       const ci = 0.55 + 0.35 * E + beat * 0.4;
-      cg.addColorStop(0, "rgba(255,244,220," + Math.min(1, ci).toFixed(3) + ")");
-      cg.addColorStop(0.25, "rgba(255,190,90," + (0.7 * ci).toFixed(3) + ")");
-      cg.addColorStop(0.6, "rgba(255,140,50," + (0.25 * ci).toFixed(3) + ")");
-      cg.addColorStop(1, "rgba(255,120,40,0)");
-      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(cx, cy, coreR * 3.4, 0, 6.2832); ctx.fill();
+      const cr = coreR * 3.4;
+      ctx.globalAlpha = Math.min(1, ci);
+      ctx.drawImage(SPRITE_CORE, cx - cr, cy - cr, cr * 2, cr * 2);
+      ctx.globalAlpha = 1;
 
       for (let arm = 0; arm < 3; arm++) {
         const off = (arm / 3) * 6.2832;
