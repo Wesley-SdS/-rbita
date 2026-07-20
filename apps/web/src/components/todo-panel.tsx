@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Card, PanelTitle, Input, Button, ErrorRetry } from "@/components/ui";
 
 interface Todo { id: string; text: string; done: boolean; dueDate: string | null; imageUrl: string | null }
 
@@ -62,9 +63,9 @@ export function TodoPanel() {
   }
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+    <Card>
       <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Tarefas</h3>
+        <PanelTitle>Tarefas</PanelTitle>
         {pending > 0 && <span className="ml-2 rounded-full px-1.5 text-[10px] font-bold" style={{ background: "var(--color-gold)", color: "#241403" }}>{pending}</span>}
         <span className="ml-auto text-xs" style={{ color: "var(--color-ink-dim)" }}>{open ? "▾" : "▸"}</span>
       </button>
@@ -80,18 +81,17 @@ export function TodoPanel() {
           </div>
         ))}
         {todos.length === 0 && <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>nenhuma tarefa</span>}
-        {err && <span role="alert" className="text-[10px]" style={{ color: "var(--color-danger)" }}>{err}</span>}
+        {err && <ErrorRetry message={err} onRetry={() => { setErr(null); load(); }} />}
       </div>
 
       {open && (
         <div className="mt-2 flex items-center gap-1">
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) pickImage(f); e.target.value = ""; }} />
           <button onClick={() => fileRef.current?.click()} title="anexar imagem" className="rounded border px-1.5 py-1 text-xs" style={{ borderColor: image ? "var(--color-gold)" : "var(--color-line)", color: image ? "var(--color-gold)" : "var(--color-ink-dim)" }}>📎</button>
-          <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="Nova tarefa…"
-            className="flex-1 rounded-lg border px-2 py-1 text-xs outline-none" style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }} />
-          <button onClick={add} className="rounded-lg px-2 py-1 text-xs font-semibold" style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>+</button>
+          <Input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="Nova tarefa…" className="flex-1" />
+          <Button variant="primary" size="sm" onClick={add}>+</Button>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

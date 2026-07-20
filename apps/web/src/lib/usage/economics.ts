@@ -1,4 +1,4 @@
-import { getModelInfo } from "@orbita/llm";
+import { getModelInfo, type ProviderId } from "@orbita/llm";
 
 /**
  * Economia vs. nuvem + estimativa de energia.
@@ -52,7 +52,7 @@ export interface UsageSummary {
 }
 
 /** Porte + provedor de um modelKey resolvido. `vision`/desconhecido = local pequeno. */
-function classify(modelKey: string | null): { tier: Tier; provider: "local" | "gateway" | "claude"; costPer1k: number } {
+function classify(modelKey: string | null): { tier: Tier; provider: ProviderId; costPer1k: number } {
   const info = modelKey ? getModelInfo(modelKey) : undefined;
   if (info && info.key !== "auto") return { tier: info.tier, provider: info.provider, costPer1k: info.costPer1k };
   // "vision" (moondream) e qualquer chave não catalogada rodam localmente.
@@ -72,7 +72,9 @@ export function summarizeUsage(rows: UsageRow[]): UsageSummary {
     tokensTotal += tokens;
     const { tier, provider, costPer1k } = classify(r.modelKey);
 
-    if (provider === "gateway") {
+    if (provider !== "local" && provider !== "claude") {
+      // qualquer provedor pago por uso (gateway/groq/google/openai/cohere):
+      // conta como gasto real de nuvem.
       cloudRequests += 1;
       cloudSpentBRL += (tokens / 1000) * costPer1k;
       continue;

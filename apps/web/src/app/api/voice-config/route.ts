@@ -30,5 +30,9 @@ export async function GET() {
     up = false;
   }
 
-  return Response.json({ up, wsWakeUrl: `${wsBase}/ws/wake`, wakePhrase });
+  // cache curtinho: evita martelar o /health do voice, mas reflete rápido quando ele sobe.
+  return Response.json(
+    { up, wsWakeUrl: `${wsBase}/ws/wake`, wakePhrase },
+    { headers: { "Cache-Control": "private, max-age=10" } },
+  );
 }

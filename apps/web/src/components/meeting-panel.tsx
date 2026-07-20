@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Card, PanelTitle, Button } from "@/components/ui";
 
 /**
  * Transcrição de reunião ao vivo (caso-âncora do PRD: "Resume essa reunião").
@@ -83,9 +84,9 @@ export function MeetingPanel() {
   }
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+    <Card>
       <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Reunião</h3>
+        <PanelTitle>Reunião</PanelTitle>
         {active && <span className="ml-2 h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--color-danger)" }} />}
         <span className="ml-auto text-xs" style={{ color: "var(--color-ink-dim)" }}>{open ? "▾" : "▸"}</span>
       </button>
@@ -93,10 +94,9 @@ export function MeetingPanel() {
       {open && (
         <div className="mt-2 flex flex-col gap-2">
           {!active ? (
-            <button onClick={start} disabled={busy} className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-              style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>
+            <Button variant="primary" size="md" onClick={start} disabled={busy}>
               {busy ? "resumindo…" : "● iniciar transcrição"}
-            </button>
+            </Button>
           ) : (
             <button onClick={stop} className="rounded-lg border px-3 py-1.5 text-xs" style={{ borderColor: "var(--color-danger)", color: "var(--color-danger)" }}>
               ⏹ encerrar e resumir
@@ -116,6 +116,6 @@ export function MeetingPanel() {
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

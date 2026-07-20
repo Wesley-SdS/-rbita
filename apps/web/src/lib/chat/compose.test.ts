@@ -12,11 +12,13 @@ describe("composeSystem (PromptComposer)", () => {
   });
 
   it("corta chunks compressíveis de menor prioridade quando estoura o orçamento", () => {
+    // orçamento em TOKENS (~4 chars/token): núcleo=100 chars≈25 tokens,
+    // RAG=300 chars≈75 tokens. Com 40 tokens o núcleo cabe e o RAG (compressível) cai.
     const chunks: Chunk[] = [
       { content: "X".repeat(100), priority: 130 }, // núcleo, nunca cortado
       { content: "RAG".repeat(100), priority: 50, compressible: true }, // cai fora
     ];
-    const out = composeSystem(chunks, 120);
+    const out = composeSystem(chunks, 40);
     expect(out.includes("X")).toBe(true);
     expect(out.includes("RAG")).toBe(false);
   });

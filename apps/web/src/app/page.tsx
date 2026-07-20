@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { HealthBadge } from "@/components/health-badge";
 
 export default function Home() {
@@ -17,13 +18,14 @@ export default function Home() {
         Assistente pessoal de IA · local-first. Fundação em pé.
       </p>
       <HealthBadge />
-      <a
+      <Link
         href="/login"
+        prefetch
         className="rounded-lg px-5 py-3 text-sm font-semibold"
         style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}
       >
         Entrar →
-      </a>
+      </Link>
     </main>
   );
 }

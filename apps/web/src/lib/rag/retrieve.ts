@@ -14,12 +14,35 @@ export interface RagHit {
 const CHUNK_MIN_SIM = 0.35;
 const MEM_MIN_SIM = 0.4;
 
+// Cache de resultado de busca (60s). Evita re-embedar + re-consultar a MESMA
+// query em janela curta: pré-injeção + tool no mesmo turno, retries e failover,
+// ou o usuário repetindo/reenviando. Chave por (usuário, k, query normalizada).
+const CACHE_TTL = 60_000;
+const CACHE_MAX = 200;
+const searchCache = new Map<string, { at: number; hits: RagHit[] }>();
+const cacheKey = (userId: string, query: string, k: number) => `${userId}:${k}:${query.trim().toLowerCase()}`;
+function cacheGet(key: string): RagHit[] | null {
+  const e = searchCache.get(key);
+  if (!e) return null;
+  if (Date.now() - e.at > CACHE_TTL) { searchCache.delete(key); return null; }
+  return e.hits;
+}
+function cacheSet(key: string, hits: RagHit[]) {
+  if (searchCache.size >= CACHE_MAX) { const oldest = searchCache.keys().next().value; if (oldest) searchCache.delete(oldest); }
+  searchCache.set(key, { at: Date.now(), hits });
+}
+
 /**
  * Busca semântica em documentos + memória do usuário. Faz oversampling e
  * ranqueia documentos e memórias JUNTOS por similaridade, retornando os top-k
  * (memória e trechos competem de forma justa). Sem fallback de baixa confiança.
+ * Resultados são cacheados por 60s (ver `searchCache`).
  */
 export async function retrieveContext(userId: string, query: string, k = 4): Promise<RagHit[]> {
+  const key = cacheKey(userId, query, k);
+  const cached = cacheGet(key);
+  if (cached) return cached;
+
   const q = await embedText(query, "query");
 
   const chunkSim = sql<number>`1 - (${cosineDistance(chunk.embedding, q)})`;
@@ -46,5 +69,7 @@ export async function retrieveContext(userId: string, query: string, k = 4): Pro
     ...chunks.map((c) => ({ content: c.content, source: c.title, sim: Number(c.sim) })),
   ];
   merged.sort((a, b) => b.sim - a.sim);
-  return merged.slice(0, k);
+  const hits = merged.slice(0, k);
+  cacheSet(key, hits);
+  return hits;
 }

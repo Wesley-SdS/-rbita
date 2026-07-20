@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Card, PanelTitle } from "@/components/ui";
 
 interface Connector {
   id: string;
@@ -45,9 +46,9 @@ export function ConnectorsPanel() {
   const connectedCount = connectors.filter((c) => c.connected).length;
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+    <Card>
       <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Conectores</h3>
+        <PanelTitle>Conectores</PanelTitle>
         {connectedCount > 0 && (
           <span className="ml-2 rounded-full px-1.5 text-[10px] font-bold" style={{ background: "var(--color-gold)", color: "#241403" }}>{connectedCount}</span>
         )}
@@ -90,6 +91,6 @@ export function ConnectorsPanel() {
         ))}
         {connectors.length === 0 && <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>carregando…</span>}
       </div>
-    </div>
+    </Card>
   );
 }

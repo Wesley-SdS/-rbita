@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Card, PanelTitle, Input, Textarea, Button } from "@/components/ui";
 
 interface Counts { documents: number; chunks: number; memories: number }
 interface Mem { id: string; content: string }
@@ -62,12 +63,10 @@ export function KnowledgePanel() {
     } finally { setBusy(false); }
   }
 
-  const input = { borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" };
-
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+    <Card>
       <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Memória &amp; Docs</h3>
+        <PanelTitle>Memória &amp; Docs</PanelTitle>
         <span className="ml-auto text-xs" style={{ color: "var(--color-ink-dim)" }}>{open ? "▾" : "▸"}</span>
       </button>
       <div className="mt-1 font-mono text-[10px]" style={{ color: "var(--color-gold)" }}>
@@ -76,18 +75,17 @@ export function KnowledgePanel() {
 
       {open && (
         <div className="mt-3 flex flex-col gap-2">
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título do documento" className="rounded-lg border px-2 py-1.5 text-xs outline-none" style={input} />
-          <textarea value={docText} onChange={(e) => setDocText(e.target.value)} placeholder="Cole um texto para a Órbita indexar (RAG)…" rows={3} className="rounded-lg border px-2 py-1.5 text-xs outline-none" style={input} />
-          <button onClick={ingest} disabled={busy} className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50" style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>Ingerir documento</button>
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título do documento" />
+          <Textarea size="sm" value={docText} onChange={(e) => setDocText(e.target.value)} placeholder="Cole um texto para a Órbita indexar (RAG)…" rows={3} />
+          <Button variant="primary" size="md" onClick={ingest} disabled={busy}>Ingerir documento</Button>
 
           <input ref={fileRef} type="file" accept=".pdf,.txt,.md,image/*" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
-          <button onClick={() => fileRef.current?.click()} disabled={busy} className="rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50"
-            style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>📎 Enviar arquivo (PDF / imagem / txt)</button>
+          <Button variant="outline" size="md" onClick={() => fileRef.current?.click()} disabled={busy}>📎 Enviar arquivo (PDF / imagem / txt)</Button>
 
           <div className="mt-1 flex gap-2">
-            <input value={fact} onChange={(e) => setFact(e.target.value)} onKeyDown={(e) => e.key === "Enter" && remember()} placeholder="Lembrar um fato sobre você…" className="flex-1 rounded-lg border px-2 py-1.5 text-xs outline-none" style={input} />
-            <button onClick={remember} disabled={busy} className="rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50" style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>Lembrar</button>
+            <Input value={fact} onChange={(e) => setFact(e.target.value)} onKeyDown={(e) => e.key === "Enter" && remember()} placeholder="Lembrar um fato sobre você…" className="flex-1" />
+            <Button variant="outline" size="md" onClick={remember} disabled={busy}>Lembrar</Button>
           </div>
 
           {msg && <div className="text-[10px]" style={{ color: msg.startsWith("✓") ? "#8ac98f" : "var(--color-danger)" }}>{msg}</div>}
@@ -104,6 +102,6 @@ export function KnowledgePanel() {
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

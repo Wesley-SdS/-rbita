@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Card, PanelTitle } from "@/components/ui";
 
 interface W { id: string; type: string; title: string; config: Record<string, unknown> }
 
@@ -27,9 +28,9 @@ export function Widgets() {
   }
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+    <Card>
       <div className="flex items-center">
-        <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Meus cards</h3>
+        <PanelTitle>Meus cards</PanelTitle>
         <button onClick={() => setAdding(!adding)} className="ml-auto text-xs" style={{ color: "var(--color-gold)" }}>＋</button>
       </div>
 
@@ -41,7 +42,7 @@ export function Widgets() {
           <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>Nenhum card. Toque em ＋, ou peça à Órbita: &quot;pina a cotação do dólar&quot;.</span>
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 

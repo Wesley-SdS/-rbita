@@ -62,7 +62,10 @@ def get_whisper():
             if _whisper is None:  # dupla checagem: evita carregar 2x sob concorrência
                 from faster_whisper import WhisperModel
 
-                size = os.environ.get("WHISPER_MODEL", "base")
+                # 'base' transcreve mal em pt-BR. 'small' é o melhor custo/qualidade em
+                # CPU sem GPU; p/ qualidade máxima use WHISPER_MODEL=large-v3-turbo (mais
+                # lento em CPU) ou medium. Configurável por env sem tocar no código.
+                size = os.environ.get("WHISPER_MODEL", "small")
                 _whisper = WhisperModel(size, device="cpu", compute_type="int8")
     return _whisper
 
@@ -178,8 +181,25 @@ def health() -> dict:
 
 
 def _transcribe(path: str) -> dict:
-    """Trabalho CPU-bound do Whisper — roda numa thread (não no event loop)."""
-    segments, info = get_whisper().transcribe(path, language="pt", vad_filter=True)
+    """Trabalho CPU-bound do Whisper — roda numa thread (não no event loop).
+
+    Parâmetros afinados p/ pt-BR e comandos curtos:
+    - beam_size=5: busca melhor que o greedy padrão.
+    - initial_prompt: enviesa idioma/grafia p/ português do Brasil (menos erro).
+    - condition_on_previous_text=False: comandos são curtos e independentes; evita o
+      modelo "inventar" continuação a partir de contexto anterior.
+    - vad com min_silence 500ms: não corta o fim das palavras (causa comum de erro).
+    """
+    segments, info = get_whisper().transcribe(
+        path,
+        language="pt",
+        beam_size=5,
+        temperature=0,
+        condition_on_previous_text=False,
+        initial_prompt="Conversa em português do Brasil com a assistente Órbita.",
+        vad_filter=True,
+        vad_parameters={"min_silence_duration_ms": 500},
+    )
     text = " ".join(s.text for s in segments).strip()
     return {"text": text, "language": info.language, "duration": info.duration}
 

@@ -1,30 +1,41 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Orb, type OrbMode } from "@/components/orb";
-import { KnowledgePanel } from "@/components/knowledge-panel";
-import { PrivacyPanel } from "@/components/privacy-panel";
-import { RoutinesPanel } from "@/components/routines-panel";
-import { ConnectorsPanel } from "@/components/connectors-panel";
-import { MeetingPanel } from "@/components/meeting-panel";
-import { FinancePanel } from "@/components/finance-panel";
-import { TodoPanel } from "@/components/todo-panel";
-import { FolderPanel } from "@/components/folder-panel";
-import { ActionsPanel } from "@/components/actions-panel";
-import { Markdown } from "@/components/markdown";
-import { ExtensionsPanel } from "@/components/extensions-panel";
-import { Widgets } from "@/components/widgets";
-import { Block, BlocksManager, useHiddenBlocks } from "@/components/block";
-import { Stat, PushToggle, PersonaPanel, EconomyPanel } from "@/components/side-panels";
-import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
-import { RealtimeSession } from "@/lib/voice/realtime";
-import { signOut } from "@/lib/auth-client";
+import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Orb, type OrbMode } from "@/components/orb";
+import { Markdown } from "@/components/markdown";
+import { Block, BlocksManager, useHiddenBlocks } from "@/components/block";
+import { Stat } from "@/components/stat";
+import { Card, PanelTitle, Skeleton } from "@/components/ui";
+import { signOut } from "@/lib/auth-client";
+import type { ModelInfo, VoiceBridge } from "@/components/console/types";
+import { useOrbMode } from "@/components/console/use-orb-mode";
+import { useConversations } from "@/components/console/use-conversations";
+import { useChatStream } from "@/components/console/use-chat-stream";
+import { useVoice } from "@/components/console/use-voice";
 
-type Role = "user" | "assistant";
-interface ToolStep { name: string; done: boolean }
-interface Msg { role: Role; content: string; steps?: ToolStep[] }
-interface ModelInfo { key: string; label: string; provider: string; billing: "free" | "subscription" | "paid" | "variable" }
+// Painéis pesados / abaixo da dobra: code-split (só baixam o JS quando entram em cena).
+// Reduz o bundle inicial do /app e acelera a primeira renderização do chat.
+function PanelSkeleton() {
+  return <Skeleton />;
+}
+
+const KnowledgePanel = dynamic(() => import("@/components/knowledge-panel").then((m) => m.KnowledgePanel), { ssr: false, loading: PanelSkeleton });
+const PrivacyPanel = dynamic(() => import("@/components/privacy-panel").then((m) => m.PrivacyPanel), { ssr: false, loading: PanelSkeleton });
+const RoutinesPanel = dynamic(() => import("@/components/routines-panel").then((m) => m.RoutinesPanel), { ssr: false, loading: PanelSkeleton });
+const ConnectorsPanel = dynamic(() => import("@/components/connectors-panel").then((m) => m.ConnectorsPanel), { ssr: false, loading: PanelSkeleton });
+const MeetingPanel = dynamic(() => import("@/components/meeting-panel").then((m) => m.MeetingPanel), { ssr: false, loading: PanelSkeleton });
+const FinancePanel = dynamic(() => import("@/components/finance-panel").then((m) => m.FinancePanel), { ssr: false, loading: PanelSkeleton });
+const TodoPanel = dynamic(() => import("@/components/todo-panel").then((m) => m.TodoPanel), { ssr: false, loading: PanelSkeleton });
+const FolderPanel = dynamic(() => import("@/components/folder-panel").then((m) => m.FolderPanel), { ssr: false, loading: PanelSkeleton });
+const ActionsPanel = dynamic(() => import("@/components/actions-panel").then((m) => m.ActionsPanel), { ssr: false, loading: PanelSkeleton });
+const ExtensionsPanel = dynamic(() => import("@/components/extensions-panel").then((m) => m.ExtensionsPanel), { ssr: false, loading: PanelSkeleton });
+const Widgets = dynamic(() => import("@/components/widgets").then((m) => m.Widgets), { ssr: false, loading: PanelSkeleton });
+const PersonaPanel = dynamic(() => import("@/components/side-panels").then((m) => m.PersonaPanel), { ssr: false, loading: PanelSkeleton });
+const EconomyPanel = dynamic(() => import("@/components/side-panels").then((m) => m.EconomyPanel), { ssr: false, loading: PanelSkeleton });
+const PushToggle = dynamic(() => import("@/components/side-panels").then((m) => m.PushToggle), { ssr: false, loading: PanelSkeleton });
 
 // rótulos amigáveis para a timeline de atividade (o que a Órbita está fazendo).
 const TOOL_LABELS: Record<string, string> = {
@@ -77,372 +88,72 @@ const STATUS: Record<OrbMode, string> = {
   connecting: "conectando…",
 };
 
-export function Console({ userName, userEmail }: { userName: string; userEmail: string }) {
+/** Item do menu "+" do compositor. */
+function MenuItem({ icon, label, onClick, active }: { icon: string; label: string; onClick: () => void; active?: boolean }) {
+  return (
+    <button onClick={onClick}
+      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] hover:opacity-90"
+      style={{ color: active ? "var(--color-gold)" : "var(--color-ink)", background: active ? "color-mix(in oklab, var(--color-gold) 12%, transparent)" : "transparent" }}>
+      <span className="w-5 text-center">{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+export function Console({
+  userName,
+  userEmail,
+  initialModels = [],
+  initialDefaultModel = "",
+  initialConvs = [],
+}: {
+  userName: string;
+  userEmail: string;
+  initialModels?: ModelInfo[];
+  initialDefaultModel?: string;
+  initialConvs?: { id: string; title: string }[];
+}) {
   const router = useRouter();
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [modelKey, setModelKey] = useState("");
-  const [messages, setMessages] = useState<Msg[]>([]);
-  const [input, setInput] = useState("");
-  const [mode, setMode] = useState<OrbMode>("standby");
-  const modeRef = useRef<OrbMode>("standby"); // espelho p/ callbacks (evita stale closure do wake)
+  const [models] = useState<ModelInfo[]>(initialModels);
+  const [modelKey, setModelKey] = useState(initialDefaultModel || initialModels[0]?.key || "");
   const [error, setError] = useState<string | null>(null);
-  const convId = useRef<string | null>(null);
-  const logRef = useRef<HTMLDivElement>(null);
-
-  // métricas de sessão (reais / estimadas)
-  const [stats, setStats] = useState({ requests: 0, tokens: 0, lastMs: 0 });
-  const [elapsed, setElapsed] = useState(0); // segundos desde o envio (feedback ao vivo)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [voiceOn, setVoiceOn] = useState(true);
-  const [recording, setRecording] = useState(false);
-  const [wakeOn, setWakeOn] = useState(false);
-  const recRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const ttsRef = useRef<LocalTTS | null>(null);
-  const wakeRef = useRef<WakeListener | null>(null);
-  const audioFileRef = useRef<HTMLInputElement | null>(null);
-  const imageFileRef = useRef<HTMLInputElement | null>(null);
-  const [imageAttach, setImageAttach] = useState<string | null>(null); // data URL da imagem anexada
-  const ttsLocalOkRef = useRef<boolean>(true); // cai p/ navegador se o TTS local falhar
-  const { hidden, toggle } = useHiddenBlocks(); // blocos que o usuário ocultou
   const [privacyMode, setPrivacyMode] = useState(false); // força tudo local (nada vai p/ nuvem)
-  const [realtimeEnabled, setRealtimeEnabled] = useState(false); // S2S premium disponível?
-  const [realtimeOn, setRealtimeOn] = useState(false);
-  const rtRef = useRef<RealtimeSession | null>(null);
   const [focus, setFocus] = useState(false);
-  const [convs, setConvs] = useState<{ id: string; title: string }[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [focusKbd, setFocusKbd] = useState(false); // teclado no modo foco (voz-primeiro no celular)
+  const [plusOpen, setPlusOpen] = useState(false); // menu "+" do compositor
+  const imageFileRef = useRef<HTMLInputElement | null>(null);
+  const { hidden, toggle } = useHiddenBlocks(); // blocos que o usuário ocultou
 
-  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []); // limpa o cronômetro no unmount
+  const { mode, setMode, modeRef } = useOrbMode();
+  const { messages, setMessages, convs, activeId, setActiveId, convId, loadConvs, loadConversation, newConversation, deleteConv } =
+    useConversations(initialConvs);
 
-  function loadConvs() {
-    fetch("/api/conversations").then((r) => r.json()).then((d) => setConvs(d.conversations ?? [])).catch(() => {});
-  }
-  async function loadConversation(id: string) {
-    const r = await fetch(`/api/conversations/${id}`);
-    const d = await r.json();
-    if (r.ok) {
-      convId.current = id;
-      setActiveId(id);
-      setMessages((d.messages ?? []).map((m: { role: Role; content: string }) => ({ role: m.role, content: m.content })));
-    }
-  }
-  function newConversation() {
-    convId.current = null;
-    setActiveId(null);
-    setMessages([]);
-    setError(null);
-  }
-  async function deleteConv(id: string) {
-    await fetch(`/api/conversations/${id}`, { method: "DELETE" });
-    if (convId.current === id) newConversation();
-    loadConvs();
-  }
+  // Pontes chat↔voz por ref (evitam o ciclo de dependência e o stale-closure do
+  // callback do wake word). São reatribuídas a cada render — sempre a closure atual.
+  const voiceRef = useRef<VoiceBridge | null>(null);
+  const sendMessageRef = useRef<((content: string) => void) | null>(null);
 
-  function speakBrowser(text: string) {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) { setMode("standby"); return; }
-    try {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text.replace(/[#*_`>]/g, ""));
-      const v = speechSynthesis.getVoices().find((x) => /pt.?BR/i.test(x.lang)) ?? null;
-      if (v) u.voice = v;
-      u.lang = v?.lang ?? "pt-BR";
-      u.rate = 1.03;
-      u.onstart = () => setMode("speaking");
-      u.onend = () => setMode("standby");
-      speechSynthesis.speak(u);
-    } catch {
-      setMode("standby");
-    }
-  }
+  const chat = useChatStream({
+    modelKey, privacyMode, modeRef, setMode, setError,
+    setMessages, convId, setActiveId, loadConvs, voiceRef,
+  });
+  const voice = useVoice({
+    modeRef, setMode, setError, setMessages,
+    input: chat.input, setInput: chat.setInput, sendMessageRef,
+  });
 
-  /** Fala preferindo o TTS local (Piper); cai para o navegador se indisponível. */
-  async function speak(text: string) {
-    if (!voiceOn) { setMode("standby"); return; }
-    if (ttsLocalOkRef.current) {
-      try {
-        if (!ttsRef.current) ttsRef.current = new LocalTTS();
-        await ttsRef.current.speak(text, { onStart: () => setMode("speaking"), onEnd: () => setMode("standby") });
-        return;
-      } catch {
-        ttsLocalOkRef.current = false; // uma falha → usa navegador daqui pra frente
-      }
-    }
-    speakBrowser(text);
-  }
+  useEffect(() => { sendMessageRef.current = chat.sendMessage; });
+  useEffect(() => { voiceRef.current = { handleAssistantResponse: voice.handleAssistantResponse, stopSpeaking: voice.stopSpeaking }; });
 
-  /** Para a fala imediatamente (barge-in) e libera o estado (evita travar em "speaking"). */
-  function stopSpeaking() {
-    ttsRef.current?.stop();
-    if (typeof window !== "undefined" && "speechSynthesis" in window) speechSynthesis.cancel();
-    if (modeRef.current === "speaking") { modeRef.current = "standby"; setMode("standby"); }
-  }
+  useEffect(() => { chat.logRef.current?.scrollTo({ top: chat.logRef.current.scrollHeight }); }, [messages, chat.logRef]);
 
-  /** "Ver a tela": captura um frame da tela compartilhada e pede análise à Órbita. */
-  async function seeScreen() {
-    if (mode !== "standby") return;
-    let stream: MediaStream | null = null;
-    try {
-      stream = await (navigator.mediaDevices as MediaDevices & { getDisplayMedia: (c: unknown) => Promise<MediaStream> }).getDisplayMedia({ video: true });
-      const video = document.createElement("video");
-      video.srcObject = stream;
-      await video.play();
-      await new Promise((r) => setTimeout(r, 400)); // deixa o primeiro frame chegar
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
-      canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const image = canvas.toDataURL("image/jpeg", 0.6);
-      stream.getTracks().forEach((t) => t.stop());
-
-      const question = input.trim() || "O que você vê na minha tela? Me ajude com o que estou fazendo.";
-      setInput("");
-      setMessages((m) => [...m, { role: "user", content: "🖥️ " + question }, { role: "assistant", content: "" }]);
-      setMode("studying");
-      const r = await fetch("/api/vision", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image, question }) });
-      const d = await r.json();
-      setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: d.answer ?? ("⚠ " + (d.error ?? "falha")) }; return c; });
-      setMode("standby");
-      if (d.answer && voiceOn) void speak(d.answer);
-    } catch (e) {
-      stream?.getTracks().forEach((t) => t.stop());
-      setMode("standby");
-      if (!(e instanceof Error && e.name === "NotAllowedError")) setError("Não foi possível capturar a tela.");
-    }
-  }
-
-  /** Transcreve um arquivo de áudio enviado e coloca o texto no composer. */
-  async function sendAudioFile(file: File) {
-    setMode("studying");
-    try {
-      const fd = new FormData();
-      fd.append("file", file, file.name || "audio.webm");
-      const r = await fetch("/api/stt", { method: "POST", body: fd });
-      const d = await r.json();
-      setMode("standby");
-      if (d.text?.trim()) setInput((prev) => (prev ? prev + " " : "") + d.text.trim());
-      else setError("Não consegui transcrever o áudio.");
-    } catch {
-      setMode("standby");
-      setError("Falha ao transcrever o áudio.");
-    }
-  }
-
-  /** Fluxo mãos-livres: grava o comando até o silêncio, transcreve e envia. */
-  async function voiceCommand() {
-    if (modeRef.current !== "standby") return;
-    setMode("listening");
-    try {
-      const blob = await recordUntilSilence({ onSpeech: () => setMode("listening") });
-      if (!blob) { setMode("standby"); return; }
-      setMode("studying");
-      const fd = new FormData();
-      fd.append("file", blob, "audio.webm");
-      const r = await fetch("/api/stt", { method: "POST", body: fd });
-      const d = await r.json();
-      if (d.text?.trim()) { setMode("standby"); void sendMessage(d.text.trim()); }
-      else { setMode("standby"); }
-    } catch {
-      setMode("standby");
-      setError("Falha ao capturar o comando de voz.");
-    }
-  }
-
-  /** Modo tempo real (S2S premium via OpenAI Realtime). */
-  async function toggleRealtime() {
-    if (rtRef.current?.active) {
-      rtRef.current.stop();
-      rtRef.current = null;
-      setRealtimeOn(false);
-      setMode("standby");
-      return;
-    }
-    // não mistura com o wake word local
-    if (wakeRef.current?.active) { wakeRef.current.stop(); wakeRef.current = null; setWakeOn(false); }
-    stopSpeaking();
-    const rt = new RealtimeSession({
-      onState: (s) => setMode(s === "speaking" ? "speaking" : s === "connecting" ? "connecting" : s === "listening" ? "listening" : "standby"),
-      onError: () => { setError("Falha no modo tempo real."); rt.stop(); rtRef.current = null; setRealtimeOn(false); },
-      onTranscript: (role, text) => setMessages((m) => [...m, { role, content: text }]),
-    });
-    try {
-      setRealtimeOn(true);
-      await rt.start();
-      rtRef.current = rt;
-    } catch (e) {
-      setRealtimeOn(false);
-      setError(e instanceof Error ? e.message : "Não foi possível iniciar o tempo real.");
-    }
-  }
-
-  async function toggleWake() {
-    if (wakeRef.current?.active) {
-      wakeRef.current.stop();
-      wakeRef.current = null;
-      setWakeOn(false);
-      return;
-    }
-    try {
-      const cfg = await fetch("/api/voice-config").then((r) => r.json());
-      if (!cfg.up) { setError("Serviço de voz offline — wake word precisa do apps/voice rodando."); return; }
-      const listener = new WakeListener(cfg.wsWakeUrl, {
-        onWake: () => {
-          stopSpeaking(); // barge-in ao ouvir "Ei Órbita" (libera o estado)
-          if (modeRef.current === "standby") void voiceCommand();
-        },
-        // marca que estamos em modo voz (para a conversa continuar sem repetir o gatilho)
-        onEnergy: (rms) => {
-          // barge-in por voz: se a Órbita está falando e o usuário fala alto, interrompe
-          if (ttsRef.current?.speaking && rms > 0.06) stopSpeaking();
-        },
-        onError: () => setError("Falha no wake word (serviço de voz)."),
-      });
-      await listener.start();
-      wakeRef.current = listener;
-      setWakeOn(true);
-    } catch {
-      setError("Sem acesso ao microfone para wake word.");
-    }
-  }
-
-  async function toggleMic() {
-    if (recording) { recRef.current?.stop(); return; }
-    if (mode !== "standby") return;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream);
-      chunksRef.current = [];
-      rec.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
-      rec.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        setRecording(false);
-        setMode("studying");
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const fd = new FormData();
-        fd.append("file", blob, "audio.webm");
-        try {
-          const r = await fetch("/api/stt", { method: "POST", body: fd });
-          const d = await r.json();
-          setMode("standby");
-          if (d.text?.trim()) void sendMessage(d.text.trim());
-          else setError("Não entendi o áudio.");
-        } catch {
-          setMode("standby");
-          setError("Falha na transcrição.");
-        }
-      };
-      recRef.current = rec;
-      rec.start();
-      setRecording(true);
-      setMode("listening");
-    } catch {
-      setError("Sem acesso ao microfone.");
-    }
-  }
-
+  // No celular abre direto no MODO FOCO (limpo, voz-primeiro); no desktop começa no dashboard.
   useEffect(() => {
-    fetch("/api/models")
-      .then((r) => r.json())
-      .then((d) => { setModels(d.models ?? []); setModelKey(d.defaultModel ?? d.models?.[0]?.key ?? ""); })
-      .catch(() => setError("Falha ao carregar modelos"));
-    loadConvs();
-    fetch("/api/realtime/config").then((r) => r.json()).then((d) => setRealtimeEnabled(!!d.enabled)).catch(() => {});
-    return () => { wakeRef.current?.stop(); ttsRef.current?.stop(); rtRef.current?.stop(); };
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) setFocus(true);
   }, []);
 
-  useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [messages]);
-  useEffect(() => { modeRef.current = mode; }, [mode]);
-
-  async function send() {
-    const content = input.trim();
-    if (!content && !imageAttach) return;
-    setInput("");
-    void sendMessage(content || "O que há nesta imagem?");
-  }
-
-  async function sendMessage(content: string) {
-    if (!content || mode !== "standby" || !modelKey) return;
-    // modo privacidade: força modelo local, nada é enviado para nuvem
-    const effectiveModelKey = privacyMode && !modelKey.startsWith("local/") ? "local/qwen2.5:7b" : modelKey;
-    const imgToSend = imageAttach; // imagem anexada (uma vez); limpa o anexo
-    if (imgToSend) setImageAttach(null);
-    setError(null); setMode("studying");
-    setMessages((m) => [...m, { role: "user", content }, { role: "assistant", content: "" }]);
-    const started = Date.now();
-    let spoke = false;
-    // cronômetro ao vivo: mostra os segundos correndo enquanto a Órbita processa
-    setElapsed(0);
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 500);
-    const stopTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, modelKey: effectiveModelKey, conversationId: convId.current ?? undefined, rich: true, image: imgToSend ?? undefined }),
-      });
-      const cid = res.headers.get("x-conversation-id");
-      if (cid) { convId.current = cid; setActiveId(cid); }
-      const usedModel = res.headers.get("x-model") ?? modelKey;
-
-      if (!res.ok || !res.body) {
-        const err = await res.json().catch(() => ({ error: "Erro no servidor" }));
-        throw new Error(err.error ?? "Erro no servidor");
-      }
-
-      // stream NDJSON: {t:'text'|'tool'|'tool-done'}. Reconstrói texto + timeline.
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let acc = "";
-      let buf = "";
-      const steps: ToolStep[] = [];
-      const flush = () =>
-        setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: acc, steps: [...steps] }; return c; });
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          let ev: { t: string; v?: string; name?: string; msg?: string };
-          try { ev = JSON.parse(line); } catch { continue; }
-          if (ev.t === "text") { acc += ev.v ?? ""; if (acc) setMode("speaking"); }
-          else if (ev.t === "tool" && ev.name) { setMode("searching"); steps.push({ name: ev.name, done: false }); }
-          else if (ev.t === "tool-done" && ev.name) { const s = steps.find((x) => x.name === ev.name && !x.done); if (s) s.done = true; }
-          else if (ev.t === "error") { setError(ev.msg ?? "Falha ao gerar a resposta."); }
-          flush();
-        }
-      }
-
-      // métricas da sessão (tokens estimados por chars quando não há usage do provedor).
-      // A economia acumulada/persistida vem do EconomyPanel (/api/usage) — refetch via requests.
-      const outTokens = Math.max(1, Math.ceil(acc.length / 4));
-      setStats((s) => ({
-        requests: s.requests + 1,
-        tokens: s.tokens + outTokens,
-        lastMs: Date.now() - started,
-      }));
-
-      if (voiceOn) {
-        spoke = true;
-        void speak(acc).then(() => {
-          // conversa contínua mãos-livres: enquanto o wake está ativo, re-arma a
-          // escuta por um follow-up (sem precisar repetir "Ei Órbita" a cada turno).
-          if (wakeRef.current?.active && modeRef.current === "standby") void voiceCommand();
-        });
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro inesperado");
-      setMessages((m) => { const c = [...m]; if (c[c.length - 1]?.role === "assistant" && !c[c.length - 1]?.content) c.pop(); return c; });
-    } finally {
-      stopTimer();
-      if (!spoke) setMode("standby");
-      loadConvs();
-    }
-  }
+  // última resposta da Órbita (mostrada de forma sutil no modo foco)
+  const lastReply = [...messages].reverse().find((m) => m.role === "assistant" && m.content)?.content ?? "";
 
   return (
     <>
@@ -452,7 +163,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
         <div className="rounded-2xl border p-3" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
           <div className="flex items-center">
             <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Conversas</h3>
-            <button onClick={newConversation} className="ml-auto text-xs" style={{ color: "var(--color-gold)" }}>＋ Nova</button>
+            <button onClick={() => { newConversation(); setError(null); }} className="ml-auto text-xs" style={{ color: "var(--color-gold)" }}>＋ Nova</button>
           </div>
           <div className="mt-2 flex max-h-40 flex-col gap-1 overflow-y-auto">
             {convs.length === 0 && <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>nenhuma ainda</span>}
@@ -480,8 +191,8 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
         </div>
 
         <Block id="provedor" hidden={hidden} toggle={toggle}>
-        <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
-          <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Provedor de IA</h3>
+        <Card>
+          <PanelTitle className="mb-2">Provedor de IA</PanelTitle>
           <select value={privacyMode ? "local/qwen2.5:7b" : modelKey} disabled={privacyMode} onChange={(e) => setModelKey(e.target.value)}
             className="w-full rounded-lg border px-2 py-2 text-xs disabled:opacity-60"
             style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }}>
@@ -490,6 +201,10 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
             {[
               { p: "local", label: "⚡ Local (grátis)" },
               { p: "claude", label: "🟠 Claude Max (assinatura)" },
+              { p: "groq", label: "🚀 Groq (rápido, barato)" },
+              { p: "google", label: "🔵 Google Gemini" },
+              { p: "openai", label: "🟢 OpenAI" },
+              { p: "cohere", label: "🟣 Cohere" },
               { p: "gateway", label: "☁ Gateway (pago)" },
             ].map((g) => {
               const opts = models.filter((m) => m.key !== "auto" && m.provider === g.p);
@@ -505,7 +220,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
             <input type="checkbox" checked={privacyMode} onChange={(e) => setPrivacyMode(e.target.checked)} />
             🔒 Modo privacidade (força tudo local — nada sai da máquina)
           </label>
-        </div>
+        </Card>
         </Block>
 
         <Block id="memoria" hidden={hidden} toggle={toggle}><KnowledgePanel /></Block>
@@ -522,11 +237,11 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
       <main className="relative flex h-[82vh] flex-col overflow-hidden rounded-2xl border md:h-full md:min-h-0" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
         <div className="absolute right-3 top-3 z-10 flex gap-2">
           <BlocksManager blocks={BLOCKS} hidden={hidden} toggle={toggle} />
-          <a href="/insights" title="insights e grafo de conhecimento"
+          <Link href="/insights" prefetch title="insights e grafo de conhecimento"
             className="rounded-lg border px-2.5 py-1 text-xs"
             style={{ borderColor: "var(--color-line)", background: "var(--color-surface)", color: "var(--color-ink-dim)" }}>
             📊 Insights
-          </a>
+          </Link>
           <button onClick={() => setFocus(true)} title="modo foco (tela cheia)"
             className="rounded-lg border px-2.5 py-1 text-xs"
             style={{ borderColor: "var(--color-line)", background: "var(--color-surface)", color: "var(--color-ink-dim)" }}>
@@ -537,11 +252,11 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
           style={{ background: "radial-gradient(circle at 50% 48%, #1a1206 0%, #0d0904 55%, transparent 100%)" }}>
           <Orb mode={mode} fill bare />
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.16em]" style={{ color: mode !== "standby" ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
-            {STATUS[mode]}{mode !== "standby" && elapsed > 0 ? ` · ${elapsed}s` : ""}
+            {STATUS[mode]}{mode !== "standby" && chat.elapsed > 0 ? ` · ${chat.elapsed}s` : ""}
           </div>
         </div>
 
-        <div ref={logRef} aria-live="polite" aria-atomic="false" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+        <div ref={chat.logRef} aria-live="polite" aria-atomic="false" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {messages.length === 0 && (
             <p className="mt-6 text-center text-sm" style={{ color: "var(--color-ink-dim)" }}>
               Converse com a Órbita — rodando no seu Qwen 2.5 local.
@@ -562,13 +277,18 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
               )}
               <div className="max-w-[85%] rounded-xl px-3 py-2 text-sm"
                 style={{ background: m.role === "user" ? "color-mix(in oklab, var(--color-gold) 16%, var(--color-surface))" : "var(--color-ground)", border: "1px solid var(--color-line)", color: "var(--color-ink)" }}>
+                {m.image && (
+                  // miniatura do anexo enviado na própria bolha
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={m.image} alt="anexo" className="mb-2 max-h-48 rounded-lg border object-contain" style={{ borderColor: "var(--color-line)" }} />
+                )}
                 {m.role === "assistant" && m.content ? (
                   <Markdown>{m.content}</Markdown>
                 ) : mode !== "standby" && i === messages.length - 1 ? (
                   <span className="flex items-center gap-2" style={{ color: "var(--color-ink-dim)" }}>
                     <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--color-gold)" }} />
                     <span>{STATUS[mode]}</span>
-                    {elapsed > 0 && <span className="font-mono text-xs" style={{ color: "var(--color-ink-dim)" }}>{elapsed}s</span>}
+                    {chat.elapsed > 0 && <span className="font-mono text-xs" style={{ color: "var(--color-ink-dim)" }}>{chat.elapsed}s</span>}
                   </span>
                 ) : (
                   <span className="whitespace-pre-wrap">{m.content}</span>
@@ -580,69 +300,91 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
 
         {error && <p role="alert" className="px-4 pb-1 text-xs" style={{ color: "var(--color-danger)" }}>{error}</p>}
 
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t p-3" style={{ borderColor: "var(--color-line)" }}>
-          <button onClick={() => setVoiceOn(!voiceOn)} title="voz da Órbita" className="rounded-lg border px-2.5 py-2 text-sm"
-            style={{ borderColor: "var(--color-line)", color: voiceOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
-            {voiceOn ? "🔊" : "🔇"}
-          </button>
-          <button onClick={toggleWake} title={wakeOn ? "wake word ativo — diga 'Ei Órbita'" : "ativar wake word 'Ei Órbita'"}
-            className="rounded-lg border px-2.5 py-2 text-sm"
-            style={{ borderColor: wakeOn ? "var(--color-gold)" : "var(--color-line)", color: wakeOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
-            {wakeOn ? "👂" : "🕨"}
-          </button>
-          {realtimeEnabled && !privacyMode && (
-            <button onClick={toggleRealtime} title={realtimeOn ? "encerrar conversa em tempo real" : "conversa por voz em tempo real (premium)"}
-              className="rounded-lg border px-2.5 py-2 text-sm"
-              style={{ borderColor: realtimeOn ? "var(--color-gold)" : "var(--color-line)", color: realtimeOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
-              {realtimeOn ? "🔴" : "⚡"}
+        {/* inputs de arquivo ocultos (acionados pelo menu "+") */}
+        <input ref={voice.audioFileRef} type="file" accept="audio/*" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) void voice.sendAudioFile(f); e.target.value = ""; }} />
+        <input ref={imageFileRef} type="file" accept="image/*" className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0]; e.target.value = "";
+            if (!f) return;
+            if (f.size > 6_000_000) { setError("Imagem muito grande (máx. ~6 MB)."); return; }
+            const r = new FileReader();
+            r.onload = () => chat.setImageAttach(String(r.result));
+            r.readAsDataURL(f);
+          }} />
+
+        <div className="flex shrink-0 items-end gap-2 border-t p-3" style={{ borderColor: "var(--color-line)" }}>
+          {/* menu "+" — consolida voz, ouvir, áudio, ver tela, imagem, tempo real */}
+          <div className="relative shrink-0">
+            <button onClick={() => setPlusOpen((v) => !v)} title="mais opções" aria-label="mais opções" aria-expanded={plusOpen}
+              className="rounded-lg border px-3 py-2 text-lg leading-none"
+              style={{ borderColor: plusOpen ? "var(--color-gold)" : "var(--color-line)", color: plusOpen ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
+              ＋
             </button>
-          )}
-          <input ref={audioFileRef} type="file" accept="audio/*" className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendAudioFile(f); e.target.value = ""; }} />
-          <button onClick={() => audioFileRef.current?.click()} title="enviar áudio para transcrever" className="rounded-lg border px-2.5 py-2 text-sm"
-            style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>
-            🎵
-          </button>
-          <button onClick={seeScreen} title="deixar a Órbita ver sua tela" className="rounded-lg border px-2.5 py-2 text-sm"
-            style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>
-            🖥️
-          </button>
-          <input ref={imageFileRef} type="file" accept="image/*" className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0]; e.target.value = "";
-              if (!f) return;
-              if (f.size > 6_000_000) { setError("Imagem muito grande (máx. ~6 MB)."); return; }
-              const r = new FileReader();
-              r.onload = () => setImageAttach(String(r.result));
-              r.readAsDataURL(f);
-            }} />
-          <button onClick={() => imageFileRef.current?.click()} title="anexar imagem (a Órbita responde sobre ela com o modelo de visão)"
-            className="rounded-lg border px-2.5 py-2 text-sm"
-            style={{ borderColor: imageAttach ? "var(--color-gold)" : "var(--color-line)", color: imageAttach ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
-            🖼️
-          </button>
-          {imageAttach && (
-            <span className="relative inline-block shrink-0">
+            {plusOpen && (
+              <>
+                {/* clique fora fecha */}
+                <div className="fixed inset-0 z-10" onClick={() => setPlusOpen(false)} />
+                <div className="absolute bottom-12 left-0 z-20 w-56 rounded-xl border p-1 shadow-lg"
+                  style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+                  <MenuItem icon={voice.voiceOn ? "🔊" : "🔇"} label={voice.voiceOn ? "Voz da Órbita: ligada" : "Voz da Órbita: desligada"} active={voice.voiceOn}
+                    onClick={() => voice.setVoiceOn(!voice.voiceOn)} />
+                  <MenuItem icon={voice.wakeOn ? "👂" : "🕨"} label={voice.wakeOn ? "Parar de ouvir" : 'Ouvir "Ei Órbita"'} active={voice.wakeOn}
+                    onClick={() => { setPlusOpen(false); void voice.toggleWake(); }} />
+                  <MenuItem icon="🖼️" label="Anexar imagem" active={!!chat.imageAttach}
+                    onClick={() => { setPlusOpen(false); imageFileRef.current?.click(); }} />
+                  <MenuItem icon="🎵" label="Enviar áudio p/ transcrever"
+                    onClick={() => { setPlusOpen(false); voice.audioFileRef.current?.click(); }} />
+                  <MenuItem icon="🖥️" label="Ver minha tela"
+                    onClick={() => { setPlusOpen(false); void voice.seeScreen(); }} />
+                  {voice.realtimeEnabled && !privacyMode && (
+                    <MenuItem icon={voice.realtimeOn ? "🔴" : "⚡"} label={voice.realtimeOn ? "Encerrar tempo real" : "Conversa em tempo real"} active={voice.realtimeOn}
+                      onClick={() => { setPlusOpen(false); void voice.toggleRealtime(); }} />
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {chat.imageAttach && (
+            <span className="relative mb-0.5 inline-block shrink-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imageAttach} alt="anexo" className="h-9 w-9 rounded-lg border object-cover" style={{ borderColor: "var(--color-gold)" }} />
-              <button onClick={() => setImageAttach(null)} title="remover imagem" aria-label="remover imagem"
+              <img src={chat.imageAttach} alt="anexo" className="h-9 w-9 rounded-lg border object-cover" style={{ borderColor: "var(--color-gold)" }} />
+              <button onClick={() => chat.setImageAttach(null)} title="remover imagem" aria-label="remover imagem"
                 className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-[10px] leading-none"
                 style={{ background: "var(--color-danger)", color: "#fff" }}>×</button>
             </span>
           )}
-          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) send(); }}
-            placeholder="Fale ou escreva…" className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
-            style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }} />
-          <button onClick={toggleMic} disabled={mode !== "standby" && !recording} title="falar" aria-label="microfone"
-            className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
-            style={{ background: recording ? "var(--color-danger)" : "var(--color-surface)", borderColor: "var(--color-line)" }}>
-            {recording ? "⏹" : "🎙️"}
+
+          <textarea
+            ref={chat.taRef}
+            value={chat.input}
+            rows={1}
+            onChange={(e) => { chat.setInput(e.target.value); chat.autoGrow(e.target); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); chat.send(); } }}
+            placeholder="Fale ou escreva…  (Enter envia · Shift+Enter quebra linha)"
+            className="max-h-40 min-h-[42px] flex-1 resize-none rounded-lg border px-3 py-2.5 text-sm outline-none"
+            style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }}
+          />
+
+          <button onClick={voice.toggleMic} disabled={mode !== "standby" && !voice.recording} title="falar" aria-label="microfone"
+            className="shrink-0 rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+            style={{ background: voice.recording ? "var(--color-danger)" : "var(--color-surface)", borderColor: "var(--color-line)" }}>
+            {voice.recording ? "⏹" : "🎙️"}
           </button>
-          <button onClick={send} disabled={mode !== "standby" || (!input.trim() && !imageAttach)}
-            className="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
-            style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>
-            {mode !== "standby" ? "…" : "Enviar"}
-          </button>
+          {mode !== "standby" ? (
+            <button onClick={chat.stopGenerating} title="parar a resposta" aria-label="parar"
+              className="shrink-0 rounded-lg px-4 py-2.5 text-sm font-semibold"
+              style={{ background: "var(--color-danger)", color: "#fff" }}>
+              ⏹ Parar
+            </button>
+          ) : (
+            <button onClick={chat.send} disabled={!chat.input.trim() && !chat.imageAttach}
+              className="shrink-0 rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+              style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>
+              Enviar
+            </button>
+          )}
         </div>
       </main>
 
@@ -651,14 +393,14 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
         <Block id="widgets" hidden={hidden} toggle={toggle}><Widgets /></Block>
         <Block id="persona" hidden={hidden} toggle={toggle}><PersonaPanel /></Block>
         <Block id="sessao" hidden={hidden} toggle={toggle}>
-          <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
-            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Sessão</h3>
-            <Stat label="Requisições" value={String(stats.requests)} />
-            <Stat label="Tokens (~saída)" value={stats.tokens.toLocaleString("pt-BR")} />
-            <Stat label="Latência (última)" value={stats.lastMs ? stats.lastMs + "ms" : "—"} accent />
-          </div>
+          <Card>
+            <PanelTitle className="mb-3">Sessão</PanelTitle>
+            <Stat label="Requisições" value={String(chat.stats.requests)} />
+            <Stat label="Tokens (~saída)" value={chat.stats.tokens.toLocaleString("pt-BR")} />
+            <Stat label="Latência (última)" value={chat.stats.lastMs ? chat.stats.lastMs + "ms" : "—"} accent />
+          </Card>
         </Block>
-        <Block id="custo" hidden={hidden} toggle={toggle}><EconomyPanel refreshKey={stats.requests} /></Block>
+        <Block id="custo" hidden={hidden} toggle={toggle}><EconomyPanel refreshKey={chat.stats.requests} /></Block>
         <Block id="financas" hidden={hidden} toggle={toggle}><FinancePanel /></Block>
         <Block id="tarefas" hidden={hidden} toggle={toggle}><TodoPanel /></Block>
         <Block id="arquivos" hidden={hidden} toggle={toggle}><FolderPanel /></Block>
@@ -676,6 +418,7 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
           <Orb mode={mode} fill bare />
         </div>
 
+        {/* topo: nome + sair (☰ abre os painéis saindo do foco) */}
         <div className="pointer-events-none absolute left-0 right-0 top-8 z-10 text-center">
           <div className="text-3xl" style={{ fontFamily: "var(--font-orbitron), sans-serif", fontWeight: 700, letterSpacing: "0.42em", color: "#ffd79a", textShadow: "0 0 24px rgba(255,170,60,0.55)", paddingLeft: "0.42em" }}>
             ÓRBITA
@@ -684,24 +427,61 @@ export function Console({ userName, userEmail }: { userName: string; userEmail: 
             ASSISTENTE · NÚCLEO NEURAL
           </div>
         </div>
-
-        <div className="pointer-events-none absolute bottom-14 left-0 right-0 z-10 flex items-center justify-center gap-3 font-mono text-sm uppercase" style={{ letterSpacing: "0.28em", color: "#ffcf8a", textShadow: "0 0 16px rgba(255,160,50,0.5)" }}>
-          <span className="h-2 w-2 rounded-full" style={{ background: "#ffcf8a", boxShadow: "0 0 12px #ffcf8a" }} />
-          {STATUS[mode]}
-        </div>
-
-        <button onClick={() => setVoiceOn(!voiceOn)} title="voz" className="absolute bottom-6 left-6 z-10 rounded-full border px-3 py-2 text-lg"
-          style={{ borderColor: "var(--color-line)", background: "rgba(21,16,10,0.6)", color: voiceOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
-          {voiceOn ? "🔊" : "🔇"}
+        <button onClick={() => setFocus(false)} title="abrir painéis" aria-label="abrir painéis" className="absolute left-5 top-6 z-20 rounded-lg border px-3 py-1.5 text-sm"
+          style={{ borderColor: "var(--color-line)", background: "rgba(21,16,10,0.6)", color: "var(--color-ink-dim)" }}>
+          ☰
         </button>
-        <button onClick={toggleMic} title="falar com a Órbita" className="absolute bottom-6 right-6 z-10 rounded-full border px-4 py-2 text-lg"
-          style={{ borderColor: "var(--color-line)", background: recording ? "var(--color-danger)" : "rgba(21,16,10,0.6)" }}>
-          {recording ? "⏹" : "🎙️"}
-        </button>
-        <button onClick={() => setFocus(false)} title="sair do modo foco" className="absolute right-6 top-6 z-10 rounded-lg border px-3 py-1.5 text-sm"
+        <button onClick={() => setFocus(false)} title="sair do modo foco" className="absolute right-5 top-6 z-20 rounded-lg border px-3 py-1.5 text-sm"
           style={{ borderColor: "var(--color-line)", background: "rgba(21,16,10,0.6)", color: "var(--color-ink-dim)" }}>
           ✕ Sair
         </button>
+
+        {/* última resposta da Órbita (sutil, rolável) */}
+        {lastReply && (
+          <div className="absolute left-4 right-4 top-1/2 z-10 max-h-[26vh] -translate-y-1/2 overflow-y-auto rounded-2xl px-4 py-3 text-center text-[15px] leading-relaxed"
+            style={{ color: "var(--color-ink)", background: "rgba(8,5,2,0.45)" }}>
+            {lastReply}
+          </div>
+        )}
+
+        {/* status */}
+        <div className="pointer-events-none absolute bottom-28 left-0 right-0 z-10 flex items-center justify-center gap-3 font-mono text-sm uppercase" style={{ letterSpacing: "0.28em", color: "#ffcf8a", textShadow: "0 0 16px rgba(255,160,50,0.5)" }}>
+          <span className="h-2 w-2 rounded-full" style={{ background: "#ffcf8a", boxShadow: "0 0 12px #ffcf8a" }} />
+          {STATUS[mode]}{mode !== "standby" && chat.elapsed > 0 ? ` · ${chat.elapsed}s` : ""}
+        </div>
+
+        {/* controles: voz · microfone grande (ou parar) · teclado */}
+        <div className="absolute bottom-8 left-0 right-0 z-20 flex items-center justify-center gap-8">
+          <button onClick={() => voice.setVoiceOn(!voice.voiceOn)} title="voz da Órbita" aria-label="voz" className="rounded-full border px-3 py-2 text-lg"
+            style={{ borderColor: "var(--color-line)", background: "rgba(21,16,10,0.6)", color: voice.voiceOn ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
+            {voice.voiceOn ? "🔊" : "🔇"}
+          </button>
+          <button onClick={mode !== "standby" ? chat.stopGenerating : voice.toggleMic} title={mode !== "standby" ? "parar" : "falar com a Órbita"} aria-label="microfone"
+            className="flex h-[72px] w-[72px] items-center justify-center rounded-full text-3xl"
+            style={{ background: voice.recording || mode !== "standby" ? "var(--color-danger)" : "linear-gradient(120deg, var(--color-amber), var(--color-gold))", boxShadow: "0 0 22px rgba(245,181,68,0.45)" }}>
+            {voice.recording || mode !== "standby" ? "⏹" : "🎙️"}
+          </button>
+          <button onClick={() => setFocusKbd((v) => !v)} title="teclado" aria-label="teclado" className="rounded-full border px-3 py-2 text-lg"
+            style={{ borderColor: focusKbd ? "var(--color-gold)" : "var(--color-line)", background: "rgba(21,16,10,0.6)", color: focusKbd ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
+            ⌨
+          </button>
+        </div>
+
+        {/* teclado: aparece ao tocar em ⌨ */}
+        {focusKbd && (
+          <div className="absolute bottom-0 left-0 right-0 z-30 flex items-end gap-2 border-t p-3" style={{ borderColor: "var(--color-line)", background: "rgba(8,5,2,0.94)" }}>
+            <textarea value={chat.input} rows={1} autoFocus placeholder="Escreva para a Órbita…"
+              onChange={(e) => { chat.setInput(e.target.value); chat.autoGrow(e.target); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); chat.send(); setFocusKbd(false); } }}
+              className="max-h-32 min-h-[42px] flex-1 resize-none rounded-lg border px-3 py-2.5 text-sm outline-none"
+              style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }} />
+            <button onClick={() => { chat.send(); setFocusKbd(false); }} disabled={!chat.input.trim()} aria-label="enviar"
+              className="shrink-0 rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+              style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>
+              ➤
+            </button>
+          </div>
+        )}
       </div>
     )}
     </>

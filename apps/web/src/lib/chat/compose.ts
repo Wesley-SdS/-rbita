@@ -14,8 +14,19 @@ export interface Chunk {
   compressible?: boolean; // pode ser cortado se faltar orçamento
 }
 
-/** Compõe o system a partir dos chunks, respeitando um orçamento de caracteres. */
-export function composeSystem(chunks: Chunk[], budgetChars = 12000): string {
+/** Estima tokens de um texto (~4 chars/token; heurística boa o suficiente p/ orçar
+ *  o system). Evita depender de um tokenizador pesado no caminho de request. */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Compõe o system a partir dos chunks, respeitando um orçamento em TOKENS
+ * (estimados). Chunks compressíveis de menor prioridade são cortados primeiro,
+ * preservando segurança > ferramentas > persona. ~3200 tokens ≈ o antigo teto
+ * de 12k chars, mas agora a unidade é a que o modelo realmente consome.
+ */
+export function composeSystem(chunks: Chunk[], budgetTokens = 3200): string {
   const valid = chunks.filter((c) => c.content && c.content.trim());
   // ordena por prioridade desc; empate mantém a ordem de inserção (estável)
   const ordered = valid.map((c, i) => ({ c, i })).sort((a, b) => b.c.priority - a.c.priority || a.i - b.i);
@@ -23,10 +34,10 @@ export function composeSystem(chunks: Chunk[], budgetChars = 12000): string {
   const kept: { c: Chunk; i: number }[] = [];
   let used = 0;
   for (const item of ordered) {
-    const len = item.c.content.length;
-    if (used + len <= budgetChars || !item.c.compressible) {
+    const t = estimateTokens(item.c.content);
+    if (used + t <= budgetTokens || !item.c.compressible) {
       kept.push(item);
-      used += len;
+      used += t;
     }
     // chunk compressível que não cabe é descartado (corte gracioso)
   }

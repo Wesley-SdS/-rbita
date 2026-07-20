@@ -1,4 +1,4 @@
-import { availableModels, providerEnv, DEFAULT_MODEL_KEY } from "@orbita/llm";
+import { availableModels, providerEnv, defaultModelKey } from "@orbita/llm";
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -9,9 +9,12 @@ export async function GET() {
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
 
   const env = providerEnv();
-  return Response.json({
-    models: availableModels(env),
-    env,
-    defaultModel: DEFAULT_MODEL_KEY,
-  });
+  return Response.json(
+    {
+      models: availableModels(env),
+      env,
+      defaultModel: defaultModelKey(env),
+    },
+    { headers: { "Cache-Control": "private, max-age=60" } },
+  );
 }

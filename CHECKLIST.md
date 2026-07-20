@@ -15,8 +15,8 @@ Retomar por aqui na próxima sessão. Cada item tem o ponteiro de arquivo.
 - [ ] **Lentidão intermitente (40s no Claude)** — mesmo com as correções de RAG (paralelo/timeout/keep_alive), houve pico de 40s. Investigar: cold do `next dev`, carga da máquina, ou o embedding local. Considerar build de produção. Ver commits `e2315d1`/`869ee36`/`0d37dfe`.
 
 **UI / Compositor** (`apps/web/src/components/console.tsx`)
-- [ ] **Vários botões soltos ao lado da barra** — consolidar num único **"+"** que abre um menu com as opções (voz, áudio, ver-tela, imagem/arquivo), no estilo do **adalink-pipeline** (`Adalink-Agents-Pipeline/apps/web` — estudar o composer deles).
-- [ ] **Campo de escrita deveria ser TEXTAREA** (multi-linha, auto-grow), não `<input>`. Enter envia, Shift+Enter quebra linha (respeitando a guarda de IME já existente).
+- [x] **Vários botões soltos ao lado da barra → menu "+"** — ✅ consolidados num único **"+"** (`MenuItem` + dropdown com clique-fora) com Voz/Ouvir/Imagem/Áudio/Ver-tela (+ Tempo real se `OPENAI_API_KEY`). Barra inferior agora: `+` · textarea · 🎙️ · Enviar. **Verificado em produção** (print do menu aberto, 0 erros).
+- [x] **Campo de escrita → TEXTAREA** — ✅ `<input>` virou `<textarea>` auto-grow (até 160px), Enter envia / Shift+Enter quebra linha (guarda de IME `isComposing`), reseta altura ao enviar. Placeholder explica o atalho. Verificado em produção.
 - [ ] **Miniatura do upload não aparece** — ao anexar imagem/arquivo, a bolha da mensagem do usuário não mostra o thumbnail. Renderizar a imagem anexada na mensagem (hoje só há preview no compositor via `imageAttach`, some ao enviar).
 
 **Auth / Mobile**
@@ -24,6 +24,171 @@ Retomar por aqui na próxima sessão. Cada item tem o ponteiro de arquivo.
 
 **Voz**
 - [ ] **Wake word "Ei Órbita" não ouve** — o `apps/voice` (FastAPI :8001) precisa estar RODANDO. Foi PARADO nesta sessão pra liberar CPU. Documentar/robustecer o feedback "Serviço de voz offline" e subir o serviço quando for usar voz: `cd apps/voice && .venv/Scripts/python.exe -m uvicorn main:app --host 0.0.0.0 --port 8001`.
+
+---
+
+## 🐞 BUGS/PEDIDOS NOVOS (Wesley, 2026-07-19 — 2ª leva)
+- [x] **Build error: `next/dynamic options must be an object literal`** (`console.tsx:31`) — causa: eu deixei `import` (LocalTTS/RealtimeSession/signOut/useRouter) **depois** das declarações `const X = dynamic(...)`; o analisador do Turbopack quebra com import após `dynamic()`. **Fix**: todos os `import` movidos pro topo. **Verificado**: `/app` compila (307) e `/login` (200), zero "object literal"/erro de compile no log; typecheck exit 0. (⚠️ `next build` no harness dá EXIT 127/instável — Wesley valida no terminal dele.)
+- [x] **Login: form ABAIXO do Orb (não sobre)** — `login/page.tsx` reescrito em coluna: Orb no topo → título → subtítulo → formulário embaixo (nunca sobreposto).
+- [x] **Login igual no web e no mobile** — web agora espelha a estrutura do `apps/mobile/app/index.tsx` (Orb centralizado em cima, "Seu assistente pessoal de IA", form abaixo). Mesma disposição nos dois.
+- [x] **Voz/transcrição péssima** — 2 frentes, ambas entregues:
+   - **Local (sem chave)**: `apps/voice/main.py` era faster-whisper **`base`** cru → default **`small`** + `beam_size=5`, `initial_prompt` pt-BR, `condition_on_previous_text=False`, `vad min_silence 500ms`. **VERIFICADO DE VERDADE** (Piper sintetiza frase → STT): "…quinta-feira às quinze horas e me lembre de pagar a conta de energia" → transcrito quase idêntico (só `quinze`→`15`, normalização, não erro). Transformação total vs `base`. Configurável `WHISPER_MODEL=large-v3-turbo`.
+   - **Nuvem (recomendado, pedido do Wesley — usado na Adalink)**: **AssemblyAI**. Portei da Adalink em módulos limpos (SRP): `lib/stt/{types,assemblyai,whisper-local,index}.ts` + rota `/api/stt` virou controller fino. **Preferido quando há `ASSEMBLYAI_API_KEY`** (fallback automático p/ whisper local). **TESTADO com a chave do Wesley (VERIFICADO DE VERDADE)**: transcreveu a frase pt-BR em **4,4s, confiança 0,97**, quase perfeita. ⚠️ **O teste real pegou que o `universal-3-pro` (config da Adalink) foi DEPRECADO** — o atual é **`universal-3-5-pro`**; corrigido.
+   - **Resiliência (pedido "esses erros não acontecerem")**: (1) modelos configuráveis por env `ASSEMBLYAI_SPEECH_MODELS` (deprecação futura = mudança de `.env`, não de código); (2) **auto-recuperação** — se a API rejeitar por deprecação, o adapter lê o modelo sugerido no próprio erro e re-tenta 1x (parser + fluxo verificados contra a API real e com o modelo deprecado forçado); (3) **fallback em cadeia** AssemblyAI→whisper local (usuário nunca fica sem transcrição). Chave real adicionada ao `apps/web/.env` (gitignored). Typecheck exit 0.
+- [x] **Chat: "Não consegui gerar a resposta" → RESILIÊNCIA (failover + msg específica)** — a causa era o ollama parado, mas o erro era genérico e não havia failover. **Fix** (`packages/llm/failover.ts` + `/api/chat`): (1) `ollamaUp()` checa o local antes; (2) `buildModelChain()` monta a cadeia primário→local→Claude→Gateway (só provedores configurados); (3) o chat **roteia p/ o 1º disponível** e, no path rich, faz **failover no meio do stream** (enquanto não saiu texto, erro de provedor cai pro próximo, silencioso); (4) se ninguém disponível, msg **específica e acionável** ("Ollama não está rodando… rode `ollama serve` ou configure Claude/Gateway"). **VERIFICADO e2e**: Ollama down + pedido ao modelo local → roteou sozinho pro Claude (`x-model: claude/claude-opus-4-8`) e respondeu certo. Cobre o backlog "failover cross-model" (falta só circuit breaker por provedor).
+- [ ] **Clean code / SRP / "sem lógica no front"** — princípio pedido pelo Wesley. Regras de negócio já vivem no backend (rotas/lib: roteamento de modelo, RAG, prompt, STT/TTS, finanças). O `console.tsx` ainda concentra **orquestração de UI + APIs de browser** (MediaRecorder, canvas, leitor de stream) que são inerentemente client. Refactor maior (extrair hooks `useChatStream`/`useVoice`/`useConversations`, mover o que for regra p/ o server) fica registrado como próximo passo — ver P-SRP abaixo.
+
+---
+
+## 🗺️ ROADMAP CONSOLIDADO — o que falta (priorizado, 2026-07-19)
+Levantamento do que ainda está aberto no PRD + melhorias de código/performance. Ordem = valor × esforço.
+
+**🐞 P0 — Bugs rápidos, alto impacto**
+- [x] **B1. Claude responde em INGLÊS** → ✅ seção IDIOMA (regra absoluta) no `SYSTEM_PROMPT`: responde SEMPRE em pt-BR mesmo com system/identidade em inglês. **Verificado** (resposta 100% pt-BR).
+- [x] **B2. Excesso de travessões (—)** → ✅ regra "NUNCA use travessões" na FORMATAÇÃO (+ removi os em-dash do próprio prompt). **Verificado** (resposta sem —, usou parênteses).
+- [x] **B3. Botão PARAR a resposta** → ✅ `AbortController` web (`console.tsx`: botão "⏹ Parar" enquanto gera, mantém texto parcial) e mobile (mic vira ⏹; `streamChat` aceita `signal`). Typecheck ok.
+- [x] **B4. Miniatura do upload na bolha** → ✅ `Msg.image` renderiza a imagem enviada na bolha do usuário (web). Typecheck ok.
+- [~] **B5. Login mobile "e-mail/senha inválido"** → PAUSADO (a pedido). Diagnóstico mostrou credencial CORRETA chegando (hash `33a5dc2f4c65` bate, email exato, origin null) e o servidor loga a mesma credencial via curl com 200 — falta ver o STATUS da resposta ao celular (diagnóstico removido do código; re-inserir p/ retomar).
+
+**🧹 P1 — Clean code / SRP (pedido do Wesley)**
+- [x] **C1. P-SRP: extrair `useChatStream` + `useVoice`** do `console.tsx` → ✅ **FEITO (sessão dedicada 2026-07-20)**. `console.tsx` 763→437 linhas (só render + wiring). Novos hooks: `components/console/use-chat-stream.ts` (input/send/sendMessage/stream NDJSON/stats/elapsed/abort/imageAttach) e `components/console/use-voice.ts` (speak/stopSpeaking/toggleWake/toggleMic/voiceCommand/seeScreen/sendAudioFile/toggleRealtime/handleAssistantResponse). **O ciclo chat↔voz foi quebrado por 2 refs atualizadas a cada render (mata o stale-closure do callback do wake):** `voiceRef` (`VoiceBridge` em `types.ts`) p/ chat→voz e `sendMessageRef` p/ voz→chat. Removida uma var morta (`usedModel`). **VERIFICADO** (typecheck exit 0 + Playwright headless em dev :3005, login → /app → Claude Opus): render completo (textarea/Provedor/Conversas/Enviar/Orb), **envio → stream → resposta pt-BR renderizada**, **botão ⏹ Parar aparece no stream** (B3 via hook), **0 erros de console, 0 page errors**. ⚠️ O caminho de **voz (wake word/barge-in/re-arma TTS) não é verificável headless** — a lógica foi preservada exatamente e só movida+ponteada; **confirmar no device** (falar "Ei Órbita" → comando → resposta falada → re-arma → barge-in). (`useOrbMode`/`useConversations` já haviam sido extraídos.)
+- [x] **C2. Design system** `components/ui/*` → ✅ **ENTREGUE E VERIFICADA (2026-07-20)**. Criados os primitivos: `ui/card.tsx` (`Card`+`PanelTitle`), `ui/button.tsx` (`Button` variants primary/outline/danger, size sm/md), `ui/field.tsx` (`Input`/`Textarea` size sm/md — `size` omitido do HTML nativo p/ não colidir com o attr `size:number`), `ui/skeleton.tsx` (`Skeleton`), `ui/feedback.tsx` (`ErrorRetry` com "tentar de novo", `role=alert`), `ui/index.ts` (barrel). **Adotado** em `todo-panel.tsx`, `side-panels.tsx` (Persona/Economia/Push) e `console.tsx` (Provedor/Sessão + `PanelSkeleton`→`Skeleton`), **com estados de erro/retry** nas buscas de Persona/Economia (antes engoliam o erro com `.catch(()=>{})`) e Tarefas. **VERIFICADO**: `tsc --noEmit` exit 0 + Playwright headless (dev :3005): painéis migrados renderizam idênticos (screenshot), Skeletons aparecem no load, **0 console/page errors**. **✅ VARREDURA COMPLETA (2026-07-20)**: migrados TODOS os 14 painéis — além dos 3 iniciais, agora `knowledge/folder/actions/meeting/extensions/privacy/connectors/routines/finance/widgets` usam `Card`/`PanelTitle` (+ `Button`/`Input`/`Textarea` onde o estilo casava com um size). Botões/campos com cor/tamanho únicos (ex.: "Apagar tudo", "comprovante" dourado, tabs) ficaram inline de propósito (não mapeiam a variante). Ajustei os primitivos p/ bater exato com os painéis: `Button` ganhou size **lg** (sm=px-2 py-1, md=px-3 py-1.5, lg=px-4 py-2.5) e `Input`/`Textarea` sm=px-2 py-1.5, md=px-3 py-2. **VERIFICADO**: `tsc` exit 0 em todos + **37/37 testes** + Playwright (0 console/page errors; painéis renderizam idênticos — os que aparecem como Skeleton no dev é o code-split compilando, montam em produção).
+
+**⚡ P2 — Performance**
+- [x] **PF1. Insights numa CTE** → ✅ a tabela `message` é varrida 1x (antes 4 subqueries) com `FILTER`; + cache já existente. **Verificado** (200).
+- [x] **PF2. Lazy-load por visibilidade** → ✅ `Block` só monta o painel (JS + fetch) quando entra em vista (`IntersectionObserver` rootMargin 250px); uma vez visto, fica montado. **Verificado** (/app renderiza, 0 erros).
+- [x] **PF3. PromptComposer por TOKENS** → ✅ `compose.ts` orça por tokens estimados (`estimateTokens`, ~4 chars/token) em vez de chars; corte gracioso por prioridade mantido. Typecheck ok. _(BudgetAllocator tipado completo fica como refinamento.)_
+- [~] **PF4. `cacheComponents` (Next 16)** → **AVALIADO e NÃO adotado**: é breaking (exige envolver todo dado dinâmico em Suspense/`use cache`), o app é self-hosted single-instance (sem CDN pra amortizar) e o ganho real viria do `next build` (já feito). Custo/risco > ganho agora. Reavaliar se migrar p/ deploy com CDN.
+
+**🧠 P3 — RAG / IA (nível Adalink)**
+- [ ] **R1. RAG <1s: embedding de query em API de nuvem** (Gemini text-embedding-004 / OpenAI, 768d = bate com a coluna; re-embedar corpus). Precisa de chave.
+- [ ] **R2. Hybrid BM25 + vetor (RRF) + rerank cross-encoder** (Cohere) time-boxed.
+- [x] **R3. Circuit breaker por provedor** → ✅ `failover.ts`: 3 falhas consecutivas abrem o provedor por 30s (pulado na cadeia; se todos abertos, mantém a cadeia). `/api/chat` registra sucesso/falha por tentativa. Typecheck ok. (Failover cross-model já existia.)
+- [x] **R4. Desacoplar o TTFT do RAG** → ✅ **FEITO (2026-07-20), versão segura sem regressão.** Como `buscar_conhecimento` JÁ é uma tool (RAG on-demand), fiz: (1) **cache de resultado de busca 60s** em `lib/rag/retrieve.ts` (Map LRU cap 200, chave `userId:k:query` normalizada) — dedup pré-injeção+tool no mesmo turno, retries e failover; (2) **gate conversacional** em `api/chat/route.ts`: pula a pré-injeção bloqueante para saudações/agradecimentos curtos SEM indício pessoal (regex `personalHint`/`conversational`), então o stream começa sem esperar embedding+busca; a tool cobre qualquer miss (rede de segurança). Núcleo do prompt/segurança intactos. **VERIFICADO**: `tsc` exit 0, **37/37 testes** (corrigi de quebra 1 teste STALE do `compose.test.ts` — o orçamento virou tokens no PF3, ajustei 120→40), Playwright: query conversacional responde limpa em pt-BR e query de conhecimento **aciona a tool `buscar_conhecimento`** (prova a rede de segurança), 0 erros. ⚠️ **ollama estava DOWN** → o efeito runtime do cache/gate (e a busca em si) não é totalmente mensurável agora; ganho é modesto por design (RAG já otimizado antes: paralelo+timeout 3,5s+keep_alive+cache de embedding). Alavanca dominante de fluidez segue sendo o **build de produção**.
+- [ ] **R5. Pipeline OCR completo** (Tesseract + fallback visão por confiança, dedup SHA-256, cross-modal, chunking tabular).
+
+**🎙️ P4 — Voz**
+- [ ] **V1. Voz streaming**: STT parcial ao vivo + TTS em chunks + `silero-vad` (endpointing) no lugar do VAD por energia; reunião com buffer contínuo (hoje perde áudio entre janelas de 8s).
+- [x] **V2. STT premium AssemblyAI** — feito e testado (Universal-3.5-Pro); chave do Wesley no `.env`.
+
+**🔒 P5 — Segurança**
+- [~] **S1. Headers de segurança** → ✅ headers seguros no `next.config` (X-Content-Type-Options nosniff, X-Frame-Options SAMEORIGIN, Referrer-Policy, X-DNS-Prefetch-Control). **Verificado** (curl). **Falta**: CSP estrito + HSTS (exigem mapear todas as conexões — ollama/voz-ws/AssemblyAI/data:/blob: — e HTTPS real; alto risco de quebrar, fazer com teste dedicado). Origin nas rotas mutantes já coberto pelo Better Auth (trustedOrigins) + cookie SameSite.
+
+**🔌 P6 — Conectores / integrações (dependem de chaves)**
+- [ ] **I1. Plugar OAuth** Google/Notion/Slack/WhatsApp + login Google/GitHub + `RESEND_API_KEY` p/ magic link por email real.
+- [ ] **I2. Mobile OAuth social nativo** (deep-link p/ capturar a sessão no app).
+
+---
+
+## 💡 NOVAS FUNCIONALIDADES CANDIDATAS (pesquisa web 2026-07-20)
+Tendência 2026: assistentes deixaram de ser chatbots e viraram **agentes proativos** com **memória persistente**, **voz-primeiro** e **ação cross-app**. Curadoria mapeada ao que a Órbita já tem (✅=existe/melhorar · 🆕=novo).
+
+**A. Proatividade & memória (maior alavanca — "chief of staff")**
+- 🆕 **Briefing matinal falado** ("bom dia" → agenda+e-mails+clima+contas do dia, por voz) — a Órbita tem rotinas, falta o briefing de verdade.
+- 🆕 **Recall proativo de memória** — trazer memória relevante sem ser pedida ("você costuma X às terças"); tipos de memória (fatos/preferências/episódica) + UI de controle do que é guardado.
+- 🆕 **Sugestões proativas contextuais** (chips) — "3 e-mails do cliente Z sem resposta, quer rascunhar?".
+
+**B. Ação / agentic**
+- 🆕 **Workflows multi-passo** (encadear ações: ler e-mail → rascunhar → agendar), sobre o `action_queue` + gate humano que já existe.
+- 🆕 **Triagem inteligente de inbox** (Gmail conectado): categorizar, resumir threads, rascunhar respostas.
+- 🆕 **Inteligência de agenda**: sugerir horários, detectar conflitos, reagendar (há MCP `suggest_time`).
+
+**C. Contexto ambiente (local-first, privado)**
+- 🆕 **Screen awareness contínuo (opt-in)** estilo Screenpipe — captura local + timeline pesquisável do que você viu/fez (hoje só "ver a tela" one-shot).
+- 🆕 **Busca semântica unificada** sobre arquivos + tela + áudio de reuniões, tudo local.
+
+**D. Geração & criação**
+- 🆕 **Geração de documentos** (relatório/DOCX/PDF/PPTX/planilha) a partir de conversa.
+- 🆕 **Geração de imagem** (local via SD/Ollama ou nuvem plugável).
+
+**E. Plataforma & alcance**
+- 🆕 **Extensão de navegador** (capturar página/agir na aba atual).
+- 🆕 **Desktop nativo (Tauri) + computer-use** (controlar o PC por voz/intenção) — grande, backlog.
+- ✅ **Sync sem conflito entre devices** (mesma memória/conversas PC↔celular) — reforçar.
+- 🆕 **Tradução/legenda ao vivo** em reuniões.
+
+**F. Pessoal & segurança**
+- 🆕 **Hábitos & bem-estar** (tracking + lembretes inteligentes).
+- 🆕 **Open banking / sincronizar extrato** (hoje só OCR de comprovante + PDF).
+- 🆕 **Cofre de credenciais + passkeys/2FA**.
+- 🆕 **Personas/especialistas** (modos: código, finanças, escrita) com tools/prompt sob medida.
+
+**Backlog já citado no PRD:** clonar a própria voz, marketplace de skills instaláveis, ligações (Twilio).
+
+---
+
+## 📱 MOBILE UX — foco-primeiro, minimalista (Wesley, 2026-07-19)
+Pedido: no celular a UI estava poluída; foco no Orb, voz-primeiro, personalização pesada só no web. **Redesenho do `apps/mobile/app/chat.tsx`:**
+- [x] **Abre já no MODO FOCO** (`focus` default true): Orb grande centralizado (`useWindowDimensions`, ~min(82%w,42%h,340)), ÓRBITA, status, e a **última resposta em texto sutil** (scroll curto) abaixo — sem log de chat poluindo.
+- [x] **Voz-primeiro**: **microfone grande** (76px, dourado, sombra) central e primário. `modelKey="auto"` (a Órbita escolhe o modelo; ajuste fino fica no web).
+- [x] **Texto escondido/expansível**: ícone **⌨** sutil abre o campo de digitar só ao tocar (`inputOpen`).
+- [x] **Botões sutis**: ícones em baixa opacidade nos cantos (☰ histórico, 🔊 voz, ⤢ sair do foco).
+- [x] **Sair do foco** → transcrição limpa (Orb mini + mensagens + compositor), também sutil; ⛶ volta ao foco.
+- [x] **Responsivo** + `SafeAreaView` + fundo `#080502` (funde o Orb, sem retângulo).
+- **Verificado**: typecheck mobile exit 0 + **bundle iOS compila (HTTP 200, 6,97 MB, contém o código novo)**. Testar no device via Expo Go.
+
+---
+
+## 🔐 LOGIN redesenhado + social (Wesley, 2026-07-19)
+- [x] **Mobile "Invalid origin" no login** — o Better Auth só confiava no `BETTER_AUTH_URL` (localhost:3000); o mobile acessa pelo IP da LAN (`http://192.168.15.8:3000`) → 403 INVALID_ORIGIN. **Fix** (`auth.ts`): `trustedOrigins(request)` confia em localhost + IPs de rede local (10./192.168./172.16-31.) + `BETTER_AUTH_URL` + env `TRUSTED_ORIGINS`. **Verificado**: Origin da LAN → 200+token; Origin externo (evil.example.com) → 403 (segurança mantida). Cobre também o bug antigo "iPhone não cria conta".
+- [x] **Orb grande e sem "caixa" (tom preto uniforme)** — causa medida: o canvas do Orb satura em **rgb(8,5,2)**, mas o fundo estava em `#0a0703` (rgb 10,7,3) → quadrado mais escuro. **Fix**: fundo do login = **`#080502`** (= cor real do canvas) no web (`login/page.tsx`) e mobile (`app/index.tsx` container). Verificado (mainBg == canvasCorner == rgb 8,5,2; print sem retângulo). Orb aumentado (web ~40vh/328px, mobile size 300).
+- [x] **Login web == mobile** — mesma disposição (Orb → ÓRBITA → "Seu assistente pessoal de IA" → form → sociais) nos dois. Mobile reescrito (`app/index.tsx`) em `ScrollView`.
+- [x] **Google + GitHub lado a lado com o logo de cada** — web: SVG inline (grid-cols-2); mobile: `react-native-svg` (instalado via `expo install`, incluído no Expo Go) em `components/ProviderLogos.tsx`, botões meia-largura em linha. Magic Link full-width abaixo. Verificado (print web: logo colorido do Google + octocat do GitHub lado a lado; typecheck web+mobile exit 0; Expo bundle sem erro).
+- [x] **Google + GitHub + Magic Link** — `auth.ts`: GitHub (condicional a `GITHUB_CLIENT_ID/SECRET`) + plugin `magicLink` (envia via Resend se `RESEND_API_KEY`, senão loga o link em dev). `auth-client.ts`: `magicLinkClient`. UI: 3 botões no web e mobile. **Verificado**: `/api/auth/*` registra (sem regressão do plugin), login email/senha 200, magic-link `{status:true}` + link no log. ⚠️ Google/GitHub precisam das chaves OAuth; mobile OAuth social (deep-link) é follow-up (magic link já funciona por email; botões abrem o fluxo no browser).
+
+---
+
+## ⚡ PERFORMANCE — front instantâneo, tudo async, cache (Wesley, 2026-07-19, PRIORIDADE)
+Pedido: "o front precisa ser instantâneo, usabilidade fluida, tudo async, cache em tudo que der; e o Orb na tela de login igual ao modo foco". Base: doc oficial Next.js 16 (cacheComponents/`use cache`/Suspense, `next/dynamic`, `optimizePackageImports`).
+
+**Diagnóstico (medido no código, não suposição):**
+- App roda em **`next dev`** → cada rota compila on-demand na 1ª visita (lento, ainda mais sem GPU). ⇒ maior custo isolado.
+- `console.tsx` é **1 client component gigante** que importa ~18 painéis **estaticamente** → bundle inicial pesado, tudo parseado no boot.
+- **Cascata de ~15 fetches no mount** (cada painel busca sozinho após a hidratação: models, conversations, realtime-config, profile, usage, widgets, finance, todos, folder, extensions, connectors, routines, push…).
+- **Orb**: `requestAnimationFrame` **infinito**, sem pausa quando a aba/canvas está oculto e sem cap de FPS → CPU constante sem GPU.
+- APIs read-only estáveis por sessão (`/api/models`, `/api/voice-config`, `/api/realtime/config`) sempre `force-dynamic`, **sem cache**.
+
+**Itens (ordem de ataque = impacto × segurança):**
+- [x] **P1. Orb na tela de login** (idêntico ao modo foco) — ✅ `login/page.tsx` reusa `<Orb fill bare>` de fundo + wordmark ÓRBITA no topo + cartão com backdrop-blur por cima. Verificado por Playwright headless (canvas full-screen, 0 erros de console, print conferido).
+- [x] **P2. Otimizar o Orb** — ✅ `orb.tsx`: agendador pausa o rAF quando `document.hidden` ou o canvas sai da viewport (`IntersectionObserver`) e limita a ~30fps em espera (60fps em atividade). Verificado (anima sem erro; typecheck limpo).
+- [x] **P3. Code-split dos painéis** com `next/dynamic` — ✅ 14 painéis (Knowledge/Privacy/Routines/Connectors/Meeting/Finance/Todo/Folder/Actions/Extensions/Widgets + Persona/Economy/Push) viraram `dynamic(..., { ssr:false, loading: PanelSkeleton })`. `Stat` extraído p/ `stat.tsx` (senão `side-panels` inteiro ia no bundle principal). Verificado no `/app`: todos renderizam via skeleton→painel, sem quebrar layout. ⚠️ **Aprendizado**: `next/dynamic` exige opções como **objeto literal inline** (não uma var `opts`) — senão erro de build.
+- [x] **P4. `next.config` perf** — ✅ `experimental.optimizePackageImports: ["react-markdown","remark-gfm"]`. ⚠️ **NÃO** incluir `better-auth`: tem subpaths (`better-auth/next-js`) que o otimizador quebra → a rota `/api/auth/[...all]` some (login 404). Peguei e corrigi essa regressão na verificação. `cacheComponents` avaliado e **adiado** (breaking no Next 16, exige envolver tudo em Suspense/`use cache` — risco alto sem ganho garantido self-hosted).
+- [x] **P5. Server-prefetch dos dados críticos** — ✅ `app/app/page.tsx` (server component) busca models (fn direta do `@orbita/llm`) + conversas (query Drizzle direta) e passa como props ao `Console`; boot sem `/api/models` nem `/api/conversations`. Verificado: dropdown "Qwen 2.5 7B" e lista de conversas já vêm populados na 1ª pintura.
+- [x] **P6. Cache nas APIs read-only** — ✅ `Cache-Control: private, max-age` em `/api/models` (60s), `/api/realtime/config` (300s), `/api/voice-config` (10s). Verificado via curl (headers servidos).
+- [x] **P7. Prefetch de navegação** — ✅ `<a>`→`<Link prefetch>` em `/` (Entrar) e no botão Insights do `console.tsx`.
+- [x] **P8. Produção — RODADO E MEDIDO** — ✅ `next build` passou (exit 0, BUILD_ID gerado; compilou em 29s + typecheck) e `next start` sobe em 558ms. **Medido prod × dev**: login→/app **1,25s (dev 9,9s, ~8x)**, /insights **1,9s (dev 7,5s, ~4x)**, /login **0,10s (dev cold 22,6s)**, 0 erros. **Confirma: rodar em produção é o maior salto de fluidez.** Script `pnpm --filter @orbita/web prod`. ⚠️ com `output: standalone`, o ideal p/ deploy é `node .next/standalone/apps/web/server.js` (o `next start` funciona e serve tudo, mas o Next avisa).
+- [ ] **P9. Lazy-load por visibilidade** dos painéis abaixo da dobra (fetch só quando o bloco aparece) — parcialmente coberto por P3 (o JS já é adiado); o fetch-on-visible é refinamento futuro.
+- [~] **P-SRP. Front sem lógica de negócio (pedido do Wesley)** — clean code/SOLID. **FEITO (seguro, verificado)**: extraídos `components/console/{types.ts, use-orb-mode.ts, use-conversations.ts}` — o `console.tsx` deixou de ter os tipos inline + estado/funções de conversas + o mirror do modeRef. Typecheck exit 0, 0 erros de console no browser, app 100% funcional. **FALTA (coupled, ciclo chat↔voz por barge-in/conversa-contínua)**: `useChatStream` + `useVoice` (quebrar o ciclo via ref). Fica como próximo passo focado e verificado à parte.
+
+---
+
+## 🔬 AUDITORIA DE USO + MEDIÇÃO (Fase 3, Wesley, 2026-07-19)
+Exercitei a app inteira via Playwright headless (login→chat→painéis→foco→insights), medindo tempo e UX. **0 erros de console.**
+
+**Medições (dev, máquina sem GPU, Ollama down → chat via Claude):**
+| Fluxo | Tempo | Nota |
+|---|---|---|
+| Login (DOM) | 205ms | ✅ |
+| Login→/app | 9,9s | ⚠️ dominado por compile cold do dev |
+| /app interativo (após HTML) | 649ms | ✅ |
+| Chat TTFT | 3,8s | compile 0,8s + RAG/Claude 2,8s |
+| Chat total | 14,7s | resposta Claude Opus |
+| Abrir Foco | 1,4s | ✅ |
+| /insights | 7,5s | ⚠️ compile 0,9s + **analytics 4s** |
+
+**Diagnóstico (breakdown do dev.log, `next.js:`=compile × `application-code:`=runtime):**
+- `GET /login` **1ª vez 22,6s (compile 21,5s)** → 2ª vez **162ms**. ⇒ **quase toda a lentidão é compilação cold do `next dev`.** Em produção (`next build`) isso some. **É o P8 — a ação nº 1 para "instantâneo".**
+- Único gargalo de runtime REAL: `/api/analytics` (11 subqueries correlacionadas) ~1–4s.
+
+**Melhorias aplicadas e verificadas:**
+- [x] **Cache do /api/analytics** (in-memory por usuário TTL 30s + `Cache-Control`) → **miss 1,05s → hit 46–58ms** (revisitas ~20x mais rápidas). Verificado (`x-cache: hit`).
+- [x] **Persona "�rbita" (mojibake)** — era **dado velho corrompido** no DB, não bug de código: round-trip PUT "Órbita"→GET comparado em Python deu OK (o `�` era só mangling do terminal). Corrigi o dado.
+
+**Recomendações priorizadas (não feitas — precisam de decisão/escopo):**
+1. **RODAR EM PRODUÇÃO** (`pnpm --filter @orbita/web prod`) — o maior salto de fluidez. Dev nunca será instantâneo nesta máquina.
+2. **Compositor (UX)**: consolidar os botões soltos num "+" com menu (bug #5) + trocar `<input>` por `<textarea>` (bug #6) — impacto direto na fluidez percebida.
+3. **Otimizar a query do /insights** (consolidar as 11 subqueries numa CTE) p/ o 1º load ser rápido também.
+4. **avgLatency do /insights** infla com os tempos de compile do dev gravados em `message.latencyMs` — cosmético (some em prod).
 
 ---
 

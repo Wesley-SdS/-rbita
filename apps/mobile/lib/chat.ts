@@ -11,6 +11,7 @@ export async function streamChat(
   modelKey: string,
   conversationId: string | undefined,
   onChunk: (full: string) => void,
+  signal?: AbortSignal,
 ): Promise<{ conversationId: string | null; model: string | null }> {
   const base = await getBaseUrl();
   const cookie = await SecureStore.getItemAsync("orbita.cookie");
@@ -21,6 +22,7 @@ export async function streamChat(
       ...(cookie ? { Cookie: cookie } : {}),
     },
     body: JSON.stringify({ content, modelKey, conversationId }),
+    signal,
   });
 
   if (!res.ok || !res.body) {

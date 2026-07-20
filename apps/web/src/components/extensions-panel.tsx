@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Card, PanelTitle, Input, Textarea, Button } from "@/components/ui";
 
 interface Skill { id: string; name: string; instructions: string; enabled: boolean }
 interface Mcp { id: string; name: string; url: string; enabled: boolean }
@@ -39,12 +40,10 @@ export function ExtensionsPanel() {
   };
   const remove = async (kind: "skills" | "mcp", id: string) => { await fetch(`/api/${kind}?id=${id}`, { method: "DELETE" }); load(); };
 
-  const input = { borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" };
-
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+    <Card>
       <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Extensões</h3>
+        <PanelTitle>Extensões</PanelTitle>
         {(skills.filter((s) => s.enabled).length + mcps.filter((m) => m.enabled).length) > 0 && (
           <span className="ml-2 rounded-full px-1.5 text-[10px] font-bold" style={{ background: "var(--color-gold)", color: "#241403" }}>
             {skills.filter((s) => s.enabled).length + mcps.filter((m) => m.enabled).length}
@@ -73,14 +72,14 @@ export function ExtensionsPanel() {
                   <button onClick={() => remove("skills", s.id)} style={{ color: "var(--color-danger)" }}>×</button>
                 </div>
               ))}
-              <input value={sName} onChange={(e) => setSName(e.target.value)} placeholder="Nome da skill (ex: Modo dev)" className="rounded-lg border px-2 py-1 text-xs outline-none" style={input} />
-              <input value={sKw} onChange={(e) => setSKw(e.target.value)} placeholder="Palavras-chave p/ ativar (ex: código, bug, deploy)" className="rounded-lg border px-2 py-1 text-xs outline-none" style={input} />
+              <Input value={sName} onChange={(e) => setSName(e.target.value)} placeholder="Nome da skill (ex: Modo dev)" />
+              <Input value={sKw} onChange={(e) => setSKw(e.target.value)} placeholder="Palavras-chave p/ ativar (ex: código, bug, deploy)" />
               <div className="flex items-center gap-1">
                 <span className="text-[9px]" style={{ color: "var(--color-ink-dim)" }}>Instruções</span>
                 <button onClick={() => setSInstr(SKILL_TEMPLATE)} className="text-[9px]" style={{ color: "var(--color-gold)" }}>usar template</button>
               </div>
-              <textarea value={sInstr} onChange={(e) => setSInstr(e.target.value)} placeholder="Como a Órbita deve agir. Dica: use o template (Quando usar / Quando NÃO usar / Princípios)." rows={3} className="rounded-lg border px-2 py-1 text-xs outline-none" style={input} />
-              <button onClick={addSkill} className="rounded-lg px-3 py-1 text-xs font-semibold" style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>+ skill</button>
+              <Textarea size="sm" value={sInstr} onChange={(e) => setSInstr(e.target.value)} placeholder="Como a Órbita deve agir. Dica: use o template (Quando usar / Quando NÃO usar / Princípios)." rows={3} />
+              <Button variant="primary" size="md" onClick={addSkill}>+ skill</Button>
             </>
           ) : (
             <>
@@ -91,14 +90,14 @@ export function ExtensionsPanel() {
                   <button onClick={() => remove("mcp", m.id)} style={{ color: "var(--color-danger)" }}>×</button>
                 </div>
               ))}
-              <input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="Nome (ex: GitHub)" className="rounded-lg border px-2 py-1 text-xs outline-none" style={input} />
-              <input value={mUrl} onChange={(e) => setMUrl(e.target.value)} placeholder="URL do servidor MCP (HTTP streamable)" className="rounded-lg border px-2 py-1 text-xs outline-none" style={input} />
-              <button onClick={addMcp} className="rounded-lg px-3 py-1 text-xs font-semibold" style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>+ servidor MCP</button>
+              <Input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="Nome (ex: GitHub)" />
+              <Input value={mUrl} onChange={(e) => setMUrl(e.target.value)} placeholder="URL do servidor MCP (HTTP streamable)" />
+              <Button variant="primary" size="md" onClick={addMcp}>+ servidor MCP</Button>
               <p className="text-[9px]" style={{ color: "var(--color-ink-dim)" }}>As ferramentas do MCP ficam disponíveis no chat automaticamente.</p>
             </>
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

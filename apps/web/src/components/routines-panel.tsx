@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Card, PanelTitle, Input, Textarea, Button } from "@/components/ui";
 
 interface Notif { id: string; title: string; content: string; read: boolean }
 interface Routine { id: string; title: string; intervalMinutes: number }
@@ -57,12 +58,12 @@ export function RoutinesPanel() {
     loadRoutines();
   }
 
-  const input = { borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" };
+  const fieldStyle = { borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" };
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+    <Card>
       <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Proatividade</h3>
+        <PanelTitle>Proatividade</PanelTitle>
         {unread > 0 && (
           <span className="ml-2 rounded-full px-1.5 text-[10px] font-bold" style={{ background: "var(--color-gold)", color: "#241403" }}>{unread}</span>
         )}
@@ -84,15 +85,15 @@ export function RoutinesPanel() {
       {open && (
         <div className="mt-3 flex flex-col gap-2">
           <div className="font-mono text-[9px] uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>Nova rotina</div>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título (ex: Briefing matinal)" className="rounded-lg border px-2 py-1.5 text-xs outline-none" style={input} />
-          <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="O que a Órbita deve fazer? (ex: pesquise 3 notícias de IA)" rows={2} className="rounded-lg border px-2 py-1.5 text-xs outline-none" style={input} />
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título (ex: Briefing matinal)" />
+          <Textarea size="sm" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="O que a Órbita deve fazer? (ex: pesquise 3 notícias de IA)" rows={2} />
           <div className="flex items-center gap-2">
-            <select value={interval} onChange={(e) => setIntervalMin(Number(e.target.value))} className="rounded-lg border px-2 py-1.5 text-xs" style={input}>
+            <select value={interval} onChange={(e) => setIntervalMin(Number(e.target.value))} className="rounded-lg border px-2 py-1.5 text-xs" style={fieldStyle}>
               <option value={60}>a cada hora</option>
               <option value={720}>2x/dia</option>
               <option value={1440}>diário</option>
             </select>
-            <button onClick={createRoutine} disabled={busy} className="flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50" style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>Criar</button>
+            <Button variant="primary" size="md" onClick={createRoutine} disabled={busy} className="flex-1">Criar</Button>
           </div>
 
           {routines.length > 0 && (
@@ -103,13 +104,13 @@ export function RoutinesPanel() {
                   <button onClick={() => deleteRoutine(r.id)} style={{ color: "var(--color-danger)" }}>×</button>
                 </div>
               ))}
-              <button onClick={runNow} disabled={busy} className="mt-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50" style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>
+              <Button variant="outline" size="md" onClick={runNow} disabled={busy} className="mt-1">
                 {busy ? "…" : "▶ rodar agora"}
-              </button>
+              </Button>
             </div>
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

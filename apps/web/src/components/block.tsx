@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const KEY = "orbita.hiddenBlocks";
 
@@ -19,11 +19,28 @@ export function useHiddenBlocks(): { hidden: string[]; toggle: (id: string) => v
   return { hidden, toggle, isHidden: (id) => hidden.includes(id) };
 }
 
-/** Envolve um painel: some quando oculto; mostra um botão "ocultar" no hover. */
+/**
+ * Envolve um painel: some quando oculto; botão "ocultar" no hover; e faz
+ * LAZY-MOUNT por visibilidade — o conteúdo (JS do painel + seus fetches) só
+ * monta quando o bloco entra em vista (IntersectionObserver, rootMargin 250px).
+ * Uma vez visto, permanece montado (não refaz fetch ao rolar de volta).
+ */
 export function Block({ id, hidden, toggle, children }: { id: string; hidden: string[]; toggle: (id: string) => void; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    if (seen || !ref.current) return;
+    const io = new IntersectionObserver(
+      (e) => { if (e[0]?.isIntersecting) { setSeen(true); io.disconnect(); } },
+      { rootMargin: "250px" },
+    );
+    io.observe(ref.current);
+    return () => io.disconnect();
+  }, [seen]);
+
   if (hidden.includes(id)) return null;
   return (
-    <div className="group relative">
+    <div ref={ref} className="group relative">
       <button
         onClick={() => toggle(id)}
         title="ocultar este bloco"
@@ -32,7 +49,7 @@ export function Block({ id, hidden, toggle, children }: { id: string; hidden: st
       >
         ⊖
       </button>
-      {children}
+      {seen ? children : <div aria-hidden style={{ minHeight: 72 }} />}
     </div>
   );
 }

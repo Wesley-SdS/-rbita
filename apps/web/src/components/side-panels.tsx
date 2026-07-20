@@ -1,16 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-/** Linha rótulo→valor usada nos painéis de sessão/economia. */
-export function Stat({ label, value, accent, good }: { label: string; value: string; accent?: boolean; good?: boolean }) {
-  return (
-    <div className="flex items-baseline justify-between py-1 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
-      <span>{label}</span>
-      <b className="font-mono" style={{ color: good ? "#8ac98f" : accent ? "var(--color-gold)" : "var(--color-ink)" }}>{value}</b>
-    </div>
-  );
-}
+import { Stat } from "@/components/stat";
+import { Card, PanelTitle, Input, Textarea, Button, ErrorRetry } from "@/components/ui";
 
 /** Liga/desliga notificações push do navegador (proatividade). */
 export function PushToggle() {
@@ -28,8 +20,8 @@ export function PushToggle() {
   async function test() { await fetch("/api/push/test", { method: "POST" }); }
   if (status === "unsupported") return null;
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
-      <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Notificações push</h3>
+    <Card>
+      <PanelTitle className="mb-2">Notificações push</PanelTitle>
       {status === "denied" ? (
         <p className="text-[12px]" style={{ color: "var(--color-ink-dim)" }}>Permissão bloqueada no navegador. Libere nas configurações do site para receber avisos.</p>
       ) : (
@@ -46,7 +38,7 @@ export function PushToggle() {
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -57,11 +49,16 @@ export function PersonaPanel() {
   const [p, setP] = useState<ProfileT | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState(false);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
-    fetch("/api/profile").then((r) => (r.ok ? r.json() : null)).then((d) => {
-      if (d?.profile) setP({ assistantName: d.profile.assistantName ?? "Órbita", userName: d.profile.userName ?? "", persona: d.profile.persona ?? "" });
-    }).catch(() => {});
-  }, []);
+    let alive = true;
+    setErr(false);
+    fetch("/api/profile").then((r) => (r.ok ? r.json() : Promise.reject())).then((d) => {
+      if (alive && d?.profile) setP({ assistantName: d.profile.assistantName ?? "Órbita", userName: d.profile.userName ?? "", persona: d.profile.persona ?? "" });
+    }).catch(() => { if (alive) setErr(true); });
+    return () => { alive = false; };
+  }, [reload]);
   async function save() {
     if (!p) return;
     setSaving(true); setSaved(false);
@@ -73,32 +70,28 @@ export function PersonaPanel() {
       if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 2000); }
     } finally { setSaving(false); }
   }
-  const field = { borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" };
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
-      <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Persona</h3>
-      {!p ? (
+    <Card>
+      <PanelTitle className="mb-3">Persona</PanelTitle>
+      {err && !p ? (
+        <ErrorRetry message="Falha ao carregar a persona." onRetry={() => setReload((x) => x + 1)} />
+      ) : !p ? (
         <div className="py-2 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>—</div>
       ) : (
         <div className="flex flex-col gap-2">
           <label className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>Nome da assistente</label>
-          <input value={p.assistantName} onChange={(e) => setP({ ...p, assistantName: e.target.value })} maxLength={40}
-            className="rounded-lg border px-3 py-2 text-sm outline-none" style={field} placeholder="Órbita" />
+          <Input size="md" value={p.assistantName} onChange={(e) => setP({ ...p, assistantName: e.target.value })} maxLength={40} placeholder="Órbita" />
           <label className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>Como te chamar</label>
-          <input value={p.userName ?? ""} onChange={(e) => setP({ ...p, userName: e.target.value })} maxLength={40}
-            className="rounded-lg border px-3 py-2 text-sm outline-none" style={field} placeholder="opcional" />
+          <Input size="md" value={p.userName ?? ""} onChange={(e) => setP({ ...p, userName: e.target.value })} maxLength={40} placeholder="opcional" />
           <label className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>Tom & preferências</label>
-          <textarea value={p.persona ?? ""} onChange={(e) => setP({ ...p, persona: e.target.value })} maxLength={2000} rows={3}
-            className="resize-y rounded-lg border px-3 py-2 text-sm outline-none" style={field}
+          <Textarea value={p.persona ?? ""} onChange={(e) => setP({ ...p, persona: e.target.value })} maxLength={2000} rows={3} className="resize-y"
             placeholder="Ex.: seja direto e objetivo; me trate por você; evite jargão." />
-          <button onClick={save} disabled={saving}
-            className="mt-1 rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50"
-            style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>
+          <Button variant="primary" size="lg" onClick={save} disabled={saving} className="mt-1">
             {saving ? "Salvando…" : saved ? "Salvo ✓" : "Salvar persona"}
-          </button>
+          </Button>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -111,17 +104,22 @@ type Usage = {
 /** Economia acumulada vs. nuvem — dados reais persistidos (/api/usage). */
 export function EconomyPanel({ refreshKey }: { refreshKey: number }) {
   const [u, setU] = useState<Usage | null>(null);
+  const [err, setErr] = useState(false);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
-    fetch("/api/usage").then((r) => (r.ok ? r.json() : null)).then((d) => { if (alive && d) setU(d); }).catch(() => {});
+    setErr(false);
+    fetch("/api/usage").then((r) => (r.ok ? r.json() : Promise.reject())).then((d) => { if (alive && d) setU(d); }).catch(() => { if (alive) setErr(true); });
     return () => { alive = false; };
-  }, [refreshKey]);
+  }, [refreshKey, reload]);
   const money = (n: number) => "R$" + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const pctLocal = u && u.requests ? Math.round((u.localRequests / u.requests) * 100) : 0;
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
-      <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Economia vs. nuvem</h3>
-      {!u ? (
+    <Card>
+      <PanelTitle className="mb-3">Economia vs. nuvem</PanelTitle>
+      {err && !u ? (
+        <ErrorRetry message="Falha ao carregar a economia." onRetry={() => setReload((x) => x + 1)} />
+      ) : !u ? (
         <div className="py-2 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>—</div>
       ) : (
         <>
@@ -140,6 +138,6 @@ export function EconomyPanel({ refreshKey }: { refreshKey: number }) {
           </p>
         </>
       )}
-    </div>
+    </Card>
   );
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "@/lib/auth-client";
+import { Card, PanelTitle, Input } from "@/components/ui";
 
 export function PrivacyPanel({ email }: { email: string }) {
   const router = useRouter();
@@ -30,10 +31,8 @@ export function PrivacyPanel({ email }: { email: string }) {
   }
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
-      <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>
-        Privacidade (LGPD)
-      </h3>
+    <Card>
+      <PanelTitle className="mb-2">Privacidade (LGPD)</PanelTitle>
       <div className="flex flex-col gap-2">
         <a href="/api/account/export" download className="rounded-lg border px-3 py-1.5 text-center text-xs"
           style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>
@@ -50,8 +49,7 @@ export function PrivacyPanel({ email }: { email: string }) {
             <p className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
               Apaga sua conta e <b>todos</b> os dados. Irreversível. Digite <b>{email}</b> para confirmar.
             </p>
-            <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder="seu e-mail"
-              className="rounded-lg border px-2 py-1 text-xs outline-none" style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }} />
+            <Input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder="seu e-mail" />
             {err && <span className="text-[10px]" style={{ color: "var(--color-danger)" }}>{err}</span>}
             <div className="mt-1 flex gap-2">
               <button onClick={del} disabled={busy || confirmText.trim().toLowerCase() !== email.toLowerCase()} className="flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
@@ -66,6 +64,6 @@ export function PrivacyPanel({ email }: { email: string }) {
           </div>
         )}
       </div>
-    </div>
+    </Card>
   );
 }

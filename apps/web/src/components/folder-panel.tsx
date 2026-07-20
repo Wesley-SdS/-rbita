@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Card, PanelTitle } from "@/components/ui";
 
 /* Tipos mínimos da File System Access API (não incluída no lib.dom padrão). */
 interface FSFileHandle { kind: "file"; name: string; getFile(): Promise<File> }
@@ -66,9 +67,9 @@ export function FolderPanel() {
   }
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+    <Card>
       <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Arquivos</h3>
+        <PanelTitle>Arquivos</PanelTitle>
         <span className="ml-auto text-xs" style={{ color: "var(--color-ink-dim)" }}>{open ? "▾" : "▸"}</span>
       </button>
       {open && (
@@ -84,6 +85,6 @@ export function FolderPanel() {
           {status && <div className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>{status}</div>}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

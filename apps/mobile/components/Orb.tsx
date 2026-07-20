@@ -1,5 +1,5 @@
 import { useRef, useEffect, useMemo } from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, Platform } from "react-native";
 import { WebView } from "react-native-webview";
 
 // Superset dos estados do web (mobile usava "thinking" → mapeia p/ "studying").
@@ -24,12 +24,26 @@ export function Orb({ mode = "standby", size = 200 }: { mode?: OrbMode; size?: n
     ref.current?.injectJavaScript(`window.__setMode && window.__setMode(${JSON.stringify(mapMode(mode))});true;`);
   }, [mode]);
 
+  // Alvo web (react-native-web): o WebView nativo não existe → fallback de brilho
+  // (evita o erro "WebView does not support this platform"). No device usa o WebView real.
+  if (Platform.OS === "web") {
+    return (
+      <View style={[styles.wrap, { width: size, height: size }]} pointerEvents="none">
+        <View style={[styles.glow, { width: size * 0.92, height: size * 0.92, borderRadius: size, backgroundColor: "rgba(255,150,60,0.10)" }]} />
+        <View style={[styles.glow, { width: size * 0.55, height: size * 0.55, borderRadius: size, backgroundColor: "rgba(255,175,75,0.22)" }]} />
+        <View style={[styles.glow, { width: size * 0.28, height: size * 0.28, borderRadius: size, backgroundColor: "rgba(255,205,120,0.55)" }]} />
+        <View style={[styles.glow, { width: size * 0.12, height: size * 0.12, borderRadius: size, backgroundColor: "#ffe8c0" }]} />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.wrap, { width: size, height: size }]} pointerEvents="none">
       <WebView
         ref={ref}
         source={{ html }}
         style={styles.web}
+        containerStyle={styles.web}
         originWhitelist={["*"]}
         scrollEnabled={false}
         overScrollMode="never"
@@ -45,6 +59,7 @@ export function Orb({ mode = "standby", size = 200 }: { mode?: OrbMode; size?: n
 const styles = StyleSheet.create({
   wrap: { alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   web: { flex: 1, width: "100%", height: "100%", backgroundColor: "transparent" },
+  glow: { position: "absolute" },
 });
 
 // ── HTML/Canvas: MESMA lógica do Orb web (apps/web/src/components/orb.tsx) ──
@@ -54,8 +69,10 @@ const ORB_HTML = `<!doctype html><html><head><meta name="viewport" content="widt
 (function(){
   var cv=document.getElementById('c'),ctx=cv.getContext('2d');
   var W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
-  function size(){W=window.innerWidth;H=window.innerHeight;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
-  window.addEventListener('resize',size);size();
+  function size(){W=window.innerWidth||document.documentElement.clientWidth||300;H=window.innerHeight||document.documentElement.clientHeight||300;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+  // WKWebView (iOS) às vezes reporta innerWidth=0 no 1º frame → canvas 0x0 e nada
+  // pinta. Re-medimos no load e em 2 timeouts p/ garantir dimensão > 0.
+  window.addEventListener('resize',size);window.addEventListener('load',size);setTimeout(size,60);setTimeout(size,300);size();
   var _gr=Math.PI*(3-Math.sqrt(5)),JN=150,jn=[];
   for(var i=0;i<JN;i++){var y=1-(i/(JN-1))*2,r=Math.sqrt(1-y*y),th=_gr*i;jn.push({x:Math.cos(th)*r,y:y,z:Math.sin(th)*r,big:Math.random()<0.16,ph:Math.random()*6.2832});}
   var je=[],_THR=0.32;

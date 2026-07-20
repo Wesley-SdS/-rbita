@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Card } from "@/components/ui";
 
 interface Action { id: string; kind: string; summary: string; createdAt: string }
 
@@ -35,7 +36,7 @@ export function ActionsPanel() {
   if (actions.length === 0) return null; // só aparece quando há algo a confirmar
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "color-mix(in oklab, var(--color-gold) 50%, var(--color-line))", background: "var(--color-surface)" }}>
+    <Card style={{ borderColor: "color-mix(in oklab, var(--color-gold) 50%, var(--color-line))" }}>
       <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-gold)" }}>Ações a confirmar</h3>
       <div className="mt-2 flex flex-col gap-2">
         {actions.map((a) => (
@@ -53,6 +54,6 @@ export function ActionsPanel() {
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

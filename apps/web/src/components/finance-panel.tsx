@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Card, PanelTitle } from "@/components/ui";
 
 interface Entry { id: string; description: string; category: string | null; amount: number; kind: string; dueDate: string | null; paid: boolean }
 interface Totals { gastos: number; aPagar: number; aReceber: number; saldoProjetado: number }
@@ -64,9 +65,9 @@ export function FinancePanel() {
   const aReceber = entries.filter((e) => e.kind === "receivable");
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
+    <Card>
       <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>Finanças</h3>
+        <PanelTitle>Finanças</PanelTitle>
         <span className="ml-auto text-xs" style={{ color: "var(--color-ink-dim)" }}>{open ? "▾" : "▸"}</span>
       </button>
 
@@ -100,7 +101,7 @@ export function FinancePanel() {
           {aPagar.length === 0 && aReceber.length === 0 && <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>sem contas em aberto</span>}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 

@@ -91,6 +91,8 @@ export function Orb({
     };
 
     let raf = 0;
+    let onScreen = true; // canvas visível na viewport (IntersectionObserver)
+    let lastDraw = -1e9; // p/ cap de FPS em espera
     const draw = (now?: number) => {
       const dt = Math.min(((now || 0) - lastT) / 1000, 0.05) || 0.016;
       lastT = now || 0;
@@ -241,13 +243,31 @@ export function Orb({
       }
 
       ctx.globalCompositeOperation = "source-over";
-      raf = requestAnimationFrame(draw);
     };
-    raf = requestAnimationFrame(draw);
+
+    // Agendador com economia de CPU (máquina sem GPU): não desenha quando a aba ou
+    // o canvas estão ocultos; limita a ~30fps em espera (60fps nativo em atividade).
+    const frame = (now: number) => {
+      raf = requestAnimationFrame(frame);
+      if (!onScreen || document.hidden) { lastT = now; return; }
+      const targetFps = modeRef.current === "standby" ? 30 : 60;
+      if (now - lastDraw < 1000 / targetFps - 1) return;
+      lastDraw = now;
+      draw(now);
+    };
+    raf = requestAnimationFrame(frame);
+
+    // pausa o desenho quando o Orb sai da viewport (scroll) — libera CPU
+    const io = new IntersectionObserver((ents) => { onScreen = ents[0]?.isIntersecting ?? true; }, { threshold: 0.01 });
+    io.observe(cv);
+    const onVis = () => { if (!document.hidden) lastDraw = -1e9; };
+    document.addEventListener("visibilitychange", onVis);
 
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      io.disconnect();
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
 
