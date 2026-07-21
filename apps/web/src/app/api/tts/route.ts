@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { geminiTtsAvailable, synthesizeGemini } from "@/lib/voice/tts-gemini";
 import { EDGE_MIME, edgeTtsAvailable, synthesizeEdge } from "@/lib/voice/tts-edge";
+import { voiceServiceUrl } from "@/lib/voice/service-url";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +16,9 @@ const audio = (buf: Buffer, mime: string) =>
 
 /** Piper, no serviço de voz Python (último recurso / modo totalmente offline). */
 async function piper(payload: unknown): Promise<Response> {
-  const url = (process.env.VOICE_URL ?? "http://localhost:8001") + "/tts";
+  const base = voiceServiceUrl();
+  if (!base) return Response.json({ error: "Serviço de voz indisponível" }, { status: 503 });
+  const url = base + "/tts";
   try {
     const res = await fetch(url, {
       method: "POST",

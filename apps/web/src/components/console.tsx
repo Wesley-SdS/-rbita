@@ -399,7 +399,9 @@ export function Console({
             style={{ background: voice.recording ? "var(--color-danger)" : "var(--color-surface)", borderColor: "var(--color-line)" }}>
             {voice.recording ? "⏹" : "🎙️"}
           </button>
-          {mode !== "standby" ? (
+          {/* Gravando: só o ⏹ do microfone controla (evita dois botões de parar).
+              Gerando resposta: ⏹ Parar. Ocioso: Enviar. */}
+          {voice.recording ? null : mode !== "standby" ? (
             <button onClick={chat.stopGenerating} title="parar a resposta" aria-label="parar"
               className="shrink-0 rounded-lg px-4 py-2.5 text-sm font-semibold"
               style={{ background: "var(--color-danger)", color: "#fff" }}>
@@ -470,8 +472,8 @@ export function Console({
               label={voice.voiceOn ? "desligar a voz" : "ligar a voz"}>
               {voice.voiceOn ? <IconVolume /> : <IconVolumeOff />}
             </GhostBtn>
-            <button onClick={mode !== "standby" ? chat.stopGenerating : voice.toggleMic}
-              title={mode !== "standby" ? "parar" : "falar com a Órbita"} aria-label={mode !== "standby" ? "parar" : "microfone"}
+            <button onClick={voice.recording ? voice.toggleMic : mode !== "standby" ? chat.stopGenerating : voice.toggleMic}
+              title={voice.recording ? "parar de gravar" : mode !== "standby" ? "parar" : "falar com a Órbita"} aria-label={voice.recording || mode !== "standby" ? "parar" : "microfone"}
               className="flex h-[54px] w-[54px] items-center justify-center rounded-full transition-transform duration-200 hover:scale-105"
               style={{
                 background: voice.recording || mode !== "standby" ? "var(--color-danger)" : "linear-gradient(135deg, var(--color-amber), var(--color-gold))",
