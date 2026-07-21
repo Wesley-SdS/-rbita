@@ -17,8 +17,10 @@ interface Params {
   sendMessageRef: MutableRefObject<((content: string) => void) | null>;
 }
 
+const MAX_TTS_FALHAS = 2;
+
 /**
- * Encapsula todo o caminho de voz: TTS (Piper local + fallback navegador),
+ * Encapsula todo o caminho de voz: TTS (Gemini/Piper + fallback navegador),
  * wake word "Ei Órbita", gravação/transcrição do microfone, "ver a tela" e o
  * modo tempo real (S2S). Não conhece o chat diretamente: envia mensagens pela
  * `sendMessageRef`, o que quebra o ciclo chat↔voz.
@@ -35,7 +37,9 @@ export function useVoice(p: Params) {
   const wakeRef = useRef<WakeListener | null>(null);
   const rtRef = useRef<RealtimeSession | null>(null);
   const audioFileRef = useRef<HTMLInputElement | null>(null);
-  const ttsLocalOkRef = useRef<boolean>(true); // cai p/ navegador se o TTS local falhar
+  // falhas seguidas do /api/tts; após MAX_TTS_FALHAS usa a voz do navegador.
+  // tolera >1 porque um 429 momentâneo do Gemini não deve custar a sessão inteira.
+  const ttsFalhasRef = useRef<number>(0);
 
   function speakBrowser(text: string) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) { p.setMode("standby"); return; }
@@ -54,16 +58,17 @@ export function useVoice(p: Params) {
     }
   }
 
-  /** Fala preferindo o TTS local (Piper); cai para o navegador se indisponível. */
+  /** Fala pelo /api/tts (Gemini → Piper); cai para o navegador se insistir em falhar. */
   async function speak(text: string) {
     if (!voiceOn) { p.setMode("standby"); return; }
-    if (ttsLocalOkRef.current) {
+    if (ttsFalhasRef.current < MAX_TTS_FALHAS) {
       try {
         if (!ttsRef.current) ttsRef.current = new LocalTTS();
         await ttsRef.current.speak(text, { onStart: () => p.setMode("speaking"), onEnd: () => p.setMode("standby") });
+        ttsFalhasRef.current = 0; // voltou a funcionar
         return;
       } catch {
-        ttsLocalOkRef.current = false; // uma falha → usa navegador daqui pra frente
+        ttsFalhasRef.current++;
       }
     }
     speakBrowser(text);
@@ -182,7 +187,12 @@ export function useVoice(p: Params) {
     }
     try {
       const cfg = await fetch("/api/voice-config").then((r) => r.json());
-      if (!cfg.up) { p.setError("Serviço de voz offline — wake word precisa do apps/voice rodando."); return; }
+      if (!cfg.up) {
+        // A FALA já funciona sem o serviço (TTS roda no servidor). Só o wake word
+        // "Ei Órbita" mãos-livres depende do serviço de voz. Mensagem sem jargão.
+        p.setError("Wake word “Ei Órbita” indisponível: o serviço de voz não está conectado. Você ainda pode falar pelo botão do microfone.");
+        return;
+      }
       const listener = new WakeListener(cfg.wsWakeUrl, {
         onWake: () => {
           stopSpeaking(); // barge-in ao ouvir "Ei Órbita" (libera o estado)

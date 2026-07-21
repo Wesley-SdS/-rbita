@@ -32,3 +32,6 @@ __pycache__
 apps/voice/models_test
 apps/voice/models
 *.wav
+
+# harness/editor local (Claude Code launch config)
+.claude/

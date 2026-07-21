@@ -8,7 +8,7 @@ import { router, Stack } from "expo-router";
 import { Orb, type OrbMode } from "@/components/Orb";
 import { streamChat, fetchConversations, fetchConversationMessages, deleteConversation, type ConversationSummary } from "@/lib/chat";
 import { getSession, signOut } from "@/lib/auth";
-import { startRecording, stopRecordingAndTranscribe, speak } from "@/lib/voice";
+import { startRecording, stopRecordingAndTranscribe, speak, stopSpeaking } from "@/lib/voice";
 import { theme } from "@/lib/theme";
 
 interface Msg { role: "user" | "assistant"; content: string }
@@ -69,24 +69,34 @@ export default function Chat() {
     const ac = new AbortController();
     abortRef.current = ac;
     let reply = "";
+    let ok = false;
     try {
       const { conversationId } = await streamChat(content, modelKey, convId.current, (full) => {
-        reply = full; setMode("speaking");
+        // durante o stream ainda é "processando"; o "respondendo" só vale quando a voz começa
+        reply = full;
         setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: full }; return c; });
         scrollRef.current?.scrollToEnd({ animated: true });
       }, ac.signal);
       if (conversationId) convId.current = conversationId;
-      if (voiceOn && reply) void speak(reply);
+      ok = true;
     } catch (e) {
       // parada intencional (⏹) mantém o texto parcial; erro real mostra aviso
       const aborted = e instanceof Error && (e.name === "AbortError" || /abort/i.test(e.message));
       if (!aborted) setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: "⚠ Falha ao conectar ao servidor." }; return c; });
       else setMessages((m) => { const c = [...m]; if (c[c.length - 1]?.role === "assistant" && !c[c.length - 1]?.content) c.pop(); return c; });
-    } finally { abortRef.current = null; setMode("standby"); }
+    } finally { abortRef.current = null; }
+
+    // Fala fora do try: uma falha do TTS não pode virar "erro ao conectar".
+    // O Orb fica em "respondendo…" só enquanto o áudio realmente toca (onStart/onEnd).
+    if (ok && voiceOn && reply) {
+      speak(reply, { onStart: () => setMode("speaking"), onEnd: () => setMode("standby") }).catch(() => setMode("standby"));
+    } else {
+      setMode("standby");
+    }
   }
 
-  /** Para a geração em andamento (aborta o stream). */
-  function stopGenerating() { abortRef.current?.abort(); setMode("standby"); }
+  /** Para a geração em andamento (aborta o stream e cala a fala). */
+  function stopGenerating() { abortRef.current?.abort(); void stopSpeaking(); setMode("standby"); }
 
   async function toggleMic() {
     if (recording) {

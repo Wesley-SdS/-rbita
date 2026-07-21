@@ -1,44 +1,90 @@
 /**
  * Engine de voz do cliente (browser):
- * - LocalTTS: toca o WAV do TTS local (Piper) via /api/tts, com stop() p/ barge-in.
+ * - LocalTTS: sintetiza a fala por frases via /api/tts e toca em sequência,
+ *   com stop() p/ barge-in.
  * - WakeListener: captura o microfone a 16 kHz, envia frames PCM ao serviço de
  *   voz (WebSocket openWakeWord) e dispara onWake ao detectar "Ei Órbita".
  *   Também emite o nível de energia (RMS) para permitir barge-in.
  */
 
+// Medido no Gemini TTS: sintetizar custa ~1 s por segundo de áudio gerado.
+// Daí o desenho: o 1º trecho é curto (a fala começa logo) e os seguintes são
+// maiores — como síntese ≈ duração, o próximo fica pronto enquanto o atual toca.
+const PRIMEIRO_CH = 45; // alvo do 1º trecho: ~2 s até a Órbita abrir a boca
+const MIN_CH = 80; // demais trechos: pedidos minúsculos não compensam o RTT
+const MAX_CH = 200; // teto por pedido — acima disso a síntese demora demais
+
+/**
+ * Quebra o texto em blocos faláveis, priorizando fim de frase e depois vírgula.
+ * Sem isso, uma resposta de 200 caracteres só começaria a ser falada 14 s depois.
+ */
+export function splitFala(text: string): string[] {
+  const frases = text.match(/[^.!?…\n]+[.!?…\n]*/g) ?? [text];
+  const out: string[] = [];
+  let buf = "";
+
+  const empurra = () => {
+    const t = buf.trim();
+    if (t) out.push(t);
+    buf = "";
+  };
+  const alvo = () => (out.length === 0 ? PRIMEIRO_CH : MIN_CH);
+
+  for (const frase of frases) {
+    if (buf.length + frase.length <= MAX_CH) {
+      buf += frase;
+      if (buf.length >= alvo()) empurra();
+      continue;
+    }
+    empurra();
+    if (frase.length <= MAX_CH) { buf = frase; continue; }
+    // frase gigante sem pontuação final: parte nas vírgulas
+    let resto = frase;
+    while (resto.length > MAX_CH) {
+      const corte = resto.lastIndexOf(",", MAX_CH);
+      const at = corte > MIN_CH ? corte + 1 : MAX_CH;
+      out.push(resto.slice(0, at).trim());
+      resto = resto.slice(at);
+    }
+    buf = resto;
+  }
+  empurra();
+
+  // O 1º trecho manda na latência: se uma frase longa o inflou (ex.: "Bom dia!"
+  // grudado numa frase de 90 caracteres), corta na vírgula para a fala começar antes.
+  if (out[0] && out[0].length > PRIMEIRO_CH * 1.5) {
+    const virgula = out[0].lastIndexOf(",", PRIMEIRO_CH + 20);
+    if (virgula > 15) {
+      const [cabeca, cauda] = [out[0].slice(0, virgula + 1).trim(), out[0].slice(virgula + 1).trim()];
+      if (cauda) out.splice(0, 1, cabeca, cauda);
+    }
+  }
+
+  return out.filter(Boolean);
+}
+
 export class LocalTTS {
   private audio: HTMLAudioElement | null = null;
-  private url: string | null = null;
   // guardados para que stop() (barge-in) também finalize a fala em curso:
   private endCurrent: (() => void) | null = null;
   private abort: AbortController | null = null;
 
-  /** Sintetiza e toca. Resolve quando termina OU é interrompido (barge-in). */
-  async speak(text: string, opts?: { onStart?: () => void; onEnd?: () => void }): Promise<void> {
-    this.stop();
-    const clean = text.replace(/[#*_`>[\]]/g, "").slice(0, 2000);
-    if (!clean.trim()) return;
-    // barge-in durante a síntese também aborta o fetch (senão o áudio ainda
-    // chegaria e poderia tocar depois de o usuário já ter interrompido).
-    const ctrl = new AbortController();
-    this.abort = ctrl;
-    let res: Response;
-    try {
-      res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: clean }),
-        signal: ctrl.signal,
-      });
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return; // interrompido: ok
-      throw e;
-    }
-    if (this.abort !== ctrl) return; // já foi interrompido enquanto sintetizava
+  private async fetchTrecho(texto: string, signal: AbortSignal): Promise<Blob> {
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: texto }),
+      signal,
+    });
     if (!res.ok) throw new Error("tts_indisponivel");
-    const blob = await res.blob();
-    this.url = URL.createObjectURL(blob);
-    const audio = new Audio(this.url);
+    return res.blob();
+  }
+
+  /** Toca um blob até o fim (ou até stop()). Resolve nos dois casos. */
+  private tocar(blob: Blob, urls: string[], onStart?: () => void): Promise<void> {
+    const url = URL.createObjectURL(blob);
+    urls.push(url); // por invocação: uma fala nova não revoga as URLs da outra
+    const audio = new Audio(url);
     this.audio = audio;
     return new Promise<void>((resolve) => {
       let settled = false;
@@ -46,16 +92,67 @@ export class LocalTTS {
         if (settled) return; // idempotente: fim natural OU stop() chamam só uma vez
         settled = true;
         this.endCurrent = null;
-        opts?.onEnd?.();
-        this.cleanup();
         resolve();
       };
-      this.endCurrent = done; // stop() usa isto para resolver + disparar onEnd
-      audio.onplay = () => opts?.onStart?.();
+      this.endCurrent = done; // stop() usa isto para destravar o await
+      audio.onplay = () => onStart?.();
       audio.onended = done;
       audio.onerror = done;
       void audio.play().catch(done);
     });
+  }
+
+  /**
+   * Sintetiza e toca por trechos. Resolve quando termina OU é interrompido.
+   * Enquanto um trecho toca, o próximo já está sendo sintetizado.
+   */
+  async speak(text: string, opts?: { onStart?: () => void; onEnd?: () => void }): Promise<void> {
+    this.stop();
+    const clean = text.replace(/[#*_`>[\]]/g, "").slice(0, 2000);
+    if (!clean.trim()) return;
+
+    const trechos = splitFala(clean);
+    // barge-in durante a síntese também aborta os fetches (senão o áudio ainda
+    // chegaria e poderia tocar depois de o usuário já ter interrompido).
+    const ctrl = new AbortController();
+    this.abort = ctrl;
+
+    const abortado = () => this.abort !== ctrl || ctrl.signal.aborted;
+    const urls: string[] = [];
+    let comecou = false;
+
+    // prefetch de profundidade 1: o próximo trecho é pedido antes de tocar o atual.
+    // guardamos o erro em vez de deixar a promise rejeitar sozinha (unhandled).
+    const pedir = (i: number): Promise<Blob | Error> | null =>
+      i < trechos.length
+        ? this.fetchTrecho(trechos[i], ctrl.signal).catch((e: unknown) => (e instanceof Error ? e : new Error("tts")))
+        : null;
+
+    try {
+      let proximo = pedir(0);
+      for (let i = 0; i < trechos.length; i++) {
+        const r = await proximo!;
+        if (abortado()) return;
+        if (r instanceof Error) {
+          if (r.name === "AbortError") return; // interrompido: ok
+          if (comecou) return; // já falou algo; não derruba a voz por causa da cauda
+          throw r;
+        }
+
+        proximo = pedir(i + 1);
+        await this.tocar(r, urls, comecou ? undefined : opts?.onStart);
+        comecou = true;
+        if (abortado()) return;
+      }
+    } finally {
+      if (this.abort === ctrl) {
+        // ninguém preemptou esta fala: ela é dona de encerrar o estado
+        this.abort = null;
+        this.audio = null;
+        opts?.onEnd?.();
+      }
+      for (const u of urls) URL.revokeObjectURL(u);
+    }
   }
 
   /** Interrompe a fala imediatamente (barge-in) — resolve a Promise e roda onEnd. */
@@ -71,19 +168,11 @@ export class LocalTTS {
     }
     const end = this.endCurrent;
     this.endCurrent = null;
-    end?.(); // finaliza a fala pendente (senão o estado ficaria preso em "speaking")
-    this.cleanup();
+    end?.(); // destrava o await do trecho em curso (o finally do speak revoga as URLs)
   }
 
   get speaking(): boolean {
     return !!this.audio && !this.audio.paused;
-  }
-
-  private cleanup() {
-    if (this.url) {
-      URL.revokeObjectURL(this.url);
-      this.url = null;
-    }
   }
 }
 
