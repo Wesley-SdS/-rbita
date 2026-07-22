@@ -6,6 +6,39 @@ import type { Msg } from "@/components/console/types";
 import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
 import { RealtimeSession } from "@/lib/voice/realtime";
 
+// ── Web Speech API (ditado ao vivo no navegador) ─────────────────────────────
+// Não está no lib.dom padrão do TS; tipamos só o que usamos. Roda no aparelho
+// (Chrome/Edge/Safari, incl. mobile), mostra resultado parcial na hora e não
+// faz upload — muito mais fluido que gravar → subir → transcrever.
+interface SpeechResultLike {
+  readonly isFinal: boolean;
+  readonly length: number;
+  readonly [i: number]: { readonly transcript: string };
+}
+interface SpeechEventLike {
+  readonly resultIndex: number;
+  readonly results: { readonly length: number; readonly [i: number]: SpeechResultLike };
+}
+interface RecognitionLike {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onstart: (() => void) | null;
+  onresult: ((e: SpeechEventLike) => void) | null;
+  onerror: ((e: { error: string }) => void) | null;
+  onend: (() => void) | null;
+}
+type RecognitionCtor = new () => RecognitionLike;
+
+function getRecognitionCtor(): RecognitionCtor | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
 interface Params {
   modeRef: MutableRefObject<OrbMode>;
   setMode: Dispatch<SetStateAction<OrbMode>>;
@@ -32,6 +65,7 @@ export function useVoice(p: Params) {
   const [realtimeEnabled, setRealtimeEnabled] = useState(false); // S2S premium disponível?
   const [realtimeOn, setRealtimeOn] = useState(false);
   const recRef = useRef<MediaRecorder | null>(null);
+  const dictRef = useRef<RecognitionLike | null>(null); // ditado ao vivo em curso
   const chunksRef = useRef<Blob[]>([]);
   const ttsRef = useRef<LocalTTS | null>(null);
   const wakeRef = useRef<WakeListener | null>(null);
@@ -212,9 +246,63 @@ export function useVoice(p: Params) {
     }
   }
 
+  /**
+   * Microfone: prefere o DITADO AO VIVO (Web Speech API) — o texto aparece no
+   * compositor conforme o usuário fala e é enviado ao terminar, sem upload nem
+   * transcrição no servidor. Cai para o fluxo antigo (gravar webm → /api/stt)
+   * só em navegadores sem a API.
+   */
   async function toggleMic() {
-    if (recording) { recRef.current?.stop(); return; }
+    if (dictRef.current) { dictRef.current.stop(); return; } // já ditando → encerra
+    if (recording) { recRef.current?.stop(); return; }       // fluxo antigo → para
     if (p.modeRef.current !== "standby") return;
+
+    const Ctor = getRecognitionCtor();
+    if (Ctor) { startDictation(Ctor); return; }
+    await startAudioFallback();
+  }
+
+  /** Ditado ao vivo: escreve no compositor enquanto fala; ao parar, envia. */
+  function startDictation(Ctor: RecognitionCtor) {
+    const rec = new Ctor();
+    rec.lang = "pt-BR";
+    rec.interimResults = true;   // mostra o parcial na hora (feedback no textarea)
+    rec.continuous = false;      // encerra sozinho após uma pausa na fala
+    const base = p.input.trim(); // preserva o que já estava digitado
+    let final = "";
+    const compose = (interim: string) => ((base ? base + " " : "") + (final + interim)).trimStart();
+
+    rec.onstart = () => { setRecording(true); p.setMode("listening"); };
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) final += r[0].transcript;
+        else interim += r[0].transcript;
+      }
+      p.setInput(compose(interim)); // texto aparecendo ao vivo
+    };
+    rec.onerror = (ev) => {
+      dictRef.current = null;
+      setRecording(false);
+      p.setMode("standby");
+      if (ev.error === "no-speech") p.setError("Não ouvi nada — toque e fale de novo.");
+      else if (ev.error !== "aborted") p.setError("Reconhecimento de voz indisponível neste navegador.");
+    };
+    rec.onend = () => {
+      dictRef.current = null;
+      setRecording(false);
+      p.setMode("standby");
+      const text = compose("").trim();
+      p.setInput("");
+      if (text) p.sendMessageRef.current?.(text); // fala → texto → envia
+    };
+    dictRef.current = rec;
+    rec.start();
+  }
+
+  /** Fallback p/ navegadores sem Web Speech: grava webm e transcreve no servidor. */
+  async function startAudioFallback() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const rec = new MediaRecorder(stream);
@@ -263,7 +351,7 @@ export function useVoice(p: Params) {
   useEffect(() => {
     // config de realtime (opcional) buscado no cliente; limpa listeners no unmount.
     fetch("/api/realtime/config").then((r) => r.json()).then((d) => setRealtimeEnabled(!!d.enabled)).catch(() => {});
-    return () => { wakeRef.current?.stop(); ttsRef.current?.stop(); rtRef.current?.stop(); };
+    return () => { wakeRef.current?.stop(); ttsRef.current?.stop(); rtRef.current?.stop(); dictRef.current?.abort(); };
   }, []);
 
   return {
