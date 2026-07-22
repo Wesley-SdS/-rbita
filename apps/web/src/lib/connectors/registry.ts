@@ -41,9 +41,13 @@ const DEFS: Record<ConnectorId, ConnectorDef> = {
     authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
     tokenUrl: "https://oauth2.googleapis.com/token",
     scopes: [
-      // escopos mínimos p/ as features: ler/rascunhar/enviar e-mail + eventos da agenda
-      "https://www.googleapis.com/auth/gmail.modify",
-      "https://www.googleapis.com/auth/calendar.events",
+      // ACESSO TOTAL (pedido do Wesley). Enquanto o app não for verificado pelo
+      // Google, ele fica em modo "teste": funciona 100% para os test users, com
+      // a tela de "app não verificado" que se aceita manualmente.
+      "https://mail.google.com/", // Gmail completo: ler, enviar, rascunhar, gerenciar, apagar
+      "https://www.googleapis.com/auth/calendar", // Agenda completa (todos os calendários)
+      "https://www.googleapis.com/auth/contacts", // Contatos (resolver "e-mail pro João")
+      "https://www.googleapis.com/auth/tasks", // Tarefas do Google
       "openid",
       "email",
     ],
