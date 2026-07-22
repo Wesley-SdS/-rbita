@@ -5,39 +5,10 @@ import type { OrbMode } from "@/components/orb";
 import type { Msg } from "@/components/console/types";
 import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
 import { RealtimeSession } from "@/lib/voice/realtime";
+import { getRecognitionCtor, LocalWake, type RecognitionCtor, type RecognitionLike } from "@/lib/voice/speech";
 
-// ── Web Speech API (ditado ao vivo no navegador) ─────────────────────────────
-// Não está no lib.dom padrão do TS; tipamos só o que usamos. Roda no aparelho
-// (Chrome/Edge/Safari, incl. mobile), mostra resultado parcial na hora e não
-// faz upload — muito mais fluido que gravar → subir → transcrever.
-interface SpeechResultLike {
-  readonly isFinal: boolean;
-  readonly length: number;
-  readonly [i: number]: { readonly transcript: string };
-}
-interface SpeechEventLike {
-  readonly resultIndex: number;
-  readonly results: { readonly length: number; readonly [i: number]: SpeechResultLike };
-}
-interface RecognitionLike {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onstart: (() => void) | null;
-  onresult: ((e: SpeechEventLike) => void) | null;
-  onerror: ((e: { error: string }) => void) | null;
-  onend: (() => void) | null;
-}
-type RecognitionCtor = new () => RecognitionLike;
-
-function getRecognitionCtor(): RecognitionCtor | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
+/** Controle mínimo de um wake listener (Render ou local): o que o toggle usa. */
+type WakeCtl = { stop: () => void; active: boolean; pause?: () => void; resume?: () => void };
 
 interface Params {
   modeRef: MutableRefObject<OrbMode>;
@@ -68,7 +39,7 @@ export function useVoice(p: Params) {
   const dictRef = useRef<RecognitionLike | null>(null); // ditado ao vivo em curso
   const chunksRef = useRef<Blob[]>([]);
   const ttsRef = useRef<LocalTTS | null>(null);
-  const wakeRef = useRef<WakeListener | null>(null);
+  const wakeRef = useRef<WakeCtl | null>(null);
   const rtRef = useRef<RealtimeSession | null>(null);
   const audioFileRef = useRef<HTMLInputElement | null>(null);
   // falhas seguidas do /api/tts; após MAX_TTS_FALHAS usa a voz do navegador.
@@ -219,20 +190,47 @@ export function useVoice(p: Params) {
       setWakeOn(false);
       return;
     }
+
+    // Preferido: wake word NO APARELHO (Web Speech API) — sem servidor, sem
+    // cold-start. Detecta "Ei Órbita" e dispara o ditado do comando.
+    const Ctor = getRecognitionCtor();
+    if (Ctor) {
+      try {
+        // dispara o pedido de permissão do microfone uma vez, com antecedência
+        const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+        s.getTracks().forEach((t) => t.stop());
+      } catch {
+        p.setError("Sem acesso ao microfone para o wake word.");
+        return;
+      }
+      const w = new LocalWake(Ctor, {
+        onWake: () => {
+          stopSpeaking(); // barge-in ao ouvir "Ei Órbita"
+          if (p.modeRef.current === "standby") startDictation(Ctor); // capta o comando (retoma o wake no fim)
+          else w.resume(); // ocupada: só religa a escuta
+        },
+        onError: () => {
+          /* erro transitório; o próprio LocalWake religa */
+        },
+      });
+      w.start();
+      wakeRef.current = w;
+      setWakeOn(true);
+      return;
+    }
+
+    // Fallback: serviço de voz remoto (Render) para navegadores sem Web Speech.
     try {
       const cfg = await fetch("/api/voice-config").then((r) => r.json());
-      if (!cfg.up) {
-        // A FALA já funciona sem o serviço (TTS roda no servidor). Só o wake word
-        // "Ei Órbita" mãos-livres depende do serviço de voz. Mensagem sem jargão.
-        p.setError("Wake word “Ei Órbita” indisponível: o serviço de voz não está conectado. Você ainda pode falar pelo botão do microfone.");
+      if (!cfg.up || !cfg.wsWakeUrl) {
+        p.setError("Wake word “Ei Órbita” indisponível neste navegador. Use o botão do microfone.");
         return;
       }
       const listener = new WakeListener(cfg.wsWakeUrl, {
         onWake: () => {
-          stopSpeaking(); // barge-in ao ouvir "Ei Órbita" (libera o estado)
+          stopSpeaking();
           if (p.modeRef.current === "standby") void voiceCommand();
         },
-        // barge-in por voz: se a Órbita está falando e o usuário fala alto, interrompe
         onEnergy: (rms) => {
           if (ttsRef.current?.speaking && rms > 0.06) stopSpeaking();
         },
@@ -264,6 +262,7 @@ export function useVoice(p: Params) {
 
   /** Ditado ao vivo: escreve no compositor enquanto fala; ao parar, envia. */
   function startDictation(Ctor: RecognitionCtor) {
+    wakeRef.current?.pause?.(); // cede o mic: o wake não pode ouvir junto com o ditado
     const rec = new Ctor();
     rec.lang = "pt-BR";
     rec.interimResults = true;   // mostra o parcial na hora (feedback no textarea)
@@ -288,6 +287,7 @@ export function useVoice(p: Params) {
       p.setMode("standby");
       if (ev.error === "no-speech") p.setError("Não ouvi nada — toque e fale de novo.");
       else if (ev.error !== "aborted") p.setError("Reconhecimento de voz indisponível neste navegador.");
+      wakeRef.current?.resume?.(); // volta a escutar "Ei Órbita"
     };
     rec.onend = () => {
       dictRef.current = null;
@@ -296,6 +296,7 @@ export function useVoice(p: Params) {
       const text = compose("").trim();
       p.setInput("");
       if (text) p.sendMessageRef.current?.(text); // fala → texto → envia
+      wakeRef.current?.resume?.(); // volta a escutar "Ei Órbita"
     };
     dictRef.current = rec;
     rec.start();
