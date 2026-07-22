@@ -16,7 +16,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import WebSocket from "ws";
 
-const TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
+// ⚠️ NÃO é um segredo: é o token PÚBLICO fixo do serviço de leitura em voz alta
+// do Microsoft Edge, idêntico em milhares de repositórios (biblioteca `edge-tts`
+// e forks). Não dá acesso a nada da conta de ninguém. Está no allowlist do
+// GitGuardian (.gitguardian.yaml) para não gerar falso positivo. ggignore
+const TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4"; // pragma: allowlist secret
 const CHROMIUM_VERSION = "143.0.3650.75";
 const BASE = "speech.platform.bing.com/consumer/speech/synthesize/readaloud";
 const WIN_EPOCH = 11_644_473_600; // segundos entre 1601-01-01 e 1970-01-01

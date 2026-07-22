@@ -1,0 +1,18 @@
+# Allowlist do GitGuardian (usado pelo ggshield em pré-commit/CI).
+# Aqui ficam apenas FALSOS POSITIVOS conhecidos — nunca segredos reais.
+# Obs.: o monitoramento pelo painel/GitHub App usa o allowlist do próprio painel;
+# marcar um incidente como "false positive" lá é o que silencia as notificações.
+version: 2
+
+secret:
+  ignored-matches:
+    # Token PÚBLICO fixo do serviço de leitura em voz alta do Microsoft Edge.
+    # Idêntico em milhares de repos (biblioteca edge-tts). Não é credencial.
+    - name: Microsoft Edge public read-aloud token (não é segredo)
+      match: 6A5AA1D4EAFF4E9FB37E23D68491D6F4
+
+  ignored-paths:
+    # Hashes de integridade (sha512) de pacotes npm — públicos e de alta entropia,
+    # disparam o detector genérico sem serem segredos.
+    - "pnpm-lock.yaml"
+    - "**/pnpm-lock.yaml"
