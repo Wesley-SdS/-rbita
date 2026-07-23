@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const KEY = "orbita.hiddenBlocks";
 
@@ -10,12 +10,14 @@ export function useHiddenBlocks(): { hidden: string[]; toggle: (id: string) => v
   useEffect(() => {
     try { setHidden(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch { /* noop */ }
   }, []);
-  const toggle = (id: string) =>
+  // useCallback: referência estável entre renders (habilita memoizar os <Block>).
+  const toggle = useCallback((id: string) => {
     setHidden((h) => {
       const next = h.includes(id) ? h.filter((x) => x !== id) : [...h, id];
       try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* noop */ }
       return next;
     });
+  }, []);
   return { hidden, toggle, isHidden: (id) => hidden.includes(id) };
 }
 

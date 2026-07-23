@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -12,7 +12,7 @@ import { Card, PanelTitle, Skeleton } from "@/components/ui";
 import { IconVolume, IconVolumeOff, IconMic, IconStop, IconChat, IconMenu, IconClose, IconSend } from "@/components/ui/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { signOut } from "@/lib/auth-client";
-import type { ModelInfo, VoiceBridge } from "@/components/console/types";
+import type { ModelInfo, VoiceBridge, Msg } from "@/components/console/types";
 import { useOrbMode } from "@/components/console/use-orb-mode";
 import { useConversations } from "@/components/console/use-conversations";
 import { useChatStream } from "@/components/console/use-chat-stream";
@@ -91,6 +91,69 @@ const STATUS: Record<OrbMode, string> = {
 };
 
 /**
+ * Bolha do log principal, MEMOIZADA. Durante o streaming, o `paint` troca só o
+ * ÚLTIMO objeto de `messages` (mantendo as referências anteriores), então apenas
+ * a última bolha re-renderiza — as antigas pulam o re-parse de markdown. `status`
+ * (indicador de "processando/respondendo…") só é não-nulo na última bolha ativa.
+ */
+const LogRow = memo(function LogRow({ m, status }: { m: Msg; status: { label: string; elapsed: number } | null }) {
+  return (
+    <div className={m.role === "user" ? "flex justify-end" : "flex flex-col items-start"}>
+      {m.role === "assistant" && m.steps && m.steps.length > 0 && (
+        <div className="mb-1 flex flex-col gap-0.5">
+          {m.steps.map((s, k) => (
+            <div key={k} className="flex items-center gap-1.5 font-mono text-[10px]" style={{ color: s.done ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
+              <span>{s.done ? "✓" : "⟳"}</span>
+              <span>{toolLabel(s.name)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="max-w-[85%] rounded-xl px-3 py-2 text-sm"
+        style={{ background: m.role === "user" ? "color-mix(in oklab, var(--color-gold) 16%, var(--color-surface))" : "var(--color-ground)", border: "1px solid var(--color-line)", color: "var(--color-ink)" }}>
+        {m.image && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={m.image} alt="anexo" className="mb-2 max-h-48 rounded-lg border object-contain" style={{ borderColor: "var(--color-line)" }} />
+        )}
+        {m.role === "assistant" && m.content ? (
+          <Markdown>{m.content}</Markdown>
+        ) : status ? (
+          <span className="flex items-center gap-2" style={{ color: "var(--color-ink-dim)" }}>
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--color-gold)" }} />
+            <span>{status.label}</span>
+            {status.elapsed > 0 && <span className="font-mono text-xs" style={{ color: "var(--color-ink-dim)" }}>{status.elapsed}s</span>}
+          </span>
+        ) : (
+          <span className="whitespace-pre-wrap">{m.content}</span>
+        )}
+      </div>
+    </div>
+  );
+});
+
+/** Bolha do painel de foco (mais enxuta), também memoizada por `m`. */
+const FocusRow = memo(function FocusRow({ m }: { m: Msg }) {
+  return (
+    <div className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+      <div className="max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed"
+        style={{ background: m.role === "user" ? "color-mix(in oklab, var(--color-gold) 15%, transparent)" : "rgba(255,255,255,0.05)", color: "var(--color-ink)" }}>
+        {m.image && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={m.image} alt="anexo" className="mb-2 max-h-40 rounded-lg object-contain" />
+        )}
+        {m.role === "assistant" && m.content ? (
+          <Markdown>{m.content}</Markdown>
+        ) : m.content ? (
+          <span className="whitespace-pre-wrap">{m.content}</span>
+        ) : (
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--color-gold)" }} />
+        )}
+      </div>
+    </div>
+  );
+});
+
+/**
  * Botão circular translúcido do modo foco. Vidro fosco + traço fino em vez de
  * caixa com borda e emoji, que dava aparência datada.
  */
@@ -138,6 +201,18 @@ export function Console({
 }) {
   const router = useRouter();
   const [models] = useState<ModelInfo[]>(initialModels);
+  // agrupa os modelos uma vez: evita refiltrar `models` 8x a cada render (o <select>
+  // de provedores fazia isso, custoso durante o streaming).
+  const modelGroups = useMemo(() => {
+    const byProvider = new Map<string, ModelInfo[]>();
+    for (const m of models) {
+      if (m.key === "auto") continue;
+      const arr = byProvider.get(m.provider);
+      if (arr) arr.push(m);
+      else byProvider.set(m.provider, [m]);
+    }
+    return { auto: models.filter((m) => m.key === "auto"), byProvider };
+  }, [models]);
   const [modelKey, setModelKey] = useState(initialDefaultModel || initialModels[0]?.key || "");
   const [error, setError] = useState<string | null>(null);
   const [privacyMode, setPrivacyMode] = useState(false); // força tudo local (nada vai p/ nuvem)
@@ -223,7 +298,7 @@ export function Console({
             className="w-full rounded-lg border px-2 py-2 text-xs disabled:opacity-60"
             style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }}>
             {/* Auto primeiro, depois cada provedor em seu grupo separado */}
-            {!privacyMode && models.filter((m) => m.key === "auto").map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+            {!privacyMode && modelGroups.auto.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
             {[
               { p: "local", label: "⚡ Local (grátis)" },
               { p: "claude", label: "🟠 Claude Max (assinatura)" },
@@ -233,7 +308,7 @@ export function Console({
               { p: "cohere", label: "🟣 Cohere" },
               { p: "gateway", label: "☁ Gateway (pago)" },
             ].map((g) => {
-              const opts = models.filter((m) => m.key !== "auto" && m.provider === g.p);
+              const opts = modelGroups.byProvider.get(g.p) ?? [];
               if (!opts.length || (privacyMode && g.p !== "local")) return null;
               return (
                 <optgroup key={g.p} label={g.label}>
@@ -277,7 +352,9 @@ export function Console({
         </div>
         <div className="relative shrink-0 h-[42vh] min-h-[300px]"
           style={{ background: "radial-gradient(circle at 50% 48%, #1a1206 0%, #0d0904 55%, transparent 100%)" }}>
-          <Orb mode={mode} fill bare />
+          {/* no modo foco este Orb fica COBERTO pelo overlay — pausa o RAF (no
+              mobile, que abre em foco, isso evita 2 Orbs desenhando o tempo todo) */}
+          <Orb mode={mode} fill bare paused={focus} />
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.16em]" style={{ color: mode !== "standby" ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
             {STATUS[mode]}{mode !== "standby" && chat.elapsed > 0 ? ` · ${chat.elapsed}s` : ""}
           </div>
@@ -290,38 +367,17 @@ export function Console({
             </p>
           )}
           {messages.map((m, i) => (
-            <div key={i} className={m.role === "user" ? "flex justify-end" : "flex flex-col items-start"}>
-              {/* timeline de atividade: o que a Órbita está fazendo (passos com ⟳ → ✓) */}
-              {m.role === "assistant" && m.steps && m.steps.length > 0 && (
-                <div className="mb-1 flex flex-col gap-0.5">
-                  {m.steps.map((s, k) => (
-                    <div key={k} className="flex items-center gap-1.5 font-mono text-[10px]" style={{ color: s.done ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
-                      <span>{s.done ? "✓" : "⟳"}</span>
-                      <span>{toolLabel(s.name)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="max-w-[85%] rounded-xl px-3 py-2 text-sm"
-                style={{ background: m.role === "user" ? "color-mix(in oklab, var(--color-gold) 16%, var(--color-surface))" : "var(--color-ground)", border: "1px solid var(--color-line)", color: "var(--color-ink)" }}>
-                {m.image && (
-                  // miniatura do anexo enviado na própria bolha
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.image} alt="anexo" className="mb-2 max-h-48 rounded-lg border object-contain" style={{ borderColor: "var(--color-line)" }} />
-                )}
-                {m.role === "assistant" && m.content ? (
-                  <Markdown>{m.content}</Markdown>
-                ) : mode !== "standby" && i === messages.length - 1 ? (
-                  <span className="flex items-center gap-2" style={{ color: "var(--color-ink-dim)" }}>
-                    <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--color-gold)" }} />
-                    <span>{STATUS[mode]}</span>
-                    {chat.elapsed > 0 && <span className="font-mono text-xs" style={{ color: "var(--color-ink-dim)" }}>{chat.elapsed}s</span>}
-                  </span>
-                ) : (
-                  <span className="whitespace-pre-wrap">{m.content}</span>
-                )}
-              </div>
-            </div>
+            <LogRow
+              key={i}
+              m={m}
+              status={
+                m.role === "assistant" && m.content
+                  ? null
+                  : mode !== "standby" && i === messages.length - 1
+                    ? { label: STATUS[mode], elapsed: chat.elapsed }
+                    : null
+              }
+            />
           ))}
         </div>
 
@@ -503,25 +559,7 @@ export function Console({
                 <p className="mt-8 text-center text-sm" style={{ color: "var(--color-ink-dim)" }}>Fale ou escreva para começar.</p>
               )}
               {messages.map((m, i) => (
-                <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-                  <div className="max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed"
-                    style={{
-                      background: m.role === "user" ? "color-mix(in oklab, var(--color-gold) 15%, transparent)" : "rgba(255,255,255,0.05)",
-                      color: "var(--color-ink)",
-                    }}>
-                    {m.image && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={m.image} alt="anexo" className="mb-2 max-h-40 rounded-lg object-contain" />
-                    )}
-                    {m.role === "assistant" && m.content ? (
-                      <Markdown>{m.content}</Markdown>
-                    ) : m.content ? (
-                      <span className="whitespace-pre-wrap">{m.content}</span>
-                    ) : (
-                      <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--color-gold)" }} />
-                    )}
-                  </div>
-                </div>
+                <FocusRow key={i} m={m} />
               ))}
             </div>
 

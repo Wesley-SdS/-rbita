@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 
 export type OrbMode =
   | "standby"
@@ -11,20 +11,25 @@ export type OrbMode =
   | "connecting";
 
 /** Núcleo neural ÓRBITA (estilo Jarvis) — portado do design/protótipo. */
-export function Orb({
+export const Orb = memo(function Orb({
   mode = "standby",
   height = 380,
   fill = false,
   bare = false,
+  paused = false,
 }: {
   mode?: OrbMode;
   height?: number;
   fill?: boolean;
   bare?: boolean;
+  /** Para o loop de animação (ex.: Orb coberto pelo overlay de foco). */
+  paused?: boolean;
 }) {
   const cvRef = useRef<HTMLCanvasElement | null>(null);
   const modeRef = useRef<OrbMode>(mode);
   modeRef.current = mode;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
 
   useEffect(() => {
     const cv = cvRef.current;
@@ -89,6 +94,21 @@ export function Orb({
       EDGE_WIDTH.push(Math.max(0.6, Math.min(1.1, 0.6 + ((al - 0.05) / 0.16) * 0.5)));
     }
     const edgeBuf: number[][] = Array.from({ length: EDGE_BUCKETS }, () => []);
+
+    // Braços espirais do núcleo: a cor de cada partícula depende SÓ de tt = s/N,
+    // então é constante entre frames. Pré-computa as strings uma vez (antes eram
+    // 3 braços × 90 = 270 concatenações de string por frame, em TODOS os modos).
+    const ARM_STEPS = 90;
+    const ARM_FILL: string[] = [];
+    for (let s = 0; s < ARM_STEPS; s++) {
+      const tt = s / ARM_STEPS, br = (1 - tt) * 0.9;
+      ARM_FILL.push("rgba(255," + (200 - tt * 40) + "," + (150 - tt * 70) + "," + br.toFixed(3) + ")");
+    }
+    // Pontinho central dos nós: alpha quantizado em faixas (imperceptível num dot
+    // de 1–2px), removendo o toFixed+concat por nó por frame (~150/frame).
+    const NODE_FILL_BUCKETS = 20;
+    const NODE_FILL: string[] = [];
+    for (let i = 0; i < NODE_FILL_BUCKETS; i++) NODE_FILL.push("rgba(255,236,205," + ((i + 0.5) / NODE_FILL_BUCKETS).toFixed(3) + ")");
 
     const SPRITE_BIG = glowSprite("255,215,150");
     const SPRITE_SMALL = glowSprite("255,180,90");
@@ -230,7 +250,8 @@ export function Orb({
         ctx.globalAlpha = Math.min(1, 0.5 * br);
         ctx.drawImage(n.big ? SPRITE_BIG : SPRITE_SMALL, p.px - rad, p.py - rad, rad * 2, rad * 2);
         ctx.globalAlpha = 1;
-        ctx.fillStyle = "rgba(255,236,205," + Math.min(1, 0.6 * br + 0.2).toFixed(3) + ")";
+        const nfa = Math.min(1, 0.6 * br + 0.2);
+        ctx.fillStyle = NODE_FILL[Math.min(NODE_FILL_BUCKETS - 1, (nfa * NODE_FILL_BUCKETS) | 0)];
         ctx.beginPath(); ctx.arc(p.px, p.py, sz, 0, 6.2832); ctx.fill();
       }
 
@@ -288,10 +309,10 @@ export function Orb({
 
       for (let arm = 0; arm < 3; arm++) {
         const off = (arm / 3) * 6.2832;
-        for (let s = 0; s < 90; s++) {
-          const tt = s / 90, th = tt * 2.4 * 6.2832 + off + coreAng, rad = tt * coreR * 1.35;
-          const x = cx + Math.cos(th) * rad, y = cy + Math.sin(th) * rad * 0.9, br = (1 - tt) * 0.9, sz = (1 - tt) * 2.4 + 0.4;
-          ctx.fillStyle = "rgba(255," + (200 - tt * 40) + "," + (150 - tt * 70) + "," + br.toFixed(3) + ")";
+        for (let s = 0; s < ARM_STEPS; s++) {
+          const tt = s / ARM_STEPS, th = tt * 2.4 * 6.2832 + off + coreAng, rad = tt * coreR * 1.35;
+          const x = cx + Math.cos(th) * rad, y = cy + Math.sin(th) * rad * 0.9, sz = (1 - tt) * 2.4 + 0.4;
+          ctx.fillStyle = ARM_FILL[s]; // cor pré-computada (depende só de tt)
           ctx.beginPath(); ctx.arc(x, y, sz, 0, 6.2832); ctx.fill();
         }
       }
@@ -317,7 +338,7 @@ export function Orb({
     // o canvas estão ocultos; limita a ~30fps em espera (60fps nativo em atividade).
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
-      if (!onScreen || document.hidden) { lastT = now; return; }
+      if (!onScreen || document.hidden || pausedRef.current) { lastT = now; return; }
       const targetFps = modeRef.current === "standby" ? 30 : 60;
       if (now - lastDraw < 1000 / targetFps - 1) return;
       lastDraw = now;
@@ -356,4 +377,4 @@ export function Orb({
       <canvas ref={cvRef} aria-hidden style={canvasStyle} />
     </div>
   );
-}
+});
