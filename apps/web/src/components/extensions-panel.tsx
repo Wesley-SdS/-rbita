@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, PanelTitle, Input, Textarea, Button } from "@/components/ui";
 
 interface Skill { id: string; name: string; instructions: string; enabled: boolean }
-interface Mcp { id: string; name: string; url: string; enabled: boolean }
+interface Mcp { id: string; name: string; url: string; enabled: boolean; risk: string }
 
 /** Extensões: skills (comportamentos) + servidores MCP (ferramentas externas). */
 export function ExtensionsPanel() {
@@ -87,13 +87,21 @@ export function ExtensionsPanel() {
                 <div key={m.id} className="flex items-center gap-1.5 text-[11px]">
                   <button onClick={() => toggle("mcp", m.id, !m.enabled)}>{m.enabled ? "🟢" : "⚪"}</button>
                   <span className="flex-1 truncate" style={{ color: "var(--color-ink)" }} title={m.url}>{m.name}</span>
+                  {/* risco das tools do servidor: "leitura" executa direto; o resto passa pela aprovação */}
+                  <select value={m.risk ?? "efeito_externo"} title="Risco das ferramentas deste servidor"
+                    onChange={async (e) => { await fetch("/api/mcp", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: m.id, risk: e.target.value }) }); load(); }}
+                    className="rounded-md border px-1 py-0.5 text-[10px]" style={{ borderColor: "var(--color-line)", background: "transparent", color: m.risk === "leitura" ? "inherit" : "var(--color-gold)" }}>
+                    <option value="leitura">somente leitura</option>
+                    <option value="efeito_externo">com efeito (aprova)</option>
+                    <option value="perigoso">perigoso (aprova)</option>
+                  </select>
                   <button onClick={() => remove("mcp", m.id)} style={{ color: "var(--color-danger)" }}>×</button>
                 </div>
               ))}
               <Input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="Nome (ex: GitHub)" />
               <Input value={mUrl} onChange={(e) => setMUrl(e.target.value)} placeholder="URL do servidor MCP (HTTP streamable)" />
               <Button variant="primary" size="md" onClick={addMcp}>+ servidor MCP</Button>
-              <p className="text-[9px]" style={{ color: "var(--color-ink-dim)" }}>As ferramentas do MCP ficam disponíveis no chat automaticamente.</p>
+              <p className="text-[9px]" style={{ color: "var(--color-ink-dim)" }}>As ferramentas do MCP entram no chat automaticamente. Por padrão passam pela aprovação; marque "somente leitura" para executarem direto.</p>
             </>
           )}
         </div>

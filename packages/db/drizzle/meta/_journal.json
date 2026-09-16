@@ -1,0 +1,125 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1784380684897,
+      "tag": "0000_perfect_invaders",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784381120906,
+      "tag": "0001_curly_tarot",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784381622027,
+      "tag": "0002_warm_sugar_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784384305210,
+      "tag": "0003_living_hobgoblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784385346042,
+      "tag": "0004_lame_blue_shield",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784388579258,
+      "tag": "0005_vengeful_dreadnoughts",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784402681534,
+      "tag": "0006_legal_dorian_gray",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784410809177,
+      "tag": "0007_naive_maginty",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784413176747,
+      "tag": "0008_amusing_adam_warlock",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784433119545,
+      "tag": "0009_bent_the_leader",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784435755069,
+      "tag": "0010_unique_ink",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784439610896,
+      "tag": "0011_marvelous_onslaught",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784441833763,
+      "tag": "0012_gigantic_charles_xavier",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784443401810,
+      "tag": "0013_volatile_silk_fever",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784446362698,
+      "tag": "0014_chunky_fallen_one",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1789593422870,
+      "tag": "0015_onda1_settings_events_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1789596607935,
+      "tag": "0016_onda1_tool_config_mcp_risk",
+      "breakpoints": true
+    }
+  ]
+}

@@ -38,6 +38,9 @@ const Widgets = dynamic(() => import("@/components/widgets").then((m) => m.Widge
 const PersonaPanel = dynamic(() => import("@/components/side-panels").then((m) => m.PersonaPanel), { ssr: false, loading: PanelSkeleton });
 const EconomyPanel = dynamic(() => import("@/components/side-panels").then((m) => m.EconomyPanel), { ssr: false, loading: PanelSkeleton });
 const PushToggle = dynamic(() => import("@/components/side-panels").then((m) => m.PushToggle), { ssr: false, loading: PanelSkeleton });
+const RulesPanel = dynamic(() => import("@/components/rules-panel").then((m) => m.RulesPanel), { ssr: false, loading: PanelSkeleton });
+const SettingsPanel = dynamic(() => import("@/components/settings-panel").then((m) => m.SettingsPanel), { ssr: false, loading: PanelSkeleton });
+const ToolsPanel = dynamic(() => import("@/components/tools-panel").then((m) => m.ToolsPanel), { ssr: false, loading: PanelSkeleton });
 
 // rótulos amigáveis para a timeline de atividade (o que a Órbita está fazendo).
 const TOOL_LABELS: Record<string, string> = {
@@ -77,7 +80,10 @@ const BLOCKS = [
   { id: "extensoes", label: "Extensões" },
   { id: "conectores", label: "Conectores" },
   { id: "proatividade", label: "Proatividade" },
+  { id: "regras", label: "Regras proativas" },
+  { id: "ferramentas", label: "Ferramentas" },
   { id: "push", label: "Notificações push" },
+  { id: "ajustes", label: "Ajustes" },
 ];
 
 
@@ -493,7 +499,10 @@ export function Console({
         <ActionsPanel />
         <Block id="conectores" hidden={hidden} toggle={toggle}><ConnectorsPanel /></Block>
         <Block id="proatividade" hidden={hidden} toggle={toggle}><RoutinesPanel /></Block>
+        <Block id="regras" hidden={hidden} toggle={toggle}><RulesPanel /></Block>
+        <Block id="ferramentas" hidden={hidden} toggle={toggle}><ToolsPanel /></Block>
         <Block id="push" hidden={hidden} toggle={toggle}><PushToggle /></Block>
+        <Block id="ajustes" hidden={hidden} toggle={toggle}><SettingsPanel /></Block>
       </aside>
     </div>
 

@@ -33,5 +33,8 @@ apps/voice/models_test
 apps/voice/models
 *.wav
 
-# harness/editor local (Claude Code launch config)
-.claude/
+# harness/editor local (Claude Code). As SKILLS são versionadas de propósito:
+# são convenção do projeto, valem para qualquer máquina e para qualquer sessão.
+# O resto (launch.json, settings.local.json) é pessoal e fica de fora.
+.claude/*
+!.claude/skills/

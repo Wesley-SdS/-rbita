@@ -1,3 +1,5 @@
+import { discoverModels, discoveredSnapshot, type DiscoveredModel } from "./discovery";
+
 export type ProviderId = "local" | "gateway" | "claude" | "groq" | "google" | "openai" | "cohere";
 
 /** Flags de ambiente: quais provedores estão configurados (chave presente). */
@@ -18,67 +20,98 @@ export interface ModelInfo {
   id: string;
   label: string;
   tier: "small" | "medium" | "large";
-  /** grátis (local) / assinatura (claude max) / pago (gateway) / variável (auto) */
+  /** grátis (local) / assinatura (claude max) / pago (nuvem) / variável (auto) */
   billing: "free" | "subscription" | "paid" | "variable";
-  /** custo aproximado em R$ por 1k tokens de saída (0 = local/assinatura) */
+  /** custo aproximado por 1k tokens de saída (0 = local/assinatura) */
   costPer1k: number;
+  /** EIXO 1 do roteador: roda na máquina de casa? */
+  local: boolean;
+  supportsTools?: boolean;
+  supportsVision?: boolean;
+  contextWindow?: number;
 }
 
-/** Catálogo de modelos. Local é verificável já; Gateway/Claude/Groq ligam com env. */
-export const CATALOG: ModelInfo[] = [
-  { key: "local/qwen2.5:14b", provider: "local", id: "qwen2.5:14b", label: "Qwen 2.5 14B · local", tier: "large", billing: "free", costPer1k: 0 },
-  { key: "local/qwen2.5:7b", provider: "local", id: "qwen2.5:7b", label: "Qwen 2.5 7B · local", tier: "medium", billing: "free", costPer1k: 0 },
-  { key: "local/qwen2.5:3b", provider: "local", id: "qwen2.5:3b", label: "Qwen 2.5 3B · local (leve)", tier: "small", billing: "free", costPer1k: 0 },
-  { key: "local/llama3.2:1b", provider: "local", id: "llama3.2:1b", label: "Llama 3.2 1B · local (mínimo)", tier: "small", billing: "free", costPer1k: 0 },
-  { key: "claude/claude-sonnet-5", provider: "claude", id: "claude-sonnet-5", label: "Claude Sonnet 5 · Max", tier: "large", billing: "subscription", costPer1k: 0 },
-  { key: "claude/claude-opus-4-8", provider: "claude", id: "claude-opus-4-8", label: "Claude Opus 4.8 · Max", tier: "large", billing: "subscription", costPer1k: 0 },
-  // Provedores online OpenAI-compatible (só encaixe: baseURL + chave). IDs vêm dos docs de cada um.
-  // Groq: inferência muito rápida (LPU), tier grátis — console.groq.com.
-  { key: "groq/llama-3.3-70b-versatile", provider: "groq", id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B · Groq (rápido)", tier: "large", billing: "paid", costPer1k: 0.004 },
-  { key: "groq/llama-3.1-8b-instant", provider: "groq", id: "llama-3.1-8b-instant", label: "Llama 3.1 8B · Groq (grátis/rápido)", tier: "small", billing: "paid", costPer1k: 0.0005 },
-  // Google Gemini (direto, tier grátis generoso) — aistudio.google.com/apikey.
-  { key: "google/gemini-2.5-flash", provider: "google", id: "gemini-2.5-flash", label: "Gemini 2.5 Flash · Google", tier: "medium", billing: "paid", costPer1k: 0.0015 },
-  { key: "google/gemini-2.5-flash-lite", provider: "google", id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite · Google (barato)", tier: "small", billing: "paid", costPer1k: 0.0005 },
-  { key: "google/gemini-2.5-pro", provider: "google", id: "gemini-2.5-pro", label: "Gemini 2.5 Pro · Google", tier: "large", billing: "paid", costPer1k: 0.03 },
-  // OpenAI (direto) — reusa OPENAI_API_KEY (mesma da visão/realtime).
-  { key: "openai/gpt-5", provider: "openai", id: "gpt-5", label: "GPT-5 · OpenAI", tier: "large", billing: "paid", costPer1k: 0.05 },
-  { key: "openai/gpt-5-mini", provider: "openai", id: "gpt-5-mini", label: "GPT-5 mini · OpenAI (barato)", tier: "medium", billing: "paid", costPer1k: 0.01 },
-  // Cohere (Compatibility API) — dashboard.cohere.com.
-  { key: "cohere/command-a-03-2025", provider: "cohere", id: "command-a-03-2025", label: "Command A · Cohere", tier: "large", billing: "paid", costPer1k: 0.02 },
-  { key: "cohere/command-r-plus", provider: "cohere", id: "command-r-plus", label: "Command R+ · Cohere", tier: "medium", billing: "paid", costPer1k: 0.015 },
-  { key: "gateway/openai/gpt-5", provider: "gateway", id: "openai/gpt-5", label: "GPT-5 · Gateway", tier: "large", billing: "paid", costPer1k: 0.05 },
-  { key: "gateway/google/gemini-2.5-flash", provider: "gateway", id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash · Gateway", tier: "medium", billing: "paid", costPer1k: 0.01 },
-];
-
-export const DEFAULT_MODEL_KEY = "local/qwen2.5:7b";
+const PROVIDERS: readonly ProviderId[] = ["local", "gateway", "claude", "groq", "google", "openai", "cohere"];
 
 /**
- * Modelo pré-selecionado na UI. Prefere a NUVEM RÁPIDA (Sonnet 5) quando o Claude
- * está configurado, mesmo com local disponível, porque o local sem GPU é lento.
- * Cai para o local só quando não há Claude.
+ * Quebra `provider/id` na PRIMEIRA barra — o id pode conter barras
+ * (`gateway/openai/gpt-5` → provider `gateway`, id `openai/gpt-5`).
  */
-export function defaultModelKey(env: ProviderEnv): string {
-  if (env.claude) return "claude/claude-sonnet-5";
-  // Sem Ollama alcançável (ex.: Vercel), o padrão TEM que ser de nuvem, senão
-  // o modelo pré-selecionado nasce quebrado.
-  if (!localAvailable()) return firstCloudKey(env) ?? DEFAULT_MODEL_KEY;
-  return DEFAULT_MODEL_KEY;
+export function parseModelKey(key: string): { provider: ProviderId; id: string } | null {
+  const i = key.indexOf("/");
+  if (i <= 0) return null;
+  const provider = key.slice(0, i) as ProviderId;
+  const id = key.slice(i + 1);
+  if (!id || !PROVIDERS.includes(provider)) return null;
+  return { provider, id };
 }
 
-/** Pseudo-modelo que roteia automaticamente (local → Max → Gateway). */
+function billingDe(provider: ProviderId): ModelInfo["billing"] {
+  if (provider === "local") return "free";
+  if (provider === "claude") return "subscription";
+  return "paid";
+}
+
+function paraModelInfo(m: DiscoveredModel): ModelInfo {
+  return {
+    key: m.key,
+    provider: m.provider,
+    id: m.id,
+    label: m.label,
+    tier: m.tier,
+    billing: billingDe(m.provider),
+    costPer1k: m.costPer1kOutput ?? 0,
+    local: m.local,
+    supportsTools: m.supportsTools,
+    supportsVision: m.supportsVision,
+    contextWindow: m.contextWindow,
+  };
+}
+
+/** Pseudo-modelo que roteia automaticamente (ver `routeModelKey`). */
 export const AUTO_MODEL: ModelInfo = {
   key: "auto",
   provider: "local",
   id: "auto",
   label: "Auto · escolhe o melhor modelo disponível",
   tier: "medium",
-  billing: "variable", // pode rotear p/ Max (assinatura) ou Gateway (pago)
+  billing: "variable",
   costPer1k: 0,
+  local: false,
 };
 
+/**
+ * Último recurso quando NADA foi descoberto ainda. Não é um catálogo: é o palpite
+ * mínimo para o app não nascer com um modelo vazio no primeiro boot, antes da
+ * primeira descoberta. Assim que `discoverModels()` roda, isto deixa de importar.
+ */
+export const DEFAULT_MODEL_KEY = process.env.ORBITA_FALLBACK_MODEL ?? "local/qwen2.5:7b";
+
+/**
+ * Metadados de um modelo, SEM ir à rede.
+ *
+ * Usa o último snapshot da descoberta; se o modelo não estiver lá (cache frio ou
+ * modelo recém-instalado), deriva o que dá da própria chave. Nunca devolve
+ * `undefined` para uma chave bem formada — rejeitar um modelo por não estar num
+ * catálogo estático era justamente o comportamento hardcoded que saiu daqui.
+ */
 export function getModelInfo(key: string): ModelInfo | undefined {
   if (key === "auto") return AUTO_MODEL;
-  return CATALOG.find((m) => m.key === key);
+  const achado = discoveredSnapshot().find((m) => m.key === key);
+  if (achado) return paraModelInfo(achado);
+
+  const parsed = parseModelKey(key);
+  if (!parsed) return undefined;
+  return {
+    key,
+    provider: parsed.provider,
+    id: parsed.id,
+    label: parsed.id,
+    tier: "medium",
+    billing: billingDe(parsed.provider),
+    costPer1k: 0,
+    local: parsed.provider === "local",
+  };
 }
 
 /**
@@ -92,44 +125,83 @@ export function localAvailable(): boolean {
   return !(process.env.VERCEL && pointsToLocalhost);
 }
 
-/** 1º provedor de NUVEM configurado, em ordem de custo/velocidade. */
-function firstCloudKey(env: ProviderEnv): string | undefined {
-  if (env.claude) return "claude/claude-sonnet-5";
-  if (env.groq) return "groq/llama-3.3-70b-versatile";
-  if (env.google) return "google/gemini-2.5-flash";
-  if (env.openai) return "openai/gpt-5-mini";
-  if (env.cohere) return "cohere/command-a-03-2025";
-  if (env.gateway) return "gateway/google/gemini-2.5-flash";
-  return undefined;
+/** Modelos disponíveis agora (vai à rede na primeira vez; depois, cache). */
+export async function availableModels(_env?: ProviderEnv): Promise<ModelInfo[]> {
+  const found = await discoverModels();
+  return [AUTO_MODEL, ...found.map(paraModelInfo)];
 }
 
-/** Modelos disponíveis dado o ambiente (esconde os que exigem env ausente). */
-export function availableModels(env: ProviderEnv): ModelInfo[] {
-  const local = localAvailable();
-  const list = CATALOG.filter((m) => {
-    if (m.provider === "gateway") return env.gateway;
-    if (m.provider === "claude") return env.claude;
-    if (m.provider === "groq") return Boolean(env.groq);
-    if (m.provider === "google") return Boolean(env.google);
-    if (m.provider === "openai") return Boolean(env.openai);
-    if (m.provider === "cohere") return Boolean(env.cohere);
-    return local; // local só quando há Ollama alcançável
-  });
-  return [AUTO_MODEL, ...list];
+/** Snapshot síncrono dos modelos já descobertos (sem rede). */
+export function availableModelsSync(): ModelInfo[] {
+  return discoveredSnapshot().map(paraModelInfo);
+}
+
+// ── escolha de modelo ────────────────────────────────────────────────────────
+
+const ordemTier = { large: 0, medium: 1, small: 2 } as const;
+
+/** Melhor modelo local que sabe usar ferramentas, do mais forte ao mais leve. */
+function melhorLocal(lista: ModelInfo[], tier?: ModelInfo["tier"]): ModelInfo | undefined {
+  const locais = lista.filter((m) => m.local && m.supportsTools !== false);
+  if (tier) return locais.find((m) => m.tier === tier);
+  return locais.sort((a, b) => ordemTier[a.tier] - ordemTier[b.tier])[0];
+}
+
+/** Melhor modelo de nuvem: assinatura primeiro (já paga), depois porte. */
+function melhorNuvem(lista: ModelInfo[], tier?: ModelInfo["tier"]): ModelInfo | undefined {
+  const nuvem = lista.filter((m) => !m.local);
+  const candidatos = tier ? nuvem.filter((m) => m.tier === tier) : nuvem;
+  return candidatos.sort(
+    (a, b) =>
+      Number(b.billing === "subscription") - Number(a.billing === "subscription") ||
+      ordemTier[a.tier] - ordemTier[b.tier] ||
+      a.costPer1k - b.costPer1k,
+  )[0];
 }
 
 /**
- * Auto-router: escolhe um modelo concreto por heurística de complexidade.
- * Simples → local pequeno; complexo → local grande, ou Max/Gateway se configurados.
+ * Modelo pré-selecionado na UI: o melhor de nuvem quando há (responde rápido),
+ * senão o melhor local. Derivado da descoberta, não de uma lista fixa.
  */
-export function routeModelKey(content: string, env: ProviderEnv): string {
-  const complex =
+export async function defaultModelKey(_env?: ProviderEnv): Promise<string> {
+  const lista = (await availableModels()).filter((m) => m.key !== "auto");
+  const escolha = melhorNuvem(lista) ?? melhorLocal(lista) ?? lista[0];
+  return escolha?.key ?? DEFAULT_MODEL_KEY;
+}
+
+/**
+ * Classifica a complexidade do pedido.
+ *
+ * ⚠️ PROVISÓRIO: é a última heurística fixa que sobrou do roteador antigo. Na
+ * Onda 1 vira regra editável pela UI (princípio de zero hardcode) e ganha o
+ * prefilter portado do Adalink, incluindo o caso `home_command` — comando
+ * doméstico deve ir para o modelo local pequeno sem passar por classificador.
+ */
+export function classificarComplexidade(content: string): boolean {
+  return (
     content.length > 600 ||
-    /```|\b(fun[çc][ãa]o|c[óo]digo|code|algoritmo|refator\w*|arquitetura|demonstre|prove|equa[çc][ãa]o|matem[áa]tic\w*|debug\w*)\b/i.test(content);
-  if (complex && env.claude) return "claude/claude-opus-4-8";
-  if (complex && env.gateway) return "gateway/openai/gpt-5";
-  // Sem Ollama alcançável, nunca rotear para local: cai no 1º provedor de nuvem.
-  if (!localAvailable()) return firstCloudKey(env) ?? DEFAULT_MODEL_KEY;
-  if (complex) return "local/qwen2.5:14b";
-  return "local/qwen2.5:7b";
+    /```|\b(fun[çc][ãa]o|c[óo]digo|code|algoritmo|refator\w*|arquitetura|demonstre|prove|equa[çc][ãa]o|matem[áa]tic\w*|debug\w*)\b/i.test(content)
+  );
+}
+
+/**
+ * Escolhe um modelo de uma lista — núcleo PURO do roteador, sem rede e sem
+ * catálogo fixo, para poder ser testado e, na Onda 1, substituído pelo roteador
+ * de dois eixos (local/nuvem × porte).
+ *
+ * Simples → local pequeno (latência é o que importa; é o caminho do comando de
+ * casa). Complexo → o mais forte disponível, preferindo nuvem.
+ */
+export function escolherModelo(lista: ModelInfo[], opts: { complexo: boolean }): ModelInfo | undefined {
+  const uteis = lista.filter((m) => m.key !== "auto");
+  if (!uteis.length) return undefined;
+  return opts.complexo
+    ? melhorNuvem(uteis, "large") ?? melhorNuvem(uteis) ?? melhorLocal(uteis, "large") ?? melhorLocal(uteis)
+    : melhorLocal(uteis, "small") ?? melhorLocal(uteis) ?? melhorNuvem(uteis, "small") ?? melhorNuvem(uteis);
+}
+
+/** Auto-router: aplica `escolherModelo` sobre o que a descoberta já encontrou. */
+export function routeModelKey(content: string, _env?: ProviderEnv): string {
+  const escolha = escolherModelo(availableModelsSync(), { complexo: classificarComplexidade(content) });
+  return escolha?.key ?? DEFAULT_MODEL_KEY;
 }

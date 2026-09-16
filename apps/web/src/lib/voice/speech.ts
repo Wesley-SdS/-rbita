@@ -135,3 +135,78 @@ export class LocalWake {
     }
   }
 }
+
+/**
+ * Ditado contínuo para PRÉVIA ao vivo (reunião).
+ *
+ * Por que Web Speech e não o /api/stt: a prévia roda no aparelho, é instantânea,
+ * não sobe áudio e não custa nada. O fluxo antigo mandava uma janela de 8s para
+ * a AssemblyAI a cada 8s — numa reunião de 1h isso são ~450 jobs pagos só para
+ * desenhar texto na tela.
+ *
+ * ⚠️ Isto é PRÉVIA, não a transcrição final. A final vem da gravação contínua
+ * (`ContinuousRecorder`), transcrita de uma vez com separação de vozes. Duas
+ * consequências que a UI precisa deixar claras: a prévia só ouve o MICROFONE
+ * (não o áudio do sistema) e não separa quem falou.
+ */
+export class ContinuousDictation {
+  private rec: RecognitionLike | null = null;
+  private on = false;
+  private finalText = "";
+
+  constructor(
+    private Ctor: RecognitionCtor,
+    private cb: { onText: (text: string) => void },
+  ) {}
+
+  start(): void {
+    this.on = true;
+    this.finalText = "";
+    this.spin();
+  }
+
+  stop(): void {
+    this.on = false;
+    try {
+      this.rec?.abort();
+    } catch {
+      /* já parado */
+    }
+    this.rec = null;
+  }
+
+  get active(): boolean {
+    return this.on;
+  }
+
+  private spin(): void {
+    if (!this.on) return;
+    const rec = new this.Ctor();
+    rec.lang = "pt-BR";
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) this.finalText += r[0].transcript;
+        else interim += r[0].transcript;
+      }
+      this.cb.onText((this.finalText + interim).trim());
+    };
+    rec.onerror = () => {
+      /* transitório (no-speech/aborted): o onend religa */
+    };
+    rec.onend = () => {
+      // o navegador encerra sozinho a cada ~1 min; numa reunião longa isso
+      // aconteceria dezenas de vezes — religar é o que mantém a prévia viva.
+      if (this.on) this.spin();
+    };
+    this.rec = rec;
+    try {
+      rec.start();
+    } catch {
+      /* start durante transição: o onend religa */
+    }
+  }
+}

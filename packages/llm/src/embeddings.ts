@@ -33,6 +33,25 @@ const KEEP_ALIVE = process.env.OLLAMA_EMBED_KEEP_ALIVE || "60m";
  * diferentes vivem em espaços vetoriais distintos, e a similaridade entre eles
  * não significa nada. Ao migrar um corpus existente, é preciso REINDEXAR.
  */
+export type EmbedPreference = "auto" | "local" | "cloud";
+// Preferência vem da config (`embeddings.provider`); "auto" mantém o comportamento
+// antigo (nuvem se houver chave). "local" é o caminho de privacidade: nada sai de casa.
+// A preferência é um GETTER (assíncrono) avaliado a cada embed, não um valor
+// fixado por outra requisição: assim "Sempre local" vale também para reindexar,
+// ingest, memória e skills, e vale logo depois de um restart.
+type PreferenceSource = EmbedPreference | (() => Promise<EmbedPreference> | EmbedPreference);
+let preference: PreferenceSource = "auto";
+export function configureEmbeddings(p: { provider?: PreferenceSource }): void {
+  if (p.provider) preference = p.provider;
+}
+async function resolvePreference(): Promise<EmbedPreference> {
+  try {
+    return typeof preference === "function" ? await preference() : preference;
+  } catch {
+    return "auto";
+  }
+}
+
 function cloudConfig(): { baseURL: string; apiKey: string; model: string; dimensions?: number } | null {
   const gemini = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
   if (gemini) {
@@ -102,9 +121,11 @@ async function cloudEmbed(inputs: string[], cfg: NonNullable<ReturnType<typeof c
   return [...j.data].sort((a, b) => a.index - b.index).map((d) => d.embedding);
 }
 
-/** Roteia para a nuvem (quando há chave) ou para o Ollama local. */
+/** Roteia conforme a preferência: local (Ollama), nuvem (quando há chave) ou auto. */
 async function embed(inputs: string[], kind: EmbedKind): Promise<number[][]> {
-  const cfg = cloudConfig();
+  const pref = await resolvePreference();
+  const cfg = pref === "local" ? null : cloudConfig();
+  if (pref === "cloud" && !cfg) throw new Error("embeddings.provider = nuvem, mas não há chave de embedding (GEMINI_API_KEY ou OPENAI_API_KEY)");
   if (cfg) return cloudEmbed(inputs, cfg); // nuvem: sem prefixo de tarefa
   return ollamaEmbed(inputs.map((v) => PREFIX[kind] + v));
 }

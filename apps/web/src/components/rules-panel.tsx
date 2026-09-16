@@ -1,0 +1,188 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Card, PanelTitle, Input, Textarea, Button, ErrorRetry } from "@/components/ui";
+
+/**
+ * Regras proativas: evento (ou horário) → condições → ações. A validação de
+ * verdade é do servidor (zod em rules/engine.ts); aqui só montamos o JSON.
+ */
+interface Rule {
+  id: string; name: string; enabled: boolean; builtinKey: string | null; lastFiredAt: string | null;
+  trigger: { kind: "event"; type: string } | { kind: "cron"; expr: string };
+  conditions: { path: string; op: string; value?: unknown }[];
+  actions: ({ kind: "notify"; title: string; body: string } | { kind: "prompt"; prompt: string })[];
+}
+
+const OPS = ["eq", "neq", "gt", "gte", "lt", "lte", "contains", "exists", "not_exists"];
+const EVENT_HINTS = ["finance.bill_due", "routine.finished", "connector.token_refreshed", "connector.refresh_failed", "setting.changed", "action.executed"];
+const dim = { color: "var(--color-ink-dim)" } as const;
+
+export function RulesPanel() {
+  const [rules, setRules] = useState<Rule[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  const [editing, setEditing] = useState<Partial<Rule> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setErr(null);
+    fetch("/api/rules").then((r) => (r.ok ? r.json() : Promise.reject())).then((d) => { if (alive) setRules(d.rules ?? []); }).catch(() => { if (alive) setErr("Não foi possível carregar as regras."); });
+    return () => { alive = false; };
+  }, [reload]);
+
+  async function toggle(r: Rule) {
+    await fetch(`/api/rules/${r.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...strip(r), enabled: !r.enabled }) });
+    setReload((n) => n + 1);
+  }
+  async function remove(id: string) {
+    await fetch(`/api/rules/${id}`, { method: "DELETE" });
+    setReload((n) => n + 1);
+  }
+  async function test(id: string) {
+    setMsg(null);
+    const r = await fetch(`/api/rules/${id}/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payload: { quantidade: 1, resumo: "Teste da regra", provider: "teste", error: "teste" } }) });
+    const d = await r.json().catch(() => ({}));
+    setMsg(r.ok ? `Disparadas: ${d.disparadas}. Veja em notificações.` : d.error ?? "Falhou");
+  }
+  async function save() {
+    if (!editing) return;
+    setBusy(true);
+    setMsg(null);
+    const body = strip(editing as Rule);
+    const isNew = !editing.id;
+    const r = await fetch(isNew ? "/api/rules" : `/api/rules/${editing.id}`, { method: isNew ? "POST" : "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const d = await r.json().catch(() => ({}));
+    setBusy(false);
+    if (!r.ok) { setMsg(d.error ?? "Dados inválidos"); return; }
+    setEditing(null);
+    setReload((n) => n + 1);
+  }
+
+  if (err) return <Card><PanelTitle className="mb-2">Regras proativas</PanelTitle><ErrorRetry message={err} onRetry={() => setReload((n) => n + 1)} /></Card>;
+
+  return (
+    <Card>
+      <div className="mb-2 flex items-baseline justify-between">
+        <PanelTitle>Regras proativas</PanelTitle>
+        {!editing && <button type="button" className="text-[11px] underline" style={dim} onClick={() => setEditing(novaRegra())}>nova regra</button>}
+      </div>
+      <p className="mb-3 text-[12px]" style={dim}>Evento ou horário, condições e ações. Rodam no processo da casa, com o navegador fechado.</p>
+
+      {editing ? (
+        <RuleEditor value={editing} onChange={setEditing} onSave={save} onCancel={() => { setEditing(null); setMsg(null); }} busy={busy} />
+      ) : !rules ? (
+        <p className="text-[12px]" style={dim}>Carregando…</p>
+      ) : rules.length === 0 ? (
+        <p className="text-[12px]" style={dim}>Nenhuma regra ainda. As regras padrão aparecem quando o processo da casa sobe.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {rules.map((r) => (
+            <li key={r.id} className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--color-line)", opacity: r.enabled ? 1 : 0.6 }}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-medium">{r.name} {r.builtinKey && <span className="text-[10px]" style={dim}>padrão</span>}</div>
+                  <div className="text-[11px]" style={dim}>
+                    {r.trigger.kind === "event" ? `evento ${r.trigger.type}` : `cron ${r.trigger.expr}`} · {r.actions.length} ação{r.actions.length > 1 ? "ões" : ""}
+                    {r.lastFiredAt ? ` · último disparo ${new Date(r.lastFiredAt).toLocaleString("pt-BR")}` : ""}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2 text-[11px]">
+                  <button type="button" className="underline" style={dim} onClick={() => toggle(r)}>{r.enabled ? "desligar" : "ligar"}</button>
+                  <button type="button" className="underline" style={dim} onClick={() => setEditing(r)}>editar</button>
+                  <button type="button" className="underline" style={dim} onClick={() => test(r.id)}>testar</button>
+                  {!r.builtinKey && <button type="button" className="underline" style={dim} onClick={() => remove(r.id)}>apagar</button>}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {msg && <p className="mt-2 text-[11px]" style={{ color: "var(--color-gold)" }}>{msg}</p>}
+    </Card>
+  );
+}
+
+function novaRegra(): Partial<Rule> {
+  return { name: "", enabled: true, trigger: { kind: "event", type: "finance.bill_due" }, conditions: [], actions: [{ kind: "notify", title: "", body: "" }] };
+}
+function strip(r: Rule) {
+  return { name: r.name, enabled: r.enabled, trigger: r.trigger, conditions: r.conditions ?? [], actions: r.actions };
+}
+
+function RuleEditor({ value, onChange, onSave, onCancel, busy }: { value: Partial<Rule>; onChange: (v: Partial<Rule>) => void; onSave: () => void; onCancel: () => void; busy: boolean }) {
+  const t = value.trigger ?? { kind: "event", type: "" };
+  const conds = value.conditions ?? [];
+  const acts = value.actions ?? [];
+  const set = (patch: Partial<Rule>) => onChange({ ...value, ...patch });
+  return (
+    <div className="flex flex-col gap-2 text-[12px]">
+      <Input placeholder="Nome da regra" value={value.name ?? ""} onChange={(e) => set({ name: e.target.value })} />
+      <div className="flex gap-2">
+        <select value={t.kind} className="rounded-lg border px-2 py-1" style={{ borderColor: "var(--color-line)", background: "transparent" }}
+          onChange={(e) => set({ trigger: e.target.value === "cron" ? { kind: "cron", expr: "0 8 * * *" } : { kind: "event", type: "finance.bill_due" } })}>
+          <option value="event">quando acontecer um evento</option>
+          <option value="cron">em um horário (cron)</option>
+        </select>
+        {t.kind === "event" ? (
+          <>
+            <Input list="orbita-eventos" placeholder="tipo do evento" value={t.type} onChange={(e) => set({ trigger: { kind: "event", type: e.target.value } })} />
+            <datalist id="orbita-eventos">{EVENT_HINTS.map((h) => <option key={h} value={h} />)}</datalist>
+          </>
+        ) : (
+          <Input placeholder="min hora dia mês dia-da-semana" value={t.expr} onChange={(e) => set({ trigger: { kind: "cron", expr: e.target.value } })} />
+        )}
+      </div>
+
+      <div className="flex items-center justify-between"><span style={dim}>Condições (todas precisam valer)</span>
+        <button type="button" className="underline" style={dim} onClick={() => set({ conditions: [...conds, { path: "payload.", op: "eq", value: "" }] })}>+ condição</button></div>
+      {conds.map((c, i) => (
+        <div key={i} className="flex gap-1">
+          <Input placeholder="payload.campo" value={c.path} onChange={(e) => set({ conditions: conds.map((x, j) => (j === i ? { ...x, path: e.target.value } : x)) })} />
+          <select value={c.op} className="rounded-lg border px-1" style={{ borderColor: "var(--color-line)", background: "transparent" }}
+            onChange={(e) => set({ conditions: conds.map((x, j) => (j === i ? { ...x, op: e.target.value } : x)) })}>
+            {OPS.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <Input placeholder="valor" value={c.value === undefined ? "" : String(c.value)} onChange={(e) => set({ conditions: conds.map((x, j) => (j === i ? { ...x, value: coerce(e.target.value) } : x)) })} />
+          <button type="button" style={dim} onClick={() => set({ conditions: conds.filter((_, j) => j !== i) })}>×</button>
+        </div>
+      ))}
+
+      <div className="flex items-center justify-between"><span style={dim}>Ações</span>
+        <span className="flex gap-2">
+          <button type="button" className="underline" style={dim} onClick={() => set({ actions: [...acts, { kind: "notify", title: "", body: "" }] })}>+ notificar</button>
+          <button type="button" className="underline" style={dim} onClick={() => set({ actions: [...acts, { kind: "prompt", prompt: "" }] })}>+ perguntar ao modelo</button>
+        </span></div>
+      {acts.map((a, i) => (
+        <div key={i} className="flex flex-col gap-1 rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
+          <div className="flex items-center justify-between"><span style={dim}>{a.kind === "notify" ? "Notificar (use {{payload.campo}})" : "Perguntar ao modelo, com ferramentas"}</span>
+            <button type="button" style={dim} onClick={() => set({ actions: acts.filter((_, j) => j !== i) })}>×</button></div>
+          {a.kind === "notify" ? (
+            <>
+              <Input placeholder="Título" value={a.title} onChange={(e) => set({ actions: acts.map((x, j) => (j === i && x.kind === "notify" ? { ...x, title: e.target.value } : x)) })} />
+              <Textarea placeholder="Corpo" value={a.body} onChange={(e) => set({ actions: acts.map((x, j) => (j === i && x.kind === "notify" ? { ...x, body: e.target.value } : x)) })} />
+            </>
+          ) : (
+            <Textarea placeholder="O que pedir ao modelo" value={a.prompt} onChange={(e) => set({ actions: acts.map((x, j) => (j === i && x.kind === "prompt" ? { ...x, prompt: e.target.value } : x)) })} />
+          )}
+        </div>
+      ))}
+
+      <div className="flex gap-2">
+        <Button onClick={onSave} disabled={busy}>{busy ? "…" : "Salvar"}</Button>
+        <Button onClick={onCancel} disabled={busy}>Cancelar</Button>
+      </div>
+    </div>
+  );
+}
+
+/** "12" → 12, "true" → true, resto texto (o servidor valida o tipo) */
+function coerce(s: string): unknown {
+  if (s === "") return "";
+  if (s === "true") return true;
+  if (s === "false") return false;
+  const n = Number(s);
+  return Number.isFinite(n) && s.trim() !== "" ? n : s;
+}

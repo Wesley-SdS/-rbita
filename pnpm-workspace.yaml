@@ -1,5 +1,6 @@
 packages:
   - "apps/web"
+  - "apps/api"
   - "packages/*"
   # apps/mobile (Expo) é gerenciado por npm próprio — Metro não convive bem com
   # os symlinks do pnpm. apps/voice é Python (sem package.json).

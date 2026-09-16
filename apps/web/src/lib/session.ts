@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import { auth } from "@orbita/core/auth";
 
 /** Sessão atual no servidor (Server Components / Route Handlers). */
 export async function getSession() {

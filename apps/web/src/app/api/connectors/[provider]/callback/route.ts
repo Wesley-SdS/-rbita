@@ -1,6 +1,6 @@
-import { getConnector, type ConnectorId } from "@/lib/connectors/registry";
-import { exchangeCodeAndSave } from "@/lib/connectors/store";
-import { verifyState } from "@/lib/connectors/state";
+import { getConnector, type ConnectorId } from "@orbita/core/connectors/registry";
+import { exchangeCodeAndSave } from "@orbita/core/connectors/store";
+import { verifyState } from "@orbita/core/connectors/state";
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";

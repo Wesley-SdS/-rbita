@@ -1,0 +1,31 @@
+{
+  "name": "@orbita/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@orbita/db": "workspace:*",
+    "@orbita/llm": "workspace:*",
+    "ai": "^7.0.31",
+    "better-auth": "^1.6.23",
+    "croner": "^10.0.1",
+    "drizzle-orm": "^0.45.2",
+    "duck-duck-scrape": "^2.2.7",
+    "tesseract.js": "^7.0.0",
+    "unpdf": "^1.6.2",
+    "web-push": "^3.6.7",
+    "ws": "^8.21.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@types/web-push": "^3.6.4",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}

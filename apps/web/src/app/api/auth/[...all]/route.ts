@@ -1,6 +1,6 @@
-import { auth } from "@/lib/auth";
+import { auth } from "@orbita/core/auth";
 import { toNextJsHandler } from "better-auth/next-js";
-import { rateLimit, clientIp, tooMany } from "@/lib/ratelimit";
+import { rateLimit, clientIp, tooMany } from "@orbita/core/ratelimit";
 
 const handlers = toNextJsHandler(auth);
 

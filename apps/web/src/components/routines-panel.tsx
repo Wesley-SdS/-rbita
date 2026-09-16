@@ -26,12 +26,11 @@ export function RoutinesPanel() {
   useEffect(() => {
     loadNotifs();
     loadRoutines();
+    // Só o polling de notificações fica aqui. O agendador que vivia neste
+    // componente (setInterval de 5 min) morreu na Onda 1: quem roda rotinas
+    // e regras é o processo persistente (apps/api), com o navegador fechado.
     const poll = setInterval(loadNotifs, 30000);
-    // agendador cliente: roda rotinas devidas a cada 5 min enquanto o app está aberto
-    const sched = setInterval(() => {
-      fetch("/api/routines/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).then(loadNotifs).catch(() => {});
-    }, 5 * 60 * 1000);
-    return () => { clearInterval(poll); clearInterval(sched); };
+    return () => { clearInterval(poll); };
   }, []);
 
   async function createRoutine() {
