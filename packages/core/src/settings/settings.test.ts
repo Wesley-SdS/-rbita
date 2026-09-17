@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createSettingsStore, SettingValidationError, type SettingsBackend } from "./store";
+import { createSettingsStore, redactListing, SettingValidationError, type SettingsBackend } from "./store";
 import { SETTING_DEFS, schemaFor, isSettingKey } from "./defs";
 
 function memBackend(initial: Record<string, unknown> = {}) {
@@ -91,5 +91,26 @@ describe("settings: store", () => {
     };
     const s = createSettingsStore(backend, 1000);
     expect(await s.get("chat.ragTimeoutMs")).toBe(3500);
+  });
+});
+
+describe("settings: quem não é o dono (RV.1)", () => {
+  it("chave sensível aparece sem valor nem default", async () => {
+    const { backend } = memBackend({ "auth.allowedEmails": ["anna@casa.local"] });
+    const s = createSettingsStore(backend, 1000);
+    const l = redactListing(await s.list(), false);
+    const itens = l.groups.flatMap((g) => g.settings);
+    const emails = itens.find((x) => x.key === "auth.allowedEmails")!;
+    expect(emails).toMatchObject({ hidden: true, value: null, default: null });
+    expect(JSON.stringify(l)).not.toContain("anna@casa.local");
+    // o resto continua legível
+    expect(itens.find((x) => x.key === "chat.historyWindow")!.value).toBe(24);
+  });
+
+  it("o dono vê tudo", async () => {
+    const { backend } = memBackend({ "auth.allowedEmails": ["anna@casa.local"] });
+    const s = createSettingsStore(backend, 1000);
+    const l = redactListing(await s.list(), true);
+    expect(l.groups.flatMap((g) => g.settings).find((x) => x.key === "auth.allowedEmails")!.value).toEqual(["anna@casa.local"]);
   });
 });

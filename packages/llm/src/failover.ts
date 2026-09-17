@@ -1,4 +1,5 @@
-import { getModelInfo, localAvailable, availableModelsSync, DEFAULT_MODEL_KEY, type ModelInfo, type ProviderId } from "./catalog";
+import { getModelInfo, localAvailable, availableModelsSync, type ModelInfo, type ProviderId } from "./catalog";
+import { BOOTSTRAP_MODEL_KEY, policySnapshot, type FailoverOrder } from "./policy";
 
 export interface ProviderFlags {
   gateway: boolean;
@@ -67,8 +68,9 @@ function umPorProvedor(exceto: string[]): ModelInfo[] {
     if (m.supportsTools === false) continue; // a cadeia do chat precisa de tools
     if (m.local && !localAvailable()) continue;
     const atual = porProvedor.get(m.provider);
-    // por provedor: o mais forte; empate resolve pelo mais barato
-    if (!atual || ordemTier[m.tier] < ordemTier[atual.tier] || (m.tier === atual.tier && m.costPer1k < atual.costPer1k)) {
+    // por provedor: o mais forte; empate resolve pelo preço conhecido e mais barato
+    const melhorPreco = m.priceKnown !== atual?.priceKnown ? m.priceKnown : m.costPer1k < (atual?.costPer1k ?? Infinity);
+    if (!atual || ordemTier[m.tier] < ordemTier[atual.tier] || (m.tier === atual.tier && melhorPreco)) {
       porProvedor.set(m.provider, m);
     }
   }
@@ -76,10 +78,41 @@ function umPorProvedor(exceto: string[]): ModelInfo[] {
 }
 
 /**
+ * Posição de um modelo na cadeia, por classe de cobrança. Menor vem primeiro.
+ * Nuvem SEM preço informado fica sempre depois da nuvem com preço: custo
+ * desconhecido não é custo zero (RV.2).
+ */
+function classe(m: ModelInfo, ordem: FailoverOrder): number {
+  const assinatura = m.billing === "subscription";
+  const local = m.local;
+  const pagaConhecida = !assinatura && !local && m.priceKnown;
+  const rank =
+    ordem === "local_primeiro"
+      ? { local: 0, assinatura: 1, paga: 2, semPreco: 3 }
+      : ordem === "assinatura_paga_local"
+        ? { assinatura: 0, paga: 1, semPreco: 2, local: 3 }
+        : { assinatura: 0, local: 1, paga: 2, semPreco: 3 };
+  if (assinatura) return rank.assinatura;
+  if (local) return rank.local;
+  return pagaConhecida ? rank.paga : rank.semPreco;
+}
+
+/** Ordena as alternativas do failover (puro, testável). */
+export function ordenarAlternativas(modelos: ModelInfo[], ordem: FailoverOrder): ModelInfo[] {
+  return [...modelos].sort(
+    (a, b) =>
+      classe(a, ordem) - classe(b, ordem) ||
+      // dentro da mesma classe: o mais barato, depois o mais forte
+      a.costPer1k - b.costPer1k ||
+      ordemTier[a.tier] - ordemTier[b.tier],
+  );
+}
+
+/**
  * Cadeia de failover: o modelo pedido primeiro, depois um fallback por provedor
- * disponível — assinatura antes de pago, local antes de nuvem quando empata.
+ * disponível, na ordem escolhida pelo dono (`llm.failoverOrder`).
  *
- * Os fallbacks NÃO são mais uma lista fixa de chaves: saem do que a descoberta
+ * Os fallbacks NÃO são uma lista fixa de chaves: saem do que a descoberta
  * encontrou. Instalar um modelo novo no Ollama ou ligar uma chave já entra aqui,
  * sem tocar em código.
  */
@@ -87,17 +120,11 @@ export function buildModelChain(requestedKey: string, _env?: ProviderFlags): str
   const chain: string[] = [];
   if (getModelInfo(requestedKey)) chain.push(requestedKey);
 
-  const alternativas = umPorProvedor(chain).sort(
-    (a, b) =>
-      // assinatura já paga primeiro, depois o mais barato, depois o mais forte
-      Number(b.billing === "subscription") - Number(a.billing === "subscription") ||
-      a.costPer1k - b.costPer1k ||
-      ordemTier[a.tier] - ordemTier[b.tier],
-  );
-  for (const m of alternativas) if (!chain.includes(m.key)) chain.push(m.key);
+  const policy = policySnapshot();
+  for (const m of ordenarAlternativas(umPorProvedor(chain), policy.failoverOrder)) if (!chain.includes(m.key)) chain.push(m.key);
 
   // nada descoberto ainda (primeiro boot, cache frio): o palpite mínimo.
-  if (!chain.length) chain.push(DEFAULT_MODEL_KEY);
+  if (!chain.length) chain.push(policy.fallbackModel.trim() || BOOTSTRAP_MODEL_KEY);
 
   // pula provedores em cooldown; se todos abertos, mantém a cadeia completa
   // (melhor tentar um "aberto" do que ficar sem resposta).

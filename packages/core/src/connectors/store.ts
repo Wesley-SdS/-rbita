@@ -93,6 +93,9 @@ export async function exchangeCodeAndSave(cid: ConnectorId, userId: string, code
         accountLabel,
         scope: scope ?? null,
         expiresAt,
+        // reconectar pela tela zera o histórico de falha de renovação (RV.4)
+        refreshFailures: 0,
+        refreshFailedAt: null,
         updatedAt: new Date(),
       },
     });
@@ -115,7 +118,9 @@ export async function refreshConnectionToken(cid: ConnectorId, userId: string, r
   const expiresAt = tok.expires_in ? new Date(Date.now() + tok.expires_in * 1000) : null;
   await db
     .update(connection)
-    .set({ accessTokenEnc: encryptSecret(tok.access_token), expiresAt, updatedAt: new Date() })
+    // qualquer renovação bem-sucedida (laço ou request) zera o histórico de falha:
+    // senão uma falha passageira antiga silenciava o aviso de uma revogação real (RV.4)
+    .set({ accessTokenEnc: encryptSecret(tok.access_token), expiresAt, refreshFailures: 0, refreshFailedAt: null, updatedAt: new Date() })
     .where(and(eq(connection.userId, userId), eq(connection.provider, cid)));
   return tok.access_token;
 }

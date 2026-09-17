@@ -1,13 +1,14 @@
 // Migrada do Next em paridade (apps/web/src/app/api/finance/statement/route.ts).
 import { generateObject } from "ai";
 import { z } from "zod";
-import { resolveModel, DEFAULT_MODEL_KEY } from "@orbita/llm";
+import { resolveModel, fallbackModelKey } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { expense } from "@orbita/db/finance-schema";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { log } from "@orbita/core/observability/logger";
 import { parseYmd } from "@orbita/core/finance/date";
+import { settings } from "@orbita/core/settings/index";
 
 const ItemSchema = z.object({
   descricao: z.string(),
@@ -22,7 +23,7 @@ const INSTRUCAO =
   "Débitos/compras = expense; créditos/entradas = receivable. Ignore saldos e cabeçalhos.\n\nTrecho:\n\n";
 
 /** Divide o texto em blocos que cabem no contexto, cortando em quebras de linha. */
-function splitBlocks(text: string, size = 6000): string[] {
+function splitBlocks(text: string, size: number): string[] {
   const blocks: string[] = [];
   let i = 0;
   while (i < text.length) {
@@ -65,8 +66,9 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if (!text.trim()) return Response.json({ error: "PDF sem texto extraível (é uma imagem? use o comprovante por foto)" }, { status: 422 });
 
   // 2) LLM extrai por blocos (extratos longos não são truncados), structured output
-  const model = resolveModel(DEFAULT_MODEL_KEY);
-  const blocks = splitBlocks(text, 6000).slice(0, 12); // teto de segurança
+  const model = resolveModel(await fallbackModelKey());
+  const cfg = await settings.getMany(["finance.statementBlockChars", "finance.statementMaxBlocks"]);
+  const blocks = splitBlocks(text, cfg["finance.statementBlockChars"]).slice(0, cfg["finance.statementMaxBlocks"]); // teto de segurança
   const all: z.infer<typeof ItemSchema>[] = [];
   for (const block of blocks) {
     try {

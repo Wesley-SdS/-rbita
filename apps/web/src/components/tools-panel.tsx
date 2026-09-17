@@ -26,11 +26,13 @@ export function ToolsPanel() {
   const [err, setErr] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const [msg, setMsg] = useState<string | null>(null);
+  // o catálogo vale para a casa inteira: só o dono muda (RV.1)
+  const [isOwner, setIsOwner] = useState(true);
 
   useEffect(() => {
     let alive = true;
     setErr(null);
-    fetch("/api/tools").then((r) => (r.ok ? r.json() : Promise.reject())).then((d) => { if (alive) setTools(d.tools ?? []); }).catch(() => { if (alive) setErr("Não foi possível carregar o catálogo."); });
+    fetch("/api/tools").then((r) => (r.ok ? r.json() : Promise.reject())).then((d) => { if (alive) { setTools(d.tools ?? []); setIsOwner(d.isOwner !== false); } }).catch(() => { if (alive) setErr("Não foi possível carregar o catálogo."); });
     return () => { alive = false; };
   }, [reload]);
 
@@ -60,7 +62,7 @@ export function ToolsPanel() {
         <PanelTitle>Ferramentas</PanelTitle>
         {tools && <span className="text-[11px]" style={dim}>{ativas} ativas de {tools.length}</span>}
       </div>
-      <p className="mb-3 text-[12px]" style={dim}>O que a Órbita sabe fazer. Risco com "aprova" passa pelo painel de ações antes de executar.</p>
+      <p className="mb-3 text-[12px]" style={dim}>O que a Órbita sabe fazer. Risco com "aprova" passa pelo painel de ações antes de executar.{!isOwner && " Só o dono desta instância liga, desliga ou muda o risco."}</p>
       {!tools ? (
         <p className="text-[12px]" style={dim}>Carregando…</p>
       ) : (
@@ -71,7 +73,7 @@ export function ToolsPanel() {
               <ul className="flex flex-col gap-1">
                 {tools.filter((t) => t.domain === d).map((t) => (
                   <li key={t.name} className="flex items-start gap-2 rounded-lg border px-2 py-1.5 text-[12px]" style={{ borderColor: "var(--color-line)", opacity: t.enabled ? 1 : 0.55 }}>
-                    <input type="checkbox" className="mt-0.5" checked={t.enabled} onChange={(e) => void update(t.name, { enabled: e.target.checked })} title={t.enabled ? "desligar" : "ligar"} />
+                    <input type="checkbox" className="mt-0.5" checked={t.enabled} disabled={!isOwner} onChange={(e) => void update(t.name, { enabled: e.target.checked })} title={t.enabled ? "desligar" : "ligar"} />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-2">
                         <code className="text-[12px]">{t.name}</code>
@@ -79,7 +81,7 @@ export function ToolsPanel() {
                       </div>
                       <div className="text-[11px]" style={dim}>{t.description}</div>
                     </div>
-                    <select value={t.riskOverride ?? ""} onChange={(e) => changeRisk(t, e.target.value)}
+                    <select value={t.riskOverride ?? ""} disabled={!isOwner} onChange={(e) => changeRisk(t, e.target.value)}
                       className="shrink-0 rounded-md border px-1 py-0.5 text-[11px]" style={{ borderColor: "var(--color-line)", background: "transparent", color: GATED.includes(t.effectiveRisk) ? "var(--color-gold)" : "inherit" }}
                       title="Risco efetivo. Vazio = o declarado no código.">
                       <option value="">{RISK_LABEL[t.risk]} (padrão)</option>

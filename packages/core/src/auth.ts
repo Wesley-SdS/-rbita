@@ -7,6 +7,7 @@ import { user, session, account, verification } from "@orbita/db/auth-schema";
 import { log } from "./observability/logger";
 import { trustedOrigins } from "./auth-origins";
 import { settings } from "./settings";
+import { getOwnerId } from "./owner";
 
 /** Provedores sociais ativados conforme as credenciais presentes no ambiente. */
 function socialProviders() {
@@ -62,6 +63,8 @@ export async function signupAllowed(email: string): Promise<boolean> {
   const allowed = new Set([...ENV_ALLOWED, ...cfg["auth.allowedEmails"].map((s) => s.toLowerCase())]);
   const e = email.trim().toLowerCase();
   if (allowed.has(e)) return true;
+  // recuperação de instância órfã: quem o ambiente aponta como dono precisa conseguir criar a conta
+  if (process.env.ORBITA_OWNER_EMAIL && process.env.ORBITA_OWNER_EMAIL.trim().toLowerCase() === e) return true;
   if (cfg["auth.signupMode"] === "open") return true;
   if (cfg["auth.signupMode"] === "closed") return false;
   // auto: aberto só enquanto não existe ninguém (o dono ainda não se cadastrou)
@@ -82,6 +85,11 @@ export const auth = betterAuth({
             throw new APIError("FORBIDDEN", { message: "Cadastro restrito ao dono desta instância." });
           }
           return { data: newUser };
+        },
+        // grava a posse já no primeiro cadastro (RV.1): sem linha em instance_owner,
+        // apagar a conta do dono antes de alguém abrir os ajustes promoveria outra conta
+        after: async () => {
+          await getOwnerId().catch((e) => log.warn("owner.claim_falhou", { error: e instanceof Error ? e.message : String(e) }));
         },
       },
     },

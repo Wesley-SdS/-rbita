@@ -1,6 +1,6 @@
 import { generateText, stepCountIs } from "ai";
 import { eq } from "drizzle-orm";
-import { resolveModel, DEFAULT_MODEL_KEY } from "@orbita/llm";
+import { resolveModel, fallbackModelKey } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { routine, notification } from "@orbita/db/routine-schema";
 import { buildAllTools, SYSTEM_PROMPT } from "../chat/tools";
@@ -36,7 +36,7 @@ export async function runPromptForUser(userId: string, prompt: string, systemSuf
     applyLlmSettings(),
   ]);
   try {
-    const modelKey = cfg["routines.model"].trim() || DEFAULT_MODEL_KEY;
+    const modelKey = cfg["routines.model"].trim() || (await fallbackModelKey());
     const { text } = await generateText({
       model: resolveModel(modelKey),
       system: SYSTEM_PROMPT + skillInstructions + systemSuffix,

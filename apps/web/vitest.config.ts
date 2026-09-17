@@ -8,6 +8,10 @@ export default defineConfig({
   root: path.resolve(__dirname, "../.."),
   test: {
     environment: "node",
+    // Import de módulo pesado (AI SDK, drizzle) com a CPU saturada por modelo local
+    // passava de 20 s e derrubava a suíte por carga, não por bug.
+    hookTimeout: 60_000,
+    testTimeout: 30_000,
     include: ["apps/web/src/**/*.test.ts", "apps/api/src/**/*.test.ts", "packages/*/src/**/*.test.ts"],
     // O client do @orbita/db exige DATABASE_URL no import (e só conecta no
     // primeiro uso). Um valor de teste permite importar módulos que dependem do

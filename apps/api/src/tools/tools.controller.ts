@@ -3,6 +3,8 @@ import { z } from "zod";
 import { TOOL_RISKS, getTool, riskAtLeast, setToolOverride, toolCatalog } from "@orbita/core/tools/index";
 import { events } from "@orbita/core/events/index";
 import { CurrentUser, SessionGuard, type SessionUser } from "../auth/session.guard";
+import { OwnerGuard } from "../auth/owner.guard";
+import { isOwner } from "@orbita/core/owner";
 
 const PutBody = z.object({
   enabled: z.boolean().optional(),
@@ -16,10 +18,12 @@ const PutBody = z.object({
 export class ToolsController {
   @Get()
   async list(@CurrentUser() user: SessionUser) {
-    return { tools: await toolCatalog(user.id) };
+    return { tools: await toolCatalog(user.id), isOwner: await isOwner(user.id) };
   }
 
+  // `tool_config` vale para a casa inteira: só o dono liga, desliga ou muda risco (RV.1)
   @Put(":name")
+  @UseGuards(OwnerGuard)
   async update(@Param("name") name: string, @Body() body: unknown, @CurrentUser() user: SessionUser) {
     const def = getTool(name);
     if (!def) throw new NotFoundException("Ferramenta desconhecida");

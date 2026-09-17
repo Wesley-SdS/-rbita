@@ -4,6 +4,7 @@ import { ingestDocument } from "@orbita/core/rag/ingest";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { rateLimit, tooMany } from "@orbita/core/ratelimit";
+import { settings } from "@orbita/core/settings/index";
 
 const Body = z.object({
   title: z.string().min(1).max(200),
@@ -14,7 +15,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const session = sessionOf(ctx);
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
 
-  const rl = rateLimit(`ingest:${session.user.id}`, 20, 60_000);
+  const rl = rateLimit(`ingest:${session.user.id}`, await settings.get("limits.ingestPerMinute"), 60_000);
   if (!rl.ok) return tooMany(rl.retryAfterSec);
 
   let body: unknown;

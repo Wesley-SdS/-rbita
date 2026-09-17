@@ -45,7 +45,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   // Config do motor (cache curto; mudou na tela, vale no próximo turno). Uma
   // leitura só por turno: nada de constante no código (CLAUDE.md §5.6).
   const cfg = await settings.getMany([
-    "chat.historyWindow", "chat.ragTimeoutMs", "chat.maxSteps", "chat.maxRetries", "chat.rateLimitPerMinute",
+    "chat.historyWindow", "chat.ragTimeoutMs", "chat.trivialMaxChars", "chat.conversationalMaxChars", "chat.maxSteps", "chat.maxRetries", "chat.rateLimitPerMinute",
     "chat.outputCapSmall", "chat.outputCapMedium", "chat.outputCapLarge",
     "prompt.budgetTokens", "prompt.priorityPersona", "prompt.priorityTemporal", "prompt.prioritySkills", "prompt.priorityRag",
     "rag.topK",
@@ -140,8 +140,8 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const RAG_TIMEOUT = cfg["chat.ragTimeoutMs"];
   const c = content.trim();
   const personalHint = /\b(meu|minh|nosso|lembr|anot|salv|guard|document|arquivo|planilha|extrato|comprovante|reuni|combin|falei|conversa|discut|prometi|agend|tarefa|compromisso|gast|conta|financ|onde eu|quando eu|o que eu)/i.test(c);
-  const conversational = /^(oi|ol[áa]|e a[íi]|bom dia|boa tarde|boa noite|tudo bem|como vai|obrigad|valeu|blz|beleza|legal|show|perfeito|[óo]timo|entendi|ok|opa|eai|e a[íi])\b/i.test(c) && c.length < 40 && !personalHint;
-  const trivial = !image && (c.length < 14 || conversational);
+  const conversational = /^(oi|ol[áa]|e a[íi]|bom dia|boa tarde|boa noite|tudo bem|como vai|obrigad|valeu|blz|beleza|legal|show|perfeito|[óo]timo|entendi|ok|opa|eai|e a[íi])\b/i.test(c) && c.length < cfg["chat.conversationalMaxChars"] && !personalHint;
+  const trivial = !image && (c.length < cfg["chat.trivialMaxChars"] || conversational);
   const ragTask: Promise<RagHit[]> = trivial
     ? Promise.resolve([])
     : Promise.race([

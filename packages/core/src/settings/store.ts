@@ -26,6 +26,9 @@ export interface SettingListItem {
   value: unknown;
   default: unknown;
   overridden: boolean;
+  /** valor escondido para quem não é o dono (ver `redactListing`) */
+  hidden?: boolean;
+  sensitive?: boolean;
 }
 
 export interface SettingsListing {
@@ -68,6 +71,20 @@ function invalidMessage(t: SettingType): string {
     case "list":
       return `Lista inválida (até ${t.maxItems ?? 200} itens, cada um com até ${t.itemMaxLength ?? 200} caracteres)`;
   }
+}
+
+/**
+ * Esconde o valor das chaves sensíveis para quem não é o dono (RV.1). A chave
+ * continua listada (a tela mostra que existe), só o conteúdo some. Puro.
+ */
+export function redactListing(listing: SettingsListing, owner: boolean): SettingsListing {
+  if (owner) return listing;
+  return {
+    groups: listing.groups.map((g) => ({
+      ...g,
+      settings: g.settings.map((s) => (s.sensitive ? { ...s, value: null, default: null, hidden: true } : s)),
+    })),
+  };
 }
 
 export function createSettingsStore(backend: SettingsBackend, cacheMs = 5000): SettingsStore {
@@ -145,6 +162,7 @@ export function createSettingsStore(backend: SettingsBackend, cacheMs = 5000): S
                 value: resolve(k, raw),
                 default: def.default,
                 overridden: raw !== undefined,
+                sensitive: "sensitive" in def ? def.sensitive : undefined,
               };
             }),
         }))

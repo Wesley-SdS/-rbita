@@ -4,6 +4,7 @@ import { embedTexts } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { chunk, memory } from "@orbita/db/knowledge-schema";
 import type { RouteCtx } from "../http/web";
+import { settings } from "@orbita/core/settings/index";
 import { sessionOf } from "../http/web-route";
 import { rateLimit, tooMany } from "@orbita/core/ratelimit";
 
@@ -33,7 +34,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const uid = session.user.id;
 
-  const rl = rateLimit(`reindex:${uid}`, 3, 60_000);
+  const rl = rateLimit(`reindex:${uid}`, await settings.get("limits.reindexPerMinute"), 60_000);
   if (!rl.ok) return tooMany(rl.retryAfterSec);
 
   const [chunks, mems] = await Promise.all([

@@ -1,4 +1,5 @@
 import { discoverModels, discoveredSnapshot, type DiscoveredModel } from "./discovery";
+import { BOOTSTRAP_MODEL_KEY, policySnapshot, readPolicy, type DefaultPreference } from "./policy";
 
 export type ProviderId = "local" | "gateway" | "claude" | "groq" | "google" | "openai" | "cohere";
 
@@ -24,6 +25,12 @@ export interface ModelInfo {
   billing: "free" | "subscription" | "paid" | "variable";
   /** custo aproximado por 1k tokens de saída (0 = local/assinatura) */
   costPer1k: number;
+  /**
+   * O custo é conhecido? Falso para nuvem que não informa preço (Groq, Gemini,
+   * OpenAI, Cohere diretos). Sem isto, preço ausente virava custo zero e a nuvem
+   * passava na frente do modelo local na cadeia de failover (RV.2).
+   */
+  priceKnown: boolean;
   /** EIXO 1 do roteador: roda na máquina de casa? */
   local: boolean;
   supportsTools?: boolean;
@@ -61,6 +68,7 @@ function paraModelInfo(m: DiscoveredModel): ModelInfo {
     tier: m.tier,
     billing: billingDe(m.provider),
     costPer1k: m.costPer1kOutput ?? 0,
+    priceKnown: m.provider === "local" || m.provider === "claude" || m.costPer1kOutput !== undefined,
     local: m.local,
     supportsTools: m.supportsTools,
     supportsVision: m.supportsVision,
@@ -77,15 +85,22 @@ export const AUTO_MODEL: ModelInfo = {
   tier: "medium",
   billing: "variable",
   costPer1k: 0,
+  priceKnown: true,
   local: false,
 };
 
 /**
  * Último recurso quando NADA foi descoberto ainda. Não é um catálogo: é o palpite
- * mínimo para o app não nascer com um modelo vazio no primeiro boot, antes da
- * primeira descoberta. Assim que `discoverModels()` roda, isto deixa de importar.
+ * mínimo para o app não nascer com um modelo vazio no primeiro boot. O valor
+ * efetivo vem de `llm.fallbackModel` (tela de Ajustes) via `fallbackModelKey()`;
+ * isto é só o bootstrap, mantido exportado para quem ainda o importa.
  */
-export const DEFAULT_MODEL_KEY = process.env.ORBITA_FALLBACK_MODEL ?? "local/qwen2.5:7b";
+export const DEFAULT_MODEL_KEY = BOOTSTRAP_MODEL_KEY;
+
+/** Modelo reserva já resolvido, sem ir ao banco (valor do último `readPolicy`). */
+function fallbackSync(): string {
+  return policySnapshot().fallbackModel.trim() || BOOTSTRAP_MODEL_KEY;
+}
 
 /**
  * Metadados de um modelo, SEM ir à rede.
@@ -110,6 +125,7 @@ export function getModelInfo(key: string): ModelInfo | undefined {
     tier: "medium",
     billing: billingDe(parsed.provider),
     costPer1k: 0,
+    priceKnown: parsed.provider === "local" || parsed.provider === "claude",
     local: parsed.provider === "local",
   };
 }
@@ -147,7 +163,7 @@ function melhorLocal(lista: ModelInfo[], tier?: ModelInfo["tier"]): ModelInfo | 
   return locais.sort((a, b) => ordemTier[a.tier] - ordemTier[b.tier])[0];
 }
 
-/** Melhor modelo de nuvem: assinatura primeiro (já paga), depois porte. */
+/** Melhor modelo de nuvem: assinatura primeiro (já paga), depois porte; preço desconhecido por último no empate. */
 function melhorNuvem(lista: ModelInfo[], tier?: ModelInfo["tier"]): ModelInfo | undefined {
   const nuvem = lista.filter((m) => !m.local);
   const candidatos = tier ? nuvem.filter((m) => m.tier === tier) : nuvem;
@@ -155,18 +171,25 @@ function melhorNuvem(lista: ModelInfo[], tier?: ModelInfo["tier"]): ModelInfo | 
     (a, b) =>
       Number(b.billing === "subscription") - Number(a.billing === "subscription") ||
       ordemTier[a.tier] - ordemTier[b.tier] ||
+      Number(b.priceKnown) - Number(a.priceKnown) ||
       a.costPer1k - b.costPer1k,
   )[0];
 }
 
 /**
- * Modelo pré-selecionado na UI: o melhor de nuvem quando há (responde rápido),
- * senão o melhor local. Derivado da descoberta, não de uma lista fixa.
+ * Modelo pré-selecionado na UI, pela preferência do dono (`llm.defaultPreference`).
+ * Nuvem é o padrão enquanto a casa não tem GPU: um 7B local na CPU leva de 30 s a
+ * minutos por turno. Derivado da descoberta, não de uma lista fixa.
  */
+export function escolherPadrao(lista: ModelInfo[], preferencia: DefaultPreference): ModelInfo | undefined {
+  const uteis = lista.filter((m) => m.key !== "auto");
+  const escolha = preferencia === "local" ? melhorLocal(uteis) ?? melhorNuvem(uteis) : melhorNuvem(uteis) ?? melhorLocal(uteis);
+  return escolha ?? uteis[0];
+}
+
 export async function defaultModelKey(_env?: ProviderEnv): Promise<string> {
-  const lista = (await availableModels()).filter((m) => m.key !== "auto");
-  const escolha = melhorNuvem(lista) ?? melhorLocal(lista) ?? lista[0];
-  return escolha?.key ?? DEFAULT_MODEL_KEY;
+  const [lista, policy] = await Promise.all([availableModels(), readPolicy()]);
+  return escolherPadrao(lista, policy.defaultPreference)?.key ?? (policy.fallbackModel.trim() || BOOTSTRAP_MODEL_KEY);
 }
 
 /**
@@ -203,5 +226,5 @@ export function escolherModelo(lista: ModelInfo[], opts: { complexo: boolean }):
 /** Auto-router: aplica `escolherModelo` sobre o que a descoberta já encontrou. */
 export function routeModelKey(content: string, _env?: ProviderEnv): string {
   const escolha = escolherModelo(availableModelsSync(), { complexo: classificarComplexidade(content) });
-  return escolha?.key ?? DEFAULT_MODEL_KEY;
+  return escolha?.key ?? fallbackSync();
 }

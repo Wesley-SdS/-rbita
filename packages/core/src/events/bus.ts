@@ -70,3 +70,14 @@ export function createEventBus(opts: { source: string; persist?: (ev: OrbitaEven
     dispatch,
   };
 }
+
+/**
+ * Separa pendentes em "despachar" e "só marcar": evento que ficou parado mais
+ * que `maxAgeMs` (apps/api fora do ar por dias) não dispara aviso atrasado. Puro.
+ */
+export function partitionPending<T extends { at: Date }>(pendentes: T[], now: Date, maxAgeMs: number): { despachar: T[]; vencidos: T[] } {
+  const despachar: T[] = [];
+  const vencidos: T[] = [];
+  for (const ev of pendentes) (now.getTime() - ev.at.getTime() > maxAgeMs ? vencidos : despachar).push(ev);
+  return { despachar, vencidos };
+}

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, unique, integer } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -22,6 +22,14 @@ export const connection = pgTable(
     refreshTokenEnc: text("refresh_token_enc"),
     scope: text("scope"),
     expiresAt: timestamp("expires_at"),
+    /**
+     * Falhas seguidas de renovação em segundo plano (RV.4). Conexão revogada
+     * gerava notificação a cada volta do laço até o dono desconectar na mão;
+     * agora avisa uma vez e tenta de novo com espera crescente. Zera ao renovar
+     * ou reconectar.
+     */
+    refreshFailures: integer("refresh_failures").notNull().default(0),
+    refreshFailedAt: timestamp("refresh_failed_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

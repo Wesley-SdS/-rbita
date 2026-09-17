@@ -2,8 +2,9 @@
 import { sql } from "drizzle-orm";
 import { db } from "@orbita/db";
 import type { RouteCtx } from "../http/web";
+import { settings } from "@orbita/core/settings/index";
 
-async function ping(url: string, ms = 1500): Promise<boolean> {
+async function ping(url: string, ms: number): Promise<boolean> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(ms) });
     return res.ok;
@@ -24,11 +25,13 @@ export async function GET(_req: Request, _ctx: RouteCtx) {
     checks.db = "down";
   }
 
+  // a config é fail-soft: sem banco, vale o default e o health continua respondendo
+  const pingMs = await settings.get("resilience.healthPingMs");
   const voiceUrl = process.env.VOICE_URL ?? "http://localhost:8001";
-  checks.voice = (await ping(voiceUrl + "/health")) ? "up" : "down";
+  checks.voice = (await ping(voiceUrl + "/health", pingMs)) ? "up" : "down";
 
   const ollama = (process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1").replace(/\/v1\/?$/, "");
-  checks.ollama = (await ping(ollama + "/api/tags")) ? "up" : "down";
+  checks.ollama = (await ping(ollama + "/api/tags", pingMs)) ? "up" : "down";
 
   const status = checks.db === "up" ? "ok" : "error";
   return Response.json(

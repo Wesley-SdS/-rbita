@@ -1,4 +1,5 @@
 import type { ProviderId } from "./catalog";
+import { policySnapshot, readPolicy } from "./policy";
 
 /**
  * DESCOBERTA DE MODELOS — zero hardcode.
@@ -90,14 +91,15 @@ async function safe<T>(label: string, fn: () => Promise<T[]>): Promise<T[]> {
   }
 }
 
-const TIMEOUT_MS = 4000;
+/** Timeout por provedor (`llm.discoveryTimeoutMs`), lido do último snapshot da política. */
+const timeoutMs = () => policySnapshot().discoveryTimeoutMs;
 
 // ── provedores ───────────────────────────────────────────────────────────────
 
 /** Ollama: modelos instalados na máquina. É a fonte dos "dois modelos locais". */
 export async function discoverOllama(): Promise<DiscoveredModel[]> {
   const base = (process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1").replace(/\/v1\/?$/, "");
-  const r = await fetch(base + "/api/tags", { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const r = await fetch(base + "/api/tags", { signal: AbortSignal.timeout(timeoutMs()) });
   if (!r.ok) throw new Error(`ollama ${r.status}`);
   const j = (await r.json()) as {
     models?: Array<{
@@ -144,7 +146,7 @@ export async function discoverAnthropicOAuth(): Promise<DiscoveredModel[]> {
       "anthropic-beta": "oauth-2025-04-20",
       "anthropic-version": "2023-06-01",
     },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs()),
   });
   if (!r.ok) throw new Error(`anthropic ${r.status}`);
   const j = (await r.json()) as { data?: Array<{ id: string; display_name?: string }> };
@@ -275,7 +277,7 @@ export async function discoverOpenAICompatible(): Promise<DiscoveredModel[]> {
         const base = (process.env[p.baseEnv] ?? p.baseDefault).replace(/\/+$/, "");
         const r = await fetch(`${base}/models`, {
           headers: { Authorization: `Bearer ${apiKey}` },
-          signal: AbortSignal.timeout(TIMEOUT_MS),
+          signal: AbortSignal.timeout(timeoutMs()),
         });
         if (!r.ok) throw new Error(`${p.provider} ${r.status}`);
         const j = (await r.json()) as { data?: Array<{ id: string }> };
@@ -306,39 +308,69 @@ export async function discoverOpenAICompatible(): Promise<DiscoveredModel[]> {
 // ── agregação + cache ────────────────────────────────────────────────────────
 
 let cache: { at: number; models: DiscoveredModel[] } | null = null;
-const CACHE_TTL_MS = Number(process.env.MODEL_DISCOVERY_TTL_MS ?? 5 * 60_000);
+let emVoo: Promise<DiscoveredModel[]> | null = null;
+// `invalidateDiscovery` sobe a geração: uma descoberta iniciada antes não grava
+// por cima da mais nova (o dono instalou um modelo e clicou em atualizar).
+let geracao = 0;
+/** Lista vazia (Ollama subindo, CPU saturada) é tentada de novo logo, não depois de um TTL inteiro. */
+export const EMPTY_DISCOVERY_RETRY_MS = 30_000;
+
+/** Pergunta a todos os provedores; chamadas simultâneas compartilham a mesma ida à rede. */
+function descobrirAgora(): Promise<DiscoveredModel[]> {
+  if (emVoo) return emVoo;
+  const minha = geracao;
+  const promessa: Promise<DiscoveredModel[]> = (async () => {
+    const groups = await Promise.all([
+      safe("ollama", discoverOllama),
+      safe("anthropic", discoverAnthropicOAuth),
+      safe("gateway", discoverGateway),
+      discoverOpenAICompatible(), // já é safe por provedor
+    ]);
+
+    const models = groups.flat();
+    // dedup por chave, ordenado: local primeiro (eixo 1), depois porte, alias
+    // canônico antes de snapshot datado, e por fim nome.
+    const porChave = new Map(models.map((m) => [m.key, m]));
+    const ordem = { large: 0, medium: 1, small: 2 };
+    const lista = [...porChave.values()].sort(
+      (a, b) =>
+        Number(b.local) - Number(a.local) ||
+        ordem[a.tier] - ordem[b.tier] ||
+        Number(ehSnapshotDatado(a.id)) - Number(ehSnapshotDatado(b.id)) ||
+        comparaVersao(a.id, b.id) ||
+        a.key.localeCompare(b.key),
+    );
+
+    if (minha === geracao) cache = { at: Date.now(), models: lista };
+    return lista;
+  })().finally(() => {
+    if (emVoo === promessa) emVoo = null;
+  });
+  emVoo = promessa;
+  return promessa;
+}
 
 /**
- * Todos os modelos disponíveis AGORA, de todos os provedores configurados.
- * Cacheado (5 min por padrão): a lista muda quando o dono instala um modelo ou
- * liga uma chave, não a cada requisição.
+ * Todos os modelos disponíveis, de todos os provedores configurados.
+ *
+ * STALE-WHILE-REVALIDATE (RV.3): com cache vencido, devolve a lista antiga NA
+ * HORA e renova em segundo plano. Antes, cache frio fazia o turno do chat
+ * esperar até 4 s por provedor antes do primeiro token. Só espera de verdade
+ * quem nunca teve lista (primeiro boot); o scheduler do apps/api aquece o cache
+ * logo depois de subir e a cada TTL, então esse caso quase não chega ao chat.
  */
 export async function discoverModels(opts?: { force?: boolean }): Promise<DiscoveredModel[]> {
-  if (!opts?.force && cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.models;
+  const { discoveryTtlMs } = await readPolicy();
+  if (opts?.force || !cache) return descobrirAgora();
+  const ttl = cache.models.length ? discoveryTtlMs : Math.min(discoveryTtlMs, EMPTY_DISCOVERY_RETRY_MS);
+  if (Date.now() - cache.at >= ttl) void descobrirAgora().catch(() => undefined);
+  return cache.models;
+}
 
-  const groups = await Promise.all([
-    safe("ollama", discoverOllama),
-    safe("anthropic", discoverAnthropicOAuth),
-    safe("gateway", discoverGateway),
-    discoverOpenAICompatible(), // já é safe por provedor
-  ]);
-
-  const models = groups.flat();
-  // dedup por chave, ordenado: local primeiro (eixo 1), depois porte, alias
-  // canônico antes de snapshot datado, e por fim nome.
-  const porChave = new Map(models.map((m) => [m.key, m]));
-  const ordem = { large: 0, medium: 1, small: 2 };
-  const lista = [...porChave.values()].sort(
-    (a, b) =>
-      Number(b.local) - Number(a.local) ||
-      ordem[a.tier] - ordem[b.tier] ||
-      Number(ehSnapshotDatado(a.id)) - Number(ehSnapshotDatado(b.id)) ||
-      comparaVersao(a.id, b.id) ||
-      a.key.localeCompare(b.key),
-  );
-
-  cache = { at: Date.now(), models: lista };
-  return lista;
+/** Idade do cache em ms (Infinity sem cache): o scheduler aquece quando passa do TTL. */
+export function discoveryAgeMs(): number {
+  // lista vazia conta como "sem cache": o aquecimento tenta de novo na volta seguinte
+  return cache?.models.length ? Date.now() - cache.at : Infinity;
 }
 
 /** Última lista descoberta, sem ir à rede. Vazia se nada foi descoberto ainda. */
@@ -349,4 +381,6 @@ export function discoveredSnapshot(): DiscoveredModel[] {
 /** Invalida o cache (usar quando o dono mudar chave ou instalar modelo novo). */
 export function invalidateDiscovery(): void {
   cache = null;
+  emVoo = null;
+  geracao++;
 }

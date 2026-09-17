@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createEventBus, type OrbitaEvent } from "./bus";
+import { createEventBus, partitionPending, type OrbitaEvent } from "./bus";
 
 describe("event bus", () => {
   it("emite, persiste e entrega para handler do tipo e para o coringa", async () => {
@@ -44,5 +44,20 @@ describe("event bus", () => {
     off();
     await bus.emit("x", {});
     expect(h).not.toHaveBeenCalled();
+  });
+});
+
+describe("outbox pendente (RV.5)", () => {
+  const agora = new Date("2026-09-17T12:00:00Z");
+  const ev = (id: number, horasAtras: number) => ({ id, at: new Date(agora.getTime() - horasAtras * 3_600_000) });
+
+  it("despacha o recente e só marca o que ficou parado demais", () => {
+    const { despachar, vencidos } = partitionPending([ev(1, 30), ev(2, 1), ev(3, 0)], agora, 24 * 3_600_000);
+    expect(despachar.map((e) => e.id)).toEqual([2, 3]);
+    expect(vencidos.map((e) => e.id)).toEqual([1]);
+  });
+
+  it("lista vazia", () => {
+    expect(partitionPending([], agora, 1000)).toEqual({ despachar: [], vencidos: [] });
   });
 });

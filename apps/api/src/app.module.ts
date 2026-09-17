@@ -4,6 +4,7 @@ import { SettingsController } from "./settings/settings.controller";
 import { RulesController } from "./rules/rules.controller";
 import { EventsController } from "./events/events.controller";
 import { ToolsController } from "./tools/tools.controller";
+import { OwnerController } from "./owner/owner.controller";
 import { SchedulerService } from "./scheduler/scheduler.service";
 import { ROUTE_CONTROLLERS } from "./routes/index";
 
@@ -17,7 +18,7 @@ import { ROUTE_CONTROLLERS } from "./routes/index";
  * processo rodar direto de TypeScript com o tsx, sem etapa de build.
  */
 @Module({
-  controllers: [HealthController, SettingsController, RulesController, EventsController, ToolsController, ...ROUTE_CONTROLLERS],
+  controllers: [HealthController, SettingsController, RulesController, EventsController, ToolsController, OwnerController, ...ROUTE_CONTROLLERS],
   providers: [SchedulerService],
 })
 export class AppModule {}

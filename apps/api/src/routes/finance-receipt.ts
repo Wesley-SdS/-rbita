@@ -1,7 +1,7 @@
 // Migrada do Next em paridade (apps/web/src/app/api/finance/receipt/route.ts).
 import { generateObject, generateText } from "ai";
 import { z } from "zod";
-import { resolveModel, resolveVisionModel, DEFAULT_MODEL_KEY } from "@orbita/llm";
+import { resolveModel, resolveVisionModel, fallbackModelKey } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { expense } from "@orbita/db/finance-schema";
 import type { RouteCtx } from "../http/web";
@@ -61,7 +61,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   let fields: z.infer<typeof ReceiptSchema> | null = null;
   try {
     const { object } = await generateObject({
-      model: resolveModel(DEFAULT_MODEL_KEY),
+      model: resolveModel(await fallbackModelKey()),
       schema: ReceiptSchema,
       prompt: INSTRUCAO + ocrText.slice(0, 6000),
     });

@@ -28,6 +28,8 @@ export interface SettingDef<T> {
   unit?: string;
   /** aviso mostrado na tela quando o valor muda (ex.: exige reindexar) */
   warning?: string;
+  /** dado pessoal da casa: quem não é o dono vê a chave, mas não o valor (RV.1) */
+  sensitive?: boolean;
 }
 
 export const SETTING_GROUPS = {
@@ -36,6 +38,7 @@ export const SETTING_GROUPS = {
   rag: { label: "Conhecimento (RAG)", order: 30 },
   memory: { label: "Memória", order: 40 },
   embeddings: { label: "Embeddings", order: 45 },
+  models: { label: "Modelos", order: 47 },
   resilience: { label: "Resiliência", order: 50 },
   routines: { label: "Rotinas e regras", order: 60 },
   tools: { label: "Ferramentas", order: 62 },
@@ -76,11 +79,12 @@ const sel = <const V extends string>(group: SettingGroupId, label: string, descr
   type: { kind: "select", options: [...options] },
   warning,
 });
-const list = (group: SettingGroupId, label: string, description: string, def: string[] = []): SettingDef<string[]> => ({
+const list = (group: SettingGroupId, label: string, description: string, def: string[] = [], extra: { sensitive?: boolean } = {}): SettingDef<string[]> => ({
   group,
   label,
   description,
   default: def,
+  sensitive: extra.sensitive,
   type: { kind: "list", maxItems: 200, itemMaxLength: 200 },
 });
 const text = (group: SettingGroupId, label: string, description: string, def: string, maxLength = 200): SettingDef<string> => ({
@@ -102,6 +106,8 @@ export const SETTING_DEFS = {
   "chat.outputCapSmall": num("chat", "Resposta máxima (modelo leve)", "Tokens de saída para modelos de porte pequeno.", 1024, 128, 32768, { unit: "tokens" }),
   "chat.outputCapMedium": num("chat", "Resposta máxima (modelo médio)", "Tokens de saída para modelos de porte médio.", 2048, 128, 32768, { unit: "tokens" }),
   "chat.outputCapLarge": num("chat", "Resposta máxima (modelo forte)", "Tokens de saída para modelos de porte grande.", 4096, 128, 65536, { unit: "tokens" }),
+  "chat.trivialMaxChars": num("chat", "Mensagem trivial até", "Mensagens mais curtas que isso começam a responder sem esperar a busca de contexto (RAG). O modelo ainda pode buscar sob demanda.", 14, 0, 200, { unit: "chars" }),
+  "chat.conversationalMaxChars": num("chat", "Saudação curta até", "Saudações e agradecimentos até este tamanho, sem indício de assunto pessoal, também pulam a busca de contexto.", 40, 0, 400, { unit: "chars" }),
   "chat.rateLimitPerMinute": num("chat", "Limite de turnos por minuto", "Proteção contra loop de custo: cada turno dispara LLM, embeddings e RAG.", 30, 1, 600, { unit: "/min" }),
 
   // ── prompt (chat/compose.ts) ──
@@ -138,8 +144,35 @@ export const SETTING_DEFS = {
     "Trocar o provedor de embedding invalida os vetores já gravados. Depois de mudar, use \"Reindexar\" na conta.",
   ),
 
+  // ── modelos (packages/llm/src/policy.ts, via settings/apply.ts) ──
+  "llm.failoverOrder": sel(
+    "models",
+    "Ordem do failover",
+    "Quando o modelo escolhido falha antes de começar a responder, a Órbita tenta outro nesta ordem. Nuvem que não informa preço fica sempre depois da nuvem com preço.",
+    "assinatura_local_paga",
+    [
+      { value: "assinatura_local_paga", label: "Assinatura, depois local, depois nuvem paga" },
+      { value: "assinatura_paga_local", label: "Assinatura, depois nuvem paga, depois local" },
+      { value: "local_primeiro", label: "Local primeiro (máxima privacidade, lento sem GPU)" },
+    ],
+  ),
+  "llm.defaultPreference": sel(
+    "models",
+    "Modelo pré-selecionado",
+    "Qual modelo já vem escolhido no chat. Sem GPU, um modelo local pode levar de 30 segundos a minutos por resposta.",
+    "nuvem",
+    [
+      { value: "nuvem", label: "O melhor de nuvem (responde rápido)" },
+      { value: "local", label: "O melhor local (tudo fica em casa)" },
+    ],
+  ),
+  "llm.fallbackModel": text("models", "Modelo reserva", "Chave do modelo (ex.: local/qwen2.5:3b) usada quando nada foi descoberto e por resumos, extratos e rotinas sem modelo definido. Vazio usa o padrão de instalação.", ""),
+  "llm.discoveryTtlMinutes": num("models", "Renovar a lista de modelos a cada", "A lista vencida continua valendo e é renovada em segundo plano, sem atrasar a resposta.", 5, 1, 1440, { unit: "min" }),
+  "llm.discoveryTimeoutMs": num("models", "Timeout por provedor na descoberta", "Quanto esperar cada provedor responder a lista de modelos.", 4000, 500, 30000, { unit: "ms" }),
+
   // ── resiliência (packages/llm/src/failover.ts) ──
   "resilience.cbThreshold": num("resilience", "Falhas para abrir o disjuntor", "Falhas seguidas de um provedor antes de pulá-lo por um tempo.", 3, 1, 20),
+  "resilience.healthPingMs": num("resilience", "Timeout do teste de saúde", "Quanto o /api/health espera o serviço de voz e o Ollama responderem antes de marcar como fora do ar. Com a CPU ocupada, 1,5 s dava falso negativo.", 3000, 200, 30000, { unit: "ms" }),
   "resilience.cbCooldownMs": num("resilience", "Tempo de disjuntor aberto", "Quanto tempo o provedor fica fora da cadeia depois de abrir.", 30000, 1000, 600000, { unit: "ms" }),
 
   // ── rotinas e regras (apps/api) ──
@@ -176,18 +209,26 @@ export const SETTING_DEFS = {
 
   // ── eventos (apps/api) ──
   "events.pollMs": num("events", "Intervalo de leitura de eventos", "Frequência com que o processo persistente lê eventos novos gravados por outros processos.", 2000, 500, 60000, { unit: "ms" }),
+  "events.pruneEveryHours": num("events", "Limpeza de retenção a cada", "De quanto em quanto tempo o processo persistente apaga eventos e eventos de câmera vencidos.", 6, 1, 168, { unit: "h" }),
+  "events.pendingMaxAgeHours": num("events", "Idade máxima de evento pendente", "Evento gravado enquanto o processo persistente estava parado é despachado quando ele volta, desde que seja mais novo que isso. Mais velho é só marcado, para não disparar aviso atrasado.", 24, 1, 720, { unit: "h" }),
   "events.retentionDays": num("events", "Retenção da trilha de eventos", "Eventos mais antigos que isso são apagados.", 30, 1, 3650, { unit: "dias" }),
 
   // ── conectores (apps/api) ──
   "connectors.refreshCheckMinutes": num("connectors", "Verificação de tokens", "De quanto em quanto tempo o processo persistente procura tokens perto de expirar.", 10, 1, 1440, { unit: "min" }),
+  "connectors.refreshBackoffMaxHours": num("connectors", "Espera máxima após falha de renovação", "Conexão que falha ao renovar é tentada de novo com espera crescente, até este teto. O aviso \"reconecte\" sai uma vez só.", 24, 1, 168, { unit: "h" }),
   "connectors.refreshAheadMinutes": num("connectors", "Renovar com antecedência de", "Tokens que expiram dentro desse prazo são renovados em segundo plano.", 15, 1, 1440, { unit: "min" }),
 
   // ── finanças (aviso de vencimento) ──
   "finance.billDueDays": num("finance", "Avisar contas que vencem em", "Horizonte do aviso proativo de contas a vencer.", 3, 0, 60, { unit: "dias" }),
+  "finance.billCheckMinutes": num("finance", "Checar a hora do aviso a cada", "Granularidade com que o processo persistente confere se chegou a hora do aviso diário de contas.", 1, 1, 60, { unit: "min" }),
+  "finance.statementBlockChars": num("finance", "Tamanho do bloco do extrato", "Extrato em PDF é lido pelo modelo em blocos deste tamanho.", 6000, 1000, 50000, { unit: "chars" }),
+  "finance.statementMaxBlocks": num("finance", "Blocos máximos por extrato", "Teto de segurança: acima disso o resto do extrato é ignorado, para um PDF enorme não virar dezenas de chamadas de modelo.", 12, 1, 200),
   "finance.billDueHour": num("finance", "Hora do aviso de contas", "Hora local em que o aviso diário é gerado.", 8, 0, 23, { unit: "h" }),
 
   // ── limites de entrada ──
   "limits.sttMaxMb": num("limits", "Áudio máximo para transcrição", "Tamanho máximo aceito em /api/stt.", 120, 1, 1024, { unit: "MB" }),
+  "limits.ingestPerMinute": num("limits", "Documentos indexados por minuto", "Limite de /api/ingest por conta (cada documento gera embeddings).", 20, 1, 600, { unit: "/min" }),
+  "limits.reindexPerMinute": num("limits", "Reindexações por minuto", "Limite do botão Reindexar (refaz todos os embeddings da conta).", 3, 1, 60, { unit: "/min" }),
   "limits.summaryMaxChars": num("limits", "Limiar do resumo em blocos", "Até este tamanho a reunião é resumida em uma passada só. Acima disso, o resumo vira mapa-redução (por blocos, depois consolidado) em vez de cortar a transcrição.", 100000, 1000, 2000000, { unit: "chars" }),
 
   // ── grafo (api/knowledge/graph) ──
@@ -210,7 +251,7 @@ export const SETTING_DEFS = {
       { value: "closed", label: "Fechado (apenas a lista)" },
     ],
   ),
-  "auth.allowedEmails": list("auth", "E-mails autorizados", "Pessoas da casa que podem criar conta mesmo com o cadastro fechado. ALLOWED_EMAILS do .env entra como bootstrap."),
+  "auth.allowedEmails": list("auth", "E-mails autorizados", "Pessoas da casa que podem criar conta mesmo com o cadastro fechado. ALLOWED_EMAILS do .env entra como bootstrap.", [], { sensitive: true }),
 } as const satisfies Record<string, SettingDef<unknown>>;
 
 export type SettingKey = keyof typeof SETTING_DEFS;

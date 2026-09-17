@@ -40,6 +40,8 @@ export * from "./home-schema";
 export * from "./channels-schema";
 // Câmeras: cadastro + eventos pontuais de detecção, sem vídeo contínuo (Onda 5).
 export * from "./camera-schema";
+// Dono explícito da instância: quem altera config global (Fase 2, RV.1).
+export * from "./owner-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {

@@ -176,6 +176,8 @@ dono faz pelo assistente. Crescer o catálogo é o objetivo, não um efeito a co
   resposta. Se uma rota está ficando grande, a lógica está no lugar errado.
 - **`Response.json`, nunca `NextResponse`.** Mantém as rotas portáveis para a migração do Nest.
 - **Toda rota autentica** com `getSession()` e devolve 401. Toda query filtra por `userId`.
+- **Config que vale para a casa inteira** (tabela `setting`, `tool_config`, e na Fase 2 limiares biométricos) só muda com `OwnerGuard`. Chave com dado pessoal ganha `sensitive: true` em `defs.ts`.
+- **Tabela nova com dado de usuário** precisa de FK `onDelete: "cascade"` para `user` (ou para uma tabela do usuário): `account/data.test.ts` reprova `set null` sem exceção explícita, e o export/apagar a pega sozinho.
 - **Zod em toda entrada**, com limites explícitos de tamanho.
 - **Fail-soft no caminho do chat:** persona, RAG, MCP e skills usam `.catch(() => vazio)`. Uma
   integração fora do ar degrada a resposta, não derruba o turno.
@@ -194,7 +196,7 @@ dono faz pelo assistente. Crescer o catálogo é o objetivo, não um efeito a co
 Antes de considerar qualquer tarefa concluída:
 
 1. **`tsc --noEmit` limpo nos dois apps (`apps/web` e `apps/api`)** e **`vitest run` verde** (§3; baseline
-   após a Onda 1: 16 arquivos, 113 testes). Sem exceção.
+   após a Onda 7: 34 arquivos, 252 testes). Sem exceção.
 2. **Erro pré-existente conta.** Achou teste quebrado ou tipo vermelho que já estava assim?
    Corrija antes de fechar.
 3. **Código novo em `lib/` precisa de teste.** Caminho feliz + pelo menos um de erro. A suíte
@@ -236,7 +238,10 @@ Antes de considerar qualquer tarefa concluída:
 | Gmail watch (e-mail importante, polling) | `packages/core/src/meetings/gmail-watch.ts` |
 | Nomear locutor pós-reunião (leve, sem voiceprint) | `apps/api/src/routes/meeting-speakers.ts` · `document.speakers` |
 | Schemas Drizzle + migrações | `packages/db/src/` · `packages/db/drizzle/` |
-| Plano do Jarvis | `BRIEFING-JARVIS.md` |
+| Dono da instância (quem altera config global) | `packages/core/src/owner.ts` · `apps/api/src/auth/owner.guard.ts` · tabela `instance_owner` |
+| Apagar/exportar conta (derivado do schema) | `packages/core/src/account/data.ts` |
+| Política de modelos (ordem do failover, reserva, descoberta) | `packages/llm/src/policy.ts` ← chaves `llm.*` |
+| Plano do Jarvis | `BRIEFING-JARVIS.md` · Fase 2: `PRD-FASE2-IDENTIDADE-PERCEPCAO.md` |
 | Backlog pré-existente | `CHECKLIST.md` |
 
 ---
@@ -270,3 +275,6 @@ Antes de considerar qualquer tarefa concluída:
 - **O proxy do Next em dev derruba upstream lento**: um chat com 116 s até o primeiro token (modelo local de 1B na CPU) voltou `ECONNRESET`. Com modelo razoável (2 s de TTFT) o streaming NDJSON flui token a token. Em produção o Caddy tem timeout configurável.
 - **`.next/types/validator.ts` fica velho** depois de apagar rotas: `rm -rf apps/web/.next/types` antes do `tsc` se ele reclamar de `route.js` inexistente.
 - **`tesseract.js` precisa ficar em `serverExternalPackages`** e é copiado à mão no Dockerfile.
+- **O banco de dev tem 14 contas de teste.** O dono da instância é `wesley@orbita.local` (gravado em `instance_owner`); quem não é dono recebe 403 ao mudar Ajustes/Ferramentas. Instância órfã só volta por `ORBITA_OWNER_EMAIL`.
+- **Docker Desktop e os dev servers caem juntos** quando a VM satura: se tudo responder `000`, suba Docker, `apps/api`, `apps/web` e voz de novo (skill orbita-dev) antes de achar que é bug.
+- **`finance-receipt` e `finance-statement` ainda usam `generateObject`** com o modelo reserva: com modelo local isso falha (armadilha acima). Pendente.

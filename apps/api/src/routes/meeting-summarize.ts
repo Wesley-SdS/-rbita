@@ -2,7 +2,7 @@
 // Origem em paridade: apps/web/src/app/api/meeting/summarize/route.ts (Onda 1).
 import { generateText } from "ai";
 import { z } from "zod";
-import { resolveModel, DEFAULT_MODEL_KEY } from "@orbita/llm";
+import { resolveModel, fallbackModelKey } from "@orbita/llm";
 import { ingestDocument } from "@orbita/core/rag/ingest";
 import { chunkText } from "@orbita/core/rag/chunk";
 import { dedupeCompromissos, type Compromisso } from "@orbita/core/meetings/compromissos";
@@ -102,7 +102,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const { transcript } = parsed.data;
   const title = parsed.data.title?.trim() || `Reunião ${new Date().toLocaleString("pt-BR")}`;
   const started = Date.now();
-  const model = resolveModel(DEFAULT_MODEL_KEY);
+  const model = resolveModel(await fallbackModelKey());
 
   let summary: string;
   let compromissos: Compromisso[];
