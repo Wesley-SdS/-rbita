@@ -48,3 +48,10 @@ export async function eventBelongsToUser(userId: string, eventId: string): Promi
   const [row] = await db.select({ id: cameraEvent.id }).from(cameraEvent).where(and(eq(cameraEvent.id, eventId), eq(cameraEvent.userId, userId))).limit(1);
   return row !== undefined;
 }
+
+/** Nome do cômodo da câmera (null quando ela não tem cômodo associado). */
+export async function cameraRoomName(cam: Camera): Promise<string | null> {
+  if (!cam.roomId) return null;
+  const [r] = await db.select({ name: room.name }).from(room).where(eq(room.id, cam.roomId)).limit(1);
+  return r?.name ?? null;
+}

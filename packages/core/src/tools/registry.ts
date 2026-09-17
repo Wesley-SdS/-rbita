@@ -30,8 +30,18 @@ export interface Requester {
   confidence?: number;
 }
 
+/** De onde veio o pedido (B5.4): o cômodo do dispositivo que falou com a Órbita. */
+export interface RequestOrigin {
+  deviceId: string;
+  name: string;
+  roomId: string | null;
+  roomName: string | null;
+}
+
 export interface ToolContext {
   userId: string;
+  /** dispositivo de origem, resolvido uma vez por turno (preguiçoso como o requester) */
+  origin?: () => Promise<RequestOrigin | null>;
   /**
    * Resolvido sob demanda e uma vez só por turno: a identificação por voz roda
    * em paralelo ao resto do turno e só é aguardada se uma tool precisar.

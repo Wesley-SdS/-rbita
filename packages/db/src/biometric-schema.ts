@@ -89,6 +89,73 @@ export const biometricUnknownVoice = pgTable(
   (t) => [index("biometric_unknown_voice_expires_idx").on(t.expiresAt), unique("biometric_unknown_voice_label").on(t.userId, t.label)],
 );
 
+/**
+ * Amostra de ROSTO de cadastro (foto), cifrada, para recalcular a assinatura
+ * quando o backend mudar. Recorte vindo de câmera não é guardado: só o vetor.
+ */
+export const biometricFaceSample = pgTable(
+  "biometric_face_sample",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => person.id, { onDelete: "cascade" }),
+    /** cadastro (foto na tela) | camera (confirmado pelo dono) | correcao */
+    source: text("source").notNull(),
+    imageEnc: text("image_enc"),
+    mime: text("mime"),
+    /** menor lado do rosto em pixels: rosto pequeno identifica mal (PRD §7) */
+    faceSize: real("face_size"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("biometric_face_sample_person_idx").on(t.personId)],
+);
+
+/** Assinatura de rosto, por BACKEND (vetores de backends diferentes não se comparam). */
+export const biometricFaceEmbedding = pgTable(
+  "biometric_face_embedding",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => person.id, { onDelete: "cascade" }),
+    sampleId: uuid("sample_id").references(() => biometricFaceSample.id, { onDelete: "cascade" }),
+    backend: text("backend").notNull(),
+    dim: integer("dim").notNull(),
+    vector: real("vector").array().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("biometric_face_embedding_person_backend_idx").on(t.personId, t.backend)],
+);
+
+/** Rosto desconhecido efêmero: mesma regra da voz (decisão 9.2, validade fixa). */
+export const biometricUnknownFace = pgTable(
+  "biometric_unknown_face",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    backend: text("backend").notNull(),
+    vector: real("vector").array().notNull(),
+    sourceRef: text("source_ref"),
+    lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("biometric_unknown_face_expires_idx").on(t.expiresAt), unique("biometric_unknown_face_label").on(t.userId, t.label)],
+);
+
 export type BiometricVoiceSample = typeof biometricVoiceSample.$inferSelect;
 export type BiometricVoiceEmbedding = typeof biometricVoiceEmbedding.$inferSelect;
 export type BiometricUnknownVoice = typeof biometricUnknownVoice.$inferSelect;
+export type BiometricFaceSample = typeof biometricFaceSample.$inferSelect;
+export type BiometricFaceEmbedding = typeof biometricFaceEmbedding.$inferSelect;
+export type BiometricUnknownFace = typeof biometricUnknownFace.$inferSelect;

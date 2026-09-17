@@ -52,6 +52,8 @@ const BIOMETRIA = [/@orbita\/db\/biometric/, /@orbita\/db\/schema$/, /identity\/
 /** Pastas que só podem conter lógica local de identidade/biometria. */
 const PASTAS_BIOMETRICAS = ["packages/core/src/identity", "packages/core/src/perception"];
 
+/** Biometria só existe nestes módulos: quem mais importar `identity/face` ou `identity/voice` reprova. */
+
 /** Pastas que falam com a nuvem e nunca podem importar biometria. */
 const PASTAS_NUVEM = [
   "packages/llm/src",

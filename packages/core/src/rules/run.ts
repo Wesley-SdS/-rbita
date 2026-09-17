@@ -28,6 +28,32 @@ export const BUILTIN_RULES: (RuleInput & { builtinKey: string })[] = [
     actions: [{ kind: "notify", title: "Contas a vencer ({{payload.quantidade}})", body: "{{payload.resumo}}" }],
   },
   {
+    // Onda 12: regras COM CONDIÇÃO SOBRE PESSOA. Vêm desligadas: quem decide se
+    // quer ser avisado de quem chega, de rosto desconhecido ou de gesto é o dono.
+    builtinKey: "identity.presence_changed",
+    name: "Avisar quando alguém for reconhecido em outro cômodo",
+    enabled: false,
+    trigger: { kind: "event", type: "identity.presence_changed" },
+    conditions: [],
+    actions: [{ kind: "notify", title: "Movimento em casa", body: "Alguém da casa foi reconhecido em outro cômodo." }],
+  },
+  {
+    builtinKey: "identity.seen_unknown",
+    name: "Avisar rosto desconhecido numa câmera",
+    enabled: false,
+    trigger: { kind: "event", type: "identity.seen" },
+    conditions: [{ path: "payload.outcome", op: "eq", value: "desconhecido" }],
+    actions: [{ kind: "notify", title: "Rosto desconhecido", body: "A câmera viu alguém que a Órbita não reconhece ({{payload.desconhecido}})." }],
+  },
+  {
+    builtinKey: "identity.gesture",
+    name: "Gesto reconhecido numa câmera",
+    enabled: false,
+    trigger: { kind: "event", type: "identity.gesture" },
+    conditions: [{ path: "payload.gesto", op: "eq", value: "mao_levantada" }],
+    actions: [{ kind: "notify", title: "Gesto na câmera", body: "Mão levantada em {{payload.comodo}} ({{payload.camera}})." }],
+  },
+  {
     builtinKey: "connector.refresh_failed",
     name: "Avisar conector desconectado",
     enabled: true,
@@ -93,10 +119,22 @@ async function enqueueChannelAction(userId: string, kind: string, summary: strin
   await db.insert(actionQueue).values({ userId, kind, summary, payload });
 }
 
+/**
+ * Pessoa a quem o evento se refere, quando há (identity.*, câmera com rosto).
+ * Puro: é o que liga "regra sobre pessoa" ao aviso no cômodo certo.
+ */
+export function pessoaDoEvento(context: unknown): string | null {
+  const payload = (context as { payload?: Record<string, unknown> } | null)?.payload;
+  const id = payload?.personId ?? payload?.pessoaId;
+  return typeof id === "string" && id.length > 10 ? id : null;
+}
+
 async function executeActions(rule: AutomationRule, actions: RuleAction[], context: unknown): Promise<void> {
   for (const a of actions) {
     if (a.kind === "notify") {
-      await notifyUser(rule.userId, renderTemplate(a.title, context), renderTemplate(a.body, context));
+      // evento de identidade traz `personId`: o aviso vai para o aparelho do
+      // cômodo onde a pessoa foi vista (Onda 12, "a voz segue a pessoa")
+      await notifyUser(rule.userId, renderTemplate(a.title, context), renderTemplate(a.body, context), null, { personId: pessoaDoEvento(context) });
     } else if (a.kind === "prompt") {
       const body = await runPromptForUser(
         rule.userId,

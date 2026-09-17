@@ -76,17 +76,26 @@ export const casa_buscar_dispositivos: ToolDef<typeof BuscarInput> = {
   },
 };
 
-const RoomInput = z.object({ comodoId: z.string().uuid() });
+const RoomInput = z.object({
+  comodoId: z.string().describe('id do cômodo (de casa_listar_comodos) ou "aqui" para o cômodo do dispositivo que está falando'),
+});
 export const casa_listar_dispositivos_do_comodo: ToolDef<typeof RoomInput> = {
   name: "casa_listar_dispositivos_do_comodo",
   domain: "casa",
-  description: "Lista todos os dispositivos de um cômodo (id vindo de casa_listar_comodos). Use para 'apaga tudo da sala' ou para ver o que existe num cômodo.",
+  description: 'Lista todos os dispositivos de um cômodo (id vindo de casa_listar_comodos, ou "aqui" para o cômodo de onde o pedido veio). Use para "apaga tudo da sala" ou "o que tem aqui".',
   risk: "leitura",
   requires: { homeAssistant: true },
-  keywords: ["comodo", "sala", "quarto", "tudo", "dispositivos"],
+  keywords: ["comodo", "sala", "quarto", "tudo", "dispositivos", "aqui", "daqui"],
   inputSchema: RoomInput,
-  run: async ({ comodoId }, { userId }) => {
-    const hits = await entitiesInRoom(userId, comodoId);
+  run: async ({ comodoId }, ctx) => {
+    let alvo = comodoId;
+    if (AQUI.test(comodoId.trim())) {
+      const aqui = await comodoDaOrigem(ctx);
+      if (!aqui) return { erro: 'Não sei onde é "aqui": este dispositivo não está cadastrado num cômodo. Cadastre em Casa, ou diga o nome do cômodo.' };
+      alvo = aqui.roomId;
+    }
+    if (!/^[0-9a-f-]{36}$/i.test(alvo)) return { erro: "Informe o id do cômodo (de casa_listar_comodos) ou \"aqui\"." };
+    const hits = await entitiesInRoom(ctx.userId, alvo);
     return { dispositivos: hits.map(fmt) };
   },
 };
@@ -115,6 +124,18 @@ export const casa_consultar_estado: ToolDef<typeof EstadoInput> = {
     }
   },
 };
+
+/**
+ * "Aqui" (B5.4, Onda 12): o cômodo do dispositivo que fez o pedido. Sem
+ * dispositivo cadastrado, devolve null e a tool responde pedindo o cômodo, em
+ * vez de adivinhar e acionar o lugar errado.
+ */
+async function comodoDaOrigem(ctx: ToolContext): Promise<{ roomId: string; roomName: string | null } | null> {
+  const o = ctx.origin ? await ctx.origin().catch(() => null) : null;
+  return o?.roomId ? { roomId: o.roomId, roomName: o.roomName } : null;
+}
+
+const AQUI = /^(aqui|daqui|deste c[oô]modo|neste c[oô]modo|este c[oô]modo)$/i;
 
 /** Permissão por pessoa e cômodo de quem pede (Onda 9): o registro chama antes de executar ou enfileirar. */
 const autorizarEntidade = async ({ entidade }: { entidade: string }, ctx: ToolContext) =>

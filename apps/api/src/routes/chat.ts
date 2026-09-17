@@ -32,6 +32,8 @@ const BodySchema = z.object({
   // pediu (Onda 9). Vai só para o serviço LOCAL de percepção; teto real em
   // `identity.commandClipMaxKB`, este é só o limite duro do JSON.
   voiceClip: z.string().max(6_000_000).optional(),
+  // de qual dispositivo veio o pedido (B5.4): é o "aqui" de "apaga a luz daqui"
+  deviceId: z.string().uuid().optional(),
 });
 
 const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.\n\n";
@@ -72,7 +74,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
   }
-  const { content, modelKey, conversationId, rich, image, voiceClip } = parsed.data;
+  const { content, modelKey, conversationId, rich, image, voiceClip, deviceId } = parsed.data;
 
   const info = getModelInfo(modelKey);
   if (!info) return Response.json({ error: "Modelo desconhecido" }, { status: 400 });
@@ -157,12 +159,12 @@ export async function POST(req: Request, ctx: RouteCtx) {
   // QUEM PEDE: a identificação por voz começa já, em paralelo, e só é aguardada
   // se uma tool precisar (permissão por cômodo, nota na fila de aprovação).
   const clip = voiceClip && !image ? parseVoiceClip(voiceClip, cfg["identity.commandClipMaxKB"]) : null;
-  const quemPede = requesterResolver(userId, clip);
+  const quemPede = requesterResolver(userId, clip, deviceId ?? null);
   if (clip) void quemPede.voice();
 
   const [personaCtx, toolsRes, ragHits] = await Promise.all([
     buildPersonaContext(userId).catch(() => ""),
-    buildAllTools(userId, content, quemPede.resolve),
+    buildAllTools(userId, content, quemPede.resolve, quemPede.origin),
     ragTask,
   ]);
   const { tools, cleanup, skillInstructions } = toolsRes;

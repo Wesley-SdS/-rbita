@@ -7,14 +7,22 @@ import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 
 const CreateBody = z.object({ name: z.string().min(1).max(60), roomId: z.string().uuid().nullable().optional() });
-const PatchBody = z.object({ name: z.string().min(1).max(60).optional(), roomId: z.string().uuid().nullable().optional(), enabled: z.boolean().optional() });
+const PatchBody = z.object({
+  name: z.string().min(1).max(60).optional(),
+  roomId: z.string().uuid().nullable().optional(),
+  enabled: z.boolean().optional(),
+  // com isto ligado a câmera identifica quem aparece e a narração vira só local (decisão 9.6)
+  identifyFaces: z.boolean().optional(),
+  // gestos (CAM.4): o gesto vira evento; o que ele faz é a regra que o dono cadastra
+  detectGestures: z.boolean().optional(),
+});
 
 /** GET /api/cameras — nunca devolve o webhookToken de volta (só na criação). */
 export async function GET(_req: Request, ctx: RouteCtx) {
   const session = sessionOf(ctx);
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const rows = await db
-    .select({ id: camera.id, name: camera.name, roomId: camera.roomId, enabled: camera.enabled, provider: camera.provider, createdAt: camera.createdAt })
+    .select({ id: camera.id, name: camera.name, roomId: camera.roomId, enabled: camera.enabled, identifyFaces: camera.identifyFaces, detectGestures: camera.detectGestures, provider: camera.provider, createdAt: camera.createdAt })
     .from(camera)
     .where(eq(camera.userId, session.user.id));
   return Response.json({ cameras: rows });

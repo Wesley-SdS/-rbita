@@ -16,8 +16,8 @@ import { buildToolSet } from "../tools/index";
  * humano é derivado do risco pelo registro (CLAUDE.md §5.7). Aqui só resta a
  * montagem do ToolSet do turno, com seleção por relevância ao pedido.
  */
-export async function buildTools(userId: string, query = "", requester?: ToolContext["requester"]): Promise<ToolSet> {
-  return buildToolSet(userId, query, requester);
+export async function buildTools(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"]): Promise<ToolSet> {
+  return buildToolSet(userId, query, requester, origin);
 }
 
 /** Contexto temporal: injeta a data/hora atual (combate alucinação de "hoje/atual"). */
@@ -110,9 +110,9 @@ export async function getSkillInstructions(userId: string, query = ""): Promise<
  * Todas as ferramentas + extensões do usuário: tools base + conectores + MCP,
  * mais as instruções das skills. Retorna um cleanup que fecha as conexões MCP.
  */
-export async function buildAllTools(userId: string, query = "", requester?: ToolContext["requester"]): Promise<{ tools: ToolSet; cleanup: () => Promise<void>; skillInstructions: string }> {
+export async function buildAllTools(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"]): Promise<{ tools: ToolSet; cleanup: () => Promise<void>; skillInstructions: string }> {
   const [base, mcp, skillInstructions] = await Promise.all([
-    buildTools(userId, query, requester),
+    buildTools(userId, query, requester, origin),
     buildMcpTools(userId),
     getSkillInstructions(userId, query),
   ]);

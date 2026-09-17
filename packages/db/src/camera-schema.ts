@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, uuid, real, boolean, index } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
-import { room } from "./home-schema";
+import { person, room } from "./home-schema";
 
 /**
  * Onda 5 (câmeras): percepção, narração, gestos, segurança. Frigate (ou
@@ -26,6 +26,14 @@ export const camera = pgTable("camera", {
   provider: text("provider").notNull().default("generic"), // "frigate" | "generic" — só rótulo, não muda o parser
   webhookToken: text("webhook_token").notNull().unique(),
   enabled: boolean("enabled").notNull().default(true),
+  /**
+   * Identificar quem aparece nesta câmera (Onda 10). Desligado por padrão: é
+   * opt-in por câmera. Com isto ligado, a narração da cena usa SÓ modelo local
+   * (decisão 9.6, PRD §4.2) e a presença por cômodo é atualizada.
+   */
+  identifyFaces: boolean("identify_faces").notNull().default(false),
+  /** Reconhecer gestos nesta câmera (CAM.4). Pose/mão é pipeline separado da narração. */
+  detectGestures: boolean("detect_gestures").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -53,6 +61,16 @@ export const cameraEvent = pgTable(
     snapshot: text("snapshot"), // data URL (image/jpeg;base64,...), capado no ingest
     narration: text("narration"),
     narratedAt: timestamp("narrated_at"),
+    /**
+     * Quem foi reconhecido neste evento. Colunas `identified_*` são a convenção
+     * que `eraseBiometrics` usa para zerar a referência ao apagar a pessoa.
+     */
+    identifiedPersonId: uuid("identified_person_id").references(() => person.id, { onDelete: "set null" }),
+    identifiedScore: real("identified_score"),
+    identifiedOutcome: text("identified_outcome"),
+    /** "Desconhecido 2" quando não é ninguém cadastrado */
+    identifiedLabel: text("identified_label"),
+    identifiedAt: timestamp("identified_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [index("camera_event_camera_created_idx").on(t.cameraId, t.createdAt), index("camera_event_created_idx").on(t.createdAt)],

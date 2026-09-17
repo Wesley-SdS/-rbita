@@ -4,6 +4,8 @@ import { log } from "../observability/logger";
 import type { Requester } from "../tools/registry";
 import { getPerson, personForAccount } from "./people";
 import { identifyVoice, type VoiceIdentification } from "./voice";
+import { resolveOrigin, type DeviceOrigin } from "./device";
+import { updatePresence } from "./presence";
 
 /**
  * QUEM PEDE (VZ.6/VZ.7). A conta logada é o ponto de partida; um trecho de voz
@@ -45,9 +47,14 @@ export function parseVoiceClip(dataUrl: string, maxKB: number): VoiceClip | null
  * biometria são da casa do dono; outra conta segue sem restrição de cômodo
  * própria (é o comportamento de antes). Falha de percepção degrada para a conta.
  */
-export function requesterResolver(accountUserId: string, clip: VoiceClip | null): { resolve: () => Promise<Requester | null>; voice: () => Promise<VoiceIdentification | null> } {
+export function requesterResolver(
+  accountUserId: string,
+  clip: VoiceClip | null,
+  deviceId?: string | null,
+): { resolve: () => Promise<Requester | null>; voice: () => Promise<VoiceIdentification | null>; origin: () => Promise<DeviceOrigin | null> } {
   let voz: Promise<VoiceIdentification | null> | null = null;
   let quem: Promise<Requester | null> | null = null;
+  let onde: Promise<DeviceOrigin | null> | null = null;
 
   const voice = () => {
     voz ??= (async () => {
@@ -75,10 +82,28 @@ export function requesterResolver(accountUserId: string, clip: VoiceClip | null)
       if (!v) return chooseRequester(conta, null, policy, !!clip);
       const p = v.personId ? await getPerson(owner, v.personId) : null;
       const pessoaVoz: Requester | null = p ? { personId: p.id, name: p.name, role: p.role, via: "voz", confidence: v.score } : null;
+      // voz reconhecida + dispositivo num cômodo = presença (Onda 12): é assim
+      // que a Órbita sabe onde a pessoa está mesmo sem câmera naquele cômodo
+      if (v.outcome === "identificado" && p) {
+        const o = await origin();
+        if (o?.roomId) await updatePresence(owner, p.id, o.roomId, "voz", v.score).catch(() => undefined);
+      }
       return chooseRequester(conta, { outcome: v.outcome, person: pessoaVoz }, policy);
     })();
     return quem;
   };
 
-  return { resolve, voice };
+  const origin = () => {
+    onde ??= (async () => {
+      const owner = await getOwnerId();
+      if (!owner || owner !== accountUserId) return null;
+      return resolveOrigin(owner, deviceId ?? null);
+    })().catch((e) => {
+      log.warn("identity.origem_falhou", { error: e instanceof Error ? e.message : String(e) });
+      return null;
+    });
+    return onde;
+  };
+
+  return { resolve, voice, origin };
 }

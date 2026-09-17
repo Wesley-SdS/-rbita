@@ -4,7 +4,7 @@ import { requesterResolver } from "@orbita/core/identity/requester";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 
-const Body = z.object({ name: z.string().min(1).max(80), arguments: z.unknown() });
+const Body = z.object({ name: z.string().min(1).max(80), arguments: z.unknown(), deviceId: z.string().uuid().optional() });
 
 /**
  * POST /api/realtime/tool — o browser nunca executa uma tool sozinho durante
@@ -20,7 +20,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
   // sem trecho de voz aqui (o áudio vai direto à OpenAI por WebRTC): vale a conta,
   // mas a permissão por pessoa e cômodo do registro continua sendo aplicada
-  const quem = requesterResolver(session.user.id, null);
-  const result = await runRealtimeTool(session.user.id, parsed.data.name, parsed.data.arguments, quem.resolve);
+  const quem = requesterResolver(session.user.id, null, parsed.data.deviceId ?? null);
+  const result = await runRealtimeTool(session.user.id, parsed.data.name, parsed.data.arguments, quem.resolve, quem.origin);
   return Response.json({ result });
 }

@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from perception.audio import decode_to_mono16k, slice_seconds, speech_seconds
 from perception.face import FACE_MODELS, FaceEncoder, decode_image
+from perception.gesture import GESTOS, GestureDetector
 from perception.voice import VOICE_MODELS, VoiceEncoder
 
 BASE = Path(__file__).resolve().parent
@@ -74,6 +75,13 @@ def _voice(name: str | None) -> VoiceEncoder:
         return _encoders[chave]  # type: ignore[return-value]
 
 
+def _gestos() -> GestureDetector:
+    with _lock:
+        if "gesto" not in _encoders:
+            _encoders["gesto"] = GestureDetector()
+        return _encoders["gesto"]  # type: ignore[return-value]
+
+
 def _face(name: str | None) -> FaceEncoder:
     nome = name or os.environ.get("PERCEPTION_FACE_BACKEND", "insightface_s")
     if nome not in FACE_MODELS:
@@ -102,6 +110,7 @@ def health() -> dict:
     disponiveis = {
         "voz": [n for n, f in VOICE_MODELS.items() if (MODELS_DIR / "voice" / f).exists()],
         "rosto": [n for n, fs in FACE_MODELS.items() if all((MODELS_DIR / "face" / f).exists() for f in fs.values())],
+        "gestos": list(GESTOS),
     }
     return {"status": "ok", "disponiveis": disponiveis, "carregados": sorted(_encoders)}
 
@@ -189,6 +198,24 @@ def face_embed(file: UploadFile = File(...), backend: str | None = Form(None)) -
             {"bbox": [round(v, 1) for v in f.bbox], "score": round(f.score, 4), "size": round(f.size, 1), "landmarks": f.landmarks.round(1).tolist(), "embedding": f.embedding.tolist()}
             for f in faces
         ],
+    }
+
+
+@app.post("/pose/gesture")
+def pose_gesture(file: UploadFile = File(...)) -> dict:
+    """Gestos num keyframe (CAM.4). Devolve o NOME do gesto; o que ele faz é
+    decisão da regra que o dono cadastrou, e pode ser diferente por pessoa."""
+    data = _ler(file, MAX_IMAGE_MB)
+    try:
+        img = decode_image(data)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    t = time.perf_counter()
+    gestos = _gestos().detect(img)
+    return {
+        "ms": round((time.perf_counter() - t) * 1000, 1),
+        "vocabulario": list(GESTOS),
+        "gestos": [{"gesto": g.gesture, "confianca": g.confidence, "mao": g.hand} for g in gestos],
     }
 
 

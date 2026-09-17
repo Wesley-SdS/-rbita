@@ -92,6 +92,19 @@ export async function embedFaces(image: Uint8Array, mime: string, backend: strin
   return post("/face/embed", f);
 }
 
+export interface GestureResult {
+  gesto: string;
+  confianca: number;
+  mao: string;
+}
+
+/** Gestos num keyframe (CAM.4). Pipeline separado da narração, como manda o briefing §7.1. */
+export async function detectGestures(image: Uint8Array, mime: string): Promise<{ ms: number; vocabulario: string[]; gestos: GestureResult[] }> {
+  const f = new FormData();
+  f.append("file", arquivo(image, mime), "image");
+  return post("/pose/gesture", f);
+}
+
 export async function perceptionHealth(): Promise<{ status: string; disponiveis: { voz: string[]; rosto: string[] } } | null> {
   try {
     const { url } = await base();

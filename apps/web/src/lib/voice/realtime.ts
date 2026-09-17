@@ -1,3 +1,5 @@
+import { getOwnDeviceId } from "@/lib/device-id";
+
 /**
  * Cliente WebRTC da OpenAI Realtime (voz S2S premium, baixa latência).
  * Fluxo: pega token efêmero do nosso backend → abre RTCPeerConnection direto
@@ -104,7 +106,8 @@ export class RealtimeSession {
     try { args = JSON.parse(argsJson); } catch { /* argumentos vazios ou inválidos viram {} */ }
     let output: unknown;
     try {
-      const r = await fetch("/api/realtime/tool", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, arguments: args }) });
+      // deviceId: aparelho registrado em Casa → Aparelhos (Onda 12), diz "daqui" é onde.
+      const r = await fetch("/api/realtime/tool", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, arguments: args, deviceId: getOwnDeviceId() ?? undefined }) });
       const d = await r.json().catch(() => ({}));
       output = r.ok ? d.result : { erro: d.error ?? "falha ao executar" };
     } catch {

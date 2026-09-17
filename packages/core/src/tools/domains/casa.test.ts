@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
-import type { casa_acionar_com_aprovacao as CasaAcionarComAprovacao } from "./casa";
+import type { casa_acionar_com_aprovacao as CasaAcionarComAprovacao, casa_listar_dispositivos_do_comodo as CasaListarDoComodo } from "./casa";
 
 /**
  * Testes da correção de auditoria (pós-Onda 6): o gate de `casa_acionar`
@@ -22,9 +22,10 @@ vi.mock("../../home/access", () => ({ loadDomainRiskOverrides: vi.fn(async () =>
 
 const ctx = { userId: "u1" };
 let casa_acionar_com_aprovacao: typeof CasaAcionarComAprovacao;
+let casa_listar_dispositivos_do_comodo: typeof CasaListarDoComodo;
 
 beforeAll(async () => {
-  ({ casa_acionar_com_aprovacao } = await import("./casa"));
+  ({ casa_acionar_com_aprovacao, casa_listar_dispositivos_do_comodo } = await import("./casa"));
   // o import puxa o registro inteiro de tools; com a CPU saturada passava de 20 s
 }, 60_000);
 
@@ -76,5 +77,29 @@ describe("casa_acionar: recusa por risco de domínio antes de tentar executar", 
     expect(r.erro).toMatch(/aprovação/);
     vi.doUnmock("../../home/access");
     vi.resetModules();
+  });
+});
+
+describe('"aqui" resolvido pelo cômodo do dispositivo (Onda 12)', () => {
+  const SALA = "11111111-2222-3333-4444-555555555555";
+
+  it("sem dispositivo cadastrado, não adivinha o cômodo", async () => {
+    const r = (await casa_listar_dispositivos_do_comodo.run({ comodoId: "aqui" }, ctx)) as { erro?: string };
+    expect(r.erro).toMatch(/não está cadastrado num cômodo/i);
+  });
+
+  it("com dispositivo num cômodo, usa esse cômodo", async () => {
+    const { entitiesInRoom } = await import("../../home/entities");
+    const r = (await casa_listar_dispositivos_do_comodo.run(
+      { comodoId: "daqui" },
+      { ...ctx, origin: async () => ({ deviceId: "d1", name: "Navegador", roomId: SALA, roomName: "Sala" }) },
+    )) as { dispositivos?: unknown[] };
+    expect(entitiesInRoom).toHaveBeenCalledWith("u1", SALA);
+    expect(r.dispositivos).toEqual([]);
+  });
+
+  it("id de cômodo inválido é recusado, não vira busca", async () => {
+    const r = (await casa_listar_dispositivos_do_comodo.run({ comodoId: "sala" }, ctx)) as { erro?: string };
+    expect(r.erro).toMatch(/id do cômodo/i);
   });
 });

@@ -17,6 +17,9 @@ export async function GET(_req: Request, ctx: RouteCtx) {
 const SubSchema = z.object({
   endpoint: z.string().url().max(2000),
   keys: z.object({ p256dh: z.string().min(1).max(500), auth: z.string().min(1).max(500) }),
+  // dispositivo deste navegador (Onda 12): é o que permite avisar no cômodo
+  // onde a pessoa está, em vez de tocar em todos os aparelhos da casa
+  deviceId: z.string().uuid().nullable().optional(),
 });
 
 /** Registra (ou atualiza) a inscrição do navegador atual. */
@@ -27,7 +30,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const parsed = SubSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Inscrição inválida" }, { status: 400 });
 
-  const { endpoint, keys } = parsed.data;
+  const { endpoint, keys, deviceId } = parsed.data;
   // Anti-sequestro: se o endpoint já existe e pertence a OUTRO usuário, recusa —
   // senão bastaria conhecer o endpoint de push da vítima para reassociá-lo.
   const [existing] = await db
@@ -40,11 +43,11 @@ export async function POST(req: Request, ctx: RouteCtx) {
   }
   await db
     .insert(pushSubscription)
-    .values({ endpoint, userId: session.user.id, p256dh: keys.p256dh, auth: keys.auth })
+    .values({ endpoint, userId: session.user.id, p256dh: keys.p256dh, auth: keys.auth, deviceId: deviceId ?? null})
     .onConflictDoUpdate({
       target: pushSubscription.endpoint,
       // só atualiza as chaves quando o dono é o próprio usuário (garantido acima)
-      set: { p256dh: keys.p256dh, auth: keys.auth },
+      set: { p256dh: keys.p256dh, auth: keys.auth, deviceId: deviceId ?? null},
     });
   return Response.json({ ok: true });
 }

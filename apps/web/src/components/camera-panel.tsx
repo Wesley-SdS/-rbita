@@ -12,7 +12,7 @@ import { Card, PanelTitle, Input, Button, ErrorRetry } from "@/components/ui";
 const dim = { color: "var(--color-ink-dim)" } as const;
 
 interface Room { id: string; name: string }
-interface CameraRow { id: string; name: string; roomId: string | null; enabled: boolean }
+interface CameraRow { id: string; name: string; roomId: string | null; enabled: boolean; identifyFaces: boolean; detectGestures: boolean }
 interface CameraEventRow { id: string; label: string; zone: string | null; score: number | null; snapshot: string | null; narration: string | null; createdAt: string }
 
 export function CameraPanel() {
@@ -68,6 +68,18 @@ function CamerasTab() {
     await fetch(`/api/cameras?id=${c.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: !c.enabled }) });
     setReload((n) => n + 1);
   }
+  async function toggleIdentify(c: CameraRow) {
+    const ligar = !c.identifyFaces;
+    const r = await fetch(`/api/cameras?id=${c.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifyFaces: ligar }) });
+    if (r.ok && ligar) {
+      window.alert(`Identificação de rosto ligada em ${c.name}. A narração desta câmera passa a usar só modelo local, nunca a nuvem.`);
+    }
+    setReload((n) => n + 1);
+  }
+  async function toggleGestures(c: CameraRow) {
+    await fetch(`/api/cameras?id=${c.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ detectGestures: !c.detectGestures }) });
+    setReload((n) => n + 1);
+  }
   async function remove(id: string) {
     await fetch(`/api/cameras?id=${id}`, { method: "DELETE" });
     setReload((n) => n + 1);
@@ -88,16 +100,36 @@ function CamerasTab() {
         </div>
       )}
       {cams.map((c) => (
-        <div key={c.id} className="flex items-center justify-between rounded-lg border px-2 py-1" style={{ borderColor: "var(--color-line)" }}>
-          <div>
-            <span>{c.name}</span>
-            <span style={dim}> · {rooms.find((r) => r.id === c.roomId)?.name ?? "sem cômodo"}</span>
-            {!c.enabled && <span style={{ color: "var(--color-danger)" }}> · desligada</span>}
+        <div key={c.id} className="flex flex-col gap-1 rounded-lg border px-2 py-1" style={{ borderColor: "var(--color-line)" }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <span>{c.name}</span>
+              <span style={dim}> · {rooms.find((r) => r.id === c.roomId)?.name ?? "sem cômodo"}</span>
+              {!c.enabled && <span style={{ color: "var(--color-danger)" }}> · desligada</span>}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => toggle(c)} style={{ color: "var(--color-gold)" }}>{c.enabled ? "desligar" : "ligar"}</button>
+              <button onClick={() => remove(c.id)} style={{ color: "var(--color-danger)" }}>×</button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => toggle(c)} style={{ color: "var(--color-gold)" }}>{c.enabled ? "desligar" : "ligar"}</button>
-            <button onClick={() => remove(c.id)} style={{ color: "var(--color-danger)" }}>×</button>
+          <div className="flex flex-wrap gap-3">
+            <label className="flex items-center gap-2 text-[11px]" style={dim}>
+              <input type="checkbox" checked={c.identifyFaces} onChange={() => void toggleIdentify(c)} />
+              Identificar quem aparece
+            </label>
+            <label className="flex items-center gap-2 text-[11px]" style={dim}>
+              <input type="checkbox" checked={c.detectGestures} onChange={() => void toggleGestures(c)} />
+              Reconhecer gestos
+            </label>
           </div>
+          <p className="text-[10px]" style={dim}>
+            Liga o reconhecimento de rosto nesta câmera e atualiza quem está em qual cômodo. Com
+            isso ligado, a narração da cena usa só modelo local, nunca a nuvem.
+          </p>
+          <p className="text-[10px]" style={dim}>
+            Reconhece gestos como mão levantada nesta câmera. O que cada gesto faz é você que
+            decide, criando uma regra sobre o evento identity.gesture.
+          </p>
         </div>
       ))}
       <div className="flex gap-2">
@@ -108,6 +140,10 @@ function CamerasTab() {
         </select>
         <Button onClick={add} size="sm">+ câmera</Button>
       </div>
+      <p className="text-[10px]" style={dim}>
+        Os objetos que a Órbita lembra onde ficaram (tipo "onde deixei a chave") se configuram em
+        Ajustes, no grupo Visão: objetos e gestos.
+      </p>
     </div>
   );
 }

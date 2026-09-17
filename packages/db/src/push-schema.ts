@@ -1,5 +1,6 @@
-import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
+import { device } from "./device-schema";
 
 /**
  * Inscrições Web Push do usuário (um registro por navegador/dispositivo).
@@ -13,6 +14,8 @@ export const pushSubscription = pgTable("push_subscription", {
     .references(() => user.id, { onDelete: "cascade" }),
   p256dh: text("p256dh").notNull(),
   auth: text("auth").notNull(),
+  /** dispositivo (e portanto cômodo) deste navegador, quando o dono o cadastrou (Onda 12) */
+  deviceId: uuid("device_id").references(() => device.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

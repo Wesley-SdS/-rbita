@@ -46,6 +46,12 @@ export * from "./owner-schema";
 export * from "./identity-schema";
 // Biometria (voz agora, rosto na Onda 10). Nunca sai de casa; some com a pessoa.
 export * from "./biometric-schema";
+// Presença por cômodo (Onda 10): quem está onde agora.
+export * from "./presence-schema";
+// Memória visual de objetos (Onda 11): "onde deixei a chave".
+export * from "./visual-schema";
+// Dispositivo e cômodo: o "aqui" dos comandos (Onda 12).
+export * from "./device-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {

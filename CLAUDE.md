@@ -142,6 +142,12 @@ Voz, rosto, amostras e vetores só vão para o `apps/perception` local, marcados
 `biometric_*` com `person_id` cascade (o apagar pega sozinho). Módulo que fala com nuvem não importa
 biometria: o teste NV.1 reprova. Sem consentimento vigente, a assinatura não entra no casamento.
 
+### 5.4.2 Identidade nunca afirma sem confiança
+
+Presença velha sai como "visto por último", identificação fraca sai como "provavelmente", e
+perguntar sobre outra pessoa passa por `identity/ask.ts` (permissão + trilha, inclusive quando é
+negado). Gesto vira EVENTO (`identity.gesture`), nunca ação: o que ele faz é regra do dono.
+
 ### 5.5 Nada de multi-tenant
 
 Ver §1. Se um porte do Adalink trouxer `organizationId`, remova antes de commitar.
@@ -256,7 +262,10 @@ Antes de considerar qualquer tarefa concluída:
 | Dono da instância (quem altera config global) | `packages/core/src/owner.ts` · `apps/api/src/auth/owner.guard.ts` · tabela `instance_owner` |
 | Apagar/exportar conta (derivado do schema) | `packages/core/src/account/data.ts` |
 | Política de modelos (ordem do failover, reserva, descoberta) | `packages/llm/src/policy.ts` ← chaves `llm.*` |
-| Identidade: pessoas, consentimento, apagar, quem pede, voz | `packages/core/src/identity/` · rotas `apps/api/src/routes/identity-*.ts` |
+| Identidade: pessoas, consentimento, apagar, quem pede, voz, rosto, presença, gestos, dispositivo | `packages/core/src/identity/` · rotas `apps/api/src/routes/identity-*.ts` e `devices.ts` |
+| Tools de identidade (12) | `packages/core/src/tools/domains/identidade.ts` |
+| Memória visual de objetos ("onde deixei a chave") | `packages/core/src/vision/objects.ts` · chaves `vision.*` |
+| "Quem disse" entre reuniões | `packages/core/src/meetings/quem-disse.ts` |
 | Biometria (tabelas `biometric_*`, nunca sai de casa) | `packages/db/src/biometric-schema.ts` · guard `packages/core/src/privacy/egress.ts` · testes `privacy/no-leak*.test.ts` |
 | Serviço local de percepção | `apps/perception` · cliente `packages/core/src/perception/client.ts` |
 | Plano do Jarvis | `BRIEFING-JARVIS.md` · Fase 2: `PRD-FASE2-IDENTIDADE-PERCEPCAO.md` |
@@ -293,6 +302,7 @@ Antes de considerar qualquer tarefa concluída:
 - **O proxy do Next em dev derruba upstream lento**: um chat com 116 s até o primeiro token (modelo local de 1B na CPU) voltou `ECONNRESET`. Com modelo razoável (2 s de TTFT) o streaming NDJSON flui token a token. Em produção o Caddy tem timeout configurável.
 - **`.next/types/validator.ts` fica velho** depois de apagar rotas: `rm -rf apps/web/.next/types` antes do `tsc` se ele reclamar de `route.js` inexistente.
 - **Tool de casa que AGE precisa de `authorize`** (permissão por pessoa e cômodo): o `registerTools` recusa sem isso. Tool do HA exposta por MCP passa por fora do registro e não tem essa checagem.
+- **"Aqui" vem do dispositivo** (`device` + `ToolContext.origin`), não de adivinhação: sem dispositivo cadastrado num cômodo, a tool pede o cômodo em vez de agir no lugar errado.
 - **Voz reconhecida nunca libera ação perigosa** (decisão 9.5): ela só restringe (permissão por cômodo) e identifica quem pediu na fila de aprovação; nunca substitui o gate.
 - **`tesseract.js` precisa ficar em `serverExternalPackages`** e é copiado à mão no Dockerfile.
 - **O banco de dev tem 14 contas de teste.** O dono da instância é `wesley@orbita.local` (gravado em `instance_owner`); quem não é dono recebe 403 ao mudar Ajustes/Ferramentas. Instância órfã só volta por `ORBITA_OWNER_EMAIL`.

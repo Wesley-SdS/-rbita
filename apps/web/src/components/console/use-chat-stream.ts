@@ -3,6 +3,7 @@
 import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, useRef, useState } from "react";
 import type { OrbMode } from "@/components/orb";
 import type { Msg, ToolStep, VoiceBridge } from "@/components/console/types";
+import { getOwnDeviceId } from "@/lib/device-id";
 
 interface Params {
   modelKey: string;
@@ -70,7 +71,8 @@ export function useChatStream(p: Params) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // voiceClip: trecho de voz do ditado (Onda 9, "quem pediu"); mensagens digitadas nunca o têm.
-        body: JSON.stringify({ content, modelKey: effectiveModelKey, conversationId: p.convId.current ?? undefined, rich: true, image: imgToSend ?? undefined, voiceClip }),
+        // deviceId: aparelho registrado em Casa → Aparelhos (Onda 12), diz "daqui" é onde.
+        body: JSON.stringify({ content, modelKey: effectiveModelKey, conversationId: p.convId.current ?? undefined, rich: true, image: imgToSend ?? undefined, voiceClip, deviceId: getOwnDeviceId() ?? undefined }),
         signal: ac.signal,
       });
       const cid = res.headers.get("x-conversation-id");

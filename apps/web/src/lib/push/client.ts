@@ -1,5 +1,7 @@
 // Helpers de Web Push no navegador (client-side). No-op seguro onde não houver suporte.
 
+import { getOwnDeviceId } from "@/lib/device-id";
+
 function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
   const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -41,10 +43,11 @@ export async function enablePush(): Promise<{ ok: boolean; reason?: string }> {
     (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(cfg.publicKey) }));
 
   const json = sub.toJSON() as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
+  // deviceId: aparelho registrado em Casa → Aparelhos (Onda 12); liga a inscrição ao cômodo do aparelho.
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+    body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys, deviceId: getOwnDeviceId() }),
   });
   return res.ok ? { ok: true } : { ok: false, reason: "falha ao registrar" };
 }

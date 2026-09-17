@@ -17,6 +17,7 @@ const SET_NULL_INTENCIONAL: Record<string, string> = {
   "person.guardian_person_id": "o menor continua cadastrado se o responsável sair; consentFor só aceita consentimento do responsável ATUAL, então o dado pelo antigo deixa de valer",
   "biometric_consent.guardian_person_id": "o nome do responsável fica gravado no consentimento (guardian_name)",
   "identity_audit.actor_person_id": "a trilha sobre OUTRA pessoa não some porque quem perguntou saiu",
+  "camera_event.identified_person_id": "o evento da câmera continua (é dado da casa); a referência à pessoa é zerada por eraseBiometrics",
 };
 
 describe("apagar pessoa no schema", () => {

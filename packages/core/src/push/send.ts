@@ -1,5 +1,5 @@
 import webpush from "web-push";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { pushSubscription } from "@orbita/db/push-schema";
 import { log } from "../observability/logger";
@@ -37,10 +37,16 @@ export interface PushPayload {
  * Inscrições mortas (404/410) são removidas automaticamente.
  * Best-effort: nunca lança — retorna quantas foram entregues.
  */
-export async function sendPush(userId: string, payload: PushPayload): Promise<{ sent: number; pruned: number }> {
+export async function sendPush(userId: string, payload: PushPayload, opts: { deviceId?: string | null } = {}): Promise<{ sent: number; pruned: number }> {
   if (!ensureConfigured()) return { sent: 0, pruned: 0 };
 
-  const subs = await db.select().from(pushSubscription).where(eq(pushSubscription.userId, userId));
+  // `deviceId` é a "voz segue a pessoa" (Onda 12): avisa no aparelho do cômodo
+  // onde ela está. Sem inscrição naquele aparelho, cai para todos, que é o
+  // comportamento de antes (avisar é melhor que silenciar).
+  const alvo = opts.deviceId
+    ? await db.select().from(pushSubscription).where(and(eq(pushSubscription.userId, userId), eq(pushSubscription.deviceId, opts.deviceId)))
+    : [];
+  const subs = alvo.length ? alvo : await db.select().from(pushSubscription).where(eq(pushSubscription.userId, userId));
   if (!subs.length) return { sent: 0, pruned: 0 };
 
   const data = JSON.stringify({ title: payload.title, body: payload.body, url: payload.url ?? "/app" });

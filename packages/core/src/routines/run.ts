@@ -19,10 +19,13 @@ import { log } from "../observability/logger";
  */
 
 /** Cria uma notificação e dispara push (best-effort). */
-export async function notifyUser(userId: string, title: string, body: string, routineId?: string | null): Promise<void> {
+export async function notifyUser(userId: string, title: string, body: string, routineId?: string | null, opts: { personId?: string | null } = {}): Promise<void> {
   await db.insert(notification).values({ userId, routineId: routineId ?? null, title, content: body });
-  void sendPush(userId, { title, body: body.slice(0, 180), url: "/app" });
-  await events.emit("notification.created", { title, body: body.slice(0, 500) }, { userId });
+  // A VOZ SEGUE A PESSOA (Onda 12): quando o aviso é sobre alguém e essa pessoa
+  // foi vista num cômodo com dispositivo, avisa ali. Sem isso, avisa em todos.
+  const alvo = opts.personId ? await import("../identity/device").then((m) => m.deviceForPerson(userId, opts.personId!)).catch(() => null) : null;
+  void sendPush(userId, { title, body: body.slice(0, 180), url: "/app" }, { deviceId: alvo?.id ?? null });
+  await events.emit("notification.created", { title, body: body.slice(0, 500), personId: opts.personId ?? null, deviceId: alvo?.id ?? null }, { userId });
 }
 
 /**

@@ -45,6 +45,7 @@ export const SETTING_GROUPS = {
   meetings: { label: "Reuniões e agenda", order: 63 },
   home: { label: "Casa (Home Assistant)", order: 64 },
   cameras: { label: "Câmeras", order: 64.5 },
+  vision: { label: "Visão: objetos e gestos", order: 64.8 },
   events: { label: "Eventos", order: 65 },
   connectors: { label: "Conectores", order: 70 },
   finance: { label: "Finanças", order: 75 },
@@ -240,6 +241,21 @@ export const SETTING_DEFS = {
   // ── ferramentas (tools/registry.ts) ──
   "tools.maxPerTurn": num("tools", "Ferramentas por turno", "Acima disso, só as mais relevantes para o pedido vão ao modelo (seleção por palavras, sem LLM). Muitas ferramentas pioram custo e precisão.", 30, 5, 200),
 
+  // ── visão: memória de objetos e gestos (Onda 11) ──
+  "vision.trackedObjects": list(
+    "vision",
+    "Objetos que a Órbita lembra onde viu",
+    "Só estes rótulos entram na memória visual (\"onde deixei a chave?\"). O rótulo é o que a câmera manda: chave, mochila, celular, carteira, controle. Lista vazia desliga a memória visual.",
+    ["chave", "mochila", "celular", "carteira", "óculos", "controle"],
+  ),
+  "vision.retentionHours": num("vision", "Memória visual dura", "Depois disso a Órbita esquece onde viu o objeto.", 48, 1, 720, { unit: "h" }),
+  "vision.gestures": list(
+    "vision",
+    "Gestos reconhecidos",
+    "Gestos que viram evento (o que cada um FAZ é a regra que você cadastra, e pode ser diferente por pessoa). Vazio aceita todos os que o serviço conhece.",
+    ["mao_levantada", "joinha", "paz"],
+  ),
+
   // ── identidade e biometria (packages/core/src/identity, Fase 2) ──
   "identity.consentTerm": text(
     "identity",
@@ -292,6 +308,25 @@ export const SETTING_DEFS = {
   "identity.speakerRefTtlMinutes": num("identity", "Reunião: janela para usar a fala como amostra", "Por quanto tempo depois da transcrição dá para nomear um locutor e usar a fala dele como amostra de voz.", 120, 5, 1440, { unit: "min" }),
   "identity.commandTimeoutMs": num("identity", "Voz do comando: tempo máximo", "Quanto esperar para saber quem pediu. Passou disso, segue sem identificar (e, na política restrita, como visitante).", 3000, 500, 30000, { unit: "ms" }),
   "identity.enrollMaxMb": num("identity", "Voz: tamanho máximo do cadastro", "Gravação de cadastro maior que isso é recusada (o áudio fica cifrado no banco para recalcular assinaturas).", 10, 1, 100, { unit: "MB" }),
+  "identity.faceBackend": sel(
+    "identity",
+    "Backend de reconhecimento de rosto",
+    "Escolhido pela medição nesta máquina. Trocar exige recalcular as assinaturas a partir das fotos guardadas.",
+    "insightface_s",
+    [
+      { value: "insightface_s", label: "InsightFace S (512 d, escolhido na medição)" },
+      { value: "opencv", label: "OpenCV YuNet + SFace (128 d, degrada menos com o modelo local rodando)" },
+      { value: "insightface_l", label: "InsightFace L (512 d, mais pesado)" },
+    ],
+    "As assinaturas do outro backend deixam de valer até recalcular.",
+  ),
+  "identity.faceMatchThreshold": num("identity", "Rosto: limiar para afirmar", "Medição de 17/09: suas fotos ficaram acima de 0,77; 60 rostos públicos ficaram abaixo de 0,22.", 0.5, 0, 1, { step: 0.01 }),
+  "identity.faceProbableThreshold": num("identity", "Rosto: limiar de \"provavelmente\"", "Abaixo disso o rosto é desconhecido.", 0.35, 0, 1, { step: 0.01 }),
+  "identity.faceMargin": num("identity", "Rosto: folga sobre a segunda pessoa", "Parentes parecidos não podem virar afirmação.", 0.06, 0, 1, { step: 0.01 }),
+  "identity.faceMinSizePx": num("identity", "Rosto: tamanho mínimo", "Rosto menor que isso na imagem identifica mal e é ignorado.", 60, 20, 500, { unit: "px" }),
+  "identity.faceEnrollMaxMb": num("identity", "Rosto: tamanho máximo da foto", "Foto de cadastro maior que isso é recusada (fica cifrada no banco para recalcular).", 8, 1, 50, { unit: "MB" }),
+  "identity.presenceFreshMinutes": num("identity", "Presença: considerar \"agora\" por", "Depois disso, a Órbita responde \"visto por último\" em vez de afirmar onde a pessoa está.", 5, 1, 120, { unit: "min" }),
+  "identity.presenceRecentMinutes": num("identity", "Presença: considerar \"recente\" por", "Acima disso o avistamento é tratado como antigo.", 60, 5, 1440, { unit: "min" }),
   "identity.unknownRetentionDays": num("identity", "Retenção de desconhecido", "Por quantos dias uma voz ou rosto desconhecido fica guardado para ser reconhecido de novo ou nomeado. Depois some sozinho.", 7, 1, 90, { unit: "dias" }),
   "identity.commandClipMaxKB": num("identity", "Trecho de voz do comando", "Tamanho máximo do trecho gravado junto do ditado para saber quem pediu.", 400, 50, 4000, { unit: "KB" }),
   "identity.unknownVoicePolicy": sel(
