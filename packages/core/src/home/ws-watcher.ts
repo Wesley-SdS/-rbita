@@ -47,6 +47,7 @@ type HaMessage =
 export class HomeAssistantWatcher {
   private ws: WebSocket | null = null;
   private closed = false;
+  private authFailed = false;
   private msgId = 1;
   private reconnectTimer: NodeJS.Timeout | null = null;
 
@@ -55,6 +56,16 @@ export class HomeAssistantWatcher {
   start(): void {
     this.closed = false;
     this.connect();
+  }
+
+  /**
+   * Token/URL inválidos (auditoria pós-Onda 6): reconectar sozinho é inútil e
+   * bate no HA a cada `reconnectMs` até o dono reiniciar o `apps/api`. Quem
+   * decide criar um watcher novo é o `SchedulerService`, quando o dono
+   * salvar uma conexão nova — por isso isto fica público, não só um log.
+   */
+  get failed(): boolean {
+    return this.authFailed;
   }
 
   stop(): void {
@@ -92,7 +103,12 @@ export class HomeAssistantWatcher {
         ws.send(JSON.stringify({ id: this.msgId++, type: "subscribe_events", event_type: "state_changed" }));
       } else if (msg.type === "auth_invalid") {
         this.log("home.ws_auth_invalida", { message: msg.message });
-        ws.close(); // token inválido: não adianta reconectar sozinho, mas mantém o laço (dono pode reconfigurar)
+        // token/URL inválidos: reconectar sozinho só bateria no HA de novo com a
+        // mesma credencial ruim. Marca como falho e para — o reconcile do
+        // scheduler recria quando o dono salvar uma conexão nova.
+        this.authFailed = true;
+        this.closed = true;
+        ws.close();
       } else if (msg.type === "event" && msg.event.event_type === "state_changed") {
         const { entity_id, new_state, old_state } = msg.event.data;
         this.opts.onStateChanged({

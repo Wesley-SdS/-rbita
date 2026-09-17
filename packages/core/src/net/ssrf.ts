@@ -128,7 +128,12 @@ export async function assertPublicUrl(rawUrl: string): Promise<void> {
 /**
  * Exceção ESTREITA de SSRF para a rede local (B3.2, CLAUDE.md §9): libera
  * RFC1918/loopback/CGNAT, mas continua bloqueando o que é perigoso em
- * QUALQUER rede (metadata de nuvem 169.254.169.254, multicast, reservado).
+ * QUALQUER rede IPv4 (metadata de nuvem 169.254.169.254, multicast,
+ * reservado). Em IPv6 a exceção libera qualquer endereço não-multicast,
+ * inclusive ULA (fc00::/7) — onde vive o metadata IPv6 de alguns provedores
+ * (ex. AWS `fd00:ec2::254`). Irrelevante para o uso real (URL do Home
+ * Assistant na LAN de casa, quase sempre IPv4), mas não é a mesma garantia
+ * do parágrafo acima se algum dia esta função for chamada com host IPv6.
  *
  * Só chamar com uma URL que o DONO digitou numa tela de configuração
  * confiável (ex.: endereço do Home Assistant). Nunca com URL vinda de LLM,

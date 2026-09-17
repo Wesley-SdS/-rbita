@@ -94,11 +94,29 @@ describe("HomeAssistantWatcher", () => {
     watcher.stop();
   });
 
-  it("auth_invalid fecha o socket sem lançar", () => {
-    const { socket, watcher } = setup();
+  it("auth_invalid fecha o socket sem lançar, marca failed e NÃO agenda reconexão (auditoria pós-Onda 6)", () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    const watcher = new HomeAssistantWatcher({
+      baseUrl: "http://192.168.1.50:8123",
+      token: "tok-errado",
+      onStateChanged: () => {},
+      reconnectMs: 1000,
+      onLog: () => {},
+      wsFactory: () => {
+        const s = new FakeSocket();
+        sockets.push(s);
+        return s as unknown as import("ws").WebSocket;
+      },
+    });
     watcher.start();
-    expect(() => socket.emit("message", Buffer.from(JSON.stringify({ type: "auth_invalid", message: "token errado" })))).not.toThrow();
+    expect(watcher.failed).toBe(false);
+    expect(() => sockets[0]!.emit("message", Buffer.from(JSON.stringify({ type: "auth_invalid", message: "token errado" })))).not.toThrow();
+    expect(watcher.failed).toBe(true);
+    vi.advanceTimersByTime(10_000);
+    expect(sockets).toHaveLength(1); // nenhuma segunda instância: reconectar sozinho bateria no HA com o mesmo token ruim
     watcher.stop();
+    vi.useRealTimers();
   });
 
   it("reconecta depois de close, usando uma nova instância do factory", () => {

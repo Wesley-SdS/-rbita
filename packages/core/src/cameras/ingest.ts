@@ -4,6 +4,7 @@ import { camera, cameraEvent, type Camera } from "@orbita/db/camera-schema";
 import { room } from "@orbita/db/home-schema";
 import { settings } from "../settings";
 import { events } from "../events/index";
+import { narrateCameraEvent } from "./narrate";
 
 /**
  * Ingestão de eventos de câmera (Onda 5, briefing §7.1): quem detecta é um
@@ -38,13 +39,20 @@ export function dataUrlSizeKB(dataUrl: string): number {
  * por modelo nenhum.
  */
 export async function ingestCameraEvent(cam: Camera, input: CameraEventInput): Promise<{ id: string }> {
-  const maxKB = await settings.get("cameras.snapshotMaxKB");
+  const [maxKB, narrationMode] = await Promise.all([settings.get("cameras.snapshotMaxKB"), settings.get("cameras.narrationMode")]);
   const snapshot = input.snapshot && dataUrlSizeKB(input.snapshot) <= maxKB ? input.snapshot : null;
 
   const [row] = await db
     .insert(cameraEvent)
     .values({ cameraId: cam.id, userId: cam.userId, label: input.label, zone: input.zone ?? null, score: input.score ?? null, snapshot })
     .returning({ id: cameraEvent.id });
+
+  // "Automática" (cameras.narrationMode) é a exceção ao padrão sob demanda do
+  // dono: narra aqui, fora do caminho de resposta do webhook, para não segurar
+  // quem está chamando (o Frigate/script) esperando um VLM rodar.
+  if (narrationMode === "automatica" && snapshot) {
+    void narrateCameraEvent(row!.id).catch(() => {});
+  }
 
   let roomName: string | null = null;
   if (cam.roomId) {

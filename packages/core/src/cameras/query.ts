@@ -37,3 +37,14 @@ export async function recentEvents(userId: string, cameraId: string | null, limi
   const where = cameraId ? and(eq(cameraEvent.userId, userId), eq(cameraEvent.cameraId, cameraId)) : eq(cameraEvent.userId, userId);
   return db.select().from(cameraEvent).where(where).orderBy(desc(cameraEvent.createdAt)).limit(limit);
 }
+
+/**
+ * Só confere posse (sem trazer `snapshot`, que pode ter centenas de KB por
+ * linha) — usada antes de narrar, para não deixar um usuário narrar o
+ * evento de outro. Também não tem teto de "últimos N": um evento antigo
+ * continua contável do dono dele (achado de auditoria pós-Onda 6).
+ */
+export async function eventBelongsToUser(userId: string, eventId: string): Promise<boolean> {
+  const [row] = await db.select({ id: cameraEvent.id }).from(cameraEvent).where(and(eq(cameraEvent.id, eventId), eq(cameraEvent.userId, userId))).limit(1);
+  return row !== undefined;
+}

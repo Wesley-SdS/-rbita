@@ -17,9 +17,14 @@ describe("defaultDomainRisk", () => {
       expect(defaultDomainRisk(d)).toBe("leitura");
     }
   });
-  it("domínio desconhecido cai em escrita, nem trava nem libera sem gate", () => {
-    expect(defaultDomainRisk("integracao_nova_desconhecida")).toBe("escrita");
+  it("domínio desconhecido cai em perigoso por padrão (conservador até o dono liberar)", () => {
+    expect(defaultDomainRisk("integracao_nova_desconhecida")).toBe("perigoso");
     expect(isKnownDomain("integracao_nova_desconhecida")).toBe(false);
+  });
+  it("domínios de despacho (scene, script, automation, homeassistant) são perigoso, nunca direto", () => {
+    for (const d of ["scene", "script", "automation", "homeassistant"]) {
+      expect(defaultDomainRisk(d)).toBe("perigoso");
+    }
   });
 });
 

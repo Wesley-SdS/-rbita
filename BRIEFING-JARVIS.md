@@ -174,7 +174,9 @@ export VOICE_MODELS_DIR="C:/Users/Users/Documents/github/orbita/apps/voice/model
 >
 > **Atualização 2026-09-16 (fim da Onda 3, a casa):** Home Assistant como ferramenta (REST +
 > WebSocket com reconexão), busca semântica de entidade (`packages/core/src/home/entities.ts`),
-> cômodo/pessoa/permissão por cômodo cadastrados pela tela, risco por domínio configurável (decisão
+> cômodo/pessoa/permissão por cômodo cadastrados pela tela (`permission.ts` pronto, mas SEM aplicação
+> ainda: falta identidade de quem fala, ver nota da Onda 6 — é cadastro, não controle parental
+> funcional), risco por domínio configurável (decisão
 > do dono: fechadura/alarme/portão/garagem no gate; luz/tomada/mídia/clima direto). `assertPublicUrl`
 > ganhou uma exceção estreita (`assertLocalOrPublicUrl`) só para o HA, ainda bloqueando metadado de
 > nuvem e faixas reservadas. `chat.maxSteps` subiu de 5 para 12 (uma rotina de casa encadeia várias
@@ -209,9 +211,10 @@ export VOICE_MODELS_DIR="C:/Users/Users/Documents/github/orbita/apps/voice/model
 > não só de qual cômodo — o mesmo "problema separado e bem maior" do voiceprint citado em §7.3), VAD
 > real com Silero e STT em streaming (B5.1, pipeline de áudio que não dá para validar sem teste de
 > microfone ao vivo), roteamento de áudio por cômodo (B5.10, exige múltiplos endpoints de saída de
-> som) e fazer o wake word local coexistir com o modo realtime (hoje um desliga o outro de propósito,
-> em `use-voice.ts`; os dois disputam o microfone e testar a mudança sem hardware físico seria
-> arriscar quebrar o que já funciona sem conseguir verificar).
+> som). Wake word local e modo realtime continuam **mutuamente exclusivos por design** (os dois
+> disputariam o microfone): a auditoria pegou que só uma direção desligava a outra
+> (`toggleRealtime` parava o wake, mas `toggleWake` não parava uma sessão realtime ativa); corrigido
+> para ficar simétrico, mas fazer os dois coexistirem de verdade continua fora de escopo.
 
 
 ### Stack

@@ -55,8 +55,10 @@ export function HomePeoplePanel() {
     <Card>
       <PanelTitle className="mb-2">Pessoas da casa</PanelTitle>
       <p className="mb-3 text-[12px]" style={dim}>
-        Quem mora ou visita, e em quais cômodos pode agir. Ainda não conectado a voz/dispositivo
-        (Onda 6) — por enquanto é o cadastro.
+        Quem mora ou visita, e em quais cômodos poderá agir. <strong style={{ color: "var(--color-danger)" }}>Isto ainda é só o
+        cadastro: nenhuma ação da casa é bloqueada por esta permissão hoje</strong>, porque falta
+        saber "quem está pedindo" (identidade de voz/dispositivo, Onda 6, ainda não resolvida). Não
+        trate isto como controle parental funcional ainda.
       </p>
       {!people ? (
         <p className="text-[12px]" style={dim}>Carregando…</p>

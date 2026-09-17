@@ -192,6 +192,8 @@ export function useVoice(p: Params) {
       setWakeOn(false);
       return;
     }
+    // não mistura com o tempo real: os dois disputariam o microfone (achado de auditoria pós-Onda 6)
+    if (rtRef.current?.active) { rtRef.current.stop(); rtRef.current = null; setRealtimeOn(false); }
 
     // Preferido: wake word NO APARELHO (Web Speech API) — sem servidor, sem
     // cold-start. Detecta "Ei Órbita" e dispara o ditado do comando.

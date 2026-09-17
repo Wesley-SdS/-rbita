@@ -100,13 +100,22 @@ export function evaluateConditions(conditions: Condition[], context: unknown): b
   return conditions.every((c) => compare(c.op, getPath(context, c.path), c.value));
 }
 
-/** Substitui `{{caminho}}` pelo valor do contexto (objetos viram JSON curto). */
-export function renderTemplate(template: string, context: unknown): string {
+/**
+ * Substitui `{{caminho}}` pelo valor do contexto (objetos viram JSON curto).
+ *
+ * `wrapValues` (usado pela ação `prompt`, CLAUDE.md §5.2): o valor do
+ * contexto de um evento pode vir de fora (assunto de e-mail, legenda de
+ * câmera...) e a instrução ao redor do placeholder é do DONO — envolver só
+ * o valor substituído marca visualmente para o modelo onde a instrução
+ * confiável termina e o dado não confiável começa, sem mudar `notify` nem
+ * as ações de canal (texto para o dono/contato, não para outro LLM).
+ */
+export function renderTemplate(template: string, context: unknown, opts: { wrapValues?: boolean } = {}): string {
   return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, path: string) => {
     const v = getPath(context, path);
     if (v === undefined || v === null) return "";
-    if (typeof v === "object") return JSON.stringify(v).slice(0, 500);
-    return String(v);
+    const s = typeof v === "object" ? JSON.stringify(v).slice(0, 500) : String(v);
+    return opts.wrapValues ? `<dado_externo>${s}</dado_externo>` : s;
   });
 }
 

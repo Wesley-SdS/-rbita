@@ -5,7 +5,7 @@ import { room } from "@orbita/db/home-schema";
 import { getHaConnection } from "../../home/connection";
 import { callService, HomeAssistantError } from "../../home/client";
 import { entitiesInRoom, findEntities, type EntityHit } from "../../home/entities";
-import { domainOf, resolveDomainRisk } from "../../home/domain-risk";
+import { DISPATCH_DOMAINS, domainOf, resolveDomainRisk } from "../../home/domain-risk";
 import { loadDomainRiskOverrides } from "../../home/access";
 import { registerTools, needsApproval, type ToolDef } from "../registry";
 
@@ -18,10 +18,23 @@ import { registerTools, needsApproval, type ToolDef } from "../registry";
  * DECLARADO da tool, antes de rodar. Por isso duas tools, não uma:
  * `casa_acionar` (declarada "escrita", roda direto) recusa e não executa se o
  * domínio real da entidade for perigoso; `casa_acionar_com_aprovacao`
- * (declarada "perigoso") sempre passa pelo gate. Nenhuma dá para "burlar" —
- * a primeira se recusa, a segunda sempre pede aprovação, mesmo que o domínio
- * real seja inofensivo.
+ * (declarada "perigoso") sempre passa pelo gate.
+ *
+ * CORREÇÃO (auditoria pós-Onda 6): o gate calculava o risco sobre o domínio
+ * de `entidade`, mas o Home Assistant executa o par (servico, dados) — e
+ * `dados` podia carregar um `entity_id`/`entities`/`device_id`/`area_id`
+ * que redireciona a chamada real para um alvo diferente do avaliado
+ * (ex.: `entidade:"light.sala"` avaliado como "escrita", com
+ * `dados:{entity_id:"lock.porta"}` de verdade destrancando a porta). E
+ * serviços de DESPACHO (`scene.apply`, `script.turn_on`,
+ * `homeassistant.turn_on`) agem sobre entidades arbitrárias por design,
+ * então nenhum domínio "alvo" os descreve com segurança. `runAcionar` agora
+ * recusa (a) qualquer `dados` com chave de redirecionamento de alvo e
+ * (b) qualquer domínio de despacho (`DISPATCH_DOMAINS`), nas DUAS tools —
+ * inclusive na com aprovação, porque o resumo da fila não mostra `dados` o
+ * bastante para uma aprovação informada de um despacho arbitrário.
  */
+const TARGET_OVERRIDE_KEYS = new Set(["entity_id", "entities", "device_id", "area_id", "target", "area_name", "label_id"]);
 
 async function requireConnection(userId: string) {
   const conn = await getHaConnection(userId);
@@ -105,8 +118,15 @@ const AcionarInput = z.object({
 });
 
 async function runAcionar(input: z.infer<typeof AcionarInput>, userId: string) {
-  const { baseUrl, token } = await requireConnection(userId);
   const domain = domainOf(input.entidade);
+  if (DISPATCH_DOMAINS.has(domain)) {
+    return { acionado: false, erro: `"${domain}" não é acionável por aqui (despacha para outras entidades). Para cena, use casa_ativar_cena.` };
+  }
+  const chaveInvalida = input.dados ? Object.keys(input.dados).find((k) => TARGET_OVERRIDE_KEYS.has(k)) : undefined;
+  if (chaveInvalida) {
+    return { acionado: false, erro: `"${chaveInvalida}" não é permitido em "dados" (redireciona o alvo real do comando).` };
+  }
+  const { baseUrl, token } = await requireConnection(userId);
   try {
     await callService(baseUrl, token, domain, input.servico, { entity_id: input.entidade, ...(input.dados ?? {}) });
     return { acionado: true, entidade: input.entidade, servico: input.servico };
@@ -123,7 +143,7 @@ export const casa_acionar: ToolDef<typeof AcionarInput> = {
   requires: { homeAssistant: true },
   keywords: ["liga", "ligar", "desliga", "desligar", "acende", "apaga", "ajusta", "acionar"],
   inputSchema: AcionarInput,
-  summarize: ({ entidade, servico }) => `Acionar ${entidade}: ${servico}`,
+  summarize: ({ entidade, servico, dados }) => `Acionar ${entidade}: ${servico}${dados ? ` (${JSON.stringify(dados).slice(0, 80)})` : ""}`,
   run: async (input, { userId }) => {
     const domain = domainOf(input.entidade);
     const overrides = await loadDomainRiskOverrides(userId);
@@ -145,7 +165,7 @@ export const casa_acionar_com_aprovacao: ToolDef<typeof AcionarInput> = {
   requires: { homeAssistant: true },
   keywords: ["destranca", "tranca", "fechadura", "alarme", "portão", "garagem", "abre", "fecha"],
   inputSchema: AcionarInput,
-  summarize: ({ entidade, servico }) => `Acionar (segurança) ${entidade}: ${servico}`,
+  summarize: ({ entidade, servico, dados }) => `Acionar (segurança) ${entidade}: ${servico}${dados ? ` (${JSON.stringify(dados).slice(0, 80)})` : ""}`,
   run: async (input, { userId }) => runAcionar(input, userId),
 };
 

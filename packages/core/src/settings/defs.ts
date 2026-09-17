@@ -166,6 +166,7 @@ export const SETTING_DEFS = {
   ),
   "cameras.retentionDays": num("cameras", "Retenção de eventos de câmera", "Eventos (e o snapshot guardado com eles) mais antigos que isso são apagados.", 14, 1, 90, { unit: "dias" }),
   "cameras.snapshotMaxKB": num("cameras", "Tamanho máximo do snapshot", "Acima disso o evento é aceito mas sem a imagem, para não estourar o banco com um webhook mal configurado.", 400, 50, 4000, { unit: "KB" }),
+  "cameras.ingestRateLimitPerMinute": num("cameras", "Eventos por minuto (por câmera)", "Acima disso, o webhook de ingestão recusa novos eventos da mesma câmera. Protege o banco e evita disparar regra automática em excesso (cada evento pode virar uma chamada de modelo).", 60, 5, 600, { unit: "/min" }),
 
   // ── reuniões e agenda (packages/core/src/meetings/*, apps/api) ──
   "meetings.calendarPollMinutes": num("meetings", "Verificar agenda a cada", "De quanto em quanto tempo o processo persistente olha a Google Agenda em busca de reuniões próximas. Sem URL pública ainda, é polling, não push do Google.", 5, 1, 60, { unit: "min" }),
