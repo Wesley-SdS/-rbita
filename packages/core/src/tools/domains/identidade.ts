@@ -2,7 +2,7 @@ import { z } from "zod";
 import { registerTools, type ToolContext, type ToolDef } from "../registry";
 import { askContext, canAskAndAudit, findPersonByName, visiblePeople } from "../../identity/ask";
 import { currentPresence } from "../../identity/presence";
-import { createPerson, listPeople, recordConsent, currentTerm } from "../../identity/people";
+import { createPerson, listPeople, currentTerm } from "../../identity/people";
 // fachada: tool dispara operação de identidade, nunca toca em vetor ou amostra (NV.1)
 import { apagarBiometriaDe, usarFalaComoAmostra } from "../../identity/actions";
 import { cameraDigest, findObject, knownObjectLabels } from "../../vision/objects";
@@ -373,7 +373,6 @@ registerTools([
   apagar_biometria,
 ]);
 
-// `recordConsent` não vira tool de propósito: consentimento é ato do dono na
+// Não existe tool de consentimento, de propósito: consentir é ato do dono na
 // tela, com o termo à vista. O modelo pode cadastrar a pessoa, nunca consentir
-// por ela (PRD §4.4).
-void recordConsent;
+// por ela (PRD §4.4). `recordConsent` fica só no caminho da rota.
