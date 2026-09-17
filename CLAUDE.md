@@ -217,7 +217,7 @@ dono faz pelo assistente. Crescer o catálogo é o objetivo, não um efeito a co
 Antes de considerar qualquer tarefa concluída:
 
 1. **`tsc --noEmit` limpo nos dois apps (`apps/web` e `apps/api`)** e **`vitest run` verde** (§3; baseline
-   após a auditoria da Fase 2: 54 arquivos, 479 testes, mais 34 testes Python em `apps/perception`). Sem exceção.
+   após a auditoria da Fase 2: 54 arquivos, 481 testes, mais 34 testes Python em `apps/perception`). Sem exceção.
 2. **Erro pré-existente conta.** Achou teste quebrado ou tipo vermelho que já estava assim?
    Corrija antes de fechar.
 3. **Código novo em `lib/` precisa de teste.** Caminho feliz + pelo menos um de erro. A suíte

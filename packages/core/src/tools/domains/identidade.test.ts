@@ -301,9 +301,28 @@ describe("reuniões e pessoas: as tools de escrita e listagem", () => {
   it("usar fala como amostra dispara a fachada de identidade, nunca toca no vetor", async () => {
     const { usarFalaComoAmostra } = await import("../../identity/actions");
     const r = await usar_fala_como_amostra.run({ pessoa: "Anna", ref: REUNIAO }, ctx);
-    expect(r).toEqual({ ok: true, pessoa: "Anna" });
+    expect(r).toEqual({ ok: true, pessoa: "Anna", origem: "reunião" });
     expect(usarFalaComoAmostra).toHaveBeenCalledWith("dono", "p-anna", REUNIAO, "correcao");
     expect(JSON.stringify(r)).not.toMatch(/vector|embedding|audio/i);
+  });
+
+  // PRD §5.2, terceiro caminho de cadastro: "pode guardar essa voz como minha"
+  // no meio do dia a dia, sem reunião nenhuma
+  it("sem referência, guarda a fala do próprio pedido", async () => {
+    const { usarFalaComoAmostra } = await import("../../identity/actions");
+    const comVoz = { ...ctx, voiceRef: async () => "ref-do-turno" };
+    const r = await usar_fala_como_amostra.run({ pessoa: "Anna", ref: null }, comVoz);
+    expect(r).toMatchObject({ ok: true, pessoa: "Anna" });
+    expect(usarFalaComoAmostra).toHaveBeenCalledWith("dono", "p-anna", "ref-do-turno", "comando");
+    expect(JSON.stringify(r)).not.toMatch(/vector|embedding|audio/i);
+  });
+
+  it("sem referência e sem fala neste turno, explica em vez de inventar", async () => {
+    const { usarFalaComoAmostra } = await import("../../identity/actions");
+    expect(await usar_fala_como_amostra.run({ pessoa: "Anna", ref: null }, ctx)).toMatchObject({
+      erro: expect.stringContaining("Não tenho uma fala"),
+    });
+    expect(usarFalaComoAmostra).not.toHaveBeenCalled();
   });
 
   it("usar fala como amostra de quem não existe não chama a fachada", async () => {

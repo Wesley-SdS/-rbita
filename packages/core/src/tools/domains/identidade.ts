@@ -314,12 +314,13 @@ export const apagar_biometria: ToolDef<typeof ApagarInput> = {
 
 const AmostraInput = z.object({
   pessoa: z.string().min(1).max(80),
-  ref: z.string().uuid().describe("referência da fala devolvida pela transcrição"),
+  ref: z.string().uuid().nullable().default(null).describe("referência de uma fala de reunião; vazio usa o que a pessoa acabou de falar neste pedido"),
 });
 export const usar_fala_como_amostra: ToolDef<typeof AmostraInput> = {
   name: "usar_fala_como_amostra",
   domain: "identidade",
-  description: "Usa uma fala de reunião já transcrita como amostra de voz de uma pessoa, se ela tiver consentimento de voz. Serve para ensinar a Órbita depois de corrigir um nome.",
+  description:
+    "Guarda uma fala como amostra de voz de uma pessoa, se ela tiver consentimento de voz. Use depois de confirmar de quem é a voz: com a referência de uma fala de reunião, ou sem referência nenhuma para guardar o que a pessoa acabou de falar neste pedido.",
   risk: "escrita",
   keywords: ["usar como amostra", "essa voz é", "aprende a voz", "corrigir locutor"],
   inputSchema: AmostraInput,
@@ -328,8 +329,15 @@ export const usar_fala_como_amostra: ToolDef<typeof AmostraInput> = {
     const askCtx = await askContext(ctx.userId, await quem(ctx));
     const alvo = findPersonByName(askCtx.people, pessoa);
     if (!alvo) return { erro: `Não encontrei "${pessoa}" entre as pessoas da casa.` };
-    const r = await usarFalaComoAmostra(ctx.userId, alvo.id, ref, "correcao");
-    return "erro" in r ? r : { ok: true, pessoa: alvo.name };
+    // sem referência, vale a fala DESTE pedido (PRD §5.2: cadastrar no dia a
+    // dia, depois de confirmar quem está falando). A referência vive poucos
+    // minutos em memória, então isso só funciona no próprio turno.
+    const referencia = ref?.trim() || (ctx.voiceRef ? await ctx.voiceRef().catch(() => null) : null);
+    if (!referencia) {
+      return { erro: "Não tenho uma fala para guardar. Peça de novo falando (o trecho de voz do pedido é o que vira amostra), ou diga qual fala da reunião usar." };
+    }
+    const r = await usarFalaComoAmostra(ctx.userId, alvo.id, referencia, ref?.trim() ? "correcao" : "comando");
+    return "erro" in r ? r : { ok: true, pessoa: alvo.name, origem: ref?.trim() ? "reunião" : "o que você acabou de falar" };
   },
 };
 

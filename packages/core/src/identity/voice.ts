@@ -91,6 +91,8 @@ export interface VoiceIdentification extends MatchResult {
   name: string | null;
   speechS: number;
   model: string;
+  /** referência efêmera desta fala, para "pode guardar essa voz" no mesmo turno */
+  ref: string | null;
 }
 
 /** "Quem pediu?" (VZ.6): identifica um trecho curto de comando e audita. */
@@ -111,7 +113,12 @@ export async function identifyVoice(ownerUserId: string, audio: Uint8Array, mime
     outcome: m.outcome,
     detail: { motivo: m.reason ?? null, falaS: r.speechS, modelo: r.model },
   });
-  return { ...m, name: nome, speechS: r.speechS, model: r.model };
+  // a fala do comando pode virar amostra se o dono confirmar de quem é (PRD
+  // §5.2). Só a referência em memória, com prazo: nada de guardar áudio de
+  // todo comando no banco sem ninguém pedir.
+  const refTtlMs = (await settings.get("identity.speakerRefTtlMinutes")) * 60_000;
+  const ref = guardarRef({ ownerUserId, model: cfg.model, vector: r.embedding, speechS: r.speechS, unknownId: null }, refTtlMs);
+  return { ...m, name: nome, speechS: r.speechS, model: r.model, ref };
 }
 
 // ── reuniões ────────────────────────────────────────────────────────────────
@@ -325,7 +332,7 @@ export async function linkUnknownVoicesToMeeting(ownerUserId: string, labels: re
  * reunião guardado, fica só o vetor (não recalculável se o modelo trocar). O
  * desconhecido de origem some: agora a voz tem dono e consentimento.
  */
-export async function enrollFromMeetingRef(ownerUserId: string, personId: string, ref: string, source: "reuniao" | "correcao") {
+export async function enrollFromMeetingRef(ownerUserId: string, personId: string, ref: string, source: "reuniao" | "correcao" | "comando") {
   const r = refs.get(ref);
   if (!r || r.ownerUserId !== ownerUserId || r.expira < Date.now()) throw new IdentityError("A fala desta reunião já expirou. Grave uma amostra na tela de pessoas.", 404);
   const p = await requireVoiceConsent(ownerUserId, personId);

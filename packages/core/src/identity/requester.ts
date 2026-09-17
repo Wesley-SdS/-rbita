@@ -51,7 +51,7 @@ export function requesterResolver(
   accountUserId: string,
   clip: VoiceClip | null,
   deviceId?: string | null,
-): { resolve: () => Promise<Requester | null>; voice: () => Promise<VoiceIdentification | null>; origin: () => Promise<DeviceOrigin | null> } {
+): { resolve: () => Promise<Requester | null>; voice: () => Promise<VoiceIdentification | null>; voiceRef: () => Promise<string | null>; origin: () => Promise<DeviceOrigin | null> } {
   let voz: Promise<VoiceIdentification | null> | null = null;
   let quem: Promise<Requester | null> | null = null;
   let onde: Promise<DeviceOrigin | null> | null = null;
@@ -69,6 +69,9 @@ export function requesterResolver(
     });
     return voz;
   };
+
+  /** Referência da fala DESTE turno (se houve trecho de voz), para cadastrá-la. */
+  const voiceRef = async (): Promise<string | null> => (await voice())?.ref ?? null;
 
   const resolve = () => {
     quem ??= (async () => {
@@ -105,5 +108,5 @@ export function requesterResolver(
     return onde;
   };
 
-  return { resolve, voice, origin };
+  return { resolve, voice, voiceRef, origin };
 }

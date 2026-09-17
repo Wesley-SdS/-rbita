@@ -15,7 +15,7 @@ import { eraseBiometrics } from "./erase";
  */
 
 /** Usa uma fala já transcrita como amostra de voz de alguém (com consentimento). */
-export async function usarFalaComoAmostra(ownerUserId: string, personId: string, ref: string, origem: "reuniao" | "correcao"): Promise<{ ok: true } | { erro: string }> {
+export async function usarFalaComoAmostra(ownerUserId: string, personId: string, ref: string, origem: "reuniao" | "correcao" | "comando"): Promise<{ ok: true } | { erro: string }> {
   try {
     await enrollFromMeetingRef(ownerUserId, personId, ref, origem);
     return { ok: true };

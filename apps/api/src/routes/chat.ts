@@ -180,7 +180,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
 
   const [personaCtx, toolsRes, ragHits] = await Promise.all([
     buildPersonaContext(userId).catch(() => ""),
-    buildAllTools(userId, content, quemPede.resolve, quemPede.origin),
+    buildAllTools(userId, content, quemPede.resolve, quemPede.origin, quemPede.voiceRef),
     ragTask,
   ]);
   const { tools, cleanup, skillInstructions } = toolsRes;

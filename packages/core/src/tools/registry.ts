@@ -47,6 +47,12 @@ export interface ToolContext {
    * em paralelo ao resto do turno e só é aguardada se uma tool precisar.
    */
   requester?: () => Promise<Requester | null>;
+  /**
+   * Referência efêmera da fala deste turno, quando houve trecho de voz. É o
+   * que permite "pode guardar essa voz como minha" sem o áudio passar pela
+   * tool: ela manda a referência, nunca o dado (PRD §4.1).
+   */
+  voiceRef?: () => Promise<string | null>;
 }
 
 export interface ToolDef<I extends z.ZodTypeAny = z.ZodTypeAny> {
