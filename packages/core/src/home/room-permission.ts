@@ -5,6 +5,19 @@ import type { Requester } from "../tools/registry";
 import { canAccessRoom } from "./permission";
 
 /**
+ * Mesma regra, para um CÔMODO direto (câmera, presença): olhar o quarto é tão
+ * restrito quanto acender a luz dele. Devolve a recusa em pt-BR ou null.
+ */
+export async function authorizeRoomForRequester(roomId: string | null, requester: Requester | null, oQue: string): Promise<string | null> {
+  if (!requester || requester.role === "dono") return null;
+  const acessos = requester.personId
+    ? await db.select({ roomId: personRoomAccess.roomId, allowed: personRoomAccess.allowed }).from(personRoomAccess).where(eq(personRoomAccess.personId, requester.personId))
+    : [];
+  if (canAccessRoom(requester.role, roomId, acessos)) return null;
+  return `Quem pediu não tem permissão para ${oQue} neste cômodo.`;
+}
+
+/**
  * Aplica `permission.ts` (B7.1, que existia sem ninguém chamar) a uma ação de
  * casa, para QUEM PEDE. Sem quem pede identificado, ou sendo o dono, não
  * restringe: é o comportamento de antes. Devolve a recusa em pt-BR ou null.

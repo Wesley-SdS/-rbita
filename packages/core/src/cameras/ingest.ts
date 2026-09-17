@@ -6,6 +6,7 @@ import { settings } from "../settings";
 import { events } from "../events/index";
 import { narrateCameraEvent } from "./narrate";
 import { log } from "../observability/logger";
+import { recordVisualObject } from "../vision/objects";
 
 /**
  * Ingestão de eventos de câmera (Onda 5, briefing §7.1): quem detecta é um
@@ -55,26 +56,6 @@ export async function ingestCameraEvent(cam: Camera, input: CameraEventInput): P
     void narrateCameraEvent(row!.id).catch(() => {});
   }
 
-  // Identificação de quem apareceu (Onda 10) e gestos (Onda 11): só se a câmera
-  // tiver isso ligado, e sempre FORA da resposta do webhook (o Frigate não espera).
-  if (cam.identifyFaces && snapshot) {
-    void import("../identity/face")
-      .then((m) => m.identifyCameraEvent(row!.id))
-      // gesto depois do rosto: assim o evento já sabe de quem é a mão
-      .then(() => (cam.detectGestures ? import("../identity/gesture").then((m) => m.detectGestureForEvent(row!.id)) : undefined))
-      .catch((e) => log.warn("identity.camera_falhou", { cameraId: cam.id, error: e instanceof Error ? e.message : String(e) }));
-  } else if (cam.detectGestures && snapshot) {
-    void import("../identity/gesture")
-      .then((m) => m.detectGestureForEvent(row!.id))
-      .catch((e) => log.warn("identity.gesto_falhou", { cameraId: cam.id, error: e instanceof Error ? e.message : String(e) }));
-  }
-
-  // Memória visual de objetos (Onda 11): "onde deixei a chave". Só o que o dono
-  // listou, sem imagem e com prazo; o rótulo vem do próprio detector da câmera.
-  void import("../vision/objects")
-    .then((m) => m.recordVisualObject({ id: row!.id, userId: cam.userId, cameraId: cam.id, roomId: cam.roomId, label: input.label, score: input.score ?? null, zone: input.zone ?? null }))
-    .catch((e) => log.warn("vision.objeto_falhou", { cameraId: cam.id, error: e instanceof Error ? e.message : String(e) }));
-
   let roomName: string | null = null;
   if (cam.roomId) {
     const [r] = await db.select({ name: room.name }).from(room).where(eq(room.id, cam.roomId)).limit(1);
@@ -84,7 +65,22 @@ export async function ingestCameraEvent(cam: Camera, input: CameraEventInput): P
   void events
     .emit(
       "camera.detected",
-      { cameraId: cam.id, cameraName: cam.name, roomId: cam.roomId, roomName, label: input.label, zone: input.zone ?? null, score: input.score ?? null, comSnapshot: snapshot !== null },
+      {
+        // `eventId` e as flags da câmera vão no payload porque quem identifica
+        // rosto e gesto é um LISTENER deste evento (identity/camera-listener),
+        // e não a ingestão: biometria não pode ser importada daqui (NV.1).
+        eventId: row!.id,
+        cameraId: cam.id,
+        cameraName: cam.name,
+        roomId: cam.roomId,
+        roomName,
+        label: input.label,
+        zone: input.zone ?? null,
+        score: input.score ?? null,
+        comSnapshot: snapshot !== null,
+        identificaPessoas: cam.identifyFaces,
+        detectaGestos: cam.detectGestures,
+      },
       { userId: cam.userId },
     )
     .catch(() => {});

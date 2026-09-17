@@ -325,6 +325,13 @@ export const SETTING_DEFS = {
   "identity.faceMargin": num("identity", "Rosto: folga sobre a segunda pessoa", "Parentes parecidos não podem virar afirmação.", 0.06, 0, 1, { step: 0.01 }),
   "identity.faceMinSizePx": num("identity", "Rosto: tamanho mínimo", "Rosto menor que isso na imagem identifica mal e é ignorado.", 60, 20, 500, { unit: "px" }),
   "identity.faceEnrollMaxMb": num("identity", "Rosto: tamanho máximo da foto", "Foto de cadastro maior que isso é recusada (fica cifrada no banco para recalcular).", 8, 1, 50, { unit: "MB" }),
+  "identity.identifyMinIntervalSeconds": num("identity", "Intervalo mínimo entre identificações", "O detector da câmera manda vários eventos por segundo quando alguém passa. A Órbita identifica no máximo uma vez por câmera nesse intervalo.", 5, 1, 300, { unit: "s" }),
+  "identity.identifyLabels": list(
+    "identity",
+    "Rótulos que valem identificação",
+    "Só eventos com estes rótulos (o que a câmera detectou) passam pelo reconhecimento de rosto e gesto. Evita rodar visão em carro e movimento. Vazio aceita todos.",
+    ["person", "people", "pessoa"],
+  ),
   "identity.presenceFreshMinutes": num("identity", "Presença: considerar \"agora\" por", "Depois disso, a Órbita responde \"visto por último\" em vez de afirmar onde a pessoa está.", 5, 1, 120, { unit: "min" }),
   "identity.presenceRecentMinutes": num("identity", "Presença: considerar \"recente\" por", "Acima disso o avistamento é tratado como antigo.", 60, 5, 1440, { unit: "min" }),
   "identity.unknownRetentionDays": num("identity", "Retenção de desconhecido", "Por quantos dias uma voz ou rosto desconhecido fica guardado para ser reconhecido de novo ou nomeado. Depois some sozinho.", 7, 1, 90, { unit: "dias" }),

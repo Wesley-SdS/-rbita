@@ -34,6 +34,7 @@ export async function PATCH(req: Request, ctx: RouteCtx) {
   const parsed = PatchBody.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
   const { id, ...patch } = parsed.data;
+  if (!Object.keys(patch).length) return Response.json({ error: "Nada para alterar" }, { status: 400 });
   try {
     await updateDevice(o.userId, id, patch);
     return Response.json({ ok: true });

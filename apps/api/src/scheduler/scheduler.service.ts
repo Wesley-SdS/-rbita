@@ -15,6 +15,7 @@ import { purgeOldCameraEvents } from "@orbita/core/cameras/retention";
 import { purgeExpiredUnknownVoices } from "@orbita/core/identity/voice";
 import { purgeExpiredUnknownFaces } from "@orbita/core/identity/face";
 import { purgeExpiredVisualObjects } from "@orbita/core/vision/objects";
+import { installCameraIdentityListener } from "@orbita/core/identity/camera-listener";
 import { log } from "@orbita/core/observability/logger";
 
 /**
@@ -52,6 +53,9 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       void fireRulesForEvent(ev).catch((e) => log.error("rules.evento_falhou", { type: ev.type, error: String(e) }));
     });
     await ensureBuiltinRules().catch((e) => log.warn("rules.builtin_falhou", { error: String(e) }));
+    // rosto e gesto reagem a `camera.detected` (com freio por câmera), em vez de
+    // a ingestão chamar biometria direto (NV.1 + rajada do Frigate)
+    installCameraIdentityListener();
 
     this.loop("routines", () => settings.get("routines.tickSeconds").then((s) => s * 1000), () => this.tickRoutines());
     this.loop("events", () => settings.get("events.pollMs"), () => this.drainOutbox());

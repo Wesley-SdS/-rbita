@@ -119,22 +119,13 @@ async function enqueueChannelAction(userId: string, kind: string, summary: strin
   await db.insert(actionQueue).values({ userId, kind, summary, payload });
 }
 
-/**
- * Pessoa a quem o evento se refere, quando há (identity.*, câmera com rosto).
- * Puro: é o que liga "regra sobre pessoa" ao aviso no cômodo certo.
- */
-export function pessoaDoEvento(context: unknown): string | null {
-  const payload = (context as { payload?: Record<string, unknown> } | null)?.payload;
-  const id = payload?.personId ?? payload?.pessoaId;
-  return typeof id === "string" && id.length > 10 ? id : null;
-}
-
 async function executeActions(rule: AutomationRule, actions: RuleAction[], context: unknown): Promise<void> {
   for (const a of actions) {
     if (a.kind === "notify") {
-      // evento de identidade traz `personId`: o aviso vai para o aparelho do
-      // cômodo onde a pessoa foi vista (Onda 12, "a voz segue a pessoa")
-      await notifyUser(rule.userId, renderTemplate(a.title, context), renderTemplate(a.body, context), null, { personId: pessoaDoEvento(context) });
+      // De propósito SEM direcionar por pessoa: o `personId` do evento é de quem
+      // foi VISTO, não de quem deve ser avisado. Mandar o aviso sobre a Anna
+      // para o aparelho ao lado da Anna é o oposto do que o dono pediu.
+      await notifyUser(rule.userId, renderTemplate(a.title, context), renderTemplate(a.body, context));
     } else if (a.kind === "prompt") {
       const body = await runPromptForUser(
         rule.userId,

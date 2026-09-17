@@ -6,6 +6,7 @@ import * as schema from "@orbita/db/schema";
 import { eventLog } from "@orbita/db/event-schema";
 import { person } from "@orbita/db/home-schema";
 import { biometricConsent, identityAudit } from "@orbita/db/identity-schema";
+import { personPresence } from "@orbita/db/presence-schema";
 import { IdentityError } from "./errors";
 import { forgetVoiceTraces } from "./voice";
 import { forgetFaceTraces } from "./face";
@@ -85,6 +86,8 @@ async function eraseWithin(tx: Tx, ownerUserId: string, personId: string, bio: B
     const nulos = Object.fromEntries(Object.keys(r.columns).map((k) => [k, null]));
     if (Object.keys(nulos).length) await tx.update(r.table).set(nulos).where(eq(r.personColumn, personId));
   }
+  // presença é derivada de biometria: "apagar é apagar" também vale para ela
+  await tx.delete(personPresence).where(eq(personPresence.personId, personId));
   // o id é uuid: aparecer no texto do payload é mencionar a pessoa, sem falso positivo
   await tx.delete(eventLog).where(sql`${eventLog.payload}::text like ${"%" + personId + "%"}`);
   await tx.delete(identityAudit).where(and(eq(identityAudit.userId, ownerUserId), eq(identityAudit.personId, personId)));

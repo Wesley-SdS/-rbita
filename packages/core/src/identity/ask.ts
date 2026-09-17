@@ -58,11 +58,25 @@ export async function canAskAndAudit(ownerUserId: string, ctx: AskContext, subje
   return ok;
 }
 
-/** Filtra uma lista de pessoas pelo que quem pergunta pode saber, auditando uma vez por pessoa. */
+/**
+ * Filtra a lista pelo que quem pergunta pode saber. Audita UMA linha por
+ * consulta (com quem entrou e quem foi negado), não uma por pessoa: numa casa
+ * com 8 pessoas, o laço antigo eram 8 INSERTs dentro do turno e uma trilha
+ * cheia de "permitido" do próprio dono.
+ */
 export async function visiblePeople(ownerUserId: string, ctx: AskContext, motivo: string): Promise<PersonRow[]> {
-  const out: PersonRow[] = [];
-  for (const p of ctx.people) if (await canAskAndAudit(ownerUserId, ctx, p, motivo)) out.push(p);
-  return out;
+  const permitidas = ctx.people.filter((p) => canAskAbout(ctx.viewer, asLike(p), ctx.grants, ctx.policy));
+  const negadas = ctx.people.filter((p) => !permitidas.includes(p));
+  const anonimo = !ctx.viewer || ctx.viewer.id.startsWith("__");
+  await db.insert(identityAudit).values({
+    userId: ownerUserId,
+    action: negadas.length ? "consulta_negada" : "consulta",
+    actorPersonId: anonimo ? null : ctx.viewer!.id,
+    source: "chat",
+    outcome: negadas.length ? "parcial" : "permitido",
+    detail: { motivo, permitidas: permitidas.map((p) => p.id), negadas: negadas.map((p) => p.id) },
+  });
+  return permitidas;
 }
 
 /** Acha a pessoa pelo nome ou apelido (o modelo fala "a Anna", "a mãe"). Puro. */

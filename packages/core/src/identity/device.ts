@@ -6,6 +6,8 @@ import { room } from "@orbita/db/home-schema";
 import { pushSubscription } from "@orbita/db/push-schema";
 import { personPresence } from "@orbita/db/presence-schema";
 import { IdentityError } from "./errors";
+import { settings } from "../settings";
+import { freshness } from "./presence";
 
 /**
  * DISPOSITIVO ↔ CÔMODO (B5.3/B5.4, Onda 12). Fecha o "aqui": o pedido diz de
@@ -96,11 +98,15 @@ export async function deviceInRoom(ownerUserId: string, roomId: string): Promise
  */
 export async function deviceForPerson(ownerUserId: string, personId: string): Promise<{ id: string; name: string; roomId: string } | null> {
   const [p] = await db
-    .select({ roomId: personPresence.roomId })
+    .select({ roomId: personPresence.roomId, seenAt: personPresence.seenAt })
     .from(personPresence)
     .where(and(eq(personPresence.userId, ownerUserId), eq(personPresence.personId, personId)))
     .limit(1);
   if (!p?.roomId) return null;
+  // presença velha não é presença: falar no cômodo onde ela estava ontem é pior
+  // que falar em todos os aparelhos
+  const cfg = await settings.getMany(["identity.presenceFreshMinutes", "identity.presenceRecentMinutes"]);
+  if (freshness(p.seenAt, new Date(), cfg["identity.presenceFreshMinutes"], cfg["identity.presenceRecentMinutes"]) !== "agora") return null;
   const d = await deviceInRoom(ownerUserId, p.roomId);
   return d ? { ...d, roomId: p.roomId } : null;
 }

@@ -125,7 +125,9 @@ export async function identifyFace(
 
   const m = matchSignature(rosto.embedding, assinaturas, cfg);
   let unknownLabel: string | null = null;
-  if (m.outcome === "desconhecido" && opts.guardarDesconhecido) unknownLabel = await lembrarDesconhecido(ownerUserId, cfg, rosto.embedding, opts.sourceRef ?? null);
+  if (m.outcome === "desconhecido" && opts.guardarDesconhecido && !(await ehDeQuemRevogou(ownerUserId, cfg, rosto.embedding))) {
+    unknownLabel = await lembrarDesconhecido(ownerUserId, cfg, rosto.embedding, opts.sourceRef ?? null);
+  }
 
   const nome = m.personId ? ((await db.select({ name: person.name }).from(person).where(eq(person.id, m.personId)).limit(1))[0]?.name ?? null) : null;
   await db.insert(identityAudit).values({
@@ -139,6 +141,25 @@ export async function identifyFace(
     detail: { tamanho: rosto.size, backend: r.backend, desconhecido: unknownLabel, ref: opts.sourceRef ?? null },
   });
   return { ...m, name: nome, faceSize: rosto.size, backend: r.backend, unknownLabel };
+}
+
+/**
+ * O rosto é de alguém que REVOGOU o consentimento? Nesse caso ele não entra no
+ * casamento (loadFaceSignatures já o exclui), mas também não pode virar
+ * "Desconhecido N": seria rastrear anonimamente exatamente quem pediu para sair.
+ * A assinatura guardada só é usada aqui, para reconhecer e ignorar.
+ */
+async function ehDeQuemRevogou(ownerUserId: string, cfg: MatchConfig & { backend: string }, vector: number[]): Promise<boolean> {
+  const consentidos = new Set((await consentedPeople(ownerUserId)).map((p) => p.id));
+  const rows = await db
+    .select({ personId: biometricFaceEmbedding.personId, vector: biometricFaceEmbedding.vector })
+    .from(biometricFaceEmbedding)
+    .where(and(eq(biometricFaceEmbedding.userId, ownerUserId), eq(biometricFaceEmbedding.backend, cfg.backend)));
+  const porPessoa = new Map<string, number[][]>();
+  for (const r of rows) if (!consentidos.has(r.personId)) porPessoa.set(r.personId, [...(porPessoa.get(r.personId) ?? []), r.vector]);
+  if (!porPessoa.size) return false;
+  const m = matchSignature(vector, [...porPessoa].map(([personId, vectors]) => ({ personId, vectors })), cfg);
+  return m.outcome !== "desconhecido";
 }
 
 /** Rosto desconhecido: reaproveita o rótulo de um recente, senão cria um novo com prazo FIXO. */

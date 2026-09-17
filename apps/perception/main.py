@@ -75,10 +75,18 @@ def _voice(name: str | None) -> VoiceEncoder:
         return _encoders[chave]  # type: ignore[return-value]
 
 
+_gesto_lock = threading.Lock()
+
+
 def _gestos() -> GestureDetector:
-    with _lock:
+    # lock PRÓPRIO: carregar o MediaPipe leva segundos e não pode segurar
+    # /voice/embed nem /face/embed, que usam o lock geral
+    with _gesto_lock:
         if "gesto" not in _encoders:
-            _encoders["gesto"] = GestureDetector()
+            try:
+                _encoders["gesto"] = GestureDetector()
+            except Exception as e:  # noqa: BLE001 - mediapipe ausente ou quebrado
+                raise HTTPException(503, f"reconhecimento de gestos indisponível: {e}") from e
         return _encoders["gesto"]  # type: ignore[return-value]
 
 

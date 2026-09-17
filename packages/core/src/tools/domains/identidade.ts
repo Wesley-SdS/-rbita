@@ -3,12 +3,13 @@ import { registerTools, type ToolContext, type ToolDef } from "../registry";
 import { askContext, canAskAndAudit, findPersonByName, visiblePeople } from "../../identity/ask";
 import { currentPresence } from "../../identity/presence";
 import { createPerson, listPeople, recordConsent, currentTerm } from "../../identity/people";
-import { eraseBiometrics } from "../../identity/erase";
-import { enrollFromMeetingRef } from "../../identity/voice";
+// fachada: tool dispara operação de identidade, nunca toca em vetor ou amostra (NV.1)
+import { apagarBiometriaDe, usarFalaComoAmostra } from "../../identity/actions";
 import { cameraDigest, findObject } from "../../vision/objects";
 import { quemDisse } from "../../meetings/quem-disse";
 import { cameraRoomName, findCamera, latestEventWithSnapshot } from "../../cameras/query";
-import { narrateSnapshot } from "../../cameras/narrate";
+import { authorizeRoomForRequester } from "../../home/room-permission";
+import { narrateCameraEvent, narrateSnapshot } from "../../cameras/narrate";
 import { db } from "@orbita/db";
 import { document } from "@orbita/db/knowledge-schema";
 import { and, eq } from "drizzle-orm";
@@ -27,6 +28,16 @@ import { and, eq } from "drizzle-orm";
  */
 
 const quem = async (ctx: ToolContext) => (ctx.requester ? await ctx.requester().catch(() => null) : null);
+
+/**
+ * Olhar a câmera de um cômodo é tão restrito quanto agir nele: sem isso, um
+ * visitante perguntaria "o que está acontecendo no quarto" e a descrição viria.
+ */
+const autorizarCamera = (oQue: string) => async (input: { comodo?: string; local?: string }, ctx: ToolContext) => {
+  const cam = await findCamera(ctx.userId, input.comodo ?? input.local ?? "");
+  if (!cam) return null; // câmera inexistente: a própria tool responde
+  return authorizeRoomForRequester(cam.roomId, await quem(ctx), oQue);
+};
 
 // ── quem está em casa ───────────────────────────────────────────────────────
 
@@ -82,13 +93,15 @@ export const o_que_esta_acontecendo: ToolDef<typeof AcontecendoInput> = {
   risk: "leitura",
   keywords: ["o que está acontecendo", "como está", "a cena", "na sala", "na cozinha"],
   inputSchema: AcontecendoInput,
+  authorize: autorizarCamera("ver a câmera"),
   run: async ({ comodo }, ctx) => {
     const cam = await findCamera(ctx.userId, comodo);
     if (!cam) return { erro: `Não achei uma câmera para "${comodo}".` };
     const [ev, askCtx, nomeComodo] = await Promise.all([latestEventWithSnapshot(cam.id), askContext(ctx.userId, await quem(ctx)), cameraRoomName(cam)]);
     if (!ev?.snapshot) return { erro: `A câmera "${cam.name}" ainda não tem imagem recente.` };
-    // câmera que identifica pessoas narra só com modelo local (decisão 9.6)
-    const descricao = await narrateSnapshot(ev.snapshot, undefined, { localOnly: cam.identifyFaces });
+    // narração já gravada no evento é reaproveitada (com modelo local, narrar de
+    // novo custa dezenas de segundos); a regra de "só local" vive no narrate
+    const descricao = await narrateCameraEvent(ev.id);
 
     const presenca = await currentPresence(ctx.userId);
     const permitidas = new Set((await visiblePeople(ctx.userId, askCtx, "o_que_esta_acontecendo")).map((p) => p.id));
@@ -110,6 +123,7 @@ export const ver_camera: ToolDef<typeof VerCameraInput> = {
   risk: "leitura",
   keywords: ["olha a câmera", "está ligado", "o forno", "a bancada", "lê isso", "o que está escrito"],
   inputSchema: VerCameraInput,
+  authorize: autorizarCamera("ver a câmera"),
   run: async ({ local, pergunta }, ctx) => {
     const cam = await findCamera(ctx.userId, local);
     if (!cam) return { erro: `Não achei uma câmera para "${local}".` };
@@ -163,7 +177,9 @@ export const resumo_do_dia_cameras: ToolDef<typeof ResumoInput> = {
         // sem permissão sobre a pessoa, o evento continua aparecendo, mas sem o nome
         quem: e.personId && permitidas.has(e.personId) ? (nomes.get(e.personId) ?? null) : e.personId ? "alguém da casa" : (e.desconhecido ?? null),
         certeza: e.outcome ?? undefined,
-        descricao: e.narration ?? undefined,
+        // a narração descreve a pessoa ("mulher de cabelo escuro cozinhando"):
+        // esconder só o nome não esconderia nada
+        descricao: e.personId && !permitidas.has(e.personId) ? undefined : (e.narration ?? undefined),
       })),
     };
   },
@@ -183,9 +199,22 @@ export const quem_disse: ToolDef<typeof QuemDisseInput> = {
   keywords: ["quem disse", "quem falou", "quem prometeu", "na reunião"],
   inputSchema: QuemDisseInput,
   run: async ({ assunto, pessoa }, ctx) => {
+    const askCtx = await askContext(ctx.userId, await quem(ctx));
+    // quem não pode consultar a pessoa recebe a fala SEM o nome (a fala é da
+    // reunião do dono; o nome é que é dado sobre outra pessoa)
+    const permitidas = new Set((await visiblePeople(ctx.userId, askCtx, "quem_disse")).map((p) => p.name.toLowerCase()));
+    if (pessoa && !permitidas.has(pessoa.toLowerCase())) return { erro: `Você não tem permissão para perguntar sobre ${pessoa}.` };
     const falas = await quemDisse(ctx.userId, assunto, { nome: pessoa });
     if (!falas.length) return { assunto, resposta: "Não achei ninguém dizendo isso nas reuniões transcritas." };
-    return { assunto, falas: falas.map((f) => ({ quem: f.nome ?? `Locutor ${f.locutor}`, trecho: f.trecho, reuniao: f.titulo, quando: f.quando })) };
+    return {
+      assunto,
+      falas: falas.map((f) => ({
+        quem: f.nome && permitidas.has(f.nome.toLowerCase()) ? f.nome : `Locutor ${f.locutor}`,
+        trecho: f.trecho,
+        reuniao: f.titulo,
+        quando: f.quando,
+      })),
+    };
   },
 };
 
@@ -262,7 +291,7 @@ export const apagar_biometria: ToolDef<typeof ApagarInput> = {
     const askCtx = await askContext(ctx.userId, await quem(ctx));
     const alvo = findPersonByName(askCtx.people, pessoa);
     if (!alvo) return { erro: `Não encontrei "${pessoa}" entre as pessoas da casa.` };
-    const r = await eraseBiometrics(ctx.userId, alvo.id);
+    const r = await apagarBiometriaDe(ctx.userId, alvo.id);
     return { ok: true, pessoa: alvo.name, tabelasLimpas: r.tabelas, referenciasZeradas: r.referencias, consentimentoRevogado: true };
   },
 };
@@ -285,12 +314,8 @@ export const usar_fala_como_amostra: ToolDef<typeof AmostraInput> = {
     const askCtx = await askContext(ctx.userId, await quem(ctx));
     const alvo = findPersonByName(askCtx.people, pessoa);
     if (!alvo) return { erro: `Não encontrei "${pessoa}" entre as pessoas da casa.` };
-    try {
-      await enrollFromMeetingRef(ctx.userId, alvo.id, ref, "correcao");
-      return { ok: true, pessoa: alvo.name };
-    } catch (e) {
-      return { erro: e instanceof Error ? e.message : "Não consegui usar essa fala como amostra." };
-    }
+    const r = await usarFalaComoAmostra(ctx.userId, alvo.id, ref, "correcao");
+    return "erro" in r ? r : { ok: true, pessoa: alvo.name };
   },
 };
 
