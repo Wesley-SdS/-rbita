@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, integer, vector, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, integer, vector, jsonb, index } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export const document = pgTable("document", {
@@ -8,6 +8,10 @@ export const document = pgTable("document", {
     .references(() => user.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   source: text("source").notNull().default("text"),
+  // Rótulos de locutor → nome real ({"A":"Ana","B":"Bruno"}), só em documentos de
+  // reunião com diarização. É METADADO de exibição: o texto arquivado mantém
+  // "Locutor A", a UI substitui na leitura. Nulo = nenhum locutor nomeado ainda.
+  speakers: jsonb("speakers").$type<Record<string, string>>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

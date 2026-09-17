@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { automationRule, type AutomationRule } from "@orbita/db/rule-schema";
 import { user } from "@orbita/db/auth-schema";
+import { actionQueue } from "@orbita/db/action-schema";
 import { events, type OrbitaEvent } from "../events/index";
 import { notifyUser, runPromptForUser } from "../routines/run";
 import { log } from "../observability/logger";
@@ -33,6 +34,22 @@ export const BUILTIN_RULES: (RuleInput & { builtinKey: string })[] = [
     trigger: { kind: "event", type: "connector.refresh_failed" },
     conditions: [],
     actions: [{ kind: "notify", title: "Conector {{payload.provider}} precisa reconectar", body: "A renovação do acesso falhou: {{payload.error}}. Reconecte em Conectores." }],
+  },
+  {
+    builtinKey: "calendar.meeting_upcoming",
+    name: "Avisar reunião próxima",
+    enabled: true,
+    trigger: { kind: "event", type: "calendar.meeting_upcoming" },
+    conditions: [],
+    actions: [{ kind: "notify", title: "Reunião em breve: {{payload.titulo}}", body: "{{payload.resumo}}" }],
+  },
+  {
+    builtinKey: "gmail.important_received",
+    name: "Avisar e-mail importante",
+    enabled: true,
+    trigger: { kind: "event", type: "gmail.important_received" },
+    conditions: [],
+    actions: [{ kind: "notify", title: "E-mail importante de {{payload.de}}", body: "{{payload.assunto}}: {{payload.trecho}}" }],
   },
 ];
 
@@ -66,6 +83,16 @@ function decode(rule: AutomationRule): { trigger: Trigger; conditions: Condition
   return { trigger: t.data, conditions: c.data, actions: a.data };
 }
 
+/**
+ * Enfileira uma ação de CANAL EXTERNO (WhatsApp/Teams) da mesma forma que uma
+ * tool enfileiraria (mesmo `kind`, mesmo formato de payload): mesmo sendo uma
+ * regra que o próprio dono configurou, mensagem para FORA de casa passa pelo
+ * gate humano de sempre (CLAUDE.md §5.1) — nunca sai direto de uma regra.
+ */
+async function enqueueChannelAction(userId: string, kind: string, summary: string, payload: Record<string, unknown>): Promise<void> {
+  await db.insert(actionQueue).values({ userId, kind, summary, payload });
+}
+
 async function executeActions(rule: AutomationRule, actions: RuleAction[], context: unknown): Promise<void> {
   for (const a of actions) {
     if (a.kind === "notify") {
@@ -77,6 +104,15 @@ async function executeActions(rule: AutomationRule, actions: RuleAction[], conte
         "\nVocê está executando uma regra proativa. Produza um resultado útil e direto.",
       );
       await notifyUser(rule.userId, rule.name, body);
+    } else if (a.kind === "whatsapp") {
+      const texto = renderTemplate(a.text, context);
+      await enqueueChannelAction(rule.userId, "enviar_whatsapp", `Regra "${rule.name}": WhatsApp para ${a.to}`, { para: a.to, texto });
+    } else if (a.kind === "teams_chat") {
+      const texto = renderTemplate(a.text, context);
+      await enqueueChannelAction(rule.userId, "enviar_teams_chat", `Regra "${rule.name}": Teams (chat)`, { chatId: a.chatId, texto });
+    } else if (a.kind === "teams_canal") {
+      const texto = renderTemplate(a.text, context);
+      await enqueueChannelAction(rule.userId, "enviar_teams_canal", `Regra "${rule.name}": Teams (canal)`, { equipeId: a.equipeId, canalId: a.canalId, texto });
     }
   }
   await db.update(automationRule).set({ lastFiredAt: new Date() }).where(eq(automationRule.id, rule.id));

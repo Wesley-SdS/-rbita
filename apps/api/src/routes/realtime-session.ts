@@ -1,7 +1,9 @@
 // Migrada do Next em paridade (apps/web/src/app/api/realtime/session/route.ts).
+import { z } from "zod";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { SYSTEM_PROMPT } from "@orbita/core/chat/tools";
+import { toolDefsForRealtime, type ToolDef } from "@orbita/core/tools/index";
 import { log } from "@orbita/core/observability/logger";
 
 /**
@@ -20,6 +22,18 @@ export async function POST(_req: Request, ctx: RouteCtx) {
   const model = process.env.REALTIME_MODEL ?? "gpt-realtime";
   const voice = process.env.REALTIME_VOICE ?? "marin";
 
+  // B7.2 (Onda 6): a sessão de voz ganha as MESMAS tools do chat de texto —
+  // sem isso, o modo realtime só conversa, não aciona a casa nem mexe em
+  // nada (briefing §7.2). O gate humano continua: uma tool arriscada
+  // enfileira em vez de executar (ver runRealtimeTool em packages/core).
+  const defs: ToolDef[] = await toolDefsForRealtime(session.user.id);
+  const tools = defs.map((d: ToolDef) => ({
+    type: "function" as const,
+    name: d.name,
+    description: d.description,
+    parameters: z.toJSONSchema(d.inputSchema) as Record<string, unknown>,
+  }));
+
   try {
     // API atual (2026): cria um client secret efêmero com a config da sessão.
     const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
@@ -32,7 +46,8 @@ export async function POST(_req: Request, ctx: RouteCtx) {
           audio: { output: { voice } },
           instructions:
             SYSTEM_PROMPT +
-            " Você está em conversa por voz em tempo real: fale de forma natural, breve e calorosa, em português do Brasil.",
+            " Você está em conversa por voz em tempo real: fale de forma natural, breve e calorosa, em português do Brasil. Ações arriscadas (destrancar, desarmar, mandar mensagem) ficam esperando sua aprovação no painel; diga isso em vez de fingir que já fez.",
+          tools,
         },
       }),
     });

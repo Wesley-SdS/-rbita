@@ -172,6 +172,8 @@ export function useVoice(p: Params) {
       onState: (s) => p.setMode(s === "speaking" ? "speaking" : s === "connecting" ? "connecting" : s === "listening" ? "listening" : "standby"),
       onError: () => { p.setError("Falha no modo tempo real."); rt.stop(); rtRef.current = null; setRealtimeOn(false); },
       onTranscript: (role, text) => p.setMessages((m) => [...m, { role, content: text }]),
+      // B7.2: mostra no log que a voz acionou uma ferramenta (mesmo gate do chat de texto).
+      onToolCall: (name) => p.setMessages((m) => [...m, { role: "assistant", content: `⚙ ${name}`, steps: [{ name, done: true }] }]),
     });
     try {
       setRealtimeOn(true);

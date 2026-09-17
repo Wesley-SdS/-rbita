@@ -67,7 +67,7 @@ describe("settings: store", () => {
   it("valor gravado que não passa mais na faixa cai para o default (fail-soft)", async () => {
     const { backend } = memBackend({ "chat.maxSteps": 500 });
     const s = createSettingsStore(backend, 1000);
-    expect(await s.get("chat.maxSteps")).toBe(5);
+    expect(await s.get("chat.maxSteps")).toBe(12);
   });
 
   it("cacheia leituras dentro do TTL e invalida ao escrever", async () => {

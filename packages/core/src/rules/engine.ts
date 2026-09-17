@@ -31,6 +31,13 @@ export const ActionSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("notify"), title: z.string().min(1).max(200), body: z.string().min(1).max(4000) }),
   // pede ao modelo (com ferramentas) e notifica com a resposta
   z.object({ kind: z.literal("prompt"), prompt: z.string().min(1).max(4000) }),
+  // canais externos (Onda 4, CH.3 roteamento de notificação): igual ao `notify`,
+  // mas para FORA de casa — por isso NUNCA envia direto, mesmo sendo uma regra
+  // que o dono configurou. Entra no mesmo gate humano das tools (action_queue),
+  // com o texto já pronto para aprovar, não passa por LLM nenhum.
+  z.object({ kind: z.literal("whatsapp"), to: z.string().min(1).max(40), text: z.string().min(1).max(2000) }),
+  z.object({ kind: z.literal("teams_chat"), chatId: z.string().min(1).max(200), text: z.string().min(1).max(2000) }),
+  z.object({ kind: z.literal("teams_canal"), equipeId: z.string().min(1).max(200), canalId: z.string().min(1).max(200), text: z.string().min(1).max(2000) }),
 ]);
 export type RuleAction = z.infer<typeof ActionSchema>;
 

@@ -5,6 +5,7 @@ import { db } from "@orbita/db";
 import { memory } from "@orbita/db/knowledge-schema";
 import { settings } from "../../settings";
 import { retrieveContext } from "../../rag/retrieve";
+import { events } from "../../events/index";
 import { registerTools, type ToolDef } from "../registry";
 
 /** Domínio: memória de longo prazo e conhecimento do usuário. */
@@ -28,6 +29,7 @@ export const salvar_memoria: ToolDef<z.ZodObject<{ fato: z.ZodString }>> = {
       .limit(1);
     if (dup) return { salvo: false, motivo: "já memorizado", fato };
     await db.insert(memory).values({ userId, content: fato, embedding });
+    void events.emit("memory.saved", { fato }, { userId }).catch(() => {});
     return { salvo: true, fato };
   },
 };
@@ -50,6 +52,7 @@ export const esquecer_memoria: ToolDef<z.ZodObject<{ descricao: z.ZodString }>> 
       .limit(1);
     if (!hit) return { esquecido: false, motivo: "nenhuma memória parecida encontrada" };
     await db.delete(memory).where(and(eq(memory.id, hit.id), eq(memory.userId, userId)));
+    void events.emit("memory.forgotten", { memoria: hit.content }, { userId }).catch(() => {});
     return { esquecido: true, memoria: hit.content };
   },
 };

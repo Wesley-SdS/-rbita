@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, PanelTitle } from "@/components/ui";
+import { Card, PanelTitle, Input, Button } from "@/components/ui";
 
 interface Connector {
   id: string;
@@ -90,7 +90,63 @@ export function ConnectorsPanel() {
           </div>
         ))}
         {connectors.length === 0 && <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>carregando…</span>}
+        {open && <WhatsappBlock />}
       </div>
     </Card>
+  );
+}
+
+/**
+ * WhatsApp não tem OAuth por usuário sem passar pela revisão de app da Meta
+ * (Embedded Signup) — o que dá para fazer é tirar o token do `.env` fixo e
+ * trazer para cá (CH.2, zero hardcode). Token e phone_id vêm do próprio app
+ * da Meta que o dono já configurou.
+ */
+function WhatsappBlock() {
+  const [status, setStatus] = useState<{ configured: boolean; phoneId: string | null } | null>(null);
+  const [phoneId, setPhoneId] = useState("");
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    fetch("/api/channels/whatsapp").then((r) => r.json()).then(setStatus).catch(() => setStatus(null));
+  }, [reload]);
+
+  async function save() {
+    setBusy(true);
+    await fetch("/api/channels/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phoneId, token }) });
+    setBusy(false);
+    setToken("");
+    setReload((n) => n + 1);
+  }
+  async function remove() {
+    setBusy(true);
+    await fetch("/api/channels/whatsapp", { method: "DELETE" });
+    setBusy(false);
+    setReload((n) => n + 1);
+  }
+
+  return (
+    <div className="rounded-lg border p-2 text-[11px]" style={{ borderColor: "var(--color-line)" }}>
+      <div className="flex items-center gap-2">
+        <span>🟢</span>
+        <span className="font-semibold" style={{ color: "var(--color-ink)" }}>WhatsApp</span>
+        {status?.configured && <span className="ml-auto" style={{ color: "var(--color-gold)" }}>● configurado</span>}
+      </div>
+      <p className="mt-1" style={{ color: "var(--color-ink-dim)" }}>Token e ID do número do seu app da Meta (WhatsApp Business Cloud API).</p>
+      {status?.configured ? (
+        <div className="mt-2 flex items-center gap-2">
+          <span style={{ color: "var(--color-ink-dim)" }}>número: {status.phoneId}</span>
+          <button onClick={remove} disabled={busy} style={{ color: "var(--color-danger)" }}>desconectar</button>
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-col gap-1">
+          <Input placeholder="phone_id" value={phoneId} onChange={(e) => setPhoneId(e.target.value)} />
+          <Input placeholder="token de acesso" type="password" value={token} onChange={(e) => setToken(e.target.value)} />
+          <Button onClick={save} disabled={busy || !phoneId || !token} size="sm">salvar</Button>
+        </div>
+      )}
+    </div>
   );
 }

@@ -230,6 +230,11 @@ Antes de considerar qualquer tarefa concluída:
 | Realtime WebRTC | `apps/web/src/lib/voice/realtime.ts` |
 | STT (AssemblyAI com diarização → whisper local) | `packages/core/src/stt/` |
 | RAG | `packages/core/src/rag/` |
+| Reuniões: resumo em mapa-redução + compromissos | `apps/api/src/routes/meeting-summarize.ts` · `packages/core/src/meetings/{compromissos,structured}.ts` |
+| JSON estruturado robusto a modelo local (sem `generateObject`) | `packages/core/src/meetings/structured.ts` |
+| Calendar watch (aviso pré-reunião, polling) | `packages/core/src/meetings/calendar-watch.ts` |
+| Gmail watch (e-mail importante, polling) | `packages/core/src/meetings/gmail-watch.ts` |
+| Nomear locutor pós-reunião (leve, sem voiceprint) | `apps/api/src/routes/meeting-speakers.ts` · `document.speakers` |
 | Schemas Drizzle + migrações | `packages/db/src/` · `packages/db/drizzle/` |
 | Plano do Jarvis | `BRIEFING-JARVIS.md` |
 | Backlog pré-existente | `CHECKLIST.md` |
@@ -238,6 +243,21 @@ Antes de considerar qualquer tarefa concluída:
 
 ## 9. Armadilhas conhecidas
 
+- **`generateObject` do AI SDK falha contra Ollama** (`AI_NoObjectGeneratedError: response did not
+  match schema`), mesmo em chamadas simples — o endpoint OpenAI-compatible do Ollama não garante o
+  modo estruturado que o SDK espera, mesmo em modelos que lidam bem com tool calling (ex.:
+  `qwen2.5:7b`, que já funciona bem no chat com tools). Use `generateStructured` (JSON por prompt +
+  parse tolerante a cerca markdown/prosa + um reparo) de `packages/core/src/meetings/structured.ts`
+  em vez de `generateObject` quando o modelo pode ser local. Deixe campos array/opcionais com
+  `.catch([])`/`.catch(default)` no schema: um modelo pequeno local às vezes esquece um campo, e
+  isso não pode jogar fora um resultado bom por causa de um campo secundário.
+- **Modelo local (CPU, sem GPU) satura a VM inteira durante a geração.** Nesta máquina de dev, uma
+  chamada ao `qwen2.5:7b` via Ollama pode levar de 30s a alguns minutos, e ENQUANTO isso outros
+  comandos de terminal e até rotas HTTP sem LLM nenhum ficam visivelmente lentos (CPU
+  compartilhada). Não é deadlock no código — não repita a chamada achando que travou; dê timeout
+  generoso e rode em background. Truque para testar rota autenticada sem passar pelo proxy do
+  Next (que tem teto de ~30s em dev): `curl -H "Host: localhost:3000" 127.0.0.1:3010/api/...` com o
+  cookie de sempre.
 - **Diarização só funciona sobre o áudio inteiro.** Os rótulos A/B/C são atribuídos por
   requisição — nunca diarize pedaços de uma mesma reunião separadamente.
 - **`assertPublicUrl` (`lib/net/ssrf.ts`) bloqueia a LAN** (192.168/10/172.16). Isso impede

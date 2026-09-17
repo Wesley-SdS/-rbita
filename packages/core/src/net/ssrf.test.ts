@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assertPublicUrl, SsrfError, _internal } from "./ssrf";
+import { assertLocalOrPublicUrl, assertPublicUrl, SsrfError, _internal } from "./ssrf";
 
 const { isPrivateIp } = _internal;
 
@@ -36,5 +36,31 @@ describe("assertPublicUrl", () => {
   });
   it("aceita host público", async () => {
     await expect(assertPublicUrl("https://example.com/")).resolves.toBeUndefined();
+  });
+});
+
+describe("assertLocalOrPublicUrl (exceção estreita do Home Assistant, B3.2)", () => {
+  it("libera IP literal de LAN e loopback", async () => {
+    await expect(assertLocalOrPublicUrl("http://192.168.1.50:8123/")).resolves.toBeUndefined();
+    await expect(assertLocalOrPublicUrl("http://10.0.0.5:8123/")).resolves.toBeUndefined();
+    await expect(assertLocalOrPublicUrl("http://172.16.4.4:8123/")).resolves.toBeUndefined();
+    await expect(assertLocalOrPublicUrl("http://127.0.0.1:8123/")).resolves.toBeUndefined();
+    await expect(assertLocalOrPublicUrl("http://[::1]:8123/")).resolves.toBeUndefined();
+  });
+  it("libera localhost (resolve p/ loopback)", async () => {
+    await expect(assertLocalOrPublicUrl("http://localhost:8123/")).resolves.toBeUndefined();
+  });
+  it("ainda bloqueia metadata de nuvem mesmo com a exceção (nunca liberado)", async () => {
+    await expect(assertLocalOrPublicUrl("http://169.254.169.254/latest/meta-data/")).rejects.toBeInstanceOf(SsrfError);
+  });
+  it("ainda bloqueia multicast e reservado", async () => {
+    await expect(assertLocalOrPublicUrl("http://224.0.0.1/")).rejects.toBeInstanceOf(SsrfError);
+    await expect(assertLocalOrPublicUrl("http://240.0.0.1/")).rejects.toBeInstanceOf(SsrfError);
+  });
+  it("ainda bloqueia protocolo não-http", async () => {
+    await expect(assertLocalOrPublicUrl("file:///etc/passwd")).rejects.toBeInstanceOf(SsrfError);
+  });
+  it("continua aceitando host público", async () => {
+    await expect(assertLocalOrPublicUrl("https://example.com/")).resolves.toBeUndefined();
   });
 });

@@ -27,14 +27,15 @@ describe("state OAuth (anti-CSRF)", () => {
 });
 
 describe("registry de conectores", () => {
-  it("lista os 3 conectores como não-configurados sem env", async () => {
+  it("lista os 4 conectores como não-configurados sem env", async () => {
     // garante ausência das credenciais
     delete process.env.GOOGLE_CLIENT_ID;
     delete process.env.NOTION_CLIENT_ID;
     delete process.env.SLACK_CLIENT_ID;
+    delete process.env.M_ID;
     const { listConnectors } = await import("./registry");
     const list = listConnectors();
-    expect(list.map((c) => c.id).sort()).toEqual(["google", "notion", "slack"]);
+    expect(list.map((c) => c.id).sort()).toEqual(["google", "microsoft", "notion", "slack"]);
     expect(list.every((c) => c.configured === false)).toBe(true);
   });
 

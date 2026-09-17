@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { sendWhatsApp, whatsappConfigured } from "../../connectors/whatsapp";
+import { sendWhatsApp } from "../../connectors/whatsapp";
 import { registerTools, type ToolDef } from "../registry";
 
-/** Domínio: WhatsApp (token do app no .env; OAuth por usuário fica para a Onda 4). */
+/** Domínio: WhatsApp (Cloud API da Meta, token cadastrado pela tela — CH.2). */
 const Input = z.object({ para: z.string(), texto: z.string() });
 
 export const enviar_whatsapp: ToolDef<typeof Input> = {
@@ -11,11 +11,11 @@ export const enviar_whatsapp: ToolDef<typeof Input> = {
   description: "Propõe enviar uma mensagem de WhatsApp (número internacional, ex: 5511999998888). Não envia direto: enfileira uma proposta para o usuário aprovar no painel 'Ações a confirmar'.",
   risk: "efeito_externo",
   keywords: ["whatsapp", "zap", "mensagem", "mandar", "avisar"],
-  requires: { available: whatsappConfigured },
+  requires: { whatsapp: true },
   inputSchema: Input,
   summarize: ({ para, texto }) => `Enviar WhatsApp para ${para}: "${texto.slice(0, 60)}"`,
-  run: async ({ para, texto }) => {
-    const r = await sendWhatsApp(para, texto);
+  run: async ({ para, texto }, { userId }) => {
+    const r = await sendWhatsApp(userId, para, texto);
     return `WhatsApp enviado (id ${r.id}).`;
   },
 };

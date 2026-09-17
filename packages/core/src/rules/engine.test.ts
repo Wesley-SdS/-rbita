@@ -26,6 +26,18 @@ describe("regras: validação da entrada", () => {
     expect(cronError("0 8 * * *")).toBeNull();
     expect(cronError("isso não é cron")).toMatch(/inválida/);
   });
+
+  it("aceita as ações de canal externo (Onda 4, CH.3): whatsapp, teams_chat, teams_canal", () => {
+    const base = { name: "Avisar", trigger: { kind: "event" as const, type: "algo" } };
+    expect(RuleInputSchema.safeParse({ ...base, actions: [{ kind: "whatsapp", to: "5511999998888", text: "oi" }] }).success).toBe(true);
+    expect(RuleInputSchema.safeParse({ ...base, actions: [{ kind: "teams_chat", chatId: "abc", text: "oi" }] }).success).toBe(true);
+    expect(RuleInputSchema.safeParse({ ...base, actions: [{ kind: "teams_canal", equipeId: "e1", canalId: "c1", text: "oi" }] }).success).toBe(true);
+  });
+  it("ação de canal externo exige os campos certos", () => {
+    const base = { name: "x", trigger: { kind: "event" as const, type: "a" } };
+    expect(RuleInputSchema.safeParse({ ...base, actions: [{ kind: "whatsapp", to: "", text: "oi" }] }).success).toBe(false);
+    expect(RuleInputSchema.safeParse({ ...base, actions: [{ kind: "teams_canal", equipeId: "e1", text: "oi" }] }).success).toBe(false);
+  });
 });
 
 describe("regras: condições", () => {

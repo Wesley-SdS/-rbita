@@ -7,7 +7,7 @@
  * e o conector acende sozinho, sem mudança de código.
  */
 
-export type ConnectorId = "google" | "notion" | "slack";
+export type ConnectorId = "google" | "notion" | "slack" | "microsoft";
 
 export interface ConnectorDef {
   id: ConnectorId;
@@ -31,6 +31,8 @@ const N_ID = process.env.NOTION_CLIENT_ID;
 const N_SECRET = process.env.NOTION_CLIENT_SECRET;
 const S_ID = process.env.SLACK_CLIENT_ID;
 const S_SECRET = process.env.SLACK_CLIENT_SECRET;
+const M_ID = process.env.MICROSOFT_CLIENT_ID;
+const M_SECRET = process.env.MICROSOFT_CLIENT_SECRET;
 
 const DEFS: Record<ConnectorId, ConnectorDef> = {
   google: {
@@ -78,6 +80,19 @@ const DEFS: Record<ConnectorId, ConnectorDef> = {
     scopes: ["chat:write", "channels:read", "channels:history"],
     clientId: S_ID,
     clientSecret: S_SECRET,
+  },
+  microsoft: {
+    id: "microsoft",
+    label: "Microsoft Teams",
+    icon: "🟦",
+    blurb: "Ler e enviar mensagens em chats e canais do Teams.",
+    authorizeUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+    tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    // escopo mínimo: chat + canal de equipe + listar equipes/canais, sem Mail/Calendar
+    // (isso já é feito pelo Google) e sem acesso amplo ao diretório.
+    scopes: ["offline_access", "openid", "email", "Chat.ReadWrite", "ChannelMessage.Send", "Team.ReadBasic.All", "Channel.ReadBasic.All"],
+    clientId: M_ID,
+    clientSecret: M_SECRET,
   },
 };
 

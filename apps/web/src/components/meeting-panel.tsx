@@ -1,10 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Card, PanelTitle, Button } from "@/components/ui";
+import { Card, PanelTitle, Button, Input } from "@/components/ui";
 import { ContinuousRecorder, startMeetingCapture, type MeetingCapture } from "@/lib/voice/capture";
 import { ContinuousDictation, getRecognitionCtor } from "@/lib/voice/speech";
 import type { SttUtterance } from "@orbita/core/stt/types";
+import { parsePrazo, type Compromisso } from "@orbita/core/meetings/compromissos";
+
+/** "Locutor A" → nome salvo, no texto e nos rótulos de fala; sem nome, mantém o rótulo. */
+function applySpeakerNames(text: string, names: Record<string, string>): string {
+  let out = text;
+  for (const [tag, name] of Object.entries(names)) {
+    if (!name.trim()) continue;
+    out = out.replace(new RegExp(`Locutor ${tag}\\b`, "g"), name.trim());
+  }
+  return out;
+}
 
 /**
  * Transcrição de reunião (caso-âncora do PRD: "Resume essa reunião").
@@ -31,6 +42,12 @@ export function MeetingPanel() {
   const [summary, setSummary] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [phase, setPhase] = useState<"idle" | "transcrevendo" | "resumindo">("idle");
+  const [documentId, setDocumentId] = useState<string | null>(null);
+  const [compromissos, setCompromissos] = useState<Compromisso[]>([]);
+  const [addedTodos, setAddedTodos] = useState<Set<number>>(new Set());
+  const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
+  const [savingNames, setSavingNames] = useState(false);
+  const [namesSaved, setNamesSaved] = useState(false);
 
   const captureRef = useRef<MeetingCapture | null>(null);
   const recorderRef = useRef<ContinuousRecorder | null>(null);
@@ -55,6 +72,7 @@ export function MeetingPanel() {
 
   async function start() {
     setSummary(""); setTranscript(""); setPreview(""); setUtterances([]); setNote(null);
+    setDocumentId(null); setCompromissos([]); setAddedTodos(new Set()); setSpeakerNames({}); setNamesSaved(false);
 
     let capture: MeetingCapture;
     try {
@@ -150,11 +168,47 @@ export function MeetingPanel() {
         body: JSON.stringify({ transcript: texto }),
       });
       const d = await r.json();
-      setSummary(r.ok ? d.summary + (d.archived ? "\n\n📎 salvo na sua memória." : "") : "⚠ " + (d.error ?? "falha ao resumir"));
+      if (r.ok) {
+        setSummary(d.summary + (d.archived ? "\n\n📎 salvo na sua memória." : ""));
+        setCompromissos(d.compromissos ?? []);
+        setDocumentId(d.documentId ?? null);
+      } else {
+        setSummary("⚠ " + (d.error ?? "falha ao resumir"));
+      }
     } catch {
       setSummary("⚠ falha ao resumir");
     } finally {
       setPhase("idle");
+    }
+  }
+
+  /** MTG.2: transforma um compromisso extraído da reunião numa tarefa, com um clique. */
+  async function addTodo(c: Compromisso, i: number) {
+    const prazo = parsePrazo(c.prazo);
+    const prazoISO = prazo ? prazo.toISOString() : undefined;
+    const texto = `[Reunião] ${c.descricao}${c.responsavel ? ` (${c.responsavel})` : ""}`;
+    const r = await fetch("/api/todos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: texto, ...(prazoISO ? { dueDate: prazoISO } : {}) }),
+    });
+    if (r.ok) setAddedTodos((s) => new Set(s).add(i));
+  }
+
+  /** B6.5 (versão leve): nomear os locutores desta reunião, sem reconhecimento de voz entre reuniões. */
+  async function saveSpeakerNames() {
+    if (!documentId) return;
+    setSavingNames(true);
+    try {
+      const nonEmpty = Object.fromEntries(Object.entries(speakerNames).filter(([, v]) => v.trim()));
+      const r = await fetch(`/api/meeting/${documentId}/speakers`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ speakers: nonEmpty }),
+      });
+      setNamesSaved(r.ok);
+    } finally {
+      setSavingNames(false);
     }
   }
 
@@ -210,7 +264,9 @@ export function MeetingPanel() {
               </div>
               {utterances.map((u, i) => (
                 <p key={i} className="mb-1">
-                  <span className="font-semibold" style={{ color: "var(--color-gold)" }}>Locutor {u.speaker}:</span> {u.text}
+                  <span className="font-semibold" style={{ color: "var(--color-gold)" }}>
+                    {speakerNames[u.speaker]?.trim() || `Locutor ${u.speaker}`}:
+                  </span> {u.text}
                 </p>
               ))}
             </div>
@@ -220,10 +276,63 @@ export function MeetingPanel() {
             <div className="max-h-24 overflow-y-auto rounded-lg border p-2 text-[11px]" style={boxed}>{transcript}</div>
           )}
 
+          {phase === "idle" && utterances.length > 0 && (
+            <div className="rounded-lg border p-2 text-[11px]" style={boxed}>
+              <div className="mb-1 text-[10px] uppercase tracking-wide" style={dim}>quem é quem (só nesta reunião)</div>
+              <div className="flex flex-col gap-1">
+                {[...new Set(utterances.map((u) => u.speaker))].map((tag) => (
+                  <div key={tag} className="flex items-center gap-2">
+                    <span style={dim}>Locutor {tag}</span>
+                    <Input
+                      size="sm"
+                      placeholder="nome"
+                      value={speakerNames[tag] ?? ""}
+                      onChange={(e) => { setSpeakerNames((s) => ({ ...s, [tag]: e.target.value })); setNamesSaved(false); }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={saveSpeakerNames}
+                disabled={savingNames || !documentId}
+                className="mt-2 rounded-lg border px-2 py-1 text-[11px] disabled:opacity-50"
+                style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}
+              >
+                {savingNames ? "salvando…" : namesSaved ? "✓ nomes salvos" : "salvar nomes"}
+              </button>
+            </div>
+          )}
+
+          {compromissos.length > 0 && (
+            <div className="rounded-lg border p-2 text-[11px]" style={boxed}>
+              <div className="mb-1 text-[10px] uppercase tracking-wide" style={dim}>compromissos identificados</div>
+              <ul className="flex flex-col gap-1">
+                {compromissos.map((c, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <button
+                      onClick={() => addTodo(c, i)}
+                      disabled={addedTodos.has(i)}
+                      title="adicionar como tarefa"
+                      className="mt-0.5 shrink-0 rounded border px-1.5 text-[11px] disabled:opacity-40"
+                      style={{ borderColor: "var(--color-line)", color: addedTodos.has(i) ? "var(--color-gold)" : "var(--color-ink-dim)" }}
+                    >
+                      {addedTodos.has(i) ? "✓" : "+"}
+                    </button>
+                    <span>
+                      {applySpeakerNames(c.descricao, speakerNames)}
+                      {c.responsavel && <span style={dim}> · {applySpeakerNames(c.responsavel, speakerNames)}</span>}
+                      {c.prazo && <span style={dim}> · prazo {c.prazo}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {summary && (
             <div className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg border p-2 text-[11px]"
               style={{ borderColor: "color-mix(in oklab, var(--color-gold) 40%, var(--color-line))", color: "var(--color-ink)" }}>
-              {summary}
+              {applySpeakerNames(summary, speakerNames)}
             </div>
           )}
         </div>

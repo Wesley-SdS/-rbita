@@ -32,6 +32,14 @@ export * from "./event-schema";
 export * from "./rule-schema";
 // Configuração por ferramenta (ligada/desligada, risco sobrescrito).
 export * from "./tool-schema";
+// Reuniões: dedup de aviso de agenda + cursor do watch de e-mail (Onda 2).
+export * from "./meeting-schema";
+// A casa: Home Assistant, cômodos, entidades, risco por domínio, pessoas (Onda 3).
+export * from "./home-schema";
+// Canais: WhatsApp configurável pela UI, sem env fixo (Onda 4).
+export * from "./channels-schema";
+// Câmeras: cadastro + eventos pontuais de detecção, sem vídeo contínuo (Onda 5).
+export * from "./camera-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {

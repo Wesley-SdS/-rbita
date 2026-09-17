@@ -4,9 +4,11 @@ import { db } from "@orbita/db";
 import { actionQueue } from "@orbita/db/action-schema";
 import { toolConfig } from "@orbita/db/tool-schema";
 import { connectedProviders } from "../connectors/store";
+import { getHaConnection } from "../home/connection";
+import { whatsappConfigured } from "../connectors/whatsapp";
 import { settings } from "../settings";
 import {
-  availableFor, effectiveRisk, isEnabled, isToolRisk, listRegisteredTools, selectRelevant, toToolSet,
+  availableFor, effectiveRisk, getTool, isEnabled, isToolRisk, listRegisteredTools, needsApproval, selectRelevant, summaryFor, toToolSet,
   type Enqueue, type ToolOverride, type ToolOverrides, type ToolRisk,
 } from "./registry";
 
@@ -23,6 +25,9 @@ import "./domains/google";
 import "./domains/notion";
 import "./domains/slack";
 import "./domains/whatsapp";
+import "./domains/casa";
+import "./domains/teams";
+import "./domains/camera";
 
 export * from "./registry";
 
@@ -62,7 +67,10 @@ export async function setToolOverride(name: string, patch: { enabled?: boolean; 
 
 /** Catálogo para a tela: tudo que existe, com risco declarado, efetivo e estado. */
 export async function toolCatalog(userId: string) {
-  const [overrides, connected] = await Promise.all([loadToolOverrides(), connectedProviders(userId)]);
+  const [overrides, connected, haConn, waConnected] = await Promise.all([
+    loadToolOverrides(), connectedProviders(userId), getHaConnection(userId), whatsappConfigured(userId),
+  ]);
+  const haConnected = haConn !== null;
   return listRegisteredTools().map((d) => ({
     name: d.name,
     domain: d.domain,
@@ -71,8 +79,8 @@ export async function toolCatalog(userId: string) {
     riskOverride: overrides.get(d.name)?.riskOverride ?? null,
     effectiveRisk: effectiveRisk(d, overrides),
     enabled: isEnabled(d, overrides),
-    requires: d.requires?.connector ?? (d.requires?.available ? "env" : null),
-    available: availableFor([d], { connected, overrides }).length === 1,
+    requires: d.requires?.connector ?? (d.requires?.homeAssistant ? "home_assistant" : d.requires?.whatsapp ? "whatsapp" : d.requires?.available ? "env" : null),
+    available: availableFor([d], { connected, haConnected, whatsappConnected: waConnected, overrides }).length === 1,
   }));
 }
 
@@ -96,8 +104,53 @@ export function enqueueFor(userId: string): Enqueue {
  * selecionadas por relevância ao pedido, com o gate derivado do risco efetivo.
  */
 export async function buildToolSet(userId: string, query = ""): Promise<ToolSet> {
-  const [overrides, connected, max] = await Promise.all([loadToolOverrides(), connectedProviders(userId), settings.get("tools.maxPerTurn")]);
-  const usable = availableFor(listRegisteredTools(), { connected, overrides });
+  const [overrides, connected, max, haConn, waConnected] = await Promise.all([
+    loadToolOverrides(), connectedProviders(userId), settings.get("tools.maxPerTurn"), getHaConnection(userId), whatsappConfigured(userId),
+  ]);
+  const usable = availableFor(listRegisteredTools(), { connected, haConnected: haConn !== null, whatsappConnected: waConnected, overrides });
   const chosen = selectRelevant(usable, query, max);
   return toToolSet(chosen, { userId }, { overrides, enqueue: enqueueFor(userId) });
+}
+
+/**
+ * Definições cruas (não convertidas em ToolSet do AI SDK) das tools deste
+ * usuário agora — usado pela sessão realtime (Onda 6, B7.2): a OpenAI
+ * Realtime API quer `{ name, description, parameters }` em JSON Schema, não
+ * o wrapper `tool()` do AI SDK. Mesma seleção do chat (ligadas, exigências
+ * atendidas, relevância), sem query porque a sessão de voz não tem "o pedido
+ * deste turno" com antecedência.
+ */
+export async function toolDefsForRealtime(userId: string) {
+  const [overrides, connected, max, haConn, waConnected] = await Promise.all([
+    loadToolOverrides(), connectedProviders(userId), settings.get("tools.maxPerTurn"), getHaConnection(userId), whatsappConfigured(userId),
+  ]);
+  const usable = availableFor(listRegisteredTools(), { connected, haConnected: haConn !== null, whatsappConnected: waConnected, overrides });
+  return selectRelevant(usable, "", max);
+}
+
+/**
+ * Executa (ou enfileira) UMA chamada de função vinda da sessão realtime. O
+ * browser nunca fala com o banco: ele repassa nome+argumentos para cá, e o
+ * gate é DERIVADO DO RISCO exatamente como em `toToolSet` — uma tool
+ * `efeito_externo`/`perigoso` chamada por voz enfileira a proposta em vez de
+ * executar (a resposta falada da Órbita então narra "mandei para aprovação",
+ * de graça, porque o modelo lê o resultado da função — é o B7.7 do briefing:
+ * confirmação falada sem código especial).
+ */
+export async function runRealtimeTool(userId: string, name: string, rawInput: unknown): Promise<unknown> {
+  const def = getTool(name);
+  if (!def) return { erro: `Ferramenta "${name}" não existe.` };
+
+  const [overrides, connected, haConn, waConnected] = await Promise.all([
+    loadToolOverrides(), connectedProviders(userId), getHaConnection(userId), whatsappConfigured(userId),
+  ]);
+  const usable = availableFor([def], { connected, haConnected: haConn !== null, whatsappConnected: waConnected, overrides });
+  if (usable.length === 0) return { erro: `Ferramenta "${name}" não está disponível agora.` };
+
+  const parsed = def.inputSchema.safeParse(rawInput ?? {});
+  if (!parsed.success) return { erro: "Entrada inválida para a ferramenta." };
+
+  const risk = effectiveRisk(def, overrides);
+  if (needsApproval(risk)) return enqueueFor(userId)(def, parsed.data, summaryFor(def, parsed.data));
+  return def.run(parsed.data, { userId });
 }

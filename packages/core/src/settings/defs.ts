@@ -39,6 +39,9 @@ export const SETTING_GROUPS = {
   resilience: { label: "Resiliência", order: 50 },
   routines: { label: "Rotinas e regras", order: 60 },
   tools: { label: "Ferramentas", order: 62 },
+  meetings: { label: "Reuniões e agenda", order: 63 },
+  home: { label: "Casa (Home Assistant)", order: 64 },
+  cameras: { label: "Câmeras", order: 64.5 },
   events: { label: "Eventos", order: 65 },
   connectors: { label: "Conectores", order: 70 },
   finance: { label: "Finanças", order: 75 },
@@ -92,7 +95,9 @@ export const SETTING_DEFS = {
   // ── motor do chat (api/chat/route.ts) ──
   "chat.historyWindow": num("chat", "Janela de histórico", "Quantas mensagens anteriores da conversa vão para o modelo a cada turno.", 24, 1, 200, { unit: "mensagens" }),
   "chat.ragTimeoutMs": num("chat", "Timeout do RAG", "Tempo máximo que o turno espera pela busca de contexto antes de começar a responder sem ela.", 3500, 0, 15000, { unit: "ms" }),
-  "chat.maxSteps": num("chat", "Teto de passos de ferramenta", "Quantas chamadas de ferramenta encadeadas o modelo pode fazer num turno. Um pedido como \"estou indo dormir\" pode precisar de mais.", 5, 1, 25),
+  // B3.10: 5 não bastava para "estou indo dormir" (apagar luzes de vários
+  // cômodos + trancar + ajustar clima = 5+ chamadas). Default subiu para 12.
+  "chat.maxSteps": num("chat", "Teto de passos de ferramenta", "Quantas chamadas de ferramenta encadeadas o modelo pode fazer num turno. Uma rotina de casa (\"estou indo dormir\") pode precisar de várias.", 12, 1, 40),
   "chat.maxRetries": num("chat", "Tentativas por provedor", "Retentativas do próprio provedor antes de passar para o próximo da cadeia.", 2, 0, 5),
   "chat.outputCapSmall": num("chat", "Resposta máxima (modelo leve)", "Tokens de saída para modelos de porte pequeno.", 1024, 128, 32768, { unit: "tokens" }),
   "chat.outputCapMedium": num("chat", "Resposta máxima (modelo médio)", "Tokens de saída para modelos de porte médio.", 2048, 128, 32768, { unit: "tokens" }),
@@ -142,6 +147,32 @@ export const SETTING_DEFS = {
   "routines.model": text("routines", "Modelo das rotinas", "Chave do modelo usado por rotinas e regras (vazio = padrão local).", ""),
   "routines.rateLimitPerMinute": num("routines", "Execuções manuais por minuto", "Limite do botão \"rodar agora\".", 6, 1, 120, { unit: "/min" }),
 
+  // ── casa (Home Assistant, packages/core/src/home/*, apps/api) ──
+  "home.entitySyncMinutes": num("home", "Sincronizar entidades a cada", "De quanto em quanto tempo o processo persistente relê os estados e nomes das entidades do Home Assistant (para a busca semântica e o índice de estado).", 5, 1, 60, { unit: "min" }),
+  "home.entityTopK": num("home", "Entidades por busca", "Quantas entidades a busca semântica (\"a luz da sala\") devolve por consulta.", 5, 1, 30),
+  "home.entityMinSim": num("home", "Similaridade mínima da busca de entidade", "Abaixo disso a Órbita não arrisca um palpite de qual dispositivo você quis dizer.", 0.4, 0, 1, { step: 0.01 }),
+  "home.wsReconnectMs": num("home", "Reconexão do WebSocket do HA", "Espera antes de tentar reconectar ao Home Assistant depois de uma queda de conexão.", 5000, 500, 120000, { unit: "ms" }),
+
+  // ── câmeras (packages/core/src/cameras/*, apps/api) ──
+  "cameras.narrationMode": sel(
+    "cameras",
+    "Narração de câmera",
+    "Sob demanda só descreve a cena quando você pergunta (\"o que está acontecendo na sala?\"). Automática também narra todo evento de segurança, o que gasta mais chamadas de visão.",
+    "sob_demanda",
+    [
+      { value: "sob_demanda", label: "Sob demanda (padrão)" },
+      { value: "automatica", label: "Automática em todo evento" },
+    ],
+  ),
+  "cameras.retentionDays": num("cameras", "Retenção de eventos de câmera", "Eventos (e o snapshot guardado com eles) mais antigos que isso são apagados.", 14, 1, 90, { unit: "dias" }),
+  "cameras.snapshotMaxKB": num("cameras", "Tamanho máximo do snapshot", "Acima disso o evento é aceito mas sem a imagem, para não estourar o banco com um webhook mal configurado.", 400, 50, 4000, { unit: "KB" }),
+
+  // ── reuniões e agenda (packages/core/src/meetings/*, apps/api) ──
+  "meetings.calendarPollMinutes": num("meetings", "Verificar agenda a cada", "De quanto em quanto tempo o processo persistente olha a Google Agenda em busca de reuniões próximas. Sem URL pública ainda, é polling, não push do Google.", 5, 1, 60, { unit: "min" }),
+  "meetings.warnMinutesBefore": num("meetings", "Avisar reunião com antecedência de", "Quantos minutos antes do início a Órbita avisa sobre uma reunião.", 15, 1, 120, { unit: "min" }),
+  "meetings.gmailPollMinutes": num("meetings", "Verificar e-mail importante a cada", "De quanto em quanto tempo o processo persistente procura e-mails novos marcados como importantes pelo próprio Gmail.", 5, 1, 60, { unit: "min" }),
+  "meetings.mapChunkChars": num("meetings", "Tamanho do bloco no resumo longo", "Reunião maior que o limite de resumo direto é dividida em blocos deste tamanho, resumida por bloco e depois consolidada (mapa-redução).", 15000, 2000, 100000, { unit: "chars" }),
+
   // ── eventos (apps/api) ──
   "events.pollMs": num("events", "Intervalo de leitura de eventos", "Frequência com que o processo persistente lê eventos novos gravados por outros processos.", 2000, 500, 60000, { unit: "ms" }),
   "events.retentionDays": num("events", "Retenção da trilha de eventos", "Eventos mais antigos que isso são apagados.", 30, 1, 3650, { unit: "dias" }),
@@ -156,7 +187,7 @@ export const SETTING_DEFS = {
 
   // ── limites de entrada ──
   "limits.sttMaxMb": num("limits", "Áudio máximo para transcrição", "Tamanho máximo aceito em /api/stt.", 120, 1, 1024, { unit: "MB" }),
-  "limits.summaryMaxChars": num("limits", "Transcrição máxima no resumo", "Acima disso a reunião é cortada antes de resumir (com aviso).", 100000, 1000, 2000000, { unit: "chars" }),
+  "limits.summaryMaxChars": num("limits", "Limiar do resumo em blocos", "Até este tamanho a reunião é resumida em uma passada só. Acima disso, o resumo vira mapa-redução (por blocos, depois consolidado) em vez de cortar a transcrição.", 100000, 1000, 2000000, { unit: "chars" }),
 
   // ── grafo (api/knowledge/graph) ──
   "graph.nodeLimit": num("graph", "Nós no grafo", "Quantos trechos entram no grafo de conhecimento.", 60, 5, 500),

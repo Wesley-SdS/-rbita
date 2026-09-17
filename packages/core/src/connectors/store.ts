@@ -31,7 +31,7 @@ interface TokenResponse {
   bot_id?: string;
 }
 
-async function postToken(url: string, body: URLSearchParams, headers: Record<string, string> = {}): Promise<TokenResponse> {
+async function postToken(providerId: string, url: string, body: URLSearchParams, headers: Record<string, string> = {}): Promise<TokenResponse> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", ...headers },
@@ -39,12 +39,9 @@ async function postToken(url: string, body: URLSearchParams, headers: Record<str
   });
   const json = (await res.json()) as TokenResponse & { error?: string; ok?: boolean };
   if (!res.ok || json.error || json.ok === false) {
-    throw new Error(`Falha ao obter token (${id(url)}): ${json.error ?? res.status}`);
+    throw new Error(`Falha ao obter token (${providerId}): ${json.error ?? res.status}`);
   }
   return json;
-}
-function id(url: string) {
-  return url.includes("google") ? "google" : url.includes("notion") ? "notion" : "slack";
 }
 
 /** Troca o `code` do callback por tokens e persiste (criptografado). */
@@ -65,7 +62,7 @@ export async function exchangeCodeAndSave(cid: ConnectorId, userId: string, code
       ? { Authorization: `Basic ${Buffer.from(`${def.clientId}:${def.clientSecret}`).toString("base64")}` }
       : {};
 
-  const tok = await postToken(def.tokenUrl, body, headers);
+  const tok = await postToken(cid, def.tokenUrl, body, headers);
 
   // Slack: o token do usuário vem em authed_user.access_token.
   const accessToken = cid === "slack" ? tok.authed_user?.access_token ?? tok.access_token : tok.access_token;
@@ -106,6 +103,7 @@ export async function refreshConnectionToken(cid: ConnectorId, userId: string, r
   const def = getConnector(cid);
   if (!def?.clientId || !def.clientSecret) throw new Error(`Conector ${cid} não configurado`);
   const tok = await postToken(
+    cid,
     def.tokenUrl,
     new URLSearchParams({
       grant_type: "refresh_token",
@@ -143,6 +141,12 @@ export async function getAccessToken(cid: ConnectorId, userId: string): Promise<
     }
   }
   return decryptSecret(row.accessTokenEnc);
+}
+
+/** IDs de todos os usuários que conectaram este provedor (para laços do processo persistente). */
+export async function usersConnected(cid: ConnectorId): Promise<string[]> {
+  const rows = await db.select({ userId: connection.userId }).from(connection).where(eq(connection.provider, cid));
+  return rows.map((r) => r.userId);
 }
 
 /** Conjunto de conectores que o usuário conectou (para expor as tools certas). */

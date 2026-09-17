@@ -31,8 +31,20 @@ import * as health from "./health";
 import * as voiceConfig from "./voice-config";
 import * as realtimeConfig from "./realtime-config";
 import * as realtimeSession from "./realtime-session";
+import * as realtimeTool from "./realtime-tool";
 import * as vision from "./vision";
 import * as meetingSummarize from "./meeting-summarize";
+import * as meetingSpeakers from "./meeting-speakers";
+import * as homeConnection from "./home-connection";
+import * as homeRooms from "./home-rooms";
+import * as homeEntities from "./home-entities";
+import * as homeDomainRisk from "./home-domain-risk";
+import * as homePersons from "./home-persons";
+import * as homePersonAccess from "./home-person-access";
+import * as channelsWhatsapp from "./channels-whatsapp";
+import * as cameras from "./cameras";
+import * as cameraEvents from "./camera-events";
+import * as cameraIngest from "./camera-ingest";
 import * as ingest from "./ingest";
 import * as finance from "./finance";
 import * as financeReceipt from "./finance-receipt";
@@ -61,6 +73,17 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/knowledge/graph", knowledgeGraph),
   webRoute("api/ingest", ingest),
   webRoute("api/meeting/summarize", meetingSummarize),
+  webRoute("api/meeting/:id/speakers", meetingSpeakers),
+  webRoute("api/home/connection", homeConnection),
+  webRoute("api/home/rooms", homeRooms),
+  webRoute("api/home/entities", homeEntities),
+  webRoute("api/home/domain-risk", homeDomainRisk),
+  webRoute("api/home/persons", homePersons),
+  webRoute("api/home/person-access", homePersonAccess),
+  webRoute("api/channels/whatsapp", channelsWhatsapp),
+  webRoute("api/cameras", cameras),
+  webRoute("api/cameras/events", cameraEvents),
+  webRoute("api/cameras/ingest", cameraIngest),
   webRoute("api/vision", vision),
   webRoute("api/models", models),
   // dia a dia
@@ -95,5 +118,6 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/voice-config", voiceConfig),
   webRoute("api/realtime/config", realtimeConfig),
   webRoute("api/realtime/session", realtimeSession),
+  webRoute("api/realtime/tool", realtimeTool),
   webRoute("api/health", health),
 ];

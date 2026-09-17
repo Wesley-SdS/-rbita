@@ -5,6 +5,7 @@ import { mcpServer } from "@orbita/db/extension-schema";
 import { actionQueue } from "@orbita/db/action-schema";
 import { log } from "../observability/logger";
 import { assertPublicUrl } from "../net/ssrf";
+import { events } from "../events/index";
 import { isToolRisk, needsApproval, type ToolRisk } from "../tools/registry";
 
 type McpClient = { close: () => Promise<void>; callTool: (a: { name: string; arguments?: Record<string, unknown> }) => Promise<{ content: unknown }> };
@@ -72,6 +73,9 @@ export async function buildMcpTools(userId: string): Promise<{ tools: ToolSet; c
                 }
               : async (args) => {
                   const res = await client.callTool({ name: t.name, arguments: args as Record<string, unknown> });
+                  // B7.2: MCP roda sem o mesmo escrutínio das tools do registro (é
+                  // código de fora); mesmo sem gate, a execução deixa rastro.
+                  void events.emit("mcp.tool_executed", { server: s.name, tool: t.name }, { userId }).catch(() => {});
                   return res.content;
                 },
           });
@@ -104,6 +108,7 @@ export async function callMcpTool(userId: string, payload: Record<string, unknow
   const client = await connect(s.url, s.headers as Record<string, string> | null);
   try {
     const res = await client.callTool({ name: toolName, arguments: args });
+    void events.emit("mcp.tool_executed", { server: s.name, tool: toolName, approved: true }, { userId }).catch(() => {});
     return typeof res.content === "string" ? res.content : JSON.stringify(res.content).slice(0, 2000);
   } finally {
     await client.close().catch(() => {});

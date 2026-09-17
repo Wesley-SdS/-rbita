@@ -8,6 +8,8 @@ export interface RealtimeCallbacks {
   onState?: (state: "connecting" | "listening" | "speaking" | "closed") => void;
   onError?: (msg: string) => void;
   onTranscript?: (role: "user" | "assistant", text: string) => void;
+  /** uma tool foi chamada durante a conversa por voz (B7.2 — ver packages/core/src/tools/index.ts:runRealtimeTool). */
+  onToolCall?: (name: string, result: unknown) => void;
 }
 
 export class RealtimeSession {
@@ -15,6 +17,8 @@ export class RealtimeSession {
   private stream: MediaStream | null = null;
   private audioEl: HTMLAudioElement | null = null;
   private dc: RTCDataChannel | null = null;
+  /** call_id → nome da função, preenchido quando o item aparece; os argumentos chegam depois, em partes. */
+  private pendingCalls = new Map<string, string>();
 
   constructor(private cb: RealtimeCallbacks = {}) {}
 
@@ -61,7 +65,14 @@ export class RealtimeSession {
   }
 
   private handleEvent(raw: string) {
-    let ev: { type?: string; transcript?: string; delta?: string };
+    let ev: {
+      type?: string;
+      transcript?: string;
+      delta?: string;
+      call_id?: string;
+      arguments?: string;
+      item?: { type?: string; call_id?: string; name?: string };
+    };
     try { ev = JSON.parse(raw); } catch { return; }
     const t = ev.type ?? "";
     // aceita tanto os nomes da fase beta quanto os do GA (gpt-realtime)
@@ -71,9 +82,37 @@ export class RealtimeSession {
       if (ev.transcript) this.cb.onTranscript?.("assistant", ev.transcript);
     } else if (t === "conversation.item.input_audio_transcription.completed") {
       if (ev.transcript) this.cb.onTranscript?.("user", ev.transcript);
+    } else if (t === "response.output_item.added" && ev.item?.type === "function_call" && ev.item.call_id && ev.item.name) {
+      // B7.2: o nome da função chega aqui; os argumentos chegam depois, em partes, num evento próprio.
+      this.pendingCalls.set(ev.item.call_id, ev.item.name);
+    } else if (t === "response.function_call_arguments.done" && ev.call_id) {
+      const name = this.pendingCalls.get(ev.call_id);
+      this.pendingCalls.delete(ev.call_id);
+      if (name) void this.executeFunctionCall(ev.call_id, name, ev.arguments ?? "{}");
     } else if (t === "error") {
       this.cb.onError?.("erro na sessão realtime");
     }
+  }
+
+  /**
+   * Repassa a function call para o backend (`/api/realtime/tool`, que roda o
+   * MESMO gate do chat de texto — o browser nunca executa uma tool sozinho)
+   * e devolve o resultado pela sessão para o modelo continuar falando.
+   */
+  private async executeFunctionCall(callId: string, name: string, argsJson: string) {
+    let args: unknown = {};
+    try { args = JSON.parse(argsJson); } catch { /* argumentos vazios ou inválidos viram {} */ }
+    let output: unknown;
+    try {
+      const r = await fetch("/api/realtime/tool", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, arguments: args }) });
+      const d = await r.json().catch(() => ({}));
+      output = r.ok ? d.result : { erro: d.error ?? "falha ao executar" };
+    } catch {
+      output = { erro: "falha ao contatar o servidor" };
+    }
+    this.dc?.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify(output) } }));
+    this.dc?.send(JSON.stringify({ type: "response.create" }));
+    this.cb.onToolCall?.(name, output);
   }
 
   stop() {
@@ -85,6 +124,7 @@ export class RealtimeSession {
     this.pc = null;
     this.stream = null;
     this.dc = null;
+    this.pendingCalls.clear();
     this.cb.onState?.("closed");
   }
 

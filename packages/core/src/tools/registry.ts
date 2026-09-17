@@ -34,7 +34,7 @@ export interface ToolDef<I extends z.ZodTypeAny = z.ZodTypeAny> {
   /** palavras que ajudam a seleção por relevância a cada turno */
   keywords?: string[];
   /** só entra no ToolSet se a exigência valer para o usuário */
-  requires?: { connector?: ConnectorId; available?: () => boolean };
+  requires?: { connector?: ConnectorId; homeAssistant?: boolean; whatsapp?: boolean; available?: () => boolean };
   /** a execução REAL. Para risco com gate, só roda após aprovação (POST /api/actions). */
   run: (input: z.infer<I>, ctx: ToolContext) => Promise<unknown>;
   /** resumo legível da proposta na fila de aprovação */
@@ -107,10 +107,15 @@ export function isEnabled(def: AnyToolDef, overrides?: ToolOverrides): boolean {
 }
 
 /** Tools que valem para este usuário agora: ligadas e com exigências atendidas. */
-export function availableFor(defs: AnyToolDef[], ctx: { connected: ReadonlySet<ConnectorId>; overrides?: ToolOverrides }): AnyToolDef[] {
+export function availableFor(
+  defs: AnyToolDef[],
+  ctx: { connected: ReadonlySet<ConnectorId>; haConnected?: boolean; whatsappConnected?: boolean; overrides?: ToolOverrides },
+): AnyToolDef[] {
   return defs.filter((d) => {
     if (!isEnabled(d, ctx.overrides)) return false;
     if (d.requires?.connector && !ctx.connected.has(d.requires.connector)) return false;
+    if (d.requires?.homeAssistant && !ctx.haConnected) return false;
+    if (d.requires?.whatsapp && !ctx.whatsappConnected) return false;
     if (d.requires?.available && !d.requires.available()) return false;
     return true;
   });

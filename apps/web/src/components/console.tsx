@@ -41,6 +41,9 @@ const PushToggle = dynamic(() => import("@/components/side-panels").then((m) => 
 const RulesPanel = dynamic(() => import("@/components/rules-panel").then((m) => m.RulesPanel), { ssr: false, loading: PanelSkeleton });
 const SettingsPanel = dynamic(() => import("@/components/settings-panel").then((m) => m.SettingsPanel), { ssr: false, loading: PanelSkeleton });
 const ToolsPanel = dynamic(() => import("@/components/tools-panel").then((m) => m.ToolsPanel), { ssr: false, loading: PanelSkeleton });
+const HomePanel = dynamic(() => import("@/components/home-panel").then((m) => m.HomePanel), { ssr: false, loading: PanelSkeleton });
+const HomePeoplePanel = dynamic(() => import("@/components/home-people-panel").then((m) => m.HomePeoplePanel), { ssr: false, loading: PanelSkeleton });
+const CameraPanel = dynamic(() => import("@/components/camera-panel").then((m) => m.CameraPanel), { ssr: false, loading: PanelSkeleton });
 
 // rótulos amigáveis para a timeline de atividade (o que a Órbita está fazendo).
 const TOOL_LABELS: Record<string, string> = {
@@ -61,6 +64,8 @@ const TOOL_LABELS: Record<string, string> = {
   listar_canais_slack: "💬 Listando canais do Slack",
   enviar_slack: "💬 Enviando no Slack",
   enviar_whatsapp: "📱 Enviando WhatsApp",
+  casa_listar_cameras: "📷 Listando câmeras",
+  casa_ver_camera: "📷 Vendo a câmera",
 };
 const toolLabel = (n: string) => TOOL_LABELS[n] ?? `⚙ ${n}`;
 
@@ -79,6 +84,9 @@ const BLOCKS = [
   { id: "arquivos", label: "Arquivos" },
   { id: "extensoes", label: "Extensões" },
   { id: "conectores", label: "Conectores" },
+  { id: "casa", label: "Casa" },
+  { id: "pessoas-casa", label: "Pessoas da casa" },
+  { id: "cameras", label: "Câmeras" },
   { id: "proatividade", label: "Proatividade" },
   { id: "regras", label: "Regras proativas" },
   { id: "ferramentas", label: "Ferramentas" },
@@ -498,6 +506,9 @@ export function Console({
         <Block id="extensoes" hidden={hidden} toggle={toggle}><ExtensionsPanel /></Block>
         <ActionsPanel />
         <Block id="conectores" hidden={hidden} toggle={toggle}><ConnectorsPanel /></Block>
+        <Block id="casa" hidden={hidden} toggle={toggle}><HomePanel /></Block>
+        <Block id="pessoas-casa" hidden={hidden} toggle={toggle}><HomePeoplePanel /></Block>
+        <Block id="cameras" hidden={hidden} toggle={toggle}><CameraPanel /></Block>
         <Block id="proatividade" hidden={hidden} toggle={toggle}><RoutinesPanel /></Block>
         <Block id="regras" hidden={hidden} toggle={toggle}><RulesPanel /></Block>
         <Block id="ferramentas" hidden={hidden} toggle={toggle}><ToolsPanel /></Block>

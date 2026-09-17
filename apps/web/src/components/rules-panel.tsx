@@ -11,11 +11,27 @@ interface Rule {
   id: string; name: string; enabled: boolean; builtinKey: string | null; lastFiredAt: string | null;
   trigger: { kind: "event"; type: string } | { kind: "cron"; expr: string };
   conditions: { path: string; op: string; value?: unknown }[];
-  actions: ({ kind: "notify"; title: string; body: string } | { kind: "prompt"; prompt: string })[];
+  actions: (
+    | { kind: "notify"; title: string; body: string }
+    | { kind: "prompt"; prompt: string }
+    | { kind: "whatsapp"; to: string; text: string }
+    | { kind: "teams_chat"; chatId: string; text: string }
+    | { kind: "teams_canal"; equipeId: string; canalId: string; text: string }
+  )[];
 }
+const ACTION_LABEL: Record<Rule["actions"][number]["kind"], string> = {
+  notify: "Notificar (use {{payload.campo}})",
+  prompt: "Perguntar ao modelo, com ferramentas",
+  whatsapp: "Enviar WhatsApp (pede aprovação)",
+  teams_chat: "Enviar no Teams, chat (pede aprovação)",
+  teams_canal: "Enviar no Teams, canal (pede aprovação)",
+};
 
 const OPS = ["eq", "neq", "gt", "gte", "lt", "lte", "contains", "exists", "not_exists"];
-const EVENT_HINTS = ["finance.bill_due", "routine.finished", "connector.token_refreshed", "connector.refresh_failed", "setting.changed", "action.executed"];
+const EVENT_HINTS = [
+  "finance.bill_due", "routine.finished", "connector.token_refreshed", "connector.refresh_failed", "setting.changed", "action.executed",
+  "calendar.meeting_upcoming", "gmail.important_received", "home.state_changed", "camera.detected",
+];
 const dim = { color: "var(--color-ink-dim)" } as const;
 
 export function RulesPanel() {
@@ -154,21 +170,46 @@ function RuleEditor({ value, onChange, onSave, onCancel, busy }: { value: Partia
         <span className="flex gap-2">
           <button type="button" className="underline" style={dim} onClick={() => set({ actions: [...acts, { kind: "notify", title: "", body: "" }] })}>+ notificar</button>
           <button type="button" className="underline" style={dim} onClick={() => set({ actions: [...acts, { kind: "prompt", prompt: "" }] })}>+ perguntar ao modelo</button>
+          <button type="button" className="underline" style={dim} onClick={() => set({ actions: [...acts, { kind: "whatsapp", to: "", text: "" }] })}>+ WhatsApp</button>
+          <button type="button" className="underline" style={dim} onClick={() => set({ actions: [...acts, { kind: "teams_chat", chatId: "", text: "" }] })}>+ Teams</button>
         </span></div>
-      {acts.map((a, i) => (
-        <div key={i} className="flex flex-col gap-1 rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
-          <div className="flex items-center justify-between"><span style={dim}>{a.kind === "notify" ? "Notificar (use {{payload.campo}})" : "Perguntar ao modelo, com ferramentas"}</span>
-            <button type="button" style={dim} onClick={() => set({ actions: acts.filter((_, j) => j !== i) })}>×</button></div>
-          {a.kind === "notify" ? (
-            <>
-              <Input placeholder="Título" value={a.title} onChange={(e) => set({ actions: acts.map((x, j) => (j === i && x.kind === "notify" ? { ...x, title: e.target.value } : x)) })} />
-              <Textarea placeholder="Corpo" value={a.body} onChange={(e) => set({ actions: acts.map((x, j) => (j === i && x.kind === "notify" ? { ...x, body: e.target.value } : x)) })} />
-            </>
-          ) : (
-            <Textarea placeholder="O que pedir ao modelo" value={a.prompt} onChange={(e) => set({ actions: acts.map((x, j) => (j === i && x.kind === "prompt" ? { ...x, prompt: e.target.value } : x)) })} />
-          )}
-        </div>
-      ))}
+      {acts.map((a, i) => {
+        const upd = (patch: Partial<typeof a>) => set({ actions: acts.map((x, j) => (j === i ? ({ ...x, ...patch } as typeof x) : x)) });
+        return (
+          <div key={i} className="flex flex-col gap-1 rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
+            <div className="flex items-center justify-between"><span style={dim}>{ACTION_LABEL[a.kind]}</span>
+              <button type="button" style={dim} onClick={() => set({ actions: acts.filter((_, j) => j !== i) })}>×</button></div>
+            {a.kind === "notify" && (
+              <>
+                <Input placeholder="Título" value={a.title} onChange={(e) => upd({ title: e.target.value })} />
+                <Textarea placeholder="Corpo" value={a.body} onChange={(e) => upd({ body: e.target.value })} />
+              </>
+            )}
+            {a.kind === "prompt" && (
+              <Textarea placeholder="O que pedir ao modelo" value={a.prompt} onChange={(e) => upd({ prompt: e.target.value })} />
+            )}
+            {a.kind === "whatsapp" && (
+              <>
+                <Input placeholder="Número (ex.: 5511999998888)" value={a.to} onChange={(e) => upd({ to: e.target.value })} />
+                <Textarea placeholder="Texto (use {{payload.campo}})" value={a.text} onChange={(e) => upd({ text: e.target.value })} />
+              </>
+            )}
+            {a.kind === "teams_chat" && (
+              <>
+                <Input placeholder="id do chat (Teams > listar_conversas_teams)" value={a.chatId} onChange={(e) => upd({ chatId: e.target.value })} />
+                <Textarea placeholder="Texto (use {{payload.campo}})" value={a.text} onChange={(e) => upd({ text: e.target.value })} />
+              </>
+            )}
+            {a.kind === "teams_canal" && (
+              <>
+                <Input placeholder="id da equipe" value={a.equipeId} onChange={(e) => upd({ equipeId: e.target.value })} />
+                <Input placeholder="id do canal" value={a.canalId} onChange={(e) => upd({ canalId: e.target.value })} />
+                <Textarea placeholder="Texto (use {{payload.campo}})" value={a.text} onChange={(e) => upd({ text: e.target.value })} />
+              </>
+            )}
+          </div>
+        );
+      })}
 
       <div className="flex gap-2">
         <Button onClick={onSave} disabled={busy}>{busy ? "…" : "Salvar"}</Button>

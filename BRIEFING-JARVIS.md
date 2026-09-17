@@ -164,6 +164,54 @@ export VOICE_MODELS_DIR="C:/Users/Users/Documents/github/orbita/apps/voice/model
 > com gate derivado do risco (25 tools, catálogo com tela, MCP com gate por padrão); cadastro
 > fechado após o primeiro usuário. Decisões do dono registradas em `CLAUDE.md` §2 e na memória
 > da sessão. O que segue vale como histórico.
+>
+> **Atualização 2026-09-17 (fim da Onda 2):** Calendar watch e Gmail watch por polling (sem URL
+> pública ainda), aviso pré-reunião com contexto do RAG, extração de compromissos com criação de
+> tarefa em um clique, resumo em mapa-redução para reunião longa, e nomear locutor pós-reunião
+> (versão leve, sem voiceprint). `generateObject` do AI SDK não funciona contra Ollama; use
+> `generateStructured` (`packages/core/src/meetings/structured.ts`). B6.3 (streaming STT) deixado
+> de fora, de propósito: depende da mesma URL pública do B9.1. Detalhe em `CLAUDE.md` §8-9.
+>
+> **Atualização 2026-09-16 (fim da Onda 3, a casa):** Home Assistant como ferramenta (REST +
+> WebSocket com reconexão), busca semântica de entidade (`packages/core/src/home/entities.ts`),
+> cômodo/pessoa/permissão por cômodo cadastrados pela tela, risco por domínio configurável (decisão
+> do dono: fechadura/alarme/portão/garagem no gate; luz/tomada/mídia/clima direto). `assertPublicUrl`
+> ganhou uma exceção estreita (`assertLocalOrPublicUrl`) só para o HA, ainda bloqueando metadado de
+> nuvem e faixas reservadas. `chat.maxSteps` subiu de 5 para 12 (uma rotina de casa encadeia várias
+> chamadas).
+>
+> **Atualização 2026-09-16 (fim da Onda 4, canais):** Teams (Graph API, escopo mínimo de chat/canal),
+> roteamento de notificação pela própria engine de regras (ações `whatsapp`/`teams_chat`/`teams_canal`,
+> sempre enfileiradas, nunca diretas). WhatsApp (CH.2) teve o escopo reduzido por uma limitação real:
+> não dá para fazer OAuth por usuário sem revisão de app da Meta (Embedded Signup); o que ficou é um
+> cadastro de token/phone_id pela tela, sem hardcode, mas ainda um único WhatsApp por conta (não por
+> pessoa da casa). Trilha de auditoria (B7.2) cobrindo memória (salvar/esquecer) e chamadas MCP.
+>
+> **Atualização 2026-09-16 (fim da Onda 5, câmeras):** cadastro de câmera pela tela (sem lista fixa),
+> cada uma com um token de webhook próprio; ingestão de evento pontual (`POST /api/cameras/ingest`,
+> pensado para o Frigate ou qualquer script equivalente) grava o evento e emite no event bus — quem
+> decide se é alerta de segurança é a REGRA que o dono cadastrar sobre `camera.detected`, nunca o
+> LLM. Narração é sob demanda por padrão (decisão do dono), via VLM sobre o último keyframe com
+> imagem, nunca vídeo contínuo. Retenção configurável (`cameras.retentionDays`), e desligar a câmera
+> é o opt-out por cômodo. **Gesto (MediaPipe/pose) NÃO foi implementado**: é um pipeline de vídeo
+> separado da narração, e não há hardware de câmera real neste ambiente de dev para validar contra
+> stream de verdade — fica como gap aberto, não como decisão tomada.
+>
+> **Atualização 2026-09-16 (fim da Onda 6, voz ambiente):** a sessão OpenAI Realtime ganhou as
+> MESMAS tools do chat de texto (B7.2): o backend monta `{name, description, parameters}` em JSON
+> Schema (`z.toJSONSchema`, nativo do Zod 4, sem nova dependência) a partir do registro de tools;
+> quando o modelo chama uma função por voz, o browser repassa para `POST /api/realtime/tool`, que
+> roda pelo MESMO gate derivado de risco do chat (`runRealtimeTool` em `packages/core/src/tools/index.ts`)
+> — uma tool arriscada enfileira em vez de executar, e a confirmação falada (B7.7) sai de graça,
+> porque o modelo narra o resultado da função (“mandei para aprovação”) sem código especial. **O que
+> ficou de fora, por depender de hardware ou de um problema maior não resolvido nesta sessão:**
+> identidade de dispositivo/satélite por cômodo (B5.3-B5.5, precisaria de identificação de quem fala,
+> não só de qual cômodo — o mesmo "problema separado e bem maior" do voiceprint citado em §7.3), VAD
+> real com Silero e STT em streaming (B5.1, pipeline de áudio que não dá para validar sem teste de
+> microfone ao vivo), roteamento de áudio por cômodo (B5.10, exige múltiplos endpoints de saída de
+> som) e fazer o wake word local coexistir com o modo realtime (hoje um desliga o outro de propósito,
+> em `use-voice.ts`; os dois disputam o microfone e testar a mudança sem hardware físico seria
+> arriscar quebrar o que já funciona sem conseguir verificar).
 
 
 ### Stack

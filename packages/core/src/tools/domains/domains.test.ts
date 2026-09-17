@@ -5,7 +5,7 @@ import { pesquisar_web, ler_pagina } from "./web-tools";
 import { enviar_whatsapp } from "./whatsapp";
 import { enviar_email, criar_evento } from "./google";
 import { enviar_slack } from "./slack";
-import { needsApproval } from "../registry";
+import { needsApproval, availableFor } from "../registry";
 
 /**
  * Teste de execução por tool (TL.7), com a dependência simulada. As tools que
@@ -67,7 +67,11 @@ describe("tools com efeito externo", () => {
     expect(enviar_email.summarize!({ para: "a@b.c", assunto: "Oi", corpo: "" })).toBe('Enviar e-mail para a@b.c: "Oi"');
     expect(criar_evento.summarize!({ titulo: "Reunião", inicio: "2026-09-17T10:00:00-03:00", fim: "" })).toMatch(/Criar evento "Reunião"/);
   });
-  it("enviar_whatsapp só fica disponível com o token do app configurado", () => {
-    expect(enviar_whatsapp.requires?.available?.()).toBe(false);
+  it("enviar_whatsapp só fica disponível com o token do app configurado (CH.2)", () => {
+    expect(enviar_whatsapp.requires?.whatsapp).toBe(true);
+    const semToken = availableFor([enviar_whatsapp], { connected: new Set(), whatsappConnected: false });
+    const comToken = availableFor([enviar_whatsapp], { connected: new Set(), whatsappConnected: true });
+    expect(semToken).toEqual([]);
+    expect(comToken).toEqual([enviar_whatsapp]);
   });
 });
