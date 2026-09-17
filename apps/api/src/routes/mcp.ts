@@ -6,6 +6,7 @@ import { mcpServer } from "@orbita/db/extension-schema";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { assertPublicUrl, SsrfError } from "@orbita/core/net/ssrf";
+import { ownerOf } from "../http/owner-route";
 
 const Body = z.object({
   name: z.string().min(1).max(60),
@@ -25,8 +26,8 @@ export async function GET(_req: Request, ctx: RouteCtx) {
 }
 
 export async function POST(req: Request, ctx: RouteCtx) {
-  const s = sessionOf(ctx);
-  if (!s) return Response.json({ error: "Não autenticado" }, { status: 401 });
+  const dono = await ownerOf(ctx);
+  if (dono instanceof Response) return dono;
   const p = Body.safeParse(await req.json().catch(() => null));
   if (!p.success) return Response.json({ error: p.error.issues[0]?.message }, { status: 400 });
   // defesa SSRF: rejeita URL que aponta para rede interna já no cadastro
@@ -38,7 +39,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   }
   const [row] = await db
     .insert(mcpServer)
-    .values({ userId: s.user.id, name: p.data.name, url: p.data.url, headers: p.data.headers ?? null })
+    .values({ userId: dono.userId, name: p.data.name, url: p.data.url, headers: p.data.headers ?? null })
     .returning({ id: mcpServer.id });
   return Response.json({ id: row?.id });
 }
@@ -52,23 +53,23 @@ const PatchBody = z.object({
 });
 
 export async function PATCH(req: Request, ctx: RouteCtx) {
-  const s = sessionOf(ctx);
-  if (!s) return Response.json({ error: "Não autenticado" }, { status: 401 });
+  const dono = await ownerOf(ctx);
+  if (dono instanceof Response) return dono;
   const p = PatchBody.safeParse(await req.json().catch(() => null));
   if (!p.success) return Response.json({ error: "Dados inválidos" }, { status: 400 });
   const set: { enabled?: boolean; risk?: string } = {};
   if (p.data.enabled !== undefined) set.enabled = p.data.enabled;
   if (p.data.risk) set.risk = p.data.risk;
   if (!Object.keys(set).length) return Response.json({ error: "Nada para alterar" }, { status: 400 });
-  await db.update(mcpServer).set(set).where(and(eq(mcpServer.id, p.data.id), eq(mcpServer.userId, s.user.id)));
+  await db.update(mcpServer).set(set).where(and(eq(mcpServer.id, p.data.id), eq(mcpServer.userId, dono.userId)));
   return Response.json({ ok: true });
 }
 
 export async function DELETE(req: Request, ctx: RouteCtx) {
-  const s = sessionOf(ctx);
-  if (!s) return Response.json({ error: "Não autenticado" }, { status: 401 });
+  const dono = await ownerOf(ctx);
+  if (dono instanceof Response) return dono;
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return Response.json({ error: "id obrigatório" }, { status: 400 });
-  await db.delete(mcpServer).where(and(eq(mcpServer.id, id), eq(mcpServer.userId, s.user.id)));
+  await db.delete(mcpServer).where(and(eq(mcpServer.id, id), eq(mcpServer.userId, dono.userId)));
   return Response.json({ ok: true });
 }

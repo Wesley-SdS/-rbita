@@ -356,3 +356,48 @@ Auditoria por 4 subagentes (segurança/LGPD, provider, voz/mobile, RAG/skills) c
 - **RAG/finanças:** `esquecer_memoria` (forget) + `contas_a_vencer` (alertas) + **importar extrato PDF** (`/api/finance/statement`); grafo com CTE (fim do O(n²)); OCR standalone (cachePath + Dockerfile); ingest/retrieve robustos.
 - **Mobile:** **paridade de áudio** (expo-av: gravar→STT + falar resposta via /api/tts) — resolve "tudo igual no mobile".
 - **Pendências menores conhecidas:** sync/histórico e seletor de modelo na UI mobile; reautenticação p/ apagar conta; `CONNECTORS_ENC_KEY` distinto em prod (documentar).
+
+---
+
+## Fase 2 — Identidade e percepção ✅ (ondas 7 a 12, 2026-09-17)
+
+PRD: `PRD-FASE2-IDENTIDADE-PERCEPCAO.md`. Serviço novo: `apps/perception` (Python 3.12, porta 8002,
+sem estado). Migrações `0021`–`0028`.
+
+- [x] **Onda 7 — dívida da Fase 1 paga antes de começar.** Dono da instância (`instance_owner` +
+  `OwnerGuard`: config da casa só muda com o dono), failover na ordem assinatura → local → paga com
+  preço desconhecido por último, descoberta de modelos com revalidação em segundo plano, refresh de
+  token com backoff e aviso único, outbox por `processed_at`, apagar/exportar conta derivados do
+  schema, 16 constantes viraram chave com tela.
+- [x] **Onda 8 — pessoas da casa e consentimento.** `person` com apelidos, relação, menor de idade e
+  responsável; `biometric_consent` com termo versionado por hash (menor só com o responsável ATUAL,
+  troca de responsável revoga); `identity_audit`; `person_visibility`; apagar derivado do schema
+  (toda tabela `biometric_*` e toda coluna `identified_*`, mais presença, trilha e `event_log`).
+- [x] **Onda 9 — assinatura de voz e "quem pediu".** Cadastro por gravação e a partir de reunião
+  (correção ensina), identificação em reunião e no comando (trecho gravado em paralelo ao ditado),
+  "Desconhecido N" com prazo fixo, permissão por cômodo aplicada a quem pede, nota de quem pediu só
+  na fila de aprovação. Modelo escolhido por medição com a voz do dono: WeSpeaker ResNet34.
+- [x] **Onda 10 — rosto e presença.** Cadastro por foto e por webcam, identificação em evento de
+  câmera por listener do event bus (com freio de rajada), presença por cômodo com idade do
+  avistamento ("visto por último"). Modelo: InsightFace S.
+- [x] **Onda 11 — visão que ajuda.** Memória visual de objetos ("onde deixei a chave"), resumo do
+  que as câmeras viram, ver câmera com pergunta livre, "quem disse" entre reuniões.
+- [x] **Onda 12 — identidade em tudo.** Gestos viram evento (o que o gesto faz é regra do dono),
+  aparelhos da casa dizendo de onde é "aqui", regra com condição por pessoa e aviso no aparelho do
+  cômodo onde a pessoa está, 12 tools novas no domínio `identidade`.
+- [x] **Privacidade (PRD §4), inegociáveis.** Guard de saída instalado antes de qualquer módulo de
+  rede (biometria marcada nunca sai para host não local), câmera que identifica narra só com modelo
+  local, consentimento antes de qualquer cadastro, apagar apaga tudo, toda identificação auditada,
+  voz sozinha nunca libera ação perigosa, teste de não-vazamento (estático e de runtime).
+- [x] **Auditoria final (3 auditorias independentes + correções).** Achados corrigidos: tool antiga
+  `casa_ver_camera` contornava a permissão por cômodo e a regra "só local"; export da conta levava o
+  vetor biométrico; escritas de câmera, risco de domínio, MCP, modelos, conexão da casa, skills e
+  WhatsApp sem guard de dono; `resumo_do_dia_cameras` e `procurar_objeto` sem filtro de cômodo;
+  uuid da pessoa sobrevivia no jsonb da trilha; memória visual tinha parado de gravar (regressão);
+  "a voz segue a pessoa" não tinha nenhum chamador; limites do navegador chumbados em vez de vindos
+  da config; confiança gravada e nunca mostrada em câmeras e presença; dois fontes com byte NUL cru
+  que o git tratava como binário.
+
+**Pendente de máquina** (precisa de tudo no ar, o dono derrubou o Docker durante a fase): aplicar
+`0026`–`0028`, teste real de rosto com as 12 fotos, validação no navegador (microfone, webcam,
+aparelho, gestos) e a camada 3 do roteiro de paridade.

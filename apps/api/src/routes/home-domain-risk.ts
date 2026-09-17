@@ -11,6 +11,7 @@ import { sessionOf } from "../http/web-route";
 import { db } from "@orbita/db";
 import { haEntity } from "@orbita/db/home-schema";
 import { eq } from "drizzle-orm";
+import { ownerOf } from "../http/owner-route";
 
 /** GET /api/home/domain-risk — risco efetivo por domínio (B3.8), default + override. */
 export async function GET(_req: Request, ctx: RouteCtx) {
@@ -35,13 +36,13 @@ const PutBody = z.object({ domain: z.string().min(1).max(60), risk: z.enum(TOOL_
 
 /** PUT /api/home/domain-risk — sobrescreve (ou remove, com risk: null) o risco de um domínio. */
 export async function PUT(req: Request, ctx: RouteCtx) {
-  const session = sessionOf(ctx);
-  if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
+  const dono = await ownerOf(ctx);
+  if (dono instanceof Response) return dono;
   const parsed = PutBody.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
   // ao contrário do risco de tool (só sobe), aqui o dono pode subir OU descer
   // à vontade: é ele quem decide o que é seguro na própria casa, não um
   // padrão de segurança compartilhado entre todos os usuários do app.
-  await setDomainRiskOverride(session.user.id, parsed.data.domain, parsed.data.risk);
+  await setDomainRiskOverride(dono.userId, parsed.data.domain, parsed.data.risk);
   return Response.json({ ok: true });
 }

@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, lt } from "drizzle-orm";
-import { cosineSim } from "./match";
+import { and, eq, inArray, isNull, lt } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { person } from "@orbita/db/home-schema";
 import { biometricConsent, identityAudit } from "@orbita/db/identity-schema";
@@ -10,7 +9,8 @@ import { settings } from "../settings";
 import { events } from "../events/index";
 import { embedVoice, embedVoiceSegments } from "../perception/client";
 import { IdentityError } from "./errors";
-import { centroid, matchSignature, type MatchConfig, type MatchResult, type Signature } from "./match";
+import { log } from "../observability/logger";
+import { centroid, cosineSim, matchSignature, type MatchConfig, type MatchResult, type Signature, TENTATIVAS_ROTULO_UNICO } from "./match";
 import { consentFor, type PersonLike } from "./rules";
 
 /**
@@ -262,7 +262,7 @@ export async function identifyMeetingSpeakers(ownerUserId: string, audio: Uint8A
         await db.update(biometricUnknownVoice).set({ lastSeenAt: agora }).where(eq(biometricUnknownVoice.id, d.id));
       } else {
         // índice único (user_id, label): duas transcrições ao mesmo tempo não repetem o N
-        for (let tentativa = 0; tentativa < 5 && !unknownId; tentativa++) {
+        for (let tentativa = 0; tentativa < TENTATIVAS_ROTULO_UNICO && !unknownId; tentativa++) {
           const rotulo = `Desconhecido ${nextUnknownNumber(rotulosUsados)}`;
           rotulosUsados.push(rotulo);
           const [row] = await db
@@ -300,6 +300,23 @@ export async function identifyMeetingSpeakers(ownerUserId: string, audio: Uint8A
     });
   }
   return out.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Liga desconhecidos recém-criados à reunião de origem. Existe porque a ordem
+ * do fluxo é transcrever primeiro, arquivar depois: quando a assinatura é
+ * calculada, o documento da reunião ainda não existe. Sem isso o dono vê
+ * "Desconhecido 2" sem nenhuma forma de voltar e dizer de quem é a voz.
+ */
+export async function linkUnknownVoicesToMeeting(ownerUserId: string, labels: readonly string[], documentId: string): Promise<number> {
+  const limpos = labels.map((l) => l.trim()).filter(Boolean);
+  if (!limpos.length) return 0;
+  const r = await db
+    .update(biometricUnknownVoice)
+    .set({ sourceRef: documentId })
+    .where(and(eq(biometricUnknownVoice.userId, ownerUserId), inArray(biometricUnknownVoice.label, limpos), isNull(biometricUnknownVoice.sourceRef)))
+    .returning({ id: biometricUnknownVoice.id });
+  return r.length;
 }
 
 /**
@@ -381,7 +398,7 @@ export async function purgeExpiredUnknownVoices(): Promise<number> {
  * que ainda tem o áudio cifrado e não tem vetor do modelo atual. Amostras de
  * reunião (sem áudio guardado) não voltam: o dono regrava se quiser.
  */
-export async function recomputeVoiceSignatures(ownerUserId: string): Promise<{ modelo: string; recalculadas: number; semAudio: number }> {
+export async function recomputeVoiceSignatures(ownerUserId: string): Promise<{ modelo: string; recalculadas: number; semAudio: number; falharam: number }> {
   const { model } = await matchConfig();
   // sem consentimento vigente não se gera vetor novo, nem de amostra antiga
   const consentidos = new Set((await consentedPeople(ownerUserId)).map((p) => p.id));
@@ -391,16 +408,24 @@ export async function recomputeVoiceSignatures(ownerUserId: string): Promise<{ m
   );
   let recalculadas = 0;
   let semAudio = 0;
+  let falharam = 0;
   for (const a of amostras) {
     if (jaTem.has(a.id)) continue;
     if (!a.audioEnc) {
       semAudio++;
       continue;
     }
-    const bytes = Uint8Array.from(Buffer.from(decryptSecret(a.audioEnc), "base64"));
-    const r = await embedVoice(bytes, a.mime ?? "audio/webm", model);
-    await db.insert(biometricVoiceEmbedding).values({ userId: ownerUserId, personId: a.personId, sampleId: a.id, model: r.model, dim: r.dim, vector: r.embedding });
-    recalculadas++;
+    // uma amostra corrompida (ou um timeout do serviço local no meio) não pode
+    // jogar fora o recálculo das outras: conta e segue
+    try {
+      const bytes = Uint8Array.from(Buffer.from(decryptSecret(a.audioEnc), "base64"));
+      const r = await embedVoice(bytes, a.mime ?? "audio/webm", model);
+      await db.insert(biometricVoiceEmbedding).values({ userId: ownerUserId, personId: a.personId, sampleId: a.id, model: r.model, dim: r.dim, vector: r.embedding });
+      recalculadas++;
+    } catch (e) {
+      falharam++;
+      log.warn("identity.recalculo_voz_falhou", { sampleId: a.id, error: e instanceof Error ? e.message : String(e) });
+    }
   }
-  return { modelo: model, recalculadas, semAudio };
+  return { modelo: model, recalculadas, semAudio, falharam };
 }

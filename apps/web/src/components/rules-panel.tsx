@@ -12,7 +12,7 @@ interface Rule {
   trigger: { kind: "event"; type: string } | { kind: "cron"; expr: string };
   conditions: { path: string; op: string; value?: unknown }[];
   actions: (
-    | { kind: "notify"; title: string; body: string }
+    | { kind: "notify"; title: string; body: string; avisarPersonId?: string | null }
     | { kind: "prompt"; prompt: string }
     | { kind: "whatsapp"; to: string; text: string }
     | { kind: "teams_chat"; chatId: string; text: string }
@@ -31,6 +31,9 @@ const OPS = ["eq", "neq", "gt", "gte", "lt", "lte", "contains", "exists", "not_e
 const EVENT_HINTS = [
   "finance.bill_due", "routine.finished", "connector.token_refreshed", "connector.refresh_failed", "setting.changed", "action.executed",
   "calendar.meeting_upcoming", "gmail.important_received", "home.state_changed", "camera.detected",
+  // Fase 2 (identidade e percepção)
+  "identity.seen", "identity.presence_changed", "identity.gesture",
+  "identity.consent_granted", "identity.consent_revoked", "identity.voice_enrolled", "identity.face_enrolled",
 ];
 const dim = { color: "var(--color-ink-dim)" } as const;
 
@@ -128,7 +131,21 @@ function strip(r: Rule) {
   return { name: r.name, enabled: r.enabled, trigger: r.trigger, conditions: r.conditions ?? [], actions: r.actions };
 }
 
+interface PessoaOpcao { id: string; name: string }
+
 function RuleEditor({ value, onChange, onSave, onCancel, busy }: { value: Partial<Rule>; onChange: (v: Partial<Rule>) => void; onSave: () => void; onCancel: () => void; busy: boolean }) {
+  // "o mesmo gesto faz coisas diferentes para cada um" exigia digitar o uuid
+  // da pessoa na condição; aqui ele vem de uma lista (fail-soft: sem a lista,
+  // o campo de texto continua valendo)
+  const [pessoas, setPessoas] = useState<PessoaOpcao[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/home/persons")
+      .then((r) => (r.ok ? r.json() : { people: [] }))
+      .then((d) => { if (alive) setPessoas((d.people ?? []).map((p: PessoaOpcao) => ({ id: p.id, name: p.name }))); })
+      .catch(() => { if (alive) setPessoas([]); });
+    return () => { alive = false; };
+  }, []);
   const t = value.trigger ?? { kind: "event", type: "" };
   const conds = value.conditions ?? [];
   const acts = value.actions ?? [];
@@ -161,7 +178,15 @@ function RuleEditor({ value, onChange, onSave, onCancel, busy }: { value: Partia
             onChange={(e) => set({ conditions: conds.map((x, j) => (j === i ? { ...x, op: e.target.value } : x)) })}>
             {OPS.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
-          <Input placeholder="valor" value={c.value === undefined ? "" : String(c.value)} onChange={(e) => set({ conditions: conds.map((x, j) => (j === i ? { ...x, value: coerce(e.target.value) } : x)) })} />
+          {c.path.toLowerCase().endsWith("personid") && pessoas.length ? (
+            <select value={c.value === undefined ? "" : String(c.value)} className="min-w-0 flex-1 rounded-lg border px-1" style={{ borderColor: "var(--color-line)", background: "transparent" }}
+              onChange={(e) => set({ conditions: conds.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)) })}>
+              <option value="">escolha a pessoa</option>
+              {pessoas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          ) : (
+            <Input placeholder="valor" value={c.value === undefined ? "" : String(c.value)} onChange={(e) => set({ conditions: conds.map((x, j) => (j === i ? { ...x, value: coerce(e.target.value) } : x)) })} />
+          )}
           <button type="button" style={dim} onClick={() => set({ conditions: conds.filter((_, j) => j !== i) })}>×</button>
         </div>
       ))}
@@ -183,6 +208,14 @@ function RuleEditor({ value, onChange, onSave, onCancel, busy }: { value: Partia
               <>
                 <Input placeholder="Título" value={a.title} onChange={(e) => upd({ title: e.target.value })} />
                 <Textarea placeholder="Corpo" value={a.body} onChange={(e) => upd({ body: e.target.value })} />
+                <label className="flex items-center gap-2" style={dim}>
+                  avisar no aparelho de
+                  <select value={a.avisarPersonId ?? ""} className="rounded-lg border px-1 py-0.5" style={{ borderColor: "var(--color-line)", background: "transparent" }}
+                    onChange={(e) => upd({ avisarPersonId: e.target.value || null })}>
+                    <option value="">todos os aparelhos</option>
+                    {pessoas.map((p) => <option key={p.id} value={p.id}>{p.name}, onde ela estiver</option>)}
+                  </select>
+                </label>
               </>
             )}
             {a.kind === "prompt" && (

@@ -47,3 +47,6 @@ apps/perception/**/*.npy
 # O resto (launch.json, settings.local.json) é pessoal e fica de fora.
 .claude/*
 !.claude/skills/
+
+# artefato de build do tsc (entrou no repo por engano)
+*.tsbuildinfo

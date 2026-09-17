@@ -5,10 +5,10 @@ import { currentPresence } from "../../identity/presence";
 import { createPerson, listPeople, recordConsent, currentTerm } from "../../identity/people";
 // fachada: tool dispara operação de identidade, nunca toca em vetor ou amostra (NV.1)
 import { apagarBiometriaDe, usarFalaComoAmostra } from "../../identity/actions";
-import { cameraDigest, findObject } from "../../vision/objects";
+import { cameraDigest, findObject, knownObjectLabels } from "../../vision/objects";
 import { quemDisse } from "../../meetings/quem-disse";
 import { cameraRoomName, findCamera, latestEventWithSnapshot } from "../../cameras/query";
-import { authorizeRoomForRequester } from "../../home/room-permission";
+import { allowedRooms, authorizeRoomForRequester } from "../../home/room-permission";
 import { narrateCameraEvent, narrateSnapshot } from "../../cameras/narrate";
 import { db } from "@orbita/db";
 import { document } from "@orbita/db/knowledge-schema";
@@ -79,7 +79,7 @@ export const onde_esta: ToolDef<typeof OndeInput> = {
     if (!(await canAskAndAudit(ctx.userId, askCtx, alvo, "onde_esta"))) return { erro: `Você não tem permissão para perguntar sobre ${alvo.name}.` };
     const v = (await currentPresence(ctx.userId)).find((p) => p.personId === alvo.id);
     if (!v) return { pessoa: alvo.name, resposta: "Sem registro de onde foi vista." };
-    return { pessoa: alvo.name, comodo: v.roomName ?? "cômodo não definido", quando: v.quando, vistoEm: v.seenAt, origem: v.source };
+    return { pessoa: alvo.name, comodo: v.roomName ?? "cômodo não definido", quando: v.quando, vistoEm: v.seenAt, confianca: v.confidence ?? undefined, origem: v.source, emCasa: v.quando !== "antigo" };
   },
 };
 
@@ -107,7 +107,7 @@ export const o_que_esta_acontecendo: ToolDef<typeof AcontecendoInput> = {
     const permitidas = new Set((await visiblePeople(ctx.userId, askCtx, "o_que_esta_acontecendo")).map((p) => p.id));
     const pessoas = presenca
       .filter((p) => permitidas.has(p.personId) && p.roomId && p.roomId === cam.roomId && p.quando !== "antigo")
-      .map((p) => ({ nome: p.name, quando: p.quando }));
+      .map((p) => ({ nome: p.name, quando: p.quando, confianca: p.confidence ?? undefined }));
     return { comodo: nomeComodo ?? cam.name, camera: cam.name, descricao, capturadoEm: ev.createdAt, pessoas };
   },
 };
@@ -147,8 +147,18 @@ export const procurar_objeto: ToolDef<typeof ObjetoInput> = {
   keywords: ["onde deixei", "onde está minha", "perdi", "chave", "mochila", "celular", "carteira"],
   inputSchema: ObjetoInput,
   run: async ({ objeto }, ctx) => {
-    const vistos = await findObject(ctx.userId, objeto);
-    if (!vistos.length) return { objeto, resposta: "Não vi esse objeto no período guardado. Só lembro dos objetos da lista de memória visual, e por algumas horas." };
+    const todos = await findObject(ctx.userId, objeto);
+    // onde o objeto está é onde alguém está: cômodo proibido some da resposta
+    const podeVer = await allowedRooms(todos.map((v) => v.roomId), await quem(ctx));
+    const vistos = todos.filter((v) => podeVer.has(v.roomId));
+    if (!vistos.length) {
+      const lembrados = await knownObjectLabels(ctx.userId);
+      return {
+        objeto,
+        resposta: "Não vi esse objeto no período guardado. Só lembro dos objetos da lista de memória visual, e por algumas horas.",
+        objetosQueLembro: lembrados.length ? lembrados : undefined,
+      };
+    }
     return { objeto, ondeFoiVisto: vistos.map((v) => ({ comodo: v.roomName ?? v.cameraName ?? "sem cômodo", zona: v.zone ?? undefined, quando: v.seenAt, confianca: v.score ?? undefined })) };
   },
 };
@@ -166,7 +176,11 @@ export const resumo_do_dia_cameras: ToolDef<typeof ResumoInput> = {
     const permitidas = new Set((await visiblePeople(ctx.userId, askCtx, "resumo_do_dia_cameras")).map((p) => p.id));
     const nomes = new Map(askCtx.people.map((p) => [p.id, p.name]));
     const ate = new Date();
-    const eventos = await cameraDigest(ctx.userId, new Date(ate.getTime() - horas * 3_600_000), ate);
+    const todos = await cameraDigest(ctx.userId, new Date(ate.getTime() - horas * 3_600_000), ate);
+    // o evento em si já entrega o cômodo ("movimento no quarto às 2h"): sem
+    // permissão sobre o cômodo, ele não aparece, não basta esconder o nome
+    const podeVer = await allowedRooms(todos.map((e) => e.roomId), await quem(ctx));
+    const eventos = todos.filter((e) => podeVer.has(e.roomId));
     if (!eventos.length) return { periodoHoras: horas, eventos: [], resposta: "Nenhuma câmera registrou nada nesse período." };
     return {
       periodoHoras: horas,

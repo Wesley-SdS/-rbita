@@ -95,6 +95,16 @@ def test_token_exigido_quando_configurado(client, monkeypatch):
     assert client.get("/health").status_code == 200
 
 
+def test_bench_tambem_exige_o_segredo(client, monkeypatch):
+    """`/bench/sample` grava amostra biométrica em disco: era a única rota que
+    escapava do segredo, o que é justamente o contrário do que ele serve."""
+    monkeypatch.setattr(main, "TOKEN", "segredo")
+    monkeypatch.setattr(main, "BENCH", True)
+    dados = {"kind": "voz", "person": "w", "label": "l"}
+    assert client.post("/bench/sample", files={"file": ("a", b"x")}, data=dados).status_code == 401
+    assert client.get("/bench", headers={"x-orbita-percepcao": "errado"}).status_code == 401
+
+
 def test_segmentos_json_invalido(client):
     r = client.post("/voice/embed-segments", files={"file": ("r.wav", wav(1), "audio/wav")}, data={"segments": "{nao"})
     assert r.status_code == 422

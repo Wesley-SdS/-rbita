@@ -10,6 +10,13 @@
 
 export type MatchOutcome = "identificado" | "provavel" | "desconhecido";
 
+/**
+ * Tentativas de criar um rótulo "Desconhecido N" único. Duas pessoas novas
+ * aparecendo no mesmo segundo colidem no índice único; mais que isto não é
+ * concorrência, é bug em outro lugar.
+ */
+export const TENTATIVAS_ROTULO_UNICO = 5;
+
 export interface Signature {
   personId: string;
   /** vetores de cadastro da pessoa, todos do MESMO modelo do vetor consultado */

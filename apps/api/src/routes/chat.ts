@@ -3,7 +3,7 @@ import { streamText, stepCountIs } from "ai";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
-  resolveModel, resolveVisionModel, getModelInfo, routeModelKey, providerEnv,
+  resolveModel, resolveVisionModel, getModelInfo, routeModelKey, providerEnv, discoveredSnapshot,
   buildModelChain, discoverModels, recordProviderResult, CACHE_BREAK,
 } from "@orbita/llm";
 import { db } from "@orbita/db";
@@ -32,6 +32,9 @@ const BodySchema = z.object({
   // pediu (Onda 9). Vai só para o serviço LOCAL de percepção; teto real em
   // `identity.commandClipMaxKB`, este é só o limite duro do JSON.
   voiceClip: z.string().max(6_000_000).optional(),
+  // modo privacidade: o navegador diz que NADA pode ir para a nuvem; qual
+  // modelo local atende é decisão do servidor, que conhece a descoberta
+  privacidade: z.boolean().optional(),
   // de qual dispositivo veio o pedido (B5.4): é o "aqui" de "apaga a luz daqui"
   deviceId: z.string().uuid().optional(),
 });
@@ -74,7 +77,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
   }
-  const { content, modelKey, conversationId, rich, image, voiceClip, deviceId } = parsed.data;
+  const { content, modelKey, conversationId, rich, image, voiceClip, deviceId, privacidade } = parsed.data;
 
   const info = getModelInfo(modelKey);
   if (!info) return Response.json({ error: "Modelo desconhecido" }, { status: 400 });
@@ -126,7 +129,17 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if (!image) await discoverModels();
 
   // modelo primário (resolve o "auto" por complexidade)
-  const primaryKey = image ? "vision" : modelKey === "auto" ? routeModelKey(content, env) : modelKey;
+  let primaryKey = image ? "vision" : modelKey === "auto" ? routeModelKey(content, env) : modelKey;
+  if (privacidade && !image && !primaryKey.startsWith("local/")) {
+    const local = discoveredSnapshot().find((m) => m.key.startsWith("local/"));
+    if (!local) {
+      return Response.json(
+        { error: "Modo privacidade ligado e nenhum modelo local disponível. Instale um modelo no Ollama (ex.: ollama pull qwen2.5:7b) ou desligue o modo privacidade." },
+        { status: 503 },
+      );
+    }
+    primaryKey = local.key;
+  }
 
   // CADEIA DE FAILOVER: primário → um fallback por provedor descoberto.
   const candidates = image ? ["vision"] : buildModelChain(primaryKey, env);
@@ -158,6 +171,9 @@ export async function POST(req: Request, ctx: RouteCtx) {
 
   // QUEM PEDE: a identificação por voz começa já, em paralelo, e só é aguardada
   // se uma tool precisar (permissão por cômodo, nota na fila de aprovação).
+  // com imagem anexada o turno já vai pesado (data URL de megabytes) e o
+  // caminho é o modelo de visão, que não usa "quem pediu": o trecho de voz
+  // seria custo puro, então é descartado de propósito
   const clip = voiceClip && !image ? parseVoiceClip(voiceClip, cfg["identity.commandClipMaxKB"]) : null;
   const quemPede = requesterResolver(userId, clip, deviceId ?? null);
   if (clip) void quemPede.voice();

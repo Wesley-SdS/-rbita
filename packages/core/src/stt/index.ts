@@ -1,4 +1,5 @@
 import { log } from "../observability/logger";
+import { settings } from "../settings";
 import type { SttOptions, SttResult } from "./types";
 import { transcribeWithAssemblyAI } from "./assemblyai";
 import { transcribeWithLocalWhisper } from "./whisper-local";
@@ -15,7 +16,10 @@ export type { SttResult, SttOptions, SttUtterance } from "./types";
  * resultado vem marcado com `diarizationUnavailable`.
  */
 export async function transcribeAudio(file: File, opts: SttOptions = {}): Promise<SttResult> {
-  const key = process.env.ASSEMBLYAI_API_KEY;
+  // a nuvem é escolha do dono, e escolha precisa de tela (§5.6): a chave no
+  // .env habilita, a chave em `setting` decide
+  const permiteNuvem = (await settings.get("meetings.sttCloud").catch(() => "quando_houver_chave")) !== "nunca";
+  const key = permiteNuvem ? process.env.ASSEMBLYAI_API_KEY : undefined;
   if (key) {
     try {
       return await transcribeWithAssemblyAI(file, key, opts);

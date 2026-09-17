@@ -48,6 +48,7 @@ import * as identityAudit from "./identity-audit";
 import * as identityVoice from "./identity-voice";
 import * as identityFace from "./identity-face";
 import * as identityPresence from "./identity-presence";
+import * as identityLimits from "./identity-limits";
 import * as devices from "./devices";
 import * as channelsWhatsapp from "./channels-whatsapp";
 import * as cameras from "./cameras";
@@ -96,6 +97,7 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/identity/voice", identityVoice),
   webRoute("api/identity/face", identityFace),
   webRoute("api/identity/presence", identityPresence),
+  webRoute("api/identity/limits", identityLimits),
   webRoute("api/devices", devices),
   webRoute("api/channels/whatsapp", channelsWhatsapp),
   webRoute("api/cameras", cameras),

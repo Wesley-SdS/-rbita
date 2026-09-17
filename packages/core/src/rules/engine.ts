@@ -28,7 +28,14 @@ export type Condition = z.infer<typeof ConditionSchema>;
 
 export const ActionSchema = z.discriminatedUnion("kind", [
   // notificação direta, sem LLM: título/corpo com {{caminho}} do evento
-  z.object({ kind: z.literal("notify"), title: z.string().min(1).max(200), body: z.string().min(1).max(4000) }),
+  z.object({
+    kind: z.literal("notify"),
+    title: z.string().min(1).max(200),
+    body: z.string().min(1).max(4000),
+    // "a voz segue a pessoa": com uma pessoa escolhida, o aviso sai no aparelho
+    // do cômodo onde ELA está agora. Vazio avisa em todos os aparelhos.
+    avisarPersonId: z.string().uuid().nullable().optional(),
+  }),
   // pede ao modelo (com ferramentas) e notifica com a resposta
   z.object({ kind: z.literal("prompt"), prompt: z.string().min(1).max(4000) }),
   // canais externos (Onda 4, CH.3 roteamento de notificação): igual ao `notify`,

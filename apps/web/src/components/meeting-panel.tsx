@@ -101,10 +101,12 @@ export function MeetingPanel() {
 
   // pessoas cadastradas, para o seletor "vincular a pessoa" ao nomear locutor (fail-soft: sem elas, só falta o vínculo)
   useEffect(() => {
+    let alive = true;
     fetch("/api/home/persons")
       .then((r) => (r.ok ? r.json() : { people: [] }))
-      .then((d) => setPersons((d.people ?? []).map((p: { id: string; name: string }) => ({ id: p.id, name: p.name }))))
-      .catch(() => setPersons([]));
+      .then((d) => { if (alive) setPersons((d.people ?? []).map((p: { id: string; name: string }) => ({ id: p.id, name: p.name }))); })
+      .catch(() => { if (alive) setPersons([]); });
+    return () => { alive = false; };
   }, []);
 
   // libera microfone/captura se o componente sair com a reunião rodando
@@ -179,6 +181,9 @@ export function MeetingPanel() {
     // 1) transcrição da reunião INTEIRA, com separação de vozes
     setPhase("transcrevendo");
     let texto = "";
+    // rótulos "Desconhecido N" criados nesta transcrição: ligados à reunião no
+    // passo seguinte, que é quando ela vira documento e ganha um id
+    let desconhecidosDaReuniao: string[] = [];
     try {
       const fd = new FormData();
       fd.append("file", blob, "reuniao.webm");
@@ -195,6 +200,7 @@ export function MeetingPanel() {
         // Pré-vincula o seletor de pessoa à sugestão (identificado ou provável); sem
         // sugestão o seletor começa vazio (não é correção, é vínculo novo).
         const identities: SpeakerIdentity[] = d.speakerIdentities ?? [];
+        desconhecidosDaReuniao = identities.map((si) => si.unknownLabel).filter((l): l is string => Boolean(l));
         if (identities.length) {
           setSpeakerIdentities(identities);
           const pre: Record<string, string> = {};
@@ -230,7 +236,9 @@ export function MeetingPanel() {
       const r = await fetch("/api/meeting/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript: texto }),
+        // manda os desconhecidos desta transcrição: é neste passo que a
+        // reunião vira documento, e só então dá para ligar um ao outro
+        body: JSON.stringify({ transcript: texto, desconhecidos: desconhecidosDaReuniao }),
       });
       const d = await r.json();
       if (r.ok) {

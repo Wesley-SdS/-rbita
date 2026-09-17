@@ -11,6 +11,8 @@ import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { log } from "@orbita/core/observability/logger";
 import { settings } from "@orbita/core/settings/index";
+import { linkUnknownVoicesToMeeting } from "@orbita/core/identity/voice";
+import { isOwner } from "@orbita/core/owner";
 
 const Body = z.object({
   // teto alto: a transcrição INTEIRA é arquivada no RAG (o corte abaixo decide
@@ -18,6 +20,9 @@ const Body = z.object({
   // reunião de várias horas.
   transcript: z.string().min(1).max(500000),
   title: z.string().max(200).optional(),
+  // rótulos de voz não reconhecida criados na transcrição desta reunião: só
+  // aqui o documento existe para ligá-los à origem (Onda 9)
+  desconhecidos: z.array(z.string().max(40)).max(20).optional(),
 });
 
 const CompromissoSchema = z.object({
@@ -129,5 +134,12 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const res = await ingestDocument(session.user.id, title, doc, "meeting").catch(() => ({ chunks: 0, documentId: null as string | null }));
 
   log.info("meeting.summarize", { userId: session.user.id, ms: Date.now() - started, chars: transcript.length, blocos, compromissos: compromissos.length, chunks: res.chunks });
+  // fail-soft: o resumo não pode falhar porque o vínculo de um desconhecido falhou
+  if (res.documentId && parsed.data.desconhecidos?.length && (await isOwner(session.user.id))) {
+    await linkUnknownVoicesToMeeting(session.user.id, parsed.data.desconhecidos, res.documentId).catch((e) =>
+      log.warn("meeting.vinculo_desconhecido_falhou", { error: e instanceof Error ? e.message : String(e) }),
+    );
+  }
+
   return Response.json({ title, summary, compromissos, documentId: res.documentId, archived: res.chunks > 0, blocos });
 }

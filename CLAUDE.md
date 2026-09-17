@@ -28,7 +28,7 @@ apps/web       Next.js 16 (Turbopack) · React 19 · Tailwind 4 · Better Auth 1
 apps/api       NestJS 12 (roda de TS com tsx, porta 3010): o PROCESSO VIVO — cron, event bus, regras, refresh de token e TODAS as rotas /api
 apps/mobile    Expo SDK 54  (fora do workspace pnpm — Metro não convive com symlink do pnpm)
 apps/voice     Python FastAPI · faster-whisper · Piper · Vosk
-apps/perception Python 3.12 FastAPI (porta 8002) · stateless: voz→vetor (sherpa-onnx), rosto→vetor (onnxruntime) · só local
+apps/perception Python 3.12 FastAPI (porta 8002) · sem estado: voz e rosto viram vetor (sherpa-onnx, onnxruntime), gestos com MediaPipe · nunca sai de casa
 packages/db    schema Drizzle + client + migrações (`drizzle/`)
 packages/core  domínio puro (auth, chat, conectores, RAG, settings, events, rules, stt…) — zero import do Next
 packages/llm   provedores de LLM (descoberta · resolver · failover · embeddings)
@@ -217,7 +217,7 @@ dono faz pelo assistente. Crescer o catálogo é o objetivo, não um efeito a co
 Antes de considerar qualquer tarefa concluída:
 
 1. **`tsc --noEmit` limpo nos dois apps (`apps/web` e `apps/api`)** e **`vitest run` verde** (§3; baseline
-   após a Onda 7: 34 arquivos, 252 testes). Sem exceção.
+   após a auditoria da Fase 2: 54 arquivos, 479 testes, mais 34 testes Python em `apps/perception`). Sem exceção.
 2. **Erro pré-existente conta.** Achou teste quebrado ou tipo vermelho que já estava assim?
    Corrija antes de fechar.
 3. **Código novo em `lib/` precisa de teste.** Caminho feliz + pelo menos um de erro. A suíte
@@ -241,6 +241,11 @@ Antes de considerar qualquer tarefa concluída:
 | Execução pós-aprovação | `packages/core/src/connectors/execute.ts` |
 | Config (defs + store com cache) | `packages/core/src/settings/` · tela `components/settings-panel.tsx` |
 | Event bus (em processo + outbox `event_log`) | `packages/core/src/events/` |
+| Eventos da identidade (para regras): `identity.seen` · `identity.presence_changed` · `identity.gesture` · `identity.consent_granted` · `identity.consent_revoked` · `identity.voice_enrolled` · `identity.face_enrolled` | emitidos em `packages/core/src/identity/{face,presence,gesture,people,voice}.ts` |
+| Cliente da percepção (único caminho para o :8002) | `packages/core/src/perception/client.ts` |
+| Guarda de saída (biometria nunca sai de casa) | `apps/api/src/egress-guard.ts` · `packages/core/src/privacy/egress.ts` |
+| Memória visual de objetos e gestos | `packages/core/src/vision/objects.ts` · `packages/core/src/identity/gesture.ts` |
+| Aparelhos da casa (de onde é "aqui") | `packages/core/src/identity/device.ts` · aba "Aparelhos" em `components/home-panel.tsx` |
 | Regras proativas (motor puro + execução) | `packages/core/src/rules/` · tela `components/rules-panel.tsx` |
 | Rotinas (runner) · contas a vencer · refresh de token | `packages/core/src/routines/run.ts` · `finance/bill-due.ts` · `connectors/refresh.ts` |
 | Processo vivo (cron, poller do outbox, controllers) | `apps/api/src/` (`scheduler/scheduler.service.ts`, `auth/session.guard.ts`) |
@@ -304,6 +309,16 @@ Antes de considerar qualquer tarefa concluída:
 - **Tool de casa que AGE precisa de `authorize`** (permissão por pessoa e cômodo): o `registerTools` recusa sem isso. Tool do HA exposta por MCP passa por fora do registro e não tem essa checagem.
 - **"Aqui" vem do dispositivo** (`device` + `ToolContext.origin`), não de adivinhação: sem dispositivo cadastrado num cômodo, a tool pede o cômodo em vez de agir no lugar errado.
 - **Voz reconhecida nunca libera ação perigosa** (decisão 9.5): ela só restringe (permissão por cômodo) e identifica quem pediu na fila de aprovação; nunca substitui o gate.
+- **Biometria usa `real[]` + btree, não pgvector/HNSW.** É deliberado (`biometric-schema.ts`): cada
+  modelo tem dimensão própria (192/512/128), um índice HNSW prenderia a coluna a um modelo, e a casa
+  tem poucas pessoas, então o casamento roda em memória (`identity/match.ts`), só com quem consentiu
+  e só do modelo ativo. Isso vale para dezenas de assinaturas; se um dia virar milhares, aí sim é
+  caso de índice por modelo.
+- **Tool antiga pode furar regra nova.** `casa_ver_camera` (Onda 5) e `ver_camera` (Fase 2) fazem a
+  mesma coisa, e o modelo escolhe entre as duas: quando uma regra nova entra (permissão por cômodo,
+  "só modelo local"), ela precisa entrar nas DUAS, senão a escolha do modelo vira o buraco.
+- **Config que o navegador precisa respeitar vai por `GET /api/identity/limits`**, nunca repetida em
+  constante no front: teto do trecho de voz, duração da gravação de cadastro e tamanho de foto.
 - **`tesseract.js` precisa ficar em `serverExternalPackages`** e é copiado à mão no Dockerfile.
 - **O banco de dev tem 14 contas de teste.** O dono da instância é `wesley@orbita.local` (gravado em `instance_owner`); quem não é dono recebe 403 ao mudar Ajustes/Ferramentas. Instância órfã só volta por `ORBITA_OWNER_EMAIL`.
 - **Docker Desktop e os dev servers caem juntos** quando a VM satura: se tudo responder `000`, suba Docker, `apps/api`, `apps/web` e voz de novo (skill orbita-dev) antes de achar que é bug.

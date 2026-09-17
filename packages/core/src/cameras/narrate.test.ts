@@ -13,6 +13,13 @@ vi.mock("@orbita/llm", () => ({
   },
 }));
 vi.mock("ai", () => ({ generateText: async () => ({ text: "uma pessoa na cozinha" }) }));
+// o modelo de visão virou config (§5.6): o nome sai daqui, não de constante
+vi.mock("../settings", () => ({
+  settings: {
+    getMany: async () => ({ "vision.localModel": "moondream", "vision.cloudModel": "gpt-4o" }),
+    get: async (k: string) => (k === "vision.localModel" ? "moondream" : "gpt-4o"),
+  },
+}));
 
 let linha: Record<string, unknown> | undefined;
 const atualizados: unknown[] = [];
@@ -42,13 +49,14 @@ describe("narração de evento de câmera", () => {
   it("câmera que identifica pessoas: só modelo local", async () => {
     linha = { id: "e1", snapshot: "data:image/jpeg;base64,AAA", narration: null, identifica: true };
     await narrateCameraEvent("e1");
-    expect(visionCalls[0]).toEqual({ localOnly: true });
+    // o nome do modelo local vem da config, junto com a trava de privacidade
+    expect(visionCalls[0]).toEqual({ localOnly: true, local: "moondream", cloud: "gpt-4o" });
   });
 
   it("câmera sem identificação: segue a configuração de visão de sempre", async () => {
     linha = { id: "e2", snapshot: "data:image/jpeg;base64,AAA", narration: null, identifica: false };
     await narrateCameraEvent("e2");
-    expect(visionCalls[0]).toEqual({ localOnly: false });
+    expect(visionCalls[0]).toEqual({ localOnly: false, local: "moondream", cloud: "gpt-4o" });
   });
 
   it("narração já feita não chama modelo de novo", async () => {

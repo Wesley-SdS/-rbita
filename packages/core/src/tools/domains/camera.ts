@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { findCamera, latestEventWithSnapshot, listCameras } from "../../cameras/query";
 import { narrateSnapshot } from "../../cameras/narrate";
-import { registerTools, type ToolDef } from "../registry";
+import { authorizeRoomForRequester } from "../../home/room-permission";
+import { registerTools, type ToolContext, type ToolDef } from "../registry";
 
 /** Domínio: câmeras da casa (Onda 5). Só leitura: ver e listar, nunca controla nada. */
 
@@ -28,12 +29,21 @@ export const casa_ver_camera: ToolDef<typeof VerInput> = {
   risk: "leitura",
   keywords: ["câmera", "camera", "o que está acontecendo", "sala", "quintal", "garagem", "ver", "vendo"],
   inputSchema: VerInput,
+  // a Fase 2 trouxe permissão por cômodo e "câmera que identifica não vai para
+  // a nuvem" (decisão 9.6). Esta tool é irmã de `ver_camera` e o modelo escolhe
+  // entre as duas: sem as mesmas defesas aqui, a escolha dele viraria o buraco.
+  authorize: async ({ local }: { local: string }, ctx: ToolContext) => {
+    const cam = await findCamera(ctx.userId, local);
+    if (!cam) return null; // câmera inexistente: a própria tool responde
+    const quem = ctx.requester ? await ctx.requester().catch(() => null) : null;
+    return authorizeRoomForRequester(cam.roomId, quem, "ver a câmera");
+  },
   run: async ({ local }, { userId }) => {
     const cam = await findCamera(userId, local);
     if (!cam) return { erro: `Não achei uma câmera para "${local}".` };
     const ev = await latestEventWithSnapshot(cam.id);
     if (!ev?.snapshot) return { erro: `A câmera "${cam.name}" ainda não tem nenhuma imagem recente para descrever.` };
-    const descricao = await narrateSnapshot(ev.snapshot);
+    const descricao = await narrateSnapshot(ev.snapshot, undefined, { localOnly: cam.identifyFaces });
     return { camera: cam.name, descricao, capturadoEm: ev.createdAt };
   },
 };

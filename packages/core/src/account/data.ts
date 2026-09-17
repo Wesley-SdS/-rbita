@@ -2,6 +2,7 @@ import { eq, getTableColumns, inArray, is, type SQL } from "drizzle-orm";
 import { PgTable, getTableConfig, type PgColumn } from "drizzle-orm/pg-core";
 import { db } from "@orbita/db";
 import * as schema from "@orbita/db/schema";
+import { events } from "../events/index";
 
 /**
  * DADOS DA CONTA: apagar e exportar (LGPD), derivados do SCHEMA, não de uma
@@ -45,6 +46,15 @@ const SEGREDO = /(^|_)(token|password|secret|headers|p256dh|auth)$|_enc$/;
 /** Colunas que ficam fora do export e por quê. Puro. */
 export function omittedReason(tableName: string, columnName: string): string | null {
   if (SEGREDO.test(columnName)) return "credencial (não sai da Órbita, nem cifrada)";
+  // assinatura biométrica NUNCA sai desta casa (PRD §4.1), e "exportar meus
+  // dados" é uma saída como qualquer outra. Por prefixo de tabela para valer em
+  // tabela biométrica nova sem ninguém lembrar.
+  if (tableName.startsWith("biometric_")) {
+    if (columnName === "vector") return "assinatura biométrica (nunca sai desta casa, nem no export)";
+    // `backend` é o `model` das tabelas de ROSTO: o vetor não se compara sem
+    // saber quem o gerou, então exportar um sem o outro seria meia assinatura
+    if (columnName === "model" || columnName === "backend" || columnName === "dim") return "detalhe da assinatura biométrica (nunca sai desta casa)";
+  }
   if (columnName === "embedding") return "vetor derivado do texto já exportado (recalculável)";
   if (tableName === "camera_event" && columnName === "snapshot") return "imagem pesada; continua visível na tela de câmeras até a retenção";
   return null;
@@ -118,6 +128,9 @@ export async function eraseAccount(userId: string): Promise<{ limpezaExplicita: 
     for (const t of [...semCascade].reverse()) await tx.delete(t.table).where(ownedWhere(t, userId));
     await tx.delete(schema.user).where(eq(schema.user.id, userId));
   });
+  // a linha do usuário já foi embora: o evento fica SEM dono, e sem nada que
+  // identifique quem era (é o resto de trilha que "apagar é apagar" permite)
+  await events.emit("account.erased", { tabelas: semCascade.map((t) => t.name) }, { userId: null }).catch(() => undefined);
   return { limpezaExplicita: semCascade.map((t) => t.name) };
 }
 
@@ -146,5 +159,7 @@ export async function exportAccount(u: { id: string; name: string; email: string
     }),
   );
 
+  // exportar é uma saída de dados: fica na trilha, como toda saída
+  await events.emit("account.exported", { tabelas: Object.keys(tabelas).length, omitidos: Object.keys(omitidos).length }, { userId: u.id }).catch(() => undefined);
   return { exportadoEm: new Date().toISOString(), usuario: { id: u.id, nome: u.name, email: u.email }, tabelas, omitidos };
 }

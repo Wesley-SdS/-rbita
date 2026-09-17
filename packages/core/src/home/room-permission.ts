@@ -18,6 +18,21 @@ export async function authorizeRoomForRequester(roomId: string | null, requester
 }
 
 /**
+ * Quais destes cômodos quem pede pode ver. Para consulta que varre a casa
+ * inteira (resumo do dia, memória visual): uma leitura de acessos só, em vez
+ * de uma por cômodo. `null` no lugar do cômodo vale como "cômodo não definido"
+ * e segue a mesma regra de `canAccessRoom`.
+ */
+export async function allowedRooms(roomIds: readonly (string | null)[], requester: Requester | null): Promise<Set<string | null>> {
+  const distintos = new Set(roomIds);
+  if (!requester || requester.role === "dono") return distintos;
+  const acessos = requester.personId
+    ? await db.select({ roomId: personRoomAccess.roomId, allowed: personRoomAccess.allowed }).from(personRoomAccess).where(eq(personRoomAccess.personId, requester.personId))
+    : [];
+  return new Set([...distintos].filter((r) => canAccessRoom(requester.role, r, acessos)));
+}
+
+/**
  * Aplica `permission.ts` (B7.1, que existia sem ninguém chamar) a uma ação de
  * casa, para QUEM PEDE. Sem quem pede identificado, ou sendo o dono, não
  * restringe: é o comportamento de antes. Devolve a recusa em pt-BR ou null.

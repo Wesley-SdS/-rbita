@@ -9,7 +9,7 @@ import { settings } from "../settings";
 import { events } from "../events/index";
 import { embedFaces, type FaceResult } from "../perception/client";
 import { IdentityError } from "./errors";
-import { centroid, cosineSim, matchSignature, type MatchConfig, type MatchResult, type Signature } from "./match";
+import { centroid, cosineSim, matchSignature, type MatchConfig, type MatchResult, type Signature, TENTATIVAS_ROTULO_UNICO } from "./match";
 import { nextUnknownNumber } from "./voice";
 import { consentFor, type PersonLike } from "./rules";
 import { updatePresence } from "./presence";
@@ -177,7 +177,7 @@ async function lembrarDesconhecido(ownerUserId: string, cfg: MatchConfig & { bac
     return d.label;
   }
   const rotulos = todos.map((d) => d.label);
-  for (let tentativa = 0; tentativa < 5; tentativa++) {
+  for (let tentativa = 0; tentativa < TENTATIVAS_ROTULO_UNICO; tentativa++) {
     const rotulo = `Desconhecido ${nextUnknownNumber(rotulos)}`;
     rotulos.push(rotulo);
     const [row] = await db

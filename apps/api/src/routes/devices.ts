@@ -48,6 +48,10 @@ export async function DELETE(req: Request, ctx: RouteCtx) {
   if (o instanceof Response) return o;
   const id = z.string().uuid().safeParse(new URL(req.url).searchParams.get("id"));
   if (!id.success) return Response.json({ error: "id inválido" }, { status: 400 });
-  await removeDevice(o.userId, id.data);
-  return Response.json({ ok: true });
+  try {
+    await removeDevice(o.userId, id.data);
+    return Response.json({ ok: true });
+  } catch (e) {
+    return domainError(e);
+  }
 }

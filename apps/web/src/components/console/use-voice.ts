@@ -6,6 +6,7 @@ import type { Msg } from "@/components/console/types";
 import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
 import { RealtimeSession } from "@/lib/voice/realtime";
 import { getRecognitionCtor, LocalWake, type RecognitionCtor, type RecognitionLike } from "@/lib/voice/speech";
+import { identityLimits } from "@/lib/identity-limits";
 
 /** Controle mínimo de um wake listener (Render ou local): o que o toggle usa. */
 type WakeCtl = { stop: () => void; active: boolean; pause?: () => void; resume?: () => void };
@@ -25,14 +26,17 @@ const MAX_TTS_FALHAS = 2;
 
 /**
  * Onda 9 ("quem pediu"): grava um trecho de voz EM PARALELO ao ditado (Web
- * Speech não gera áudio nenhum) para o backend reconhecer quem falou. Janela
- * deslizante dos últimos ~6 s, nunca maior que ~400 KB em data URL. Best-effort
- * de ponta a ponta: sem microfone, sem MediaRecorder ou erro na conversão, o
- * ditado segue exatamente como antes, só sem o trecho.
+ * Speech não gera áudio nenhum) para o backend reconhecer quem falou. A janela
+ * e o teto vêm da config do dono (`identity.commandClip*`), nunca de constante
+ * daqui: os dois lados precisam concordar, senão o servidor descarta o trecho
+ * em silêncio. Best-effort de ponta a ponta: sem microfone, sem MediaRecorder
+ * ou erro na conversão, o ditado segue exatamente como antes, só sem o trecho.
  */
 function startVoiceClip(): { finish: () => Promise<string | undefined> } {
-  const JANELA_S = 6;
-  const TETO_BYTES = 400 * 1024;
+  const limites = identityLimits();
+  // teto de memória enquanto grava; a janela real é aplicada no fim, já com a
+  // config em mãos (a gravação começa antes da resposta da rota)
+  const MAX_PEDACOS = 60;
   const state: { stream: MediaStream | null; recorder: MediaRecorder | null; chunks: Blob[]; stopRequested: boolean } = {
     stream: null,
     recorder: null,
@@ -50,7 +54,7 @@ function startVoiceClip(): { finish: () => Promise<string | undefined> } {
         mr.ondataavailable = (e) => {
           if (!e.data.size) return;
           state.chunks.push(e.data);
-          if (state.chunks.length > JANELA_S) state.chunks.shift(); // janela deslizante: só os últimos ~6s
+          if (state.chunks.length > MAX_PEDACOS) state.chunks.shift(); // janela deslizante
         };
         state.recorder = mr;
         mr.start(1000); // um pedaço por segundo
@@ -65,23 +69,32 @@ function startVoiceClip(): { finish: () => Promise<string | undefined> } {
       state.stream?.getTracks().forEach((t) => t.stop());
       return undefined;
     }
-    const blob = await new Promise<Blob | null>((resolve) => {
-      mr.onstop = () => resolve(state.chunks.length ? new Blob(state.chunks, { type: mr.mimeType || "audio/webm" }) : null);
+    const { clipSegundos, clipMaxKB } = await limites;
+    const parar = await new Promise<Blob[] | null>((resolve) => {
+      mr.onstop = () => resolve(state.chunks.length ? state.chunks : null);
       try { mr.stop(); } catch { resolve(null); }
     });
     state.stream?.getTracks().forEach((t) => t.stop()); // libera o mic sempre, com ou sem áudio
-    if (!blob || !blob.size) return undefined;
-    try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onload = () => resolve(String(fr.result));
-        fr.onerror = () => reject(fr.error);
-        fr.readAsDataURL(blob);
-      });
-      return dataUrl.length <= TETO_BYTES ? dataUrl : undefined;
-    } catch {
-      return undefined;
+    if (!parar) return undefined;
+    const tipo = mr.mimeType || "audio/webm";
+    const teto = clipMaxKB * 1024;
+    // pedaço de 1 s cada: a janela é o fim da gravação, que é onde está o
+    // comando. Se ainda passar do teto, encurta em vez de desistir do trecho.
+    for (let segundos = Math.min(clipSegundos, parar.length); segundos >= 1; segundos--) {
+      const blob = new Blob(parar.slice(-segundos), { type: tipo });
+      if (!blob.size || blob.size > teto) continue;
+      try {
+        return await new Promise<string>((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(String(fr.result));
+          fr.onerror = () => reject(fr.error);
+          fr.readAsDataURL(blob);
+        });
+      } catch {
+        return undefined;
+      }
     }
+    return undefined;
   }
 
   return { finish };

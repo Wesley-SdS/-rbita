@@ -91,6 +91,9 @@ async function eraseWithin(tx: Tx, ownerUserId: string, personId: string, bio: B
   // o id é uuid: aparecer no texto do payload é mencionar a pessoa, sem falso positivo
   await tx.delete(eventLog).where(sql`${eventLog.payload}::text like ${"%" + personId + "%"}`);
   await tx.delete(identityAudit).where(and(eq(identityAudit.userId, ownerUserId), eq(identityAudit.personId, personId)));
+  // a consulta em lote grava { permitidas: [uuid...], negadas: [uuid...] } numa
+  // linha sem `person_id`: sem isto, o uuid de quem foi apagado sobrevive ali
+  await tx.delete(identityAudit).where(and(eq(identityAudit.userId, ownerUserId), sql`${identityAudit.detail}::text like ${"%" + personId + "%"}`));
   // como ATOR (ex.: consulta feita por ela, reconhecida pela voz) o vínculo também some
   await tx.update(identityAudit).set({ actorPersonId: null }).where(eq(identityAudit.actorPersonId, personId));
   await tx.update(biometricConsent).set({ revokedAt: new Date() }).where(and(eq(biometricConsent.personId, personId), isNull(biometricConsent.revokedAt)));

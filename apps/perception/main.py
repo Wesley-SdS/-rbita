@@ -36,7 +36,11 @@ MAX_AUDIO_MB = float(os.environ.get("PERCEPTION_MAX_AUDIO_MB", "1024"))
 # duração máxima DECODIFICADA (4 h): o limite em MB não segura áudio muito comprimido
 MAX_AUDIO_SECONDS = float(os.environ.get("PERCEPTION_MAX_AUDIO_SECONDS", "14400"))
 TOKEN = os.environ.get("PERCEPTION_TOKEN")
-MAX_IMAGE_MB = float(os.environ.get("PERCEPTION_MAX_IMAGE_MB", "8"))
+# Teto de DEFESA deste serviço, não a regra de negócio: quem recusa foto grande
+# de cadastro é o apps/api, por `identity.faceEnrollMaxMb` (que tem tela). Se
+# aquele valor subir acima deste, este aqui precisa subir junto, senão a recusa
+# vem do lado errado, com mensagem que o dono não entende.
+MAX_IMAGE_MB = float(os.environ.get("PERCEPTION_MAX_IMAGE_MB", "32"))
 
 app = FastAPI(title="ÓRBITA Percepção")
 
@@ -51,7 +55,10 @@ async def so_de_casa(request: Request, call_next):
     propria = {f"http://{request.url.netloc}", "http://127.0.0.1:8002", "http://localhost:8002"}
     if origem and origem not in propria:
         return JSONResponse({"detail": "origem não permitida"}, status_code=403)
-    if TOKEN and request.url.path not in ("/health", "/bench") and not request.url.path.startswith("/bench"):
+    # `/bench/sample` GRAVA amostra biométrica em disco: isentá-lo do segredo
+    # seria o contrário do que o resto deste middleware faz. Só `/health` fica
+    # livre, porque é o que o apps/api usa para dizer se o serviço está de pé.
+    if TOKEN and request.url.path != "/health":
         if request.headers.get("x-orbita-percepcao") != TOKEN:
             return JSONResponse({"detail": "não autorizado"}, status_code=401)
     return await call_next(request)

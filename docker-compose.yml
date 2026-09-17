@@ -32,6 +32,30 @@ services:
       timeout: 5s
       retries: 10
 
+  # percepção (Fase 2): voz, rosto e gestos viram vetores AQUI DENTRO. Fica sem
+  # nome de rede publicado para a web: só o apps/api fala com ela, e a porta é
+  # presa no 127.0.0.1 porque o que trafega é biometria.
+  perception:
+    build:
+      context: ./apps/perception
+    container_name: orbita-perception
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8002:8002"
+    environment:
+      # segredo compartilhado opcional: sem ele, qualquer página aberta no
+      # navegador da casa alcançaria a percepção
+      PERCEPTION_TOKEN: ${PERCEPTION_TOKEN:-}
+      PERCEPTION_VOICE_MODEL: ${PERCEPTION_VOICE_MODEL:-wespeaker_resnet34}
+      PERCEPTION_FACE_BACKEND: ${PERCEPTION_FACE_BACKEND:-insightface_s}
+    volumes:
+      - perception-models:/models
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8002/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   # one-shot: aplica as migrações Drizzle e encerra
   migrate:
     build:
@@ -95,3 +119,4 @@ services:
 volumes:
   pgdata:
   whisper-models:
+  perception-models:

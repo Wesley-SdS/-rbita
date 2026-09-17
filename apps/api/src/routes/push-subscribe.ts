@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@orbita/db";
 import { pushSubscription } from "@orbita/db/push-schema";
+import { device } from "@orbita/db/device-schema";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { pushEnabled } from "@orbita/core/push/send";
@@ -31,6 +32,12 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if (!parsed.success) return Response.json({ error: "Inscrição inválida" }, { status: 400 });
 
   const { endpoint, keys, deviceId } = parsed.data;
+  // o aparelho decide o cômodo em que o aviso toca: aceitar um id qualquer
+  // deixaria a notificação sair no aparelho de outra pessoa da casa
+  if (deviceId) {
+    const [dono] = await db.select({ id: device.id }).from(device).where(and(eq(device.id, deviceId), eq(device.userId, session.user.id))).limit(1);
+    if (!dono) return Response.json({ error: "Aparelho não encontrado" }, { status: 400 });
+  }
   // Anti-sequestro: se o endpoint já existe e pertence a OUTRO usuário, recusa —
   // senão bastaria conhecer o endpoint de push da vítima para reassociá-lo.
   const [existing] = await db

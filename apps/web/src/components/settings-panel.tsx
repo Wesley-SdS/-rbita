@@ -13,7 +13,7 @@ type SettingType =
   | { kind: "number"; min: number; max: number; step?: number; integer?: boolean }
   | { kind: "boolean" }
   | { kind: "select"; options: { value: string; label: string }[] }
-  | { kind: "text"; maxLength?: number; multiline?: boolean }
+  | { kind: "text"; maxLength?: number; minLength?: number; multiline?: boolean }
   | { kind: "list"; maxItems?: number; itemMaxLength?: number };
 
 interface Item {
@@ -191,13 +191,18 @@ function SettingField({ item, readOnly, onSave, onReset }: { item: Item; readOnl
           onChange={(e) => setDraft(e.target.value)} onBlur={commitDraft} onKeyDown={(e) => { if (e.key === "Enter") commitDraft(); }} />
       )}
       {t.kind === "text" && t.multiline && (
-        <textarea value={draft} maxLength={t.maxLength} rows={8} disabled={busy}
+        <textarea value={draft} maxLength={t.maxLength} minLength={t.minLength} rows={8} disabled={busy}
           className="w-full rounded-lg border px-2 py-1 text-[12px]" style={{ borderColor: "var(--color-line)", background: "transparent" }}
           onChange={(e) => setDraft(e.target.value)} onBlur={commitDraft} />
       )}
       {t.kind === "text" && !t.multiline && (
-        <Input type="text" value={draft} maxLength={t.maxLength} disabled={busy}
+        <Input type="text" value={draft} maxLength={t.maxLength} minLength={t.minLength} disabled={busy}
           onChange={(e) => setDraft(e.target.value)} onBlur={commitDraft} onKeyDown={(e) => { if (e.key === "Enter") commitDraft(); }} />
+      )}
+      {t.kind === "text" && t.minLength !== undefined && String(draft).trim().length < t.minLength && (
+        <p className="mt-1 text-[11px]" style={{ color: "var(--color-danger)" }}>
+          Precisa de pelo menos {t.minLength} caracteres, o servidor recusa abaixo disso.
+        </p>
       )}
       {t.kind === "list" && (
         <textarea value={draft} disabled={busy} rows={2} placeholder="um por linha"

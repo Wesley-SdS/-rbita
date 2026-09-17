@@ -122,10 +122,10 @@ async function enqueueChannelAction(userId: string, kind: string, summary: strin
 async function executeActions(rule: AutomationRule, actions: RuleAction[], context: unknown): Promise<void> {
   for (const a of actions) {
     if (a.kind === "notify") {
-      // De propósito SEM direcionar por pessoa: o `personId` do evento é de quem
-      // foi VISTO, não de quem deve ser avisado. Mandar o aviso sobre a Anna
-      // para o aparelho ao lado da Anna é o oposto do que o dono pediu.
-      await notifyUser(rule.userId, renderTemplate(a.title, context), renderTemplate(a.body, context));
+      // Quem recebe é escolha da REGRA, nunca do evento: o `personId` do evento
+      // é de quem foi VISTO, e mandar o aviso sobre a Anna para o aparelho ao
+      // lado da Anna seria o oposto do que o dono pediu.
+      await notifyUser(rule.userId, renderTemplate(a.title, context), renderTemplate(a.body, context), rule.id, { personId: a.avisarPersonId ?? null });
     } else if (a.kind === "prompt") {
       const body = await runPromptForUser(
         rule.userId,

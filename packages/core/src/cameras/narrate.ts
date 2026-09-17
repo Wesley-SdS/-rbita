@@ -4,6 +4,7 @@ import { camera } from "@orbita/db/camera-schema";
 import { resolveVisionModel } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { cameraEvent } from "@orbita/db/camera-schema";
+import { settings } from "../settings";
 
 /**
  * Narra UM keyframe (nunca vídeo contínuo — briefing §7.1). Sob demanda por
@@ -11,19 +12,30 @@ import { cameraEvent } from "@orbita/db/camera-schema";
  * acontecendo" ou uma regra pede explicitamente, nunca a cada evento.
  */
 export async function narrateSnapshot(snapshot: string, question = "O que está acontecendo nesta cena? Descreva em uma ou duas frases.", opts: { localOnly?: boolean } = {}): Promise<string> {
-  const { text } = await generateText({
-    model: resolveVisionModel(opts),
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: `${question} Responda em português do Brasil.` },
-          { type: "image", image: snapshot },
-        ],
-      },
-    ],
-  });
-  return text.trim();
+  const cfg = await settings.getMany(["vision.localModel", "vision.cloudModel"]);
+  try {
+    const { text } = await generateText({
+      model: resolveVisionModel({ ...opts, local: cfg["vision.localModel"], cloud: cfg["vision.cloudModel"] }),
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: `${question} Responda em português do Brasil.` },
+            { type: "image", image: snapshot },
+          ],
+        },
+      ],
+    });
+    return text.trim();
+  } catch (e) {
+    // erro cru do Ollama ("model not found") não diz ao dono o que fazer, e
+    // com `localOnly` não existe plano B por decisão (nuvem está barrada aqui)
+    const msg = e instanceof Error ? e.message : String(e);
+    if (opts.localOnly && /not found|no such model|404/i.test(msg)) {
+      throw new Error(`O modelo de visão local "${cfg["vision.localModel"]}" não está instalado no Ollama, e esta câmera identifica pessoas, então a nuvem está barrada. Instale o modelo ou troque a chave "Modelo de visão local" em Ajustes.`);
+    }
+    throw e;
+  }
 }
 
 /** Narra e persiste na própria linha do evento (evita narrar o mesmo evento duas vezes). */

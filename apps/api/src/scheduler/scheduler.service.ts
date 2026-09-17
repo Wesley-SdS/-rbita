@@ -190,7 +190,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     for (const userId of userIds) {
       const conn = await getHaConnection(userId);
       if (!conn) continue;
-      const fingerprint = `${conn.baseUrl} ${conn.token}`;
+      const fingerprint = `${conn.baseUrl}\u0000${conn.token}`;
       const existing = this.haWatchers.get(userId);
       if (existing) {
         if (existing.fingerprint === fingerprint) continue;

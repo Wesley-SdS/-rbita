@@ -130,9 +130,16 @@ export const casa_consultar_estado: ToolDef<typeof EstadoInput> = {
  * dispositivo cadastrado, devolve null e a tool responde pedindo o cômodo, em
  * vez de adivinhar e acionar o lugar errado.
  */
-async function comodoDaOrigem(ctx: ToolContext): Promise<{ roomId: string; roomName: string | null } | null> {
+async function comodoDaOrigem(ctx: ToolContext): Promise<{ roomId: string; roomName: string | null; via: "aparelho" | "presenca" } | null> {
   const o = ctx.origin ? await ctx.origin().catch(() => null) : null;
-  return o?.roomId ? { roomId: o.roomId, roomName: o.roomName } : null;
+  if (o?.roomId) return { roomId: o.roomId, roomName: o.roomName, via: "aparelho" };
+  // "apaga a luz de onde EU estou" (PRD §5.3): sem aparelho cadastrado no
+  // cômodo, vale onde quem pediu foi visto AGORA (presença, Onda 10)
+  const quem = ctx.requester ? await ctx.requester().catch(() => null) : null;
+  if (!quem?.personId) return null;
+  const { roomOf } = await import("../../identity/presence");
+  const p = await roomOf(ctx.userId, quem.personId).catch(() => null);
+  return p?.roomId && p.quando === "agora" ? { roomId: p.roomId, roomName: null, via: "presenca" } : null;
 }
 
 const AQUI = /^(aqui|daqui|deste c[oô]modo|neste c[oô]modo|este c[oô]modo)$/i;

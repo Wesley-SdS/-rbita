@@ -50,7 +50,10 @@ export async function POST(req: Request, ctx: RouteCtx) {
     let speakerIdentities: Awaited<ReturnType<typeof identifyMeetingSpeakers>> | undefined;
     if (diarize && result.utterances?.length && (await getOwnerId()) === session.user.id) {
       const t = Date.now();
-      speakerIdentities = await identifyMeetingSpeakers(session.user.id, new Uint8Array(await file.arrayBuffer()), file.type || "audio/webm", result.utterances, null).catch((e) => {
+      // `documentId` liga o desconhecido à reunião de origem: é o que permite
+      // depois dizer "esse Desconhecido 2 é a Anna" a partir da tela da reunião
+      const ref = (form.get("documentId") as string | null) || null;
+      speakerIdentities = await identifyMeetingSpeakers(session.user.id, new Uint8Array(await file.arrayBuffer()), file.type || "audio/webm", result.utterances, ref).catch((e) => {
         log.warn("stt.locutores_falhou", { error: e instanceof Error ? e.message : String(e) });
         return undefined;
       });

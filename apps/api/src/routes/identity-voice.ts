@@ -11,13 +11,19 @@ function erro(e: unknown): Response {
   return domainError(e);
 }
 
-async function lerAudio(req: Request): Promise<{ form: FormData; bytes: Uint8Array; mime: string } | Response> {
+async function lerAudio(req: Request, acao: string): Promise<{ form: FormData; bytes: Uint8Array; mime: string } | Response> {
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   if (!form || !(file instanceof File)) return Response.json({ error: "Arquivo de áudio ausente" }, { status: 400 });
-  // 45 s de webm/opus têm ~400 KB; o teto próprio evita guardar áudio enorme cifrado no banco
-  const maxMb = await settings.get("identity.enrollMaxMb");
-  if (file.size > maxMb * 1024 * 1024) return Response.json({ error: "Áudio grande demais" }, { status: 413 });
+  // cadastrar guarda o áudio cifrado no banco (teto em MB); identificar é um
+  // trecho curto e usa o mesmo teto do trecho que o chat manda (em KB)
+  const maxBytes =
+    acao === "cadastrar"
+      ? (await settings.get("identity.enrollMaxMb")) * 1024 * 1024
+      : (await settings.get("identity.commandClipMaxKB")) * 1024;
+  if (file.size > maxBytes) {
+    return Response.json({ error: `Áudio maior que o limite de ${Math.round(maxBytes / 1024)} KB para esta ação.` }, { status: 413 });
+  }
   return { form, bytes: new Uint8Array(await file.arrayBuffer()), mime: file.type || "audio/webm" };
 }
 
@@ -44,7 +50,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if (!acao.success) return Response.json({ error: "acao deve ser cadastrar, identificar ou recalcular" }, { status: 400 });
   try {
     if (acao.data === "recalcular") return Response.json(await recomputeVoiceSignatures(o.userId));
-    const a = await lerAudio(req);
+    const a = await lerAudio(req, acao.data);
     if (a instanceof Response) return a;
     if (acao.data === "identificar") {
       const r = await identifyVoice(o.userId, a.bytes, a.mime, "tela");

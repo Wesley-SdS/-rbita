@@ -18,6 +18,18 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/Scripts/python.exe 
 `PERCEPTION_BENCH=1` liga a página `/bench` para gravar amostras de medição em `bench_data/`
 (gitignored). Fora da medição, o processo não escreve nada em disco.
 
+> **Por que não pgvector aqui.** As assinaturas ficam em `real[]` com índice btree, não em
+> `vector` com HNSW. Cada modelo tem dimensão diferente (WeSpeaker 192, ArcFace 512, SFace 128) e
+> um índice HNSW é preso a uma dimensão, o que impediria trocar de modelo sem recriar a coluna. O
+> casamento roda em memória (`packages/core/src/identity/match.ts`), carregando só quem tem
+> consentimento vigente e só o modelo ativo: com as pessoas de uma casa isso é trivial. O ponto em
+> que essa escolha passa a doer é na casa dos milhares de assinaturas, o que não é este caso.
+
+> **O que NÃO foi medido** (honestidade sobre o limite desta medição): consumo de CPU durante o
+> reconhecimento (só latência foi medida), gestos/MediaPipe, e o pior caso de tudo junto
+> (`/pose/gesture` + modelo de visão + Ollama gerando). O teste de impostor usa voz sintética, não
+> a voz de outra pessoa da casa. Quando houver uma máquina mais forte, refazer com carga real.
+
 ## Medição de 17/09/2026 (esta máquina)
 
 i7-10610U (4 núcleos / 8 threads), 32 GB, sem GPU. CPU já saturada por outros processos durante

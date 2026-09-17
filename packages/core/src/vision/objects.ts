@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, lt, sql } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { camera, cameraEvent } from "@orbita/db/camera-schema";
 import { room } from "@orbita/db/home-schema";
@@ -28,6 +28,7 @@ export function matchTrackedLabel(label: string, tracked: readonly string[]): st
 
 export interface SeenObject {
   label: string;
+  roomId: string | null;
   roomName: string | null;
   cameraName: string | null;
   zone: string | null;
@@ -54,12 +55,14 @@ export async function recordVisualObject(ev: { id: string; userId: string; camer
 }
 
 /** Onde e quando este objeto foi visto pela última vez (do mais recente para o mais antigo). */
-export async function findObject(ownerUserId: string, termo: string, limite = 5): Promise<SeenObject[]> {
+export async function findObject(ownerUserId: string, termo: string, limite?: number): Promise<SeenObject[]> {
   const cfg = await settings.get("vision.trackedObjects");
+  limite = limite ?? (await settings.get("vision.objectResults"));
   const alvo = matchTrackedLabel(termo, cfg) ?? termo;
   const rows = await db
     .select({
       label: visualObject.label,
+      roomId: visualObject.roomId,
       roomName: room.name,
       cameraName: camera.name,
       zone: visualObject.zone,
@@ -76,7 +79,8 @@ export async function findObject(ownerUserId: string, termo: string, limite = 5)
 }
 
 /** O que a casa viu num período, com nome de quem apareceu (RS/VS: resumo do dia). */
-export async function cameraDigest(ownerUserId: string, desde: Date, ate: Date, limite = 200) {
+export async function cameraDigest(ownerUserId: string, desde: Date, ate: Date, limite?: number) {
+  limite = limite ?? (await settings.get("vision.digestMaxEvents"));
   const rows = await db
     .select({
       id: cameraEvent.id,
@@ -85,6 +89,7 @@ export async function cameraDigest(ownerUserId: string, desde: Date, ate: Date, 
       score: cameraEvent.score,
       createdAt: cameraEvent.createdAt,
       cameraName: camera.name,
+      roomId: camera.roomId,
       roomName: room.name,
       personId: cameraEvent.identifiedPersonId,
       outcome: cameraEvent.identifiedOutcome,
@@ -110,10 +115,4 @@ export async function purgeExpiredVisualObjects(): Promise<number> {
 export async function knownObjectLabels(ownerUserId: string): Promise<string[]> {
   const rows = await db.selectDistinct({ label: visualObject.label }).from(visualObject).where(eq(visualObject.userId, ownerUserId));
   return rows.map((r) => r.label);
-}
-
-/** Apaga a memória visual ligada a eventos de câmeras que sumiram (usado em testes e manutenção). */
-export async function deleteObjectsOfCameras(cameraIds: string[]): Promise<void> {
-  if (!cameraIds.length) return;
-  await db.delete(visualObject).where(inArray(visualObject.cameraId, cameraIds));
 }

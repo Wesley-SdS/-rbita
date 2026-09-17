@@ -50,8 +50,9 @@ export function useChatStream(p: Params) {
 
   async function sendMessage(content: string, voiceClip?: string) {
     if (!content || p.modeRef.current !== "standby" || !p.modelKey) return;
-    // modo privacidade: força modelo local, nada é enviado para nuvem
-    const effectiveModelKey = p.privacyMode && !p.modelKey.startsWith("local/") ? "local/qwen2.5:7b" : p.modelKey;
+    // modo privacidade: quem troca para um modelo local é o SERVIDOR (só ele
+    // sabe o que está instalado). Aqui só vai o pedido.
+    const effectiveModelKey = p.modelKey;
     const imgToSend = imageAttach; // imagem anexada (uma vez); limpa o anexo
     if (imgToSend) setImageAttach(null);
     p.setError(null); p.setMode("studying");
@@ -72,7 +73,7 @@ export function useChatStream(p: Params) {
         headers: { "Content-Type": "application/json" },
         // voiceClip: trecho de voz do ditado (Onda 9, "quem pediu"); mensagens digitadas nunca o têm.
         // deviceId: aparelho registrado em Casa → Aparelhos (Onda 12), diz "daqui" é onde.
-        body: JSON.stringify({ content, modelKey: effectiveModelKey, conversationId: p.convId.current ?? undefined, rich: true, image: imgToSend ?? undefined, voiceClip, deviceId: getOwnDeviceId() ?? undefined }),
+        body: JSON.stringify({ content, modelKey: effectiveModelKey, conversationId: p.convId.current ?? undefined, rich: true, image: imgToSend ?? undefined, voiceClip, deviceId: getOwnDeviceId() ?? undefined, privacidade: p.privacyMode || undefined }),
         signal: ac.signal,
       });
       const cid = res.headers.get("x-conversation-id");

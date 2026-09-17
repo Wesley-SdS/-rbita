@@ -25,6 +25,7 @@
 
   <div class="card row">
     <label>Quem está gravando: <input id="pessoa" value="wesley" size="12"></label>
+    <label>Segredo (só se PERCEPTION_TOKEN estiver definido): <input id="token" type="password" size="14"></label>
     <span class="dim">(outra pessoa da casa pode gravar também, com outro nome: isso mede o quanto as vozes se confundem)</span>
   </div>
 
@@ -62,7 +63,10 @@ const pessoa = () => document.getElementById("pessoa").value.trim() || "wesley";
 async function enviar(kind, label, blob) {
   const fd = new FormData();
   fd.append("file", blob, label); fd.append("kind", kind); fd.append("person", pessoa()); fd.append("label", label);
-  const r = await fetch("/bench/sample", { method: "POST", body: fd });
+  // esta página grava amostra biométrica em disco, então passa pelo mesmo
+  // segredo das outras rotas quando ele está configurado
+  const tk = document.getElementById("token").value.trim();
+  const r = await fetch("/bench/sample", { method: "POST", body: fd, headers: tk ? { "x-orbita-percepcao": tk } : {} });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
 }
 

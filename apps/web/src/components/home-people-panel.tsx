@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Card, PanelTitle, Input, Button, ErrorRetry } from "@/components/ui";
+import { identityLimits, LIMITES_PADRAO, type IdentityLimits } from "@/lib/identity-limits";
 
 /**
  * Pessoas da casa, acesso por cômodo e consentimento biométrico (Onda 8).
@@ -42,7 +43,8 @@ interface PresenceRow {
 }
 
 // mesmo texto de leitura sugerida do bench de percepção (apps/perception/bench/bench.html):
-// frase natural, com números por extenso, que dá ~45 s de fala normal.
+// frase natural, com números por extenso, que dá ~45 s de fala normal (a
+// duração real vem de identity.voiceEnrollRecordSeconds).
 const LEITURA_SUGERIDA =
   "A Órbita organiza minha rotina, acompanha minhas reuniões e cuida da casa. Hoje de manhã revisei a agenda, " +
   "respondi os e-mails mais urgentes e combinei a entrega do relatório para sexta-feira. Depois do almoço, quero " +
@@ -286,7 +288,10 @@ function PresenceBlock({ presenca, onRefresh }: { presenca: PresenceRow[] | null
         <div className="flex flex-col gap-0.5 text-[11px]">
           {presenca.map((p) => (
             <div key={p.personId} className="flex items-center justify-between gap-2">
-              <span>{p.name} · {p.roomName ?? "cômodo não definido"}</span>
+              <span>
+                {p.name} · {p.roomName ?? "cômodo não definido"}
+                {p.confidence !== null && p.confidence !== undefined && <span style={dim}> · {Math.round(p.confidence * 100)}%</span>}
+              </span>
               <span style={p.quando === "agora" ? gold : dim}>{quandoLabel(p)}</span>
             </div>
           ))}
@@ -395,7 +400,7 @@ function PersonCard({ person, people, rooms, term, voiceInfo, faceInfo, expanded
                     {!c.revokedAt && (
                       <button
                         onClick={async () => {
-                          if (!window.confirm("Revogar este consentimento?")) return;
+                          if (!window.confirm("Revogar este consentimento? A Órbita para de cadastrar nova biometria desta pessoa, mas o que já foi cadastrado só some em Apagar biometria.")) return;
                           const r = await fetch(`/api/identity/consent?id=${c.id}`, { method: "DELETE" });
                           if (!r.ok) { const d = await r.json().catch(() => ({})); window.alert(d.error ?? "Não foi possível revogar"); return; }
                           onSaved();
@@ -465,9 +470,18 @@ function PersonCard({ person, people, rooms, term, voiceInfo, faceInfo, expanded
   );
 }
 
+// o que faz o reconhecimento errar, dito onde o cadastro acontece (§7: a tela
+// mostra os limites em vez de deixar o dono descobrir errando)
+const DICAS_ROSTO = "Rosto de frente, bem iluminado e sem óculos escuros. Contraluz (janela atrás), rosto de lado ou foto de longe costumam virar \"não reconheci\". Irmãos e parentes parecidos podem ser confundidos: cadastre os dois e confira na trilha.";
+const DICAS_VOZ = "Fale em ritmo normal, num ambiente sem música nem TV. Áudio muito comprimido (chamada de vídeo, por exemplo) piora o reconhecimento, e gravação curta sai no máximo como \"provavelmente\".";
+
 /** Seção "Voz" da pessoa expandida: quantas amostras tem do modelo atual e o botão de gravar mais uma. */
 function VoiceSection({ person, voiceInfo, onEnrolled }: { person: PersonRow; voiceInfo: VoiceInfo | null; onEnrolled: () => void }) {
   const { start, stop } = useMicRecorder();
+  // quanto gravar é config do dono: com o número fixo aqui, subir a fala mínima
+  // na tela de Ajustes faria todo cadastro ser recusado sem explicação
+  const [limites, setLimites] = useState<IdentityLimits>(LIMITES_PADRAO);
+  useEffect(() => { let alive = true; identityLimits().then((l) => { if (alive) setLimites(l); }); return () => { alive = false; }; }, []);
   const [recording, setRecording] = useState(false);
   const [remaining, setRemaining] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -483,7 +497,7 @@ function VoiceSection({ person, voiceInfo, onEnrolled }: { person: PersonRow; vo
     setMsg(null);
     setOk(null);
     setRecording(true);
-    await start(45, setRemaining, async (blob) => {
+    await start(limites.cadastroVozSegundos, setRemaining, async (blob) => {
       setRecording(false);
       if (!blob) { setMsg("Sem acesso ao microfone."); return; }
       setBusy(true);
@@ -519,9 +533,12 @@ function VoiceSection({ person, voiceInfo, onEnrolled }: { person: PersonRow; vo
           <Button size="sm" variant="outline" onClick={stop}>parar agora</Button>
         </div>
       ) : (
-        <Button size="sm" variant="outline" disabled={busy || !percepcaoOk} onClick={() => void record()}>
-          {busy ? "enviando…" : "Gravar amostra de voz (45 s)"}
-        </Button>
+        <div className="flex flex-col gap-1">
+          <Button size="sm" variant="outline" disabled={busy || !percepcaoOk} onClick={() => void record()}>
+            {busy ? "enviando…" : `Gravar amostra de voz (${limites.cadastroVozSegundos} s)`}
+          </Button>
+          <p className="text-[10px]" style={dim}>{DICAS_VOZ}</p>
+        </div>
       )}
       {msg && <p className="mt-1 text-[11px]" style={danger}>{msg}</p>}
       {ok && <p className="mt-1 text-[11px]" style={gold}>{ok}</p>}
@@ -532,6 +549,8 @@ function VoiceSection({ person, voiceInfo, onEnrolled }: { person: PersonRow; vo
 /** Ferramentas de voz do painel: testar reconhecimento e recalcular assinaturas após trocar o modelo. */
 function VoiceTools({ voiceInfo, onRecalculated }: { voiceInfo: VoiceInfo | null; onRecalculated: () => void }) {
   const { start, stop } = useMicRecorder();
+  const [limites, setLimites] = useState<IdentityLimits>(LIMITES_PADRAO);
+  useEffect(() => { let alive = true; identityLimits().then((l) => { if (alive) setLimites(l); }); return () => { alive = false; }; }, []);
   const [recording, setRecording] = useState(false);
   const [remaining, setRemaining] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -542,7 +561,7 @@ function VoiceTools({ voiceInfo, onRecalculated }: { voiceInfo: VoiceInfo | null
   async function testar() {
     setResult(null);
     setRecording(true);
-    await start(4, setRemaining, async (blob) => {
+    await start(limites.testeVozSegundos, setRemaining, async (blob) => {
       setRecording(false);
       if (!blob) { setResult("Sem acesso ao microfone."); return; }
       setBusy(true);
@@ -588,7 +607,7 @@ function VoiceTools({ voiceInfo, onRecalculated }: { voiceInfo: VoiceInfo | null
         </div>
       ) : (
         <Button size="sm" variant="outline" disabled={busy || !(voiceInfo?.percepcao.ok ?? false)} onClick={() => void testar()}>
-          {busy ? "identificando…" : "Testar reconhecimento (4 s)"}
+          {busy ? "identificando…" : `Testar reconhecimento (${limites.testeVozSegundos} s)`}
         </Button>
       )}
       {result && <p className="text-[11px]" style={dim}>{result}</p>}
@@ -760,6 +779,7 @@ function FaceSection({ person, faceInfo, onEnrolled }: { person: PersonRow; face
           <Button size="sm" variant="outline" disabled={busy || !percepcaoOk} onClick={() => setShowCamera(true)}>
             Tirar foto pela webcam
           </Button>
+          <p className="w-full text-[10px]" style={dim}>{DICAS_ROSTO}</p>
         </div>
       )}
       {msg && <p className="mt-1 text-[11px]" style={danger}>{msg}</p>}

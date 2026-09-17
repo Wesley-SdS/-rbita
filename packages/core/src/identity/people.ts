@@ -259,15 +259,6 @@ export async function revokeConsent(ownerUserId: string, consentId: string): Pro
   await events.emit("identity.consent_revoked", { personId: c.personId, tipos: c.kinds }, { userId: ownerUserId });
 }
 
-/** Tem consentimento vigente? É o portão de todo cadastro biométrico (Ondas 9 e 10). */
-export async function hasConsent(ownerUserId: string, personId: string, kind: BiometricKind): Promise<{ ok: boolean; motivo?: string }> {
-  const p = await getPerson(ownerUserId, personId);
-  if (!p) return { ok: false, motivo: "Pessoa não encontrada" };
-  const rows = await db.select().from(biometricConsent).where(eq(biometricConsent.personId, personId));
-  const r = consentFor(asLike(p), rows, kind);
-  return r.ok ? { ok: true } : { ok: false, motivo: r.motivo };
-}
-
 // ── permissão sobre pessoas ─────────────────────────────────────────────────
 
 export const VisibilityInputSchema = z.object({

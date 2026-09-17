@@ -1,7 +1,7 @@
 import { and, desc, eq, ilike, isNotNull, or } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { camera, cameraEvent, type Camera, type CameraEvent } from "@orbita/db/camera-schema";
-import { room } from "@orbita/db/home-schema";
+import { person, room } from "@orbita/db/home-schema";
 
 /**
  * Achar câmera por nome (dela ou do cômodo). Diferente das entidades do Home
@@ -33,9 +33,23 @@ export async function latestEventWithSnapshot(cameraId: string): Promise<CameraE
   return ev ?? null;
 }
 
-export async function recentEvents(userId: string, cameraId: string | null, limit = 30): Promise<CameraEvent[]> {
+export interface RecentEvent extends CameraEvent {
+  /** nome de quem foi reconhecido (null quando foi desconhecido ou sem identificação) */
+  identifiedName: string | null;
+}
+
+export async function recentEvents(userId: string, cameraId: string | null, limit = 30): Promise<RecentEvent[]> {
   const where = cameraId ? and(eq(cameraEvent.userId, userId), eq(cameraEvent.cameraId, cameraId)) : eq(cameraEvent.userId, userId);
-  return db.select().from(cameraEvent).where(where).orderBy(desc(cameraEvent.createdAt)).limit(limit);
+  // o nome vem junto: a tela precisa dele para mostrar "Anna, provavelmente
+  // (82%)" em vez de um uuid, e o id sozinho não diria nada a ninguém
+  const rows = await db
+    .select({ ev: cameraEvent, nome: person.name })
+    .from(cameraEvent)
+    .leftJoin(person, eq(person.id, cameraEvent.identifiedPersonId))
+    .where(where)
+    .orderBy(desc(cameraEvent.createdAt))
+    .limit(limit);
+  return rows.map((r) => ({ ...r.ev, identifiedName: r.nome ?? null }));
 }
 
 /**

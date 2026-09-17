@@ -56,6 +56,13 @@ export async function ingestCameraEvent(cam: Camera, input: CameraEventInput): P
     void narrateCameraEvent(row!.id).catch(() => {});
   }
 
+  // Memória visual de objetos (Onda 11, decisão 9.4): "onde deixei a chave".
+  // Só o que o dono listou, sem imagem e com prazo; o rótulo vem do próprio
+  // detector da câmera. Não é biometria, então fica deste lado da cerca NV.1.
+  void recordVisualObject({ id: row!.id, userId: cam.userId, cameraId: cam.id, roomId: cam.roomId, label: input.label, score: input.score ?? null, zone: input.zone ?? null }).catch((e) =>
+    log.warn("vision.objeto_falhou", { cameraId: cam.id, error: e instanceof Error ? e.message : String(e) }),
+  );
+
   let roomName: string | null = null;
   if (cam.roomId) {
     const [r] = await db.select({ name: room.name }).from(room).where(eq(room.id, cam.roomId)).limit(1);

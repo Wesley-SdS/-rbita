@@ -120,12 +120,15 @@ function RoomsTab() {
 
   async function add() {
     if (!name.trim()) return;
-    await fetch("/api/home/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+    const r = await fetch("/api/home/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }).catch(() => null);
+    if (!r?.ok) { window.alert(((await r?.json().catch(() => ({}))) as { error?: string })?.error ?? "Não foi possível criar o cômodo."); return; }
     setName("");
     setReload((n) => n + 1);
   }
   async function remove(id: string) {
-    await fetch(`/api/home/rooms?id=${id}`, { method: "DELETE" });
+    if (!window.confirm("Apagar este cômodo? Os dispositivos e aparelhos ligados a ele ficam sem cômodo.")) return;
+    const r = await fetch(`/api/home/rooms?id=${id}`, { method: "DELETE" }).catch(() => null);
+    if (!r?.ok) { window.alert(((await r?.json().catch(() => ({}))) as { error?: string })?.error ?? "Não foi possível apagar o cômodo."); return; }
     setReload((n) => n + 1);
   }
 
@@ -159,7 +162,8 @@ function EntitiesTab() {
   }, [reload]);
 
   async function setRoom(entityId: string, roomId: string | null) {
-    await fetch("/api/home/entities", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entityId, roomId }) });
+    const r = await fetch("/api/home/entities", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entityId, roomId }) }).catch(() => null);
+    if (!r?.ok) { window.alert(((await r?.json().catch(() => ({}))) as { error?: string })?.error ?? "Não foi possível mudar o cômodo do dispositivo."); return; }
     setReload((n) => n + 1);
   }
 
@@ -172,7 +176,7 @@ function EntitiesTab() {
         <div key={e.entityId} className="flex items-center gap-2 rounded-lg border px-2 py-1" style={{ borderColor: "var(--color-line)" }}>
           <div className="min-w-0 flex-1">
             <div className="truncate">{e.friendlyName}</div>
-            <div style={dim}>{e.entityId} · {e.state ?? "—"}</div>
+            <div style={dim}>{e.entityId} · {e.state ?? "sem estado"}</div>
           </div>
           <select value={e.roomId ?? ""} onChange={(ev) => setRoom(e.entityId, ev.target.value || null)}
             className="shrink-0 rounded-md border px-1 py-0.5" style={{ borderColor: "var(--color-line)", background: "transparent" }}>
@@ -196,7 +200,7 @@ function fmtLastSeen(iso: string | null): string {
     const h = Math.round(min / 60);
     if (h < 24) return `há ${h} h`;
     return new Date(iso).toLocaleDateString("pt-BR");
-  } catch { return "—"; }
+  } catch { return "data desconhecida"; }
 }
 
 /**
@@ -214,8 +218,12 @@ function OrbitaDevicesTab() {
   const [reload, setReload] = useState(0);
   const [busy, setBusy] = useState(false);
   const [newRoomId, setNewRoomId] = useState("");
-  const [renaming, setRenaming] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState("");
+  const [abrirOutro, setAbrirOutro] = useState(false);
+  const [outroNome, setOutroNome] = useState("");
+  const [outroTipo, setOutroTipo] = useState<DeviceKind>("satelite");
+  const [outroComodo, setOutroComodo] = useState("");
 
   useEffect(() => { setOwnId(getOwnDeviceId()); }, [reload]);
 
@@ -232,6 +240,27 @@ function OrbitaDevicesTab() {
   }, [reload]);
 
   const own = devices?.find((d) => d.id === ownId) ?? null;
+
+  // toda mutação passa por aqui: erro de API vira mensagem na tela, nunca um
+  // recarregamento silencioso que devolve o controle ao valor antigo
+  async function mutar(req: () => Promise<Response>, falha: string): Promise<boolean> {
+    setBusy(true);
+    try {
+      const r = await req();
+      if (!r.ok) {
+        const d = (await r.json().catch(() => ({}))) as { error?: string };
+        window.alert(d.error ?? falha);
+        return false;
+      }
+      setReload((n) => n + 1);
+      return true;
+    } catch {
+      window.alert(falha);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function registrarEste() {
     setBusy(true);
@@ -250,46 +279,73 @@ function OrbitaDevicesTab() {
     }
   }
 
-  async function trocarComodo(roomId: string) {
-    if (!own) return;
-    setBusy(true);
-    try {
-      const r = await fetch("/api/devices", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: own.id, roomId: roomId || null }) });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); window.alert(d.error ?? "Não foi possível trocar o cômodo."); return; }
-      setReload((n) => n + 1);
-    } finally {
-      setBusy(false);
-    }
+  /**
+   * Satélite de voz e celular não abrem esta tela para se registrarem sozinhos:
+   * o dono cadastra aqui e leva o id gerado para a configuração do aparelho.
+   */
+  async function registrarOutro() {
+    if (!outroNome.trim()) return;
+    const ok = await mutar(
+      () => fetch("/api/devices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: outroNome.trim(), kind: outroTipo, roomId: outroComodo || null }),
+      }),
+      "Não foi possível cadastrar o aparelho.",
+    );
+    if (ok) { setOutroNome(""); setOutroComodo(""); setAbrirOutro(false); }
   }
 
-  async function renomear() {
-    if (!own || !nameDraft.trim()) return;
-    setBusy(true);
-    try {
-      const r = await fetch("/api/devices", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: own.id, name: nameDraft.trim() }) });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); window.alert(d.error ?? "Não foi possível renomear."); return; }
-      setRenaming(false);
-      setReload((n) => n + 1);
-    } finally {
-      setBusy(false);
-    }
+  async function trocarComodo(id: string, roomId: string) {
+    await mutar(
+      () => fetch("/api/devices", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, roomId: roomId || null }) }),
+      "Não foi possível trocar o cômodo.",
+    );
   }
 
-  async function esquecer() {
-    if (!own) return;
-    if (!window.confirm(`Esquecer "${own.name}"? Este navegador para de dizer de onde ele fala e de onde vêm os avisos.`)) return;
-    setBusy(true);
-    try {
-      await fetch(`/api/devices?id=${own.id}`, { method: "DELETE" });
+  async function renomear(id: string) {
+    if (!nameDraft.trim()) return;
+    const ok = await mutar(
+      () => fetch("/api/devices", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, name: nameDraft.trim() }) }),
+      "Não foi possível renomear.",
+    );
+    if (ok) setRenamingId(null);
+  }
+
+  async function esquecer(d: OrbitaDevice) {
+    const proprio = d.id === ownId;
+    const aviso = proprio
+      ? `Esquecer "${d.name}"? Este navegador para de dizer de onde ele fala e de onde vêm os avisos.`
+      : `Esquecer "${d.name}"? Ele deixa de indicar um cômodo, e os avisos param de sair por ele.`;
+    if (!window.confirm(aviso)) return;
+    const ok = await mutar(() => fetch(`/api/devices?id=${d.id}`, { method: "DELETE" }), "Não foi possível esquecer o aparelho.");
+    if (ok && proprio) {
       try { localStorage.removeItem(DEVICE_ID_STORAGE_KEY); } catch { /* segue mesmo sem limpar */ }
-      setReload((n) => n + 1);
-    } finally {
-      setBusy(false);
     }
+  }
+
+  function Acoes({ d }: { d: OrbitaDevice }) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={d.roomId ?? ""} disabled={busy} onChange={(e) => trocarComodo(d.id, e.target.value)}
+          className="rounded-md border px-1 py-0.5" style={{ borderColor: "var(--color-line)", background: "transparent" }}>
+          <option value="">sem cômodo</option>
+          {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>
+        <button onClick={() => { setNameDraft(d.name); setRenamingId(d.id); }} className="text-[11px] underline" style={dim} disabled={busy}>
+          renomear
+        </button>
+        <button onClick={() => esquecer(d)} className="text-[11px]" style={{ color: "var(--color-danger)" }} disabled={busy}>
+          esquecer
+        </button>
+      </div>
+    );
   }
 
   if (err) return <ErrorRetry message={err} onRetry={() => setReload((n) => n + 1)} />;
   if (!devices) return <p className="text-[12px]" style={dim}>Carregando…</p>;
+
+  const outros = devices.filter((d) => d.id !== ownId);
 
   return (
     <div className="flex flex-col gap-2 text-[12px]">
@@ -301,32 +357,22 @@ function OrbitaDevicesTab() {
 
       {own ? (
         <div className="rounded-lg border p-2" style={{ borderColor: "var(--color-gold)" }}>
-          {renaming ? (
+          {renamingId === own.id ? (
             <div className="flex gap-2">
-              <Input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && renomear()} />
-              <Button size="sm" disabled={busy} onClick={renomear}>salvar</Button>
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => setRenaming(false)}>cancelar</Button>
+              <Input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && renomear(own.id)} />
+              <Button size="sm" disabled={busy} onClick={() => renomear(own.id)}>salvar</Button>
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => setRenamingId(null)}>cancelar</Button>
             </div>
           ) : (
-            <p>
-              Este aparelho: <strong>{own.name}</strong> ({own.roomName ?? "sem cômodo"})
-            </p>
+            <>
+              <p>
+                Este aparelho: <strong>{own.name}</strong> ({own.roomName ?? "sem cômodo"})
+              </p>
+              <div className="mt-2">
+                <Acoes d={own} />
+              </div>
+            </>
           )}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <select value={own.roomId ?? ""} disabled={busy} onChange={(e) => trocarComodo(e.target.value)}
-              className="rounded-md border px-1 py-0.5" style={{ borderColor: "var(--color-line)", background: "transparent" }}>
-              <option value="">sem cômodo</option>
-              {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-            {!renaming && (
-              <button onClick={() => { setNameDraft(own.name); setRenaming(true); }} className="text-[11px] underline" style={dim} disabled={busy}>
-                renomear
-              </button>
-            )}
-            <button onClick={esquecer} className="text-[11px]" style={{ color: "var(--color-danger)" }} disabled={busy}>
-              esquecer este aparelho
-            </button>
-          </div>
         </div>
       ) : (
         <div className="rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
@@ -344,15 +390,53 @@ function OrbitaDevicesTab() {
 
       <div className="flex flex-col gap-1">
         <p className="text-[11px] font-medium" style={dim}>Outros aparelhos</p>
-        {devices.filter((d) => d.id !== ownId).length === 0 ? (
+        {outros.length === 0 ? (
           <p className="text-[11px]" style={dim}>Nenhum outro aparelho registrado ainda.</p>
         ) : (
-          devices.filter((d) => d.id !== ownId).map((d) => (
-            <div key={d.id} className="flex items-center justify-between rounded-lg border px-2 py-1" style={{ borderColor: "var(--color-line)" }}>
-              <span>{d.name} <span style={dim}>· {DEVICE_KIND_LABEL[d.kind]} · {d.roomName ?? "sem cômodo"}</span></span>
-              <span style={dim}>{fmtLastSeen(d.lastSeenAt)}</span>
+          outros.map((d) => (
+            <div key={d.id} className="flex flex-col gap-1 rounded-lg border px-2 py-1" style={{ borderColor: "var(--color-line)" }}>
+              {renamingId === d.id ? (
+                <div className="flex gap-2">
+                  <Input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && renomear(d.id)} />
+                  <Button size="sm" disabled={busy} onClick={() => renomear(d.id)}>salvar</Button>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => setRenamingId(null)}>cancelar</Button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate">{d.name} <span style={dim}>· {DEVICE_KIND_LABEL[d.kind]} · {d.roomName ?? "sem cômodo"}</span></span>
+                  <span className="shrink-0" style={dim}>{fmtLastSeen(d.lastSeenAt)}</span>
+                </div>
+              )}
+              {d.kind !== "navegador" && (
+                <p className="text-[10px]" style={dim}>
+                  id para configurar no aparelho: <code>{d.id}</code>
+                </p>
+              )}
+              <Acoes d={d} />
             </div>
           ))
+        )}
+        {abrirOutro ? (
+          <div className="mt-1 flex flex-wrap items-center gap-2 rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
+            <Input placeholder="nome do aparelho" value={outroNome} onChange={(e) => setOutroNome(e.target.value)} onKeyDown={(e) => e.key === "Enter" && registrarOutro()} />
+            <select value={outroTipo} disabled={busy} onChange={(e) => setOutroTipo(e.target.value as DeviceKind)}
+              className="rounded-md border px-1 py-0.5" style={{ borderColor: "var(--color-line)", background: "transparent" }}>
+              <option value="satelite">satélite</option>
+              <option value="celular">celular</option>
+              <option value="navegador">navegador</option>
+            </select>
+            <select value={outroComodo} disabled={busy} onChange={(e) => setOutroComodo(e.target.value)}
+              className="rounded-md border px-1 py-0.5" style={{ borderColor: "var(--color-line)", background: "transparent" }}>
+              <option value="">sem cômodo</option>
+              {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+            <Button size="sm" disabled={busy || !outroNome.trim()} onClick={registrarOutro}>salvar</Button>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => setAbrirOutro(false)}>cancelar</Button>
+          </div>
+        ) : (
+          <button onClick={() => setAbrirOutro(true)} className="mt-1 self-start text-[11px] underline" style={dim} disabled={busy}>
+            + cadastrar outro aparelho (satélite, celular)
+          </button>
         )}
       </div>
     </div>

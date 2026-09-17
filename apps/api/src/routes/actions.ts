@@ -1,5 +1,6 @@
 // Migrada do Next em paridade (apps/web/src/app/api/actions/route.ts).
 import { and, desc, eq } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@orbita/db";
 import { actionQueue } from "@orbita/db/action-schema";
 import { executeAction } from "@orbita/core/connectors/execute";
@@ -7,6 +8,9 @@ import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { log } from "@orbita/core/observability/logger";
 import { events } from "@orbita/core/events/index";
+
+/** O gate humano (§5.1) também valida a entrada: id é uuid, e nada além dele. */
+const ActionIdBody = z.object({ id: z.string().uuid() });
 
 /** Lista as ações pendentes de aprovação do usuário. */
 export async function GET(_req: Request, ctx: RouteCtx) {
@@ -24,8 +28,9 @@ export async function GET(_req: Request, ctx: RouteCtx) {
 export async function POST(req: Request, ctx: RouteCtx) {
   const session = sessionOf(ctx);
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
-  const { id } = await req.json().catch(() => ({}));
-  if (!id) return Response.json({ error: "id obrigatório" }, { status: 400 });
+  const parsed = ActionIdBody.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return Response.json({ error: "id obrigatório" }, { status: 400 });
+  const { id } = parsed.data;
 
   const [action] = await db
     .select()
@@ -53,7 +58,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
 export async function DELETE(req: Request, ctx: RouteCtx) {
   const session = sessionOf(ctx);
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
-  const id = new URL(req.url).searchParams.get("id");
+  const id = z.string().uuid().safeParse(new URL(req.url).searchParams.get("id")).data;
   if (!id) return Response.json({ error: "id obrigatório" }, { status: 400 });
   await db
     .update(actionQueue)

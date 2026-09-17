@@ -3,7 +3,6 @@ import { z } from "zod";
 import { db } from "@orbita/db";
 import { device } from "@orbita/db/device-schema";
 import { room } from "@orbita/db/home-schema";
-import { pushSubscription } from "@orbita/db/push-schema";
 import { personPresence } from "@orbita/db/presence-schema";
 import { IdentityError } from "./errors";
 import { settings } from "../settings";
@@ -109,12 +108,4 @@ export async function deviceForPerson(ownerUserId: string, personId: string): Pr
   if (freshness(p.seenAt, new Date(), cfg["identity.presenceFreshMinutes"], cfg["identity.presenceRecentMinutes"]) !== "agora") return null;
   const d = await deviceInRoom(ownerUserId, p.roomId);
   return d ? { ...d, roomId: p.roomId } : null;
-}
-
-/** Liga uma inscrição de push (navegador) ao dispositivo, para a notificação achar o cômodo. */
-export async function linkPushToDevice(ownerUserId: string, endpoint: string, deviceId: string | null): Promise<void> {
-  await db
-    .update(pushSubscription)
-    .set({ deviceId })
-    .where(and(eq(pushSubscription.endpoint, endpoint), eq(pushSubscription.userId, ownerUserId)));
 }

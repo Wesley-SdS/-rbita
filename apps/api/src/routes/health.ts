@@ -33,6 +33,11 @@ export async function GET(_req: Request, _ctx: RouteCtx) {
   const ollama = (process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1").replace(/\/v1\/?$/, "");
   checks.ollama = (await ping(ollama + "/api/tags", pingMs)) ? "up" : "down";
 
+  // percepção (Fase 2): sem ela, voz e rosto simplesmente não identificam. Não
+  // derruba o health (o resto da Órbita funciona), mas precisa aparecer.
+  const percepcao = await settings.get("identity.perceptionUrl");
+  checks.perception = (await ping(percepcao.replace(/\/+$/, "") + "/health", pingMs)) ? "up" : "down";
+
   const status = checks.db === "up" ? "ok" : "error";
   return Response.json(
     { status, db: checks.db, checks, ms: Date.now() - started, ts: new Date().toISOString() },

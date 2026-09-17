@@ -42,6 +42,11 @@ export async function PUT(req: Request, ctx: RouteCtx) {
   // amostra só com consentimento (checado em enrollFromMeetingRef); falha numa
   // etiqueta não desfaz o nome salvo, só volta o motivo para a tela
   const amostras: Record<string, string> = {};
+  // cadastrar biometria é do dono (RV.1). Antes isto era ignorado calado, e a
+  // tela dizia "ok" sem nenhuma amostra ter sido cadastrada.
+  if (parsed.data.links && Object.values(parsed.data.links).some((l) => l.usarComoAmostra) && !(await isOwner(session.user.id))) {
+    return Response.json({ error: "Somente o dono desta instância cadastra biometria." }, { status: 403 });
+  }
   if (parsed.data.links && (await isOwner(session.user.id))) {
     for (const [label, l] of Object.entries(parsed.data.links)) {
       if (!l.usarComoAmostra || !l.ref) continue;

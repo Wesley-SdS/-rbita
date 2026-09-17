@@ -1,4 +1,16 @@
 import { z } from "zod";
+// Import só de TIPO: `defs.ts` é folha, importada por quase tudo, e puxar o
+// packages/llm em runtime daqui quebraria todo teste que simula aquele módulo.
+// O `Record` continua garantindo, em tempo de compilação, que a tela ofereça
+// exatamente as ordens que o failover conhece.
+import type { FailoverOrder } from "@orbita/llm";
+
+const FAILOVER_LABEL: Record<FailoverOrder, string> = {
+  assinatura_local_paga: "Assinatura, depois local, depois nuvem paga",
+  assinatura_paga_local: "Assinatura, depois nuvem paga, depois local",
+  local_primeiro: "Local primeiro (máxima privacidade, lento sem GPU)",
+};
+const FAILOVER_OPTIONS = (Object.entries(FAILOVER_LABEL) as [FailoverOrder, string][]).map(([value, label]) => ({ value, label }));
 
 /**
  * DEFINIÇÕES DE CONFIGURAÇÃO — a única lista de "constantes" do motor.
@@ -152,11 +164,7 @@ export const SETTING_DEFS = {
     "Ordem do failover",
     "Quando o modelo escolhido falha antes de começar a responder, a Órbita tenta outro nesta ordem. Nuvem que não informa preço fica sempre depois da nuvem com preço.",
     "assinatura_local_paga",
-    [
-      { value: "assinatura_local_paga", label: "Assinatura, depois local, depois nuvem paga" },
-      { value: "assinatura_paga_local", label: "Assinatura, depois nuvem paga, depois local" },
-      { value: "local_primeiro", label: "Local primeiro (máxima privacidade, lento sem GPU)" },
-    ],
+    FAILOVER_OPTIONS,
   ),
   "llm.defaultPreference": sel(
     "models",
@@ -241,6 +249,17 @@ export const SETTING_DEFS = {
   // ── ferramentas (tools/registry.ts) ──
   "tools.maxPerTurn": num("tools", "Ferramentas por turno", "Acima disso, só as mais relevantes para o pedido vão ao modelo (seleção por palavras, sem LLM). Muitas ferramentas pioram custo e precisão.", 30, 5, 200),
 
+  "meetings.sttCloud": sel(
+    "meetings",
+    "Transcrever reunião na nuvem",
+    "Com a chave do AssemblyAI configurada, a transcrição vai para a nuvem (melhor separação de quem falou). Desligado, transcreve aqui com o whisper local, mais lento e sem diarização tão boa. O RECONHECIMENTO de quem é quem é sempre local, nos dois casos.",
+    "quando_houver_chave",
+    [
+      { value: "quando_houver_chave", label: "Sim, quando houver chave" },
+      { value: "nunca", label: "Não, só nesta casa" },
+    ],
+  ),
+
   // ── visão: memória de objetos e gestos (Onda 11) ──
   "vision.trackedObjects": list(
     "vision",
@@ -249,6 +268,10 @@ export const SETTING_DEFS = {
     ["chave", "mochila", "celular", "carteira", "óculos", "controle"],
   ),
   "vision.retentionHours": num("vision", "Memória visual dura", "Depois disso a Órbita esquece onde viu o objeto.", 48, 1, 720, { unit: "h" }),
+  "vision.objectResults": num("vision", "Avistamentos por objeto na resposta", "Quantos avistamentos a Órbita lista ao responder onde um objeto foi visto. Mais que isso vira texto longo demais para ouvir.", 5, 1, 50),
+  "vision.digestMaxEvents": num("vision", "Eventos no resumo das câmeras", "Teto de eventos lidos ao resumir o que as câmeras viram num período. Período movimentado é cortado neste número, do mais recente para trás.", 200, 10, 2000),
+  "vision.localModel": text("vision", "Modelo de visão local", "Modelo do Ollama que descreve a imagem quando a resposta precisa ficar nesta casa (câmera com identificação, modo privacidade). Precisa estar instalado no Ollama.", "moondream"),
+  "vision.cloudModel": text("vision", "Modelo de visão de nuvem", "Modelo usado quando a nuvem é permitida (ver a tela, câmera sem identificação, com chave da OpenAI configurada).", "gpt-4o"),
   "vision.gestures": list(
     "vision",
     "Gestos reconhecidos",
@@ -304,6 +327,8 @@ export const SETTING_DEFS = {
   "identity.voiceMargin": num("identity", "Voz: folga sobre a segunda pessoa", "Se duas pessoas ficam perto demais (parentes, vozes parecidas), não afirma.", 0.08, 0, 1, { step: 0.01 }),
   "identity.voiceMinSpeechSeconds": num("identity", "Voz: fala mínima para afirmar", "Fala mais curta que isso sai no máximo como \"provavelmente\". Na medição, frases abaixo de 1 s de fala foram as que mais erraram.", 1, 0.5, 30, { step: 0.5, unit: "s" }),
   "identity.voiceEnrollMinSeconds": num("identity", "Voz: fala mínima no cadastro", "Gravação de cadastro com menos fala que isso é recusada.", 20, 5, 300, { unit: "s" }),
+  "identity.voiceEnrollRecordSeconds": num("identity", "Voz: duração da gravação de cadastro", "Quanto tempo a tela grava ao cadastrar uma voz. Precisa ser maior que a fala mínima, porque gravação tem pausa e respiração.", 45, 10, 600, { unit: "s" }),
+  "identity.voiceTestRecordSeconds": num("identity", "Voz: duração do teste", "Quanto tempo a tela grava ao testar se a Órbita reconhece a voz.", 4, 2, 60, { unit: "s" }),
   "identity.meetingSpeakerMaxSeconds": num("identity", "Reunião: fala usada por locutor", "Quantos segundos das falas mais longas de cada locutor entram no reconhecimento.", 40, 5, 300, { unit: "s" }),
   "identity.speakerRefTtlMinutes": num("identity", "Reunião: janela para usar a fala como amostra", "Por quanto tempo depois da transcrição dá para nomear um locutor e usar a fala dele como amostra de voz.", 120, 5, 1440, { unit: "min" }),
   "identity.commandTimeoutMs": num("identity", "Voz do comando: tempo máximo", "Quanto esperar para saber quem pediu. Passou disso, segue sem identificar (e, na política restrita, como visitante).", 3000, 500, 30000, { unit: "ms" }),
@@ -336,6 +361,7 @@ export const SETTING_DEFS = {
   "identity.presenceRecentMinutes": num("identity", "Presença: considerar \"recente\" por", "Acima disso o avistamento é tratado como antigo.", 60, 5, 1440, { unit: "min" }),
   "identity.unknownRetentionDays": num("identity", "Retenção de desconhecido", "Por quantos dias uma voz ou rosto desconhecido fica guardado para ser reconhecido de novo ou nomeado. Depois some sozinho.", 7, 1, 90, { unit: "dias" }),
   "identity.commandClipMaxKB": num("identity", "Trecho de voz do comando", "Tamanho máximo do trecho gravado junto do ditado para saber quem pediu.", 400, 50, 4000, { unit: "KB" }),
+  "identity.commandClipSeconds": num("identity", "Duração do trecho de voz do comando", "Quantos segundos de voz o navegador guarda junto do ditado para a Órbita saber quem pediu. Muito curto não identifica; muito longo pesa no envio.", 6, 2, 30, { unit: "s" }),
   "identity.unknownVoicePolicy": sel(
     "identity",
     "Comando de voz não reconhecido",

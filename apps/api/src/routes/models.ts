@@ -3,6 +3,7 @@ import { availableModels, providerEnv, defaultModelKey, discoverModels, invalida
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { log } from "@orbita/core/observability/logger";
+import { ownerOf } from "../http/owner-route";
 
 /**
  * Lista os modelos DESCOBERTOS nos provedores configurados, nada hardcoded.
@@ -28,11 +29,11 @@ export async function GET(_req: Request, ctx: RouteCtx) {
 
 /** Força uma nova descoberta (o dono instalou um modelo ou trocou uma chave). */
 export async function POST(_req: Request, ctx: RouteCtx) {
-  const session = sessionOf(ctx);
-  if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
+  const dono = await ownerOf(ctx);
+  if (dono instanceof Response) return dono;
 
   invalidateDiscovery();
   const models = await discoverModels({ force: true });
-  log.info("models.refresh", { userId: session.user.id, total: models.length });
+  log.info("models.refresh", { userId: dono.userId, total: models.length });
   return Response.json({ ok: true, total: models.length });
 }

@@ -5,6 +5,7 @@ import { db } from "@orbita/db";
 import { camera } from "@orbita/db/camera-schema";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
+import { ownerOf } from "../http/owner-route";
 
 const CreateBody = z.object({ name: z.string().min(1).max(60), roomId: z.string().uuid().nullable().optional() });
 const PatchBody = z.object({
@@ -35,22 +36,22 @@ export async function GET(_req: Request, ctx: RouteCtx) {
  * os eventos em POST /api/cameras/ingest.
  */
 export async function POST(req: Request, ctx: RouteCtx) {
-  const session = sessionOf(ctx);
-  if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
+  const dono = await ownerOf(ctx);
+  if (dono instanceof Response) return dono;
   const parsed = CreateBody.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
   const webhookToken = randomBytes(24).toString("hex");
   const [row] = await db
     .insert(camera)
-    .values({ userId: session.user.id, name: parsed.data.name, roomId: parsed.data.roomId ?? null, webhookToken })
+    .values({ userId: dono.userId, name: parsed.data.name, roomId: parsed.data.roomId ?? null, webhookToken })
     .returning({ id: camera.id });
   return Response.json({ id: row?.id, webhookToken });
 }
 
 /** PATCH /api/cameras?id=... — nome, cômodo, ou ligar/desligar (o opt-out por cômodo). */
 export async function PATCH(req: Request, ctx: RouteCtx) {
-  const session = sessionOf(ctx);
-  if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
+  const dono = await ownerOf(ctx);
+  if (dono instanceof Response) return dono;
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return Response.json({ error: "id obrigatório" }, { status: 400 });
   const parsed = PatchBody.safeParse(await req.json().catch(() => null));
@@ -59,16 +60,16 @@ export async function PATCH(req: Request, ctx: RouteCtx) {
   await db
     .update(camera)
     .set({ ...parsed.data, updatedAt: new Date() })
-    .where(and(eq(camera.id, id), eq(camera.userId, session.user.id)));
+    .where(and(eq(camera.id, id), eq(camera.userId, dono.userId)));
   return Response.json({ ok: true });
 }
 
 /** DELETE /api/cameras?id=... */
 export async function DELETE(req: Request, ctx: RouteCtx) {
-  const session = sessionOf(ctx);
-  if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
+  const dono = await ownerOf(ctx);
+  if (dono instanceof Response) return dono;
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return Response.json({ error: "id obrigatório" }, { status: 400 });
-  await db.delete(camera).where(and(eq(camera.id, id), eq(camera.userId, session.user.id)));
+  await db.delete(camera).where(and(eq(camera.id, id), eq(camera.userId, dono.userId)));
   return Response.json({ ok: true });
 }

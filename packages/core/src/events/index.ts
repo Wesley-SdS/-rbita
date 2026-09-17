@@ -1,4 +1,4 @@
-import { asc, eq, gt, inArray, isNull, lt, max } from "drizzle-orm";
+import { asc, inArray, isNull, lt } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { eventLog } from "@orbita/db/event-schema";
 import { createEventBus, type EventBus, type OrbitaEvent } from "./bus";
@@ -18,19 +18,6 @@ export async function persistEvent(ev: OrbitaEvent): Promise<number | undefined>
   return row?.id;
 }
 
-/** Eventos gravados depois de `afterId` (outbox), em ordem. */
-export async function fetchEventsAfter(afterId: number, limit = 200): Promise<OrbitaEvent[]> {
-  const rows = await db.select().from(eventLog).where(gt(eventLog.id, afterId)).orderBy(asc(eventLog.id)).limit(limit);
-  return rows.map((r) => ({
-    id: r.id,
-    type: r.type,
-    userId: r.userId,
-    source: r.source,
-    payload: (r.payload ?? {}) as Record<string, unknown>,
-    at: r.createdAt,
-  }));
-}
-
 /** Eventos ainda não despachados às regras, do mais antigo ao mais novo (RV.5). */
 export async function fetchPendingEvents(limit = 200): Promise<OrbitaEvent[]> {
   const rows = await db.select().from(eventLog).where(isNull(eventLog.processedAt)).orderBy(asc(eventLog.id)).limit(limit);
@@ -48,17 +35,6 @@ export async function fetchPendingEvents(limit = 200): Promise<OrbitaEvent[]> {
 export async function markEventsProcessed(ids: number[]): Promise<void> {
   if (!ids.length) return;
   await db.update(eventLog).set({ processedAt: new Date() }).where(inArray(eventLog.id, ids));
-}
-
-/** Apaga toda a trilha de um usuário (apagar conta, LGPD). `event_log` não tem FK de propósito: evento de sistema não tem dono. */
-export async function deleteUserEvents(userId: string): Promise<void> {
-  await db.delete(eventLog).where(eq(eventLog.userId, userId));
-}
-
-/** Maior id já gravado (ponto de partida do poller: não reprocessa o passado). */
-export async function latestEventId(): Promise<number> {
-  const [row] = await db.select({ id: max(eventLog.id) }).from(eventLog);
-  return Number(row?.id ?? 0);
 }
 
 /** Apaga eventos mais antigos que `days` (retenção configurável). */
