@@ -300,8 +300,10 @@ Antes de considerar qualquer tarefa concluída:
 - **`assertPublicUrl` (`lib/net/ssrf.ts`) bloqueia a LAN** (192.168/10/172.16). Isso impede
   cadastrar o Home Assistant como servidor MCP. Precisa de exceção deliberada, não de remoção.
 - **`buildMcpTools` roda no caminho quente do chat**, conectando a cada mensagem. Latência.
-- **Embeddings preferem a nuvem** se `GEMINI_API_KEY` existir, **mesmo em modo privacidade**
-  (`packages/llm/src/embeddings.ts`). É um bug conhecido de privacidade.
+- **Embeddings só vão para a nuvem se a config deixar.** A armadilha antiga (nuvem sempre que
+  houvesse `GEMINI_API_KEY`) foi fechada na Onda 1: quem manda é `embeddings.provider`
+  (auto · sempre local · sempre nuvem), aplicado por requisição em `packages/llm/src/embeddings.ts`.
+  Trocar de provedor invalida os vetores já gravados: a tela avisa para reindexar.
 - **Rotinas e regras rodam no `apps/api`** (SchedulerService). Se ele não estiver de pé, nada proativo acontece; o navegador não agenda mais nada.
 - **`next.config` rewrite `fallback` quebra as rotas do app router** (404 em tudo). Use `beforeFiles` com a regex `API_KEPT_IN_NEXT`.
 - **O proxy do Next em dev derruba upstream lento**: um chat com 116 s até o primeiro token (modelo local de 1B na CPU) voltou `ECONNRESET`. Com modelo razoável (2 s de TTFT) o streaming NDJSON flui token a token. Em produção o Caddy tem timeout configurável.
