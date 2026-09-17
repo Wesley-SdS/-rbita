@@ -67,7 +67,7 @@ function invalidMessage(t: SettingType): string {
     case "select":
       return `Opção inválida (aceitas: ${t.options.map((o) => o.value).join(", ")})`;
     case "text":
-      return `Texto inválido (máximo ${t.maxLength ?? 200} caracteres)`;
+      return t.minLength ? `Texto inválido (entre ${t.minLength} e ${t.maxLength ?? 200} caracteres)` : `Texto inválido (máximo ${t.maxLength ?? 200} caracteres)`;
     case "list":
       return `Lista inválida (até ${t.maxItems ?? 200} itens, cada um com até ${t.itemMaxLength ?? 200} caracteres)`;
   }

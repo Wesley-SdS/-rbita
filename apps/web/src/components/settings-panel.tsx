@@ -13,7 +13,7 @@ type SettingType =
   | { kind: "number"; min: number; max: number; step?: number; integer?: boolean }
   | { kind: "boolean" }
   | { kind: "select"; options: { value: string; label: string }[] }
-  | { kind: "text"; maxLength?: number }
+  | { kind: "text"; maxLength?: number; multiline?: boolean }
   | { kind: "list"; maxItems?: number; itemMaxLength?: number };
 
 interface Item {
@@ -190,7 +190,12 @@ function SettingField({ item, readOnly, onSave, onReset }: { item: Item; readOnl
         <Input type="number" value={draft} min={t.min} max={t.max} step={t.step ?? (t.integer ? 1 : "any")} disabled={busy}
           onChange={(e) => setDraft(e.target.value)} onBlur={commitDraft} onKeyDown={(e) => { if (e.key === "Enter") commitDraft(); }} />
       )}
-      {t.kind === "text" && (
+      {t.kind === "text" && t.multiline && (
+        <textarea value={draft} maxLength={t.maxLength} rows={8} disabled={busy}
+          className="w-full rounded-lg border px-2 py-1 text-[12px]" style={{ borderColor: "var(--color-line)", background: "transparent" }}
+          onChange={(e) => setDraft(e.target.value)} onBlur={commitDraft} />
+      )}
+      {t.kind === "text" && !t.multiline && (
         <Input type="text" value={draft} maxLength={t.maxLength} disabled={busy}
           onChange={(e) => setDraft(e.target.value)} onBlur={commitDraft} onKeyDown={(e) => { if (e.key === "Enter") commitDraft(); }} />
       )}

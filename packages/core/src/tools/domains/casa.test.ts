@@ -12,12 +12,21 @@ import type { casa_acionar_com_aprovacao as CasaAcionarComAprovacao } from "./ca
  * módulos; sob carga cheia da suíte isso passou de 5s uma vez. Carregado
  * uma única vez em `beforeAll` para não pagar esse custo por teste.
  */
+// As recusas testadas acontecem antes de qualquer HA/banco/embedding: mockar
+// essas dependências tira do import o client Postgres, o AI SDK e o índice de
+// entidades, que com a CPU saturada levavam o import a passar de 60 s.
+vi.mock("@orbita/db", () => ({ db: {} }));
+vi.mock("../../home/connection", () => ({ getHaConnection: vi.fn(async () => null) }));
+vi.mock("../../home/entities", () => ({ entitiesInRoom: vi.fn(async () => []), findEntities: vi.fn(async () => []) }));
+vi.mock("../../home/access", () => ({ loadDomainRiskOverrides: vi.fn(async () => new Map()) }));
+
 const ctx = { userId: "u1" };
 let casa_acionar_com_aprovacao: typeof CasaAcionarComAprovacao;
 
 beforeAll(async () => {
   ({ casa_acionar_com_aprovacao } = await import("./casa"));
-}, 20000);
+  // o import puxa o registro inteiro de tools; com a CPU saturada passava de 20 s
+}, 60_000);
 
 describe("casa: defesa contra redirecionamento de alvo (auditoria)", () => {
   it("recusa domínio de despacho (scene) mesmo na tool com aprovação, mesmo tentando destrancar via dados.entities", async () => {

@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, uuid, jsonb, vector, index, unique, primaryKey, boolean } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, text, timestamp, uuid, jsonb, vector, index, unique, primaryKey, boolean, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -96,7 +97,9 @@ export const haDomainRisk = pgTable(
  * pertencem à MESMA conta/casa do dono (`userId` = o dono). É permissão por
  * pessoa e por cômodo, não isolamento de dados entre organizações.
  */
-export const person = pgTable("person", {
+export const person = pgTable(
+  "person",
+  {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -104,8 +107,26 @@ export const person = pgTable("person", {
   name: text("name").notNull(),
   // dono: tudo liberado · morador: liberado exceto onde restrito · visitante: só onde liberado
   role: text("role", { enum: ["dono", "morador", "visitante"] }).notNull().default("morador"),
+  /** Como a pessoa é chamada na fala ("Aninha", "mãe"): casa pedido por nome sem depender do cadastro exato (Onda 8). */
+  aliases: text("aliases").array().notNull().default(sql`'{}'::text[]`),
+  /**
+   * Relação com a casa, independente do papel de permissão: um contato externo
+   * (cliente de reunião) não é visitante da casa. Decisão 9.1 (17/09): qualquer
+   * relação pode ter biometria, sempre com consentimento registrado.
+   */
+  relation: text("relation", { enum: ["morador", "visitante_frequente", "contato_externo"] }).notNull().default("morador"),
+  /** Menor de idade: consentimento só vale se dado pelo responsável (PRD §4.4). */
+  isMinor: boolean("is_minor").notNull().default(false),
+  // AnyPgColumn: autorreferência precisa do tipo explícito
+  guardianPersonId: uuid("guardian_person_id").references((): AnyPgColumn => person.id, { onDelete: "set null" }),
+  /** Conta de login desta pessoa na Órbita, quando ela tem uma (ex.: a Anna entra com o e-mail dela). */
+  accountUserId: text("account_user_id").references(() => user.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  // uma conta de login = uma pessoa da casa ("quem pede" não pode oscilar)
+  (t) => [uniqueIndex("person_account_unique").on(t.userId, t.accountUserId).where(sql`${t.accountUserId} is not null`)],
+);
 
 /** Acesso explícito de uma pessoa a um cômodo (ver `permission.ts` para a regra completa). */
 export const personRoomAccess = pgTable(

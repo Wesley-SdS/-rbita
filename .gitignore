@@ -33,6 +33,15 @@ apps/voice/models_test
 apps/voice/models
 *.wav
 
+# percepção (Fase 2) — BIOMETRIA NUNCA VAI PARA O REPO (que é público).
+# Modelos baixados, amostras de voz/rosto da medição e qualquer dado de cadastro.
+apps/perception/models
+apps/perception/bench_data
+apps/perception/**/*.webm
+apps/perception/**/*.jpg
+apps/perception/**/*.png
+apps/perception/**/*.npy
+
 # harness/editor local (Claude Code). As SKILLS são versionadas de propósito:
 # são convenção do projeto, valem para qualquer máquina e para qualquer sessão.
 # O resto (launch.json, settings.local.json) é pessoal e fica de fora.

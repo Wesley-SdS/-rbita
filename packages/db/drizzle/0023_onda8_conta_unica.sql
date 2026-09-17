@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "person_account_unique" ON "person" USING btree ("user_id","account_user_id") WHERE "person"."account_user_id" is not null;

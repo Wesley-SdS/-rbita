@@ -42,6 +42,8 @@ export * from "./channels-schema";
 export * from "./camera-schema";
 // Dono explícito da instância: quem altera config global (Fase 2, RV.1).
 export * from "./owner-schema";
+// Identidade: consentimento biométrico, auditoria, permissão sobre pessoas (Fase 2).
+export * from "./identity-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {

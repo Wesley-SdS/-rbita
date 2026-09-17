@@ -41,6 +41,10 @@ import * as homeEntities from "./home-entities";
 import * as homeDomainRisk from "./home-domain-risk";
 import * as homePersons from "./home-persons";
 import * as homePersonAccess from "./home-person-access";
+import * as identityConsent from "./identity-consent";
+import * as identityBiometrics from "./identity-biometrics";
+import * as identityVisibility from "./identity-visibility";
+import * as identityAudit from "./identity-audit";
 import * as channelsWhatsapp from "./channels-whatsapp";
 import * as cameras from "./cameras";
 import * as cameraEvents from "./camera-events";
@@ -80,6 +84,11 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/home/domain-risk", homeDomainRisk),
   webRoute("api/home/persons", homePersons),
   webRoute("api/home/person-access", homePersonAccess),
+  // identidade (Fase 2): consentimento, biometria, permissão sobre pessoas, auditoria
+  webRoute("api/identity/consent", identityConsent),
+  webRoute("api/identity/biometrics", identityBiometrics),
+  webRoute("api/identity/visibility", identityVisibility),
+  webRoute("api/identity/audit", identityAudit),
   webRoute("api/channels/whatsapp", channelsWhatsapp),
   webRoute("api/cameras", cameras),
   webRoute("api/cameras/events", cameraEvents),

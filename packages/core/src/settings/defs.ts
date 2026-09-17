@@ -16,7 +16,7 @@ export type SettingType =
   | { kind: "number"; min: number; max: number; step?: number; integer?: boolean }
   | { kind: "boolean" }
   | { kind: "select"; options: { value: string; label: string }[] }
-  | { kind: "text"; maxLength?: number }
+  | { kind: "text"; maxLength?: number; minLength?: number; multiline?: boolean }
   | { kind: "list"; maxItems?: number; itemMaxLength?: number };
 
 export interface SettingDef<T> {
@@ -50,6 +50,7 @@ export const SETTING_GROUPS = {
   finance: { label: "Finanças", order: 75 },
   limits: { label: "Limites", order: 80 },
   graph: { label: "Grafo de conhecimento", order: 85 },
+  identity: { label: "Identidade e biometria", order: 66 },
   auth: { label: "Acesso", order: 90 },
 } as const;
 export type SettingGroupId = keyof typeof SETTING_GROUPS;
@@ -87,12 +88,12 @@ const list = (group: SettingGroupId, label: string, description: string, def: st
   sensitive: extra.sensitive,
   type: { kind: "list", maxItems: 200, itemMaxLength: 200 },
 });
-const text = (group: SettingGroupId, label: string, description: string, def: string, maxLength = 200): SettingDef<string> => ({
+const text = (group: SettingGroupId, label: string, description: string, def: string, maxLength = 200, multiline = false, minLength?: number): SettingDef<string> => ({
   group,
   label,
   description,
   default: def,
-  type: { kind: "text", maxLength },
+  type: { kind: "text", maxLength, minLength, multiline: multiline || undefined },
 });
 
 export const SETTING_DEFS = {
@@ -239,6 +240,67 @@ export const SETTING_DEFS = {
   // ── ferramentas (tools/registry.ts) ──
   "tools.maxPerTurn": num("tools", "Ferramentas por turno", "Acima disso, só as mais relevantes para o pedido vão ao modelo (seleção por palavras, sem LLM). Muitas ferramentas pioram custo e precisão.", 30, 5, 200),
 
+  // ── identidade e biometria (packages/core/src/identity, Fase 2) ──
+  "identity.consentTerm": text(
+    "identity",
+    "Termo de consentimento biométrico",
+    "Texto que a pessoa (ou o responsável, se for menor) lê e aceita antes de qualquer cadastro de voz ou rosto. O texto exato aceito fica guardado com o consentimento; mudar o termo não altera consentimentos antigos.",
+    [
+      "Autorizo a Órbita, assistente pessoal desta casa, a guardar uma assinatura da minha voz e/ou do meu rosto para me reconhecer em reuniões, comandos de voz e câmeras da casa.",
+      "Essa assinatura e as amostras usadas para criá-la ficam apenas nos computadores desta casa e nunca são enviadas a serviços de nuvem.",
+      "Cada reconhecimento fica registrado. Ninguém pergunta sobre mim sem permissão.",
+      "Posso revogar este consentimento a qualquer momento. Ao apagar minha biometria, amostras, assinaturas e referências a mim são removidas.",
+      "Menores de idade só são cadastrados com o consentimento do responsável.",
+    ].join("\n\n"),
+    4000,
+    true,
+    // termo vazio gravaria consentimento sobre nada
+    40,
+  ),
+  "identity.askAboutOthersDefault": sel(
+    "identity",
+    "Perguntar sobre outra pessoa",
+    "Regra quando não há permissão explícita cadastrada. O dono sempre pode, cada um pode sobre si, e o responsável pode sobre o menor dele.",
+    "negado",
+    [
+      { value: "negado", label: "Negado sem permissão explícita (padrão)" },
+      { value: "moradores_entre_si", label: "Moradores adultos podem perguntar uns sobre os outros" },
+    ],
+  ),
+
+  "identity.perceptionUrl": text("identity", "Serviço de percepção", "Endereço do apps/perception nesta casa. Só aceita endereço local: biometria nunca sai de casa.", "http://127.0.0.1:8002"),
+  "identity.perceptionTimeoutMs": num("identity", "Timeout do serviço de percepção", "Quanto esperar o cálculo de assinaturas. Reunião longa leva mais.", 60000, 1000, 600000, { unit: "ms" }),
+  "identity.voiceModel": sel(
+    "identity",
+    "Modelo de assinatura de voz",
+    "Escolhido pela medição nesta máquina. Trocar exige recalcular as assinaturas a partir das amostras guardadas.",
+    "titanet_small",
+    [
+      { value: "titanet_small", label: "TitaNet small (192 d, leve)" },
+      { value: "campplus_voxceleb", label: "CAM++ VoxCeleb (512 d)" },
+      { value: "wespeaker_resnet34", label: "WeSpeaker ResNet34 (256 d, mais lento)" },
+    ],
+    "As assinaturas de outro modelo deixam de valer até recalcular.",
+  ),
+  "identity.voiceMatchThreshold": num("identity", "Voz: limiar para afirmar", "Similaridade mínima para dizer quem falou. Calibrado com a medição da sua voz.", 0.6, 0, 1, { step: 0.01 }),
+  "identity.voiceProbableThreshold": num("identity", "Voz: limiar de \"provavelmente\"", "Abaixo disso a voz é desconhecida; entre este e o limiar de afirmar, a Órbita diz \"provavelmente\".", 0.45, 0, 1, { step: 0.01 }),
+  "identity.voiceMargin": num("identity", "Voz: folga sobre a segunda pessoa", "Se duas pessoas ficam perto demais (parentes, vozes parecidas), não afirma.", 0.08, 0, 1, { step: 0.01 }),
+  "identity.voiceMinSpeechSeconds": num("identity", "Voz: fala mínima para afirmar", "Fala mais curta que isso sai no máximo como \"provavelmente\".", 2.5, 0.5, 30, { step: 0.5, unit: "s" }),
+  "identity.voiceEnrollMinSeconds": num("identity", "Voz: fala mínima no cadastro", "Gravação de cadastro com menos fala que isso é recusada.", 20, 5, 300, { unit: "s" }),
+  "identity.meetingSpeakerMaxSeconds": num("identity", "Reunião: fala usada por locutor", "Quantos segundos das falas mais longas de cada locutor entram no reconhecimento.", 40, 5, 300, { unit: "s" }),
+  "identity.unknownRetentionDays": num("identity", "Retenção de desconhecido", "Por quantos dias uma voz ou rosto desconhecido fica guardado para ser reconhecido de novo ou nomeado. Depois some sozinho.", 7, 1, 90, { unit: "dias" }),
+  "identity.commandClipMaxKB": num("identity", "Trecho de voz do comando", "Tamanho máximo do trecho gravado junto do ditado para saber quem pediu.", 400, 50, 4000, { unit: "KB" }),
+  "identity.unknownVoicePolicy": sel(
+    "identity",
+    "Comando de voz não reconhecido",
+    "Quando a voz de um comando não é reconhecida com confiança: tratar como a conta logada, ou com as permissões de visitante. Ação perigosa sempre vai para aprovação.",
+    "conta",
+    [
+      { value: "conta", label: "Como a conta logada (padrão)" },
+      { value: "restrito", label: "Como visitante (mais restrito)" },
+    ],
+  ),
+
   // ── acesso ──
   "auth.signupMode": sel(
     "auth",
@@ -276,7 +338,7 @@ export function schemaFor(def: SettingDef<unknown>): z.ZodType<unknown> {
     case "select":
       return z.enum(t.options.map((o) => o.value) as [string, ...string[]]);
     case "text":
-      return z.string().max(t.maxLength ?? 200);
+      return z.string().min(t.minLength ?? 0).max(t.maxLength ?? 200);
     case "list":
       return z.array(z.string().trim().min(1).max(t.itemMaxLength ?? 200)).max(t.maxItems ?? 200);
   }
