@@ -17,6 +17,7 @@ import { log } from "@orbita/core/observability/logger";
 import { rateLimit, tooMany } from "@orbita/core/ratelimit";
 import { settings } from "@orbita/core/settings/index";
 import { applyLlmSettings } from "@orbita/core/settings/apply";
+import { parseVoiceClip, requesterResolver } from "@orbita/core/identity/requester";
 
 const BodySchema = z.object({
   content: z.string().min(1).max(8000),
@@ -27,6 +28,10 @@ const BodySchema = z.object({
   rich: z.boolean().optional(),
   // imagem anexada (data URL) — ativa o modelo de visão para responder sobre ela.
   image: z.string().max(8_000_000).optional(),
+  // trecho curto de áudio gravado junto do ditado (data URL), para saber QUEM
+  // pediu (Onda 9). Vai só para o serviço LOCAL de percepção; teto real em
+  // `identity.commandClipMaxKB`, este é só o limite duro do JSON.
+  voiceClip: z.string().max(6_000_000).optional(),
 });
 
 const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.\n\n";
@@ -48,7 +53,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
     "chat.historyWindow", "chat.ragTimeoutMs", "chat.trivialMaxChars", "chat.conversationalMaxChars", "chat.maxSteps", "chat.maxRetries", "chat.rateLimitPerMinute",
     "chat.outputCapSmall", "chat.outputCapMedium", "chat.outputCapLarge",
     "prompt.budgetTokens", "prompt.priorityPersona", "prompt.priorityTemporal", "prompt.prioritySkills", "prompt.priorityRag",
-    "rag.topK",
+    "rag.topK", "identity.commandClipMaxKB",
   ]);
   await applyLlmSettings();
   const OUT_CAP: Record<string, number> = { small: cfg["chat.outputCapSmall"], medium: cfg["chat.outputCapMedium"], large: cfg["chat.outputCapLarge"] };
@@ -67,7 +72,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
   }
-  const { content, modelKey, conversationId, rich, image } = parsed.data;
+  const { content, modelKey, conversationId, rich, image, voiceClip } = parsed.data;
 
   const info = getModelInfo(modelKey);
   if (!info) return Response.json({ error: "Modelo desconhecido" }, { status: 400 });
@@ -149,9 +154,15 @@ export async function POST(req: Request, ctx: RouteCtx) {
         new Promise<RagHit[]>((res) => setTimeout(() => res([]), RAG_TIMEOUT)),
       ]);
 
+  // QUEM PEDE: a identificação por voz começa já, em paralelo, e só é aguardada
+  // se uma tool precisar (permissão por cômodo, nota na fila de aprovação).
+  const clip = voiceClip && !image ? parseVoiceClip(voiceClip, cfg["identity.commandClipMaxKB"]) : null;
+  const quemPede = requesterResolver(userId, clip);
+  if (clip) void quemPede.voice();
+
   const [personaCtx, toolsRes, ragHits] = await Promise.all([
     buildPersonaContext(userId).catch(() => ""),
-    buildAllTools(userId, content),
+    buildAllTools(userId, content, quemPede.resolve),
     ragTask,
   ]);
   const { tools, cleanup, skillInstructions } = toolsRes;

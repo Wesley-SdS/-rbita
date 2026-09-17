@@ -44,6 +44,8 @@ export * from "./camera-schema";
 export * from "./owner-schema";
 // Identidade: consentimento biométrico, auditoria, permissão sobre pessoas (Fase 2).
 export * from "./identity-schema";
+// Biometria (voz agora, rosto na Onda 10). Nunca sai de casa; some com a pessoa.
+export * from "./biometric-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {

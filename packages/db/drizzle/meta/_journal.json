@@ -169,6 +169,20 @@
       "when": 1789652783292,
       "tag": "0023_onda8_conta_unica",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789662277857,
+      "tag": "0024_onda9_biometria_voz",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789666588916,
+      "tag": "0025_onda9_desconhecido_rotulo_unico",
+      "breakpoints": true
     }
   ]
 }

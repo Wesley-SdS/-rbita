@@ -47,7 +47,7 @@ export function useChatStream(p: Params) {
     void sendMessage(content || "O que há nesta imagem?");
   }
 
-  async function sendMessage(content: string) {
+  async function sendMessage(content: string, voiceClip?: string) {
     if (!content || p.modeRef.current !== "standby" || !p.modelKey) return;
     // modo privacidade: força modelo local, nada é enviado para nuvem
     const effectiveModelKey = p.privacyMode && !p.modelKey.startsWith("local/") ? "local/qwen2.5:7b" : p.modelKey;
@@ -69,7 +69,8 @@ export function useChatStream(p: Params) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, modelKey: effectiveModelKey, conversationId: p.convId.current ?? undefined, rich: true, image: imgToSend ?? undefined }),
+        // voiceClip: trecho de voz do ditado (Onda 9, "quem pediu"); mensagens digitadas nunca o têm.
+        body: JSON.stringify({ content, modelKey: effectiveModelKey, conversationId: p.convId.current ?? undefined, rich: true, image: imgToSend ?? undefined, voiceClip }),
         signal: ac.signal,
       });
       const cid = res.headers.get("x-conversation-id");

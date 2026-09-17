@@ -1,0 +1,23 @@
+[project]
+name = "orbita-perception"
+version = "0.1.0"
+description = "ÓRBITA — percepção local (Fase 2): áudio e imagem viram vetores; nada de identidade guardada aqui"
+# 3.12: o MediaPipe (gestos, Onda 11) não publica wheel para 3.13+ no Windows
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "numpy>=1.26",
+    "av>=12",
+    "sherpa-onnx>=1.10",
+    "onnxruntime>=1.18",
+    "opencv-python>=4.9",
+    "mediapipe>=0.10",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

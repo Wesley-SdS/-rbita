@@ -8,7 +8,7 @@ import { getHaConnection } from "../home/connection";
 import { whatsappConfigured } from "../connectors/whatsapp";
 import { settings } from "../settings";
 import {
-  availableFor, effectiveRisk, getTool, isEnabled, isToolRisk, listRegisteredTools, needsApproval, selectRelevant, summaryFor, toToolSet,
+  availableFor, effectiveRisk, requesterNote, type ToolContext, getTool, isEnabled, isToolRisk, listRegisteredTools, needsApproval, selectRelevant, summaryFor, toToolSet,
   type Enqueue, type ToolOverride, type ToolOverrides, type ToolRisk,
 } from "./registry";
 
@@ -103,13 +103,13 @@ export function enqueueFor(userId: string): Enqueue {
  * ToolSet do turno: tools ligadas, com exigências atendidas para este usuário,
  * selecionadas por relevância ao pedido, com o gate derivado do risco efetivo.
  */
-export async function buildToolSet(userId: string, query = ""): Promise<ToolSet> {
+export async function buildToolSet(userId: string, query = "", requester?: ToolContext["requester"]): Promise<ToolSet> {
   const [overrides, connected, max, haConn, waConnected] = await Promise.all([
     loadToolOverrides(), connectedProviders(userId), settings.get("tools.maxPerTurn"), getHaConnection(userId), whatsappConfigured(userId),
   ]);
   const usable = availableFor(listRegisteredTools(), { connected, haConnected: haConn !== null, whatsappConnected: waConnected, overrides });
   const chosen = selectRelevant(usable, query, max);
-  return toToolSet(chosen, { userId }, { overrides, enqueue: enqueueFor(userId) });
+  return toToolSet(chosen, { userId, requester }, { overrides, enqueue: enqueueFor(userId) });
 }
 
 /**
@@ -137,7 +137,7 @@ export async function toolDefsForRealtime(userId: string) {
  * de graça, porque o modelo lê o resultado da função — é o B7.7 do briefing:
  * confirmação falada sem código especial).
  */
-export async function runRealtimeTool(userId: string, name: string, rawInput: unknown): Promise<unknown> {
+export async function runRealtimeTool(userId: string, name: string, rawInput: unknown, requester?: ToolContext["requester"]): Promise<unknown> {
   const def = getTool(name);
   if (!def) return { erro: `Ferramenta "${name}" não existe.` };
 
@@ -150,7 +150,15 @@ export async function runRealtimeTool(userId: string, name: string, rawInput: un
   const parsed = def.inputSchema.safeParse(rawInput ?? {});
   if (!parsed.success) return { erro: "Entrada inválida para a ferramenta." };
 
+  const ctx: ToolContext = { userId, requester };
+  const negado = def.authorize ? await def.authorize(parsed.data, ctx) : null;
+  if (negado) return { permitido: false, erro: negado };
   const risk = effectiveRisk(def, overrides);
-  if (needsApproval(risk)) return enqueueFor(userId)(def, parsed.data, summaryFor(def, parsed.data));
-  return def.run(parsed.data, { userId });
+  if (needsApproval(risk)) {
+    const quem = requester ? await requester().catch(() => null) : null;
+    const resumo = summaryFor(def, parsed.data);
+    const proposta = await enqueueFor(userId)(def, parsed.data, resumo + requesterNote(quem));
+    return { ...proposta, resumo };
+  }
+  return def.run(parsed.data, ctx);
 }

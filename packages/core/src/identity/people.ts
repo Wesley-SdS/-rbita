@@ -8,6 +8,7 @@ import { settings } from "../settings";
 import { events } from "../events/index";
 import { BIOMETRIC_KINDS, consentFor, consentInvalidatedBy, termVersion, validateConsentInput, validateGuardian, type BiometricKind, type PersonLike } from "./rules";
 import { IdentityError } from "./errors";
+import { forgetVoiceTraces } from "./voice";
 
 export { IdentityError };
 
@@ -250,6 +251,8 @@ export async function revokeConsent(ownerUserId: string, consentId: string): Pro
     .where(and(eq(biometricConsent.id, consentId), eq(biometricConsent.userId, ownerUserId), sql`${biometricConsent.revokedAt} is null`))
     .returning({ personId: biometricConsent.personId, kinds: biometricConsent.kinds });
   if (!c) throw new IdentityError("Consentimento não encontrado ou já revogado", 404);
+  // revogou voz: a voz dela deixa de ser reconhecível também como "desconhecido"
+  if (c.kinds.includes("voz")) await forgetVoiceTraces(ownerUserId, c.personId);
   await audit({ userId: ownerUserId, action: "revogacao", personId: c.personId, source: "tela", outcome: "revogado", detail: { tipos: c.kinds } });
   await events.emit("identity.consent_revoked", { personId: c.personId, tipos: c.kinds }, { userId: ownerUserId });
 }

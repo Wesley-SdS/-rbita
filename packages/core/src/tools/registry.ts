@@ -17,8 +17,26 @@ import type { ConnectorId } from "../connectors/registry";
 export const TOOL_RISKS = ["leitura", "escrita", "efeito_externo", "perigoso"] as const;
 export type ToolRisk = (typeof TOOL_RISKS)[number];
 
+/**
+ * Quem está pedindo (Onda 9). `via: "voz"` só quando a voz foi RECONHECIDA com
+ * confiança; senão vale a conta logada. Nunca libera ação perigosa sozinha: o
+ * gate continua derivado do risco (decisão 9.5, voz + confirmação).
+ */
+export interface Requester {
+  personId: string | null;
+  name: string | null;
+  role: "dono" | "morador" | "visitante";
+  via: "voz" | "conta";
+  confidence?: number;
+}
+
 export interface ToolContext {
   userId: string;
+  /**
+   * Resolvido sob demanda e uma vez só por turno: a identificação por voz roda
+   * em paralelo ao resto do turno e só é aguardada se uma tool precisar.
+   */
+  requester?: () => Promise<Requester | null>;
 }
 
 export interface ToolDef<I extends z.ZodTypeAny = z.ZodTypeAny> {
@@ -39,6 +57,17 @@ export interface ToolDef<I extends z.ZodTypeAny = z.ZodTypeAny> {
   run: (input: z.infer<I>, ctx: ToolContext) => Promise<unknown>;
   /** resumo legível da proposta na fila de aprovação */
   summarize?: (input: z.infer<I>) => string;
+  /**
+   * Permissão de QUEM PEDE (pessoa e cômodo), checada pelo registro antes de
+   * executar e antes de enfileirar. Devolve a mensagem de recusa ou null.
+   */
+  authorize?: (input: z.infer<I>, ctx: ToolContext) => Promise<string | null>;
+}
+
+/** "(pedido por voz: Anna, 91%)" para a fila de aprovação mostrar quem pediu. Puro. */
+export function requesterNote(r: Requester | null | undefined): string {
+  if (!r || r.via !== "voz" || !r.name) return "";
+  return ` (pedido por voz: ${r.name}${r.confidence !== undefined ? `, ${Math.round(r.confidence * 100)}%` : ""})`;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -50,6 +79,10 @@ const registry = new Map<string, AnyToolDef>();
 export function registerTools(defs: AnyToolDef[]): void {
   for (const d of defs) {
     if (registry.has(d.name) && registry.get(d.name) !== d) throw new Error(`Tool duplicada no registro: ${d.name}`);
+    // permissão por pessoa e cômodo não é opt-in esquecível: tool de casa que age
+    // precisa declarar authorize (leitura fica isenta). MCP do HA passa por fora
+    // do registro e não tem essa checagem: documentado em CLAUDE.md.
+    if (d.requires?.homeAssistant && d.risk !== "leitura" && !d.authorize) throw new Error(`Tool de casa sem authorize: ${d.name}`);
     registry.set(d.name, d);
   }
 }
@@ -189,9 +222,16 @@ export function toToolSet(defs: AnyToolDef[], ctx: ToolContext, opts: { override
     set[d.name] = tool({
       description: d.description,
       inputSchema: d.inputSchema,
-      execute: needsApproval(risk)
-        ? async (input: unknown) => opts.enqueue(d, input, summaryFor(d, input))
-        : async (input: unknown) => d.run(input, ctx),
+      execute: async (input: unknown) => {
+        const negado = d.authorize ? await d.authorize(input, ctx) : null;
+        if (negado) return { permitido: false, erro: negado };
+        if (!needsApproval(risk)) return d.run(input, ctx);
+        const quem = ctx.requester ? await ctx.requester().catch(() => null) : null;
+        const resumo = summaryFor(d, input);
+        const proposta = await opts.enqueue(d, input, resumo + requesterNote(quem));
+        // quem pediu fica na fila de aprovação (tela do dono), não volta ao modelo
+        return proposta && typeof proposta === "object" && "resumo" in proposta ? { ...proposta, resumo } : proposta;
+      },
     });
   }
   return set;

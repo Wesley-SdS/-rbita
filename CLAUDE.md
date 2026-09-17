@@ -28,6 +28,7 @@ apps/web       Next.js 16 (Turbopack) · React 19 · Tailwind 4 · Better Auth 1
 apps/api       NestJS 12 (roda de TS com tsx, porta 3010): o PROCESSO VIVO — cron, event bus, regras, refresh de token e TODAS as rotas /api
 apps/mobile    Expo SDK 54  (fora do workspace pnpm — Metro não convive com symlink do pnpm)
 apps/voice     Python FastAPI · faster-whisper · Piper · Vosk
+apps/perception Python 3.12 FastAPI (porta 8002) · stateless: voz→vetor (sherpa-onnx), rosto→vetor (onnxruntime) · só local
 packages/db    schema Drizzle + client + migrações (`drizzle/`)
 packages/core  domínio puro (auth, chat, conectores, RAG, settings, events, rules, stt…) — zero import do Next
 packages/llm   provedores de LLM (descoberta · resolver · failover · embeddings)
@@ -75,6 +76,13 @@ cd ../voice                                                # serviço de voz
 export VOICE_MODELS_DIR="$PWD/models_test"                 # o default /models não existe no Windows
 ./.venv/Scripts/python.exe -m uvicorn main:app --host 127.0.0.1 --port 8001
 ```
+
+```bash
+cd apps/perception                                         # percepção (Fase 2), venv próprio 3.12
+.venv/Scripts/python.exe -m uvicorn main:app --host 127.0.0.1 --port 8002
+.venv/Scripts/python.exe -m pytest -q                      # testes Python
+```
+Detalhe e medição: `apps/perception/MEDICAO.md`.
 
 Saúde: `curl localhost:3000/api/health` → `db/voice/ollama: up`
 Conta de dev: `wesley@orbita.local` / `Orbita@2026`
@@ -126,6 +134,13 @@ Claude Code). Regra absoluta no `SYSTEM_PROMPT`.
 `.env` e `.mcp.json` são gitignored. Tokens de conector são cifrados em repouso (AES-256-GCM,
 `lib/crypto.ts`). `CONNECTORS_ENC_KEY` é **obrigatória** em produção e deve ser distinta de
 `BETTER_AUTH_SECRET`.
+
+### 5.4.1 Biometria nunca sai de casa
+
+Voz, rosto, amostras e vetores só vão para o `apps/perception` local, marcados com
+`x-orbita-biometria` (o guard do `apps/api` recusa destino não local). Tabela biométrica nova se chama
+`biometric_*` com `person_id` cascade (o apagar pega sozinho). Módulo que fala com nuvem não importa
+biometria: o teste NV.1 reprova. Sem consentimento vigente, a assinatura não entra no casamento.
 
 ### 5.5 Nada de multi-tenant
 
@@ -241,6 +256,9 @@ Antes de considerar qualquer tarefa concluída:
 | Dono da instância (quem altera config global) | `packages/core/src/owner.ts` · `apps/api/src/auth/owner.guard.ts` · tabela `instance_owner` |
 | Apagar/exportar conta (derivado do schema) | `packages/core/src/account/data.ts` |
 | Política de modelos (ordem do failover, reserva, descoberta) | `packages/llm/src/policy.ts` ← chaves `llm.*` |
+| Identidade: pessoas, consentimento, apagar, quem pede, voz | `packages/core/src/identity/` · rotas `apps/api/src/routes/identity-*.ts` |
+| Biometria (tabelas `biometric_*`, nunca sai de casa) | `packages/db/src/biometric-schema.ts` · guard `packages/core/src/privacy/egress.ts` · testes `privacy/no-leak*.test.ts` |
+| Serviço local de percepção | `apps/perception` · cliente `packages/core/src/perception/client.ts` |
 | Plano do Jarvis | `BRIEFING-JARVIS.md` · Fase 2: `PRD-FASE2-IDENTIDADE-PERCEPCAO.md` |
 | Backlog pré-existente | `CHECKLIST.md` |
 
@@ -274,6 +292,8 @@ Antes de considerar qualquer tarefa concluída:
 - **`next.config` rewrite `fallback` quebra as rotas do app router** (404 em tudo). Use `beforeFiles` com a regex `API_KEPT_IN_NEXT`.
 - **O proxy do Next em dev derruba upstream lento**: um chat com 116 s até o primeiro token (modelo local de 1B na CPU) voltou `ECONNRESET`. Com modelo razoável (2 s de TTFT) o streaming NDJSON flui token a token. Em produção o Caddy tem timeout configurável.
 - **`.next/types/validator.ts` fica velho** depois de apagar rotas: `rm -rf apps/web/.next/types` antes do `tsc` se ele reclamar de `route.js` inexistente.
+- **Tool de casa que AGE precisa de `authorize`** (permissão por pessoa e cômodo): o `registerTools` recusa sem isso. Tool do HA exposta por MCP passa por fora do registro e não tem essa checagem.
+- **Voz reconhecida nunca libera ação perigosa** (decisão 9.5): ela só restringe (permissão por cômodo) e identifica quem pediu na fila de aprovação; nunca substitui o gate.
 - **`tesseract.js` precisa ficar em `serverExternalPackages`** e é copiado à mão no Dockerfile.
 - **O banco de dev tem 14 contas de teste.** O dono da instância é `wesley@orbita.local` (gravado em `instance_owner`); quem não é dono recebe 403 ao mudar Ajustes/Ferramentas. Instância órfã só volta por `ORBITA_OWNER_EMAIL`.
 - **Docker Desktop e os dev servers caem juntos** quando a VM satura: se tudo responder `000`, suba Docker, `apps/api`, `apps/web` e voz de novo (skill orbita-dev) antes de achar que é bug.

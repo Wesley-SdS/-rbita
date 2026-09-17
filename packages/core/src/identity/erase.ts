@@ -7,6 +7,7 @@ import { eventLog } from "@orbita/db/event-schema";
 import { person } from "@orbita/db/home-schema";
 import { biometricConsent, identityAudit } from "@orbita/db/identity-schema";
 import { IdentityError } from "./errors";
+import { forgetVoiceTraces } from "./voice";
 
 /**
  * APAGAR É APAGAR (PRD §4.5), derivado do schema para não depender de memória:
@@ -101,6 +102,8 @@ async function assertPerson(ownerUserId: string, personId: string): Promise<void
 /** Apaga TODA biometria de uma pessoa (voz e rosto), numa transação. Mantém o cadastro. */
 export async function eraseBiometrics(ownerUserId: string, personId: string): Promise<EraseResult> {
   await assertPerson(ownerUserId, personId);
+  // antes do apagar: precisa das assinaturas dela para achar os desconhecidos que são ela
+  await forgetVoiceTraces(ownerUserId, personId);
   const bio = biometricTables();
   const refs = identifiedRefs();
   await db.transaction((tx) => eraseWithin(tx, ownerUserId, personId, bio, refs));
@@ -110,6 +113,7 @@ export async function eraseBiometrics(ownerUserId: string, personId: string): Pr
 /** Remove a pessoa por inteiro na MESMA transação: ou some tudo, ou nada. */
 export async function removePerson(ownerUserId: string, personId: string): Promise<EraseResult> {
   await assertPerson(ownerUserId, personId);
+  await forgetVoiceTraces(ownerUserId, personId);
   const bio = biometricTables();
   const refs = identifiedRefs();
   await db.transaction(async (tx) => {

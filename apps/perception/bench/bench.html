@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Órbita · medição de voz e rosto</title>
+<style>
+  :root { --bg:#f6f2ea; --ink:#221a10; --dim:#6d6051; --line:#e3dacb; --gold:#b57e0f; --ok:#3f7d52; --err:#bf4a33; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0b0805; --ink:#f3ecdd; --dim:#b8a98d; --line:#33281a; --gold:#f5b544; --ok:#6fbf8b; --err:#e0705a; } }
+  body { background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,sans-serif; margin:0; padding:24px 16px 64px; }
+  main { max-width:760px; margin:auto; }
+  h1 { font-size:26px; margin:0 0 6px; } h2 { font-size:18px; margin:28px 0 8px; }
+  .dim { color:var(--dim); font-size:13px; } .card { border:1px solid var(--line); border-radius:12px; padding:14px; margin:10px 0; }
+  button { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--ink); cursor:pointer; }
+  button.rec { border-color:var(--err); color:var(--err); } button:disabled { opacity:.45; cursor:default; }
+  .texto { font-size:17px; line-height:1.7; background:color-mix(in oklab,var(--gold) 8%,transparent); padding:12px; border-radius:8px; }
+  .ok { color:var(--ok); } .err { color:var(--err); } input { font:inherit; padding:6px 8px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--ink); }
+  video { width:100%; max-width:480px; border-radius:10px; background:#000; } .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Medição de voz e rosto</h1>
+  <p class="dim">Tudo fica neste computador, em <code>apps/perception/bench_data</code> (fora do repositório). Serve só para escolher o modelo e o limiar com a sua voz e o seu rosto reais. Pode apagar a pasta depois.</p>
+
+  <div class="card row">
+    <label>Quem está gravando: <input id="pessoa" value="wesley" size="12"></label>
+    <span class="dim">(outra pessoa da casa pode gravar também, com outro nome: isso mede o quanto as vozes se confundem)</span>
+  </div>
+
+  <h2>1. Voz: cadastro (45 segundos lendo)</h2>
+  <div class="card">
+    <p class="texto">A Órbita organiza minha rotina, acompanha minhas reuniões e cuida da casa. Hoje de manhã revisei a agenda, respondi os e-mails mais urgentes e combinei a entrega do relatório para sexta-feira. Depois do almoço, quero conferir as contas do mês, ligar para o cliente sobre o contrato novo e lembrar de comprar pão, frutas e café. À noite, se der tempo, vou ler um pouco, ouvir música e preparar a lista de tarefas de amanhã. Números também contam: quinze, quarenta e dois, cento e oito, mil novecentos e noventa e nove.</p>
+    <div class="row"><button id="bEnroll" class="rec">Gravar 45 s</button><span id="sEnroll" class="dim"></span></div>
+  </div>
+
+  <h2>2. Voz: frases curtas (como um comando)</h2>
+  <div class="card">
+    <p class="dim">Grave cada frase de um jeito natural, como falaria com a Órbita. Algumas com voz baixa ou de longe ajudam a medir o pior caso.</p>
+    <div id="frases"></div>
+  </div>
+
+  <h2>3. Rosto: fotos pela webcam</h2>
+  <div class="card">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="row" style="margin-top:8px"><button id="bCam">Ligar câmera</button><button id="bFoto" disabled>Tirar foto</button><span id="sFoto" class="dim"></span></div>
+    <p class="dim" id="dica"></p>
+  </div>
+</main>
+<script>
+const FRASES = [
+  "Órbita, qual é a minha próxima reunião?", "Apaga a luz da sala.", "Quanto eu gastei esse mês?",
+  "Me lembra de ligar para o cliente amanhã às nove.", "Tranca a porta da frente.", "O que tem na minha agenda hoje?",
+  "Toca uma música calma.", "Quem disse que entregava o relatório na sexta?", "Liga o ar do quarto em vinte e três graus.",
+  "Resume os e-mails importantes.", "Onde eu deixei a chave?", "Boa noite, Órbita.",
+];
+const POSES = ["de frente, luz normal", "virado um pouco para a esquerda", "virado um pouco para a direita", "olhando um pouco para cima",
+  "olhando um pouco para baixo", "de frente, mais longe da câmera", "de frente, mais perto", "com luz de lado (se der)",
+  "sorrindo", "de óculos (se usar)", "com a luz mais fraca", "de frente de novo"];
+const pessoa = () => document.getElementById("pessoa").value.trim() || "wesley";
+
+async function enviar(kind, label, blob) {
+  const fd = new FormData();
+  fd.append("file", blob, label); fd.append("kind", kind); fd.append("person", pessoa()); fd.append("label", label);
+  const r = await fetch("/bench/sample", { method: "POST", body: fd });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+}
+
+async function gravar(ms, status) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true } });
+  const rec = new MediaRecorder(stream);
+  const partes = [];
+  rec.ondataavailable = (e) => partes.push(e.data);
+  const fim = new Promise((res) => (rec.onstop = res));
+  rec.start();
+  const t0 = Date.now();
+  const tick = setInterval(() => (status.textContent = `gravando… ${Math.ceil((ms - (Date.now() - t0)) / 1000)} s`), 250);
+  await new Promise((r) => setTimeout(r, ms));
+  rec.stop(); await fim; clearInterval(tick);
+  stream.getTracks().forEach((t) => t.stop());
+  return new Blob(partes, { type: rec.mimeType || "audio/webm" });
+}
+
+document.getElementById("bEnroll").onclick = async (ev) => {
+  const s = document.getElementById("sEnroll"); ev.target.disabled = true;
+  try { const b = await gravar(45000, s); await enviar("voz", "cadastro", b); s.textContent = "salvo"; s.className = "ok"; }
+  catch (e) { s.textContent = "erro: " + e.message; s.className = "err"; }
+  ev.target.disabled = false;
+};
+
+const lista = document.getElementById("frases");
+FRASES.forEach((f, i) => {
+  const d = document.createElement("div"); d.className = "row"; d.style.margin = "6px 0";
+  d.innerHTML = `<button class="rec">Gravar</button><span>${f}</span><span class="dim"></span>`;
+  const [btn, , st] = d.children;
+  btn.onclick = async () => {
+    btn.disabled = true;
+    try { const b = await gravar(Math.max(3000, f.length * 90), st); await enviar("voz", `frase_${String(i + 1).padStart(2, "0")}`, b); st.textContent = "salvo"; st.className = "ok"; }
+    catch (e) { st.textContent = "erro: " + e.message; st.className = "err"; }
+    btn.disabled = false;
+  };
+  lista.appendChild(d);
+});
+
+let fotos = 0;
+const dica = () => (document.getElementById("dica").textContent = fotos < POSES.length ? `Próxima: ${POSES[fotos]}` : "Pode tirar mais, se quiser.");
+document.getElementById("bCam").onclick = async () => {
+  const v = document.getElementById("video");
+  v.srcObject = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+  document.getElementById("bFoto").disabled = false; dica();
+};
+document.getElementById("bFoto").onclick = async () => {
+  const v = document.getElementById("video"), s = document.getElementById("sFoto");
+  const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight;
+  c.getContext("2d").drawImage(v, 0, 0);
+  const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.92));
+  try { fotos++; await enviar("rosto", `foto_${String(fotos).padStart(2, "0")}`, blob); s.textContent = `${fotos} fotos salvas`; s.className = "ok"; dica(); }
+  catch (e) { s.textContent = "erro: " + e.message; s.className = "err"; }
+};
+</script>
+</body>
+</html>

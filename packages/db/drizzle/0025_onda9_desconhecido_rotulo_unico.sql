@@ -1,0 +1,1 @@
+ALTER TABLE "biometric_unknown_voice" ADD CONSTRAINT "biometric_unknown_voice_label" UNIQUE("user_id","label");

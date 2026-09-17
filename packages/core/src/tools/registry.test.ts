@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { z } from "zod";
 import {
   _resetRegistry, availableFor, effectiveRisk, getTool, isEnabled, listRegisteredTools, needsApproval, registerTools,
-  selectRelevant, summaryFor, toToolSet, type ToolDef, type ToolOverride,
+  requesterNote, selectRelevant, summaryFor, toToolSet, type Requester, type ToolDef, type ToolOverride,
 } from "./registry";
 
 const ler: ToolDef<z.ZodObject<{ q: z.ZodString }>> = {
@@ -111,5 +111,54 @@ describe("seleção por relevância", () => {
   it("ignora acentos e palavras curtas", () => {
     const sel = selectRelevant(listRegisteredTools(), "lê a agenda de amanhã", 1);
     expect(sel.map((t) => t.name)).toEqual(["ler_agenda"]);
+  });
+});
+
+describe("permissão de quem pede (Onda 9)", () => {
+  const exec = { toolCallId: "t", messages: [] };
+  const anna: Requester = { personId: "a", name: "Anna", role: "morador", via: "voz", confidence: 0.914 };
+
+  it("authorize recusa ANTES de executar", async () => {
+    const run = vi.fn(async () => "feito");
+    const t: ToolDef<z.ZodObject<{ x: z.ZodString }>> = { ...ler, name: "acionar", inputSchema: z.object({ x: z.string() }), authorize: async () => "sem permissão", run };
+    const set = toToolSet([t], { userId: "u1" }, { enqueue: vi.fn() });
+    expect(await set.acionar!.execute!({ x: "1" }, exec)).toEqual({ permitido: false, erro: "sem permissão" });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("authorize recusa ANTES de enfileirar (tool com gate)", async () => {
+    const enqueue = vi.fn();
+    const t = { ...enviar, authorize: async () => "Anna não pode" };
+    const set = toToolSet([t], { userId: "u1" }, { enqueue });
+    expect(await set.enviar_coisa!.execute!({ para: "x" }, exec)).toMatchObject({ permitido: false });
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it("proposta enfileirada diz quem pediu por voz; voz nunca executa sozinha", async () => {
+    const runSpy = vi.spyOn(enviar, "run");
+    const enqueue = vi.fn(async (_d, _i, resumo: string) => ({ proposta_enfileirada: true as const, aguardando_aprovacao: true as const, resumo }));
+    const set = toToolSet([enviar], { userId: "u1", requester: async () => anna }, { enqueue });
+    await set.enviar_coisa!.execute!({ para: "ana" }, exec);
+    expect(enqueue.mock.calls[0]![2]).toBe("Enviar coisa para ana (pedido por voz: Anna, 91%)");
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
+  it("a nota de quem pediu fica na fila, mas NÃO volta ao modelo", async () => {
+    const enqueue = vi.fn(async (_d, _i, resumo: string) => ({ proposta_enfileirada: true as const, aguardando_aprovacao: true as const, resumo }));
+    const set = toToolSet([enviar], { userId: "u1", requester: async () => anna }, { enqueue });
+    const r = await set.enviar_coisa!.execute!({ para: "ana" }, exec);
+    expect(enqueue.mock.calls[0]![2]).toMatch(/pedido por voz: Anna/);
+    expect(r).toMatchObject({ resumo: "Enviar coisa para ana" });
+  });
+
+  it("tool de casa que age sem authorize é recusada no registro", () => {
+    const semAuth = { ...enviar, name: "casa_x", requires: { homeAssistant: true } };
+    expect(() => registerTools([semAuth])).toThrow(/sem authorize/);
+    expect(() => registerTools([{ ...ler, name: "casa_ler", requires: { homeAssistant: true } }])).not.toThrow();
+  });
+
+  it("nota de quem pediu só para voz", () => {
+    expect(requesterNote({ ...anna, via: "conta" })).toBe("");
+    expect(requesterNote(null)).toBe("");
   });
 });

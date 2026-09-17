@@ -12,6 +12,7 @@ import { usersWithHomeAssistant, getHaConnection } from "@orbita/core/home/conne
 import { syncEntities } from "@orbita/core/home/entities";
 import { HomeAssistantWatcher } from "@orbita/core/home/ws-watcher";
 import { purgeOldCameraEvents } from "@orbita/core/cameras/retention";
+import { purgeExpiredUnknownVoices } from "@orbita/core/identity/voice";
 import { log } from "@orbita/core/observability/logger";
 
 /**
@@ -64,6 +65,8 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     const pruneEvery = () => settings.get("events.pruneEveryHours").then((h) => h * 3_600_000);
     this.loop("prune", pruneEvery, () => settings.get("events.retentionDays").then(pruneEvents));
     this.loop("camera-retention", pruneEvery, () => settings.get("cameras.retentionDays").then(purgeOldCameraEvents));
+    // desconhecido efêmero (decisão 9.2): a validade já foi gravada com a retenção vigente
+    this.loop("unknown-retention", pruneEvery, () => purgeExpiredUnknownVoices());
     log.info("scheduler.up", { loops: this.loops.map((l) => l.name) });
   }
 

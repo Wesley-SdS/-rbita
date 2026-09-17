@@ -4,6 +4,8 @@ import { sessionOf } from "../http/web-route";
 import { transcribeAudio } from "@orbita/core/stt/index";
 import { log } from "@orbita/core/observability/logger";
 import { settings } from "@orbita/core/settings/index";
+import { getOwnerId } from "@orbita/core/owner";
+import { identifyMeetingSpeakers } from "@orbita/core/identity/voice";
 
 /** Controller fino: autentica, valida o arquivo e delega ao serviço de STT. */
 export async function POST(req: Request, ctx: RouteCtx) {
@@ -42,7 +44,19 @@ export async function POST(req: Request, ctx: RouteCtx) {
       bytes: file.size,
       ms: Date.now() - started,
     });
-    return Response.json(result);
+    // Nomes dos locutores (VZ.5): a diarização foi sobre o áudio INTEIRO; aqui
+    // só se calcula uma assinatura por etiqueta, LOCALMENTE. Fail-soft: sem o
+    // serviço de percepção, a reunião sai como antes ("Locutor A").
+    let speakerIdentities: Awaited<ReturnType<typeof identifyMeetingSpeakers>> | undefined;
+    if (diarize && result.utterances?.length && (await getOwnerId()) === session.user.id) {
+      const t = Date.now();
+      speakerIdentities = await identifyMeetingSpeakers(session.user.id, new Uint8Array(await file.arrayBuffer()), file.type || "audio/webm", result.utterances, null).catch((e) => {
+        log.warn("stt.locutores_falhou", { error: e instanceof Error ? e.message : String(e) });
+        return undefined;
+      });
+      if (speakerIdentities) log.info("stt.locutores", { reconhecidos: speakerIdentities.filter((s) => s.outcome === "identificado").length, total: speakerIdentities.length, ms: Date.now() - t });
+    }
+    return Response.json(speakerIdentities ? { ...result, speakerIdentities } : result);
   } catch (e) {
     log.error("stt.failed", { error: e instanceof Error ? e.message : String(e), ms: Date.now() - started });
     return Response.json(

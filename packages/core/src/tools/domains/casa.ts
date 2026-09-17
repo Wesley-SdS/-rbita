@@ -7,7 +7,8 @@ import { callService, HomeAssistantError } from "../../home/client";
 import { entitiesInRoom, findEntities, type EntityHit } from "../../home/entities";
 import { DISPATCH_DOMAINS, domainOf, resolveDomainRisk } from "../../home/domain-risk";
 import { loadDomainRiskOverrides } from "../../home/access";
-import { registerTools, needsApproval, type ToolDef } from "../registry";
+import { authorizeEntityForRequester } from "../../home/room-permission";
+import { registerTools, needsApproval, type ToolContext, type ToolDef } from "../registry";
 
 /**
  * Tools COMPOSTAS da casa (B3.5): listar, consultar, acionar, cena — nunca
@@ -90,7 +91,11 @@ export const casa_listar_dispositivos_do_comodo: ToolDef<typeof RoomInput> = {
   },
 };
 
-const EstadoInput = z.object({ entidade: z.string().describe("entity_id do Home Assistant, ex.: light.sala") });
+// entity_id canônico: o HA aceita "LIGHT.SALA" ou "light.a,light.b"; a permissão
+// por cômodo compara com o id sincronizado, então a entrada é normalizada e validada
+const EntityId = z.string().trim().toLowerCase().regex(/^[a-z_]+\.[a-z0-9_]+$/, "entity_id inválido (formato dominio.objeto)");
+
+const EstadoInput = z.object({ entidade: EntityId.describe("entity_id do Home Assistant, ex.: light.sala") });
 export const casa_consultar_estado: ToolDef<typeof EstadoInput> = {
   name: "casa_consultar_estado",
   domain: "casa",
@@ -111,8 +116,12 @@ export const casa_consultar_estado: ToolDef<typeof EstadoInput> = {
   },
 };
 
+/** Permissão por pessoa e cômodo de quem pede (Onda 9): o registro chama antes de executar ou enfileirar. */
+const autorizarEntidade = async ({ entidade }: { entidade: string }, ctx: ToolContext) =>
+  authorizeEntityForRequester(ctx.userId, entidade, ctx.requester ? await ctx.requester().catch(() => null) : null);
+
 const AcionarInput = z.object({
-  entidade: z.string().describe("entity_id alvo, ex.: light.sala, climate.quarto"),
+  entidade: EntityId.describe("entity_id alvo, ex.: light.sala, climate.quarto"),
   servico: z.string().describe('ação do domínio, ex.: "turn_on", "turn_off", "set_temperature"'),
   dados: z.record(z.string(), z.unknown()).optional().describe('parâmetros extras do serviço, ex.: {"temperature": 22}'),
 });
@@ -144,6 +153,7 @@ export const casa_acionar: ToolDef<typeof AcionarInput> = {
   keywords: ["liga", "ligar", "desliga", "desligar", "acende", "apaga", "ajusta", "acionar"],
   inputSchema: AcionarInput,
   summarize: ({ entidade, servico, dados }) => `Acionar ${entidade}: ${servico}${dados ? ` (${JSON.stringify(dados).slice(0, 80)})` : ""}`,
+  authorize: autorizarEntidade,
   run: async (input, { userId }) => {
     const domain = domainOf(input.entidade);
     const overrides = await loadDomainRiskOverrides(userId);
@@ -166,10 +176,11 @@ export const casa_acionar_com_aprovacao: ToolDef<typeof AcionarInput> = {
   keywords: ["destranca", "tranca", "fechadura", "alarme", "portão", "garagem", "abre", "fecha"],
   inputSchema: AcionarInput,
   summarize: ({ entidade, servico, dados }) => `Acionar (segurança) ${entidade}: ${servico}${dados ? ` (${JSON.stringify(dados).slice(0, 80)})` : ""}`,
+  authorize: autorizarEntidade,
   run: async (input, { userId }) => runAcionar(input, userId),
 };
 
-const CenaInput = z.object({ entidade: z.string().describe("entity_id da cena, ex.: scene.boa_noite") });
+const CenaInput = z.object({ entidade: EntityId.describe("entity_id da cena, ex.: scene.boa_noite") });
 export const casa_ativar_cena: ToolDef<typeof CenaInput> = {
   name: "casa_ativar_cena",
   domain: "casa",
@@ -179,6 +190,7 @@ export const casa_ativar_cena: ToolDef<typeof CenaInput> = {
   keywords: ["cena", "modo", "boa noite", "cinema", "ambiente"],
   inputSchema: CenaInput,
   summarize: ({ entidade }) => `Ativar cena ${entidade}`,
+  authorize: autorizarEntidade,
   run: async ({ entidade }, { userId }) => {
     const { baseUrl, token } = await requireConnection(userId);
     try {

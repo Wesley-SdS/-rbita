@@ -17,11 +17,75 @@ interface Params {
   setMessages: Dispatch<SetStateAction<Msg[]>>;
   input: string; // p/ seeScreen (usa o texto do compositor como pergunta)
   setInput: Dispatch<SetStateAction<string>>; // p/ sendAudioFile (coloca a transcrição no compositor)
-  /** Ponte p/ o chat. Ref atualizada a cada render — sem stale closure. */
-  sendMessageRef: MutableRefObject<((content: string) => void) | null>;
+  /** Ponte p/ o chat. Ref atualizada a cada render — sem stale closure. `voiceClip`: Onda 9 (quem pediu), só no ditado. */
+  sendMessageRef: MutableRefObject<((content: string, voiceClip?: string) => void) | null>;
 }
 
 const MAX_TTS_FALHAS = 2;
+
+/**
+ * Onda 9 ("quem pediu"): grava um trecho de voz EM PARALELO ao ditado (Web
+ * Speech não gera áudio nenhum) para o backend reconhecer quem falou. Janela
+ * deslizante dos últimos ~6 s, nunca maior que ~400 KB em data URL. Best-effort
+ * de ponta a ponta: sem microfone, sem MediaRecorder ou erro na conversão, o
+ * ditado segue exatamente como antes, só sem o trecho.
+ */
+function startVoiceClip(): { finish: () => Promise<string | undefined> } {
+  const JANELA_S = 6;
+  const TETO_BYTES = 400 * 1024;
+  const state: { stream: MediaStream | null; recorder: MediaRecorder | null; chunks: Blob[]; stopRequested: boolean } = {
+    stream: null,
+    recorder: null,
+    chunks: [],
+    stopRequested: false,
+  };
+
+  if (typeof MediaRecorder !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        if (state.stopRequested) { stream.getTracks().forEach((t) => t.stop()); return; } // ditado já encerrou antes do mic liberar
+        state.stream = stream;
+        const mr = new MediaRecorder(stream);
+        mr.ondataavailable = (e) => {
+          if (!e.data.size) return;
+          state.chunks.push(e.data);
+          if (state.chunks.length > JANELA_S) state.chunks.shift(); // janela deslizante: só os últimos ~6s
+        };
+        state.recorder = mr;
+        mr.start(1000); // um pedaço por segundo
+      })
+      .catch(() => { /* sem acesso ao microfone: segue sem o trecho */ });
+  }
+
+  async function finish(): Promise<string | undefined> {
+    state.stopRequested = true;
+    const mr = state.recorder;
+    if (!mr || mr.state === "inactive") {
+      state.stream?.getTracks().forEach((t) => t.stop());
+      return undefined;
+    }
+    const blob = await new Promise<Blob | null>((resolve) => {
+      mr.onstop = () => resolve(state.chunks.length ? new Blob(state.chunks, { type: mr.mimeType || "audio/webm" }) : null);
+      try { mr.stop(); } catch { resolve(null); }
+    });
+    state.stream?.getTracks().forEach((t) => t.stop()); // libera o mic sempre, com ou sem áudio
+    if (!blob || !blob.size) return undefined;
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result));
+        fr.onerror = () => reject(fr.error);
+        fr.readAsDataURL(blob);
+      });
+      return dataUrl.length <= TETO_BYTES ? dataUrl : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  return { finish };
+}
 
 /**
  * Encapsula todo o caminho de voz: TTS (Gemini/Piper + fallback navegador),
@@ -274,6 +338,7 @@ export function useVoice(p: Params) {
     const base = p.input.trim(); // preserva o que já estava digitado
     let final = "";
     const compose = (interim: string) => ((base ? base + " " : "") + (final + interim)).trimStart();
+    const clip = startVoiceClip(); // Onda 9: trecho de voz em paralelo, best-effort (ditado não depende dele)
 
     rec.onstart = () => { setRecording(true); p.setMode("listening"); };
     rec.onresult = (e) => {
@@ -289,6 +354,7 @@ export function useVoice(p: Params) {
       dictRef.current = null;
       setRecording(false);
       p.setMode("standby");
+      void clip.finish(); // libera o microfone do trecho mesmo sem enviar mensagem
       if (ev.error === "no-speech") p.setError("Não ouvi nada — toque e fale de novo.");
       else if (ev.error !== "aborted") p.setError("Reconhecimento de voz indisponível neste navegador.");
       wakeRef.current?.resume?.(); // volta a escutar "Ei Órbita"
@@ -299,7 +365,8 @@ export function useVoice(p: Params) {
       p.setMode("standby");
       const text = compose("").trim();
       p.setInput("");
-      if (text) p.sendMessageRef.current?.(text); // fala → texto → envia
+      if (text) void clip.finish().then((voiceClip) => p.sendMessageRef.current?.(text, voiceClip)); // fala → texto → envia (com o trecho, se deu certo)
+      else void clip.finish(); // nada a enviar, mas libera o microfone do trecho
       wakeRef.current?.resume?.(); // volta a escutar "Ei Órbita"
     };
     dictRef.current = rec;
