@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Card, PanelTitle, Input, Textarea, Button, ErrorRetry } from "@/components/ui";
+import { useVisivel } from "@/lib/use-visible";
 
 /**
  * Acompanhar tarefa passo a passo pela câmera ("me ajuda com essa receita",
@@ -43,7 +44,10 @@ export function GuidedPanel() {
   const [starting, setStarting] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const visivel = useVisivel();
   useEffect(() => {
+    // fora da tela ou com a aba escondida não consulta; ao voltar, atualiza na hora
+    if (!visivel) return;
     let alive = true;
     setErr(null);
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -70,7 +74,7 @@ export function GuidedPanel() {
         setTarefas([]);
       });
     return () => { alive = false; if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [reload]);
+  }, [reload, visivel]);
 
   function refresh() { setReload((n) => n + 1); }
 

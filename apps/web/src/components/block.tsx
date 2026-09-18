@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { BlocoVisivel } from "@/lib/use-visible";
 
 const KEY = "orbita.hiddenBlocks";
 
@@ -23,22 +24,31 @@ export function useHiddenBlocks(): { hidden: string[]; toggle: (id: string) => v
 
 /**
  * Envolve um painel: some quando oculto; botão "ocultar" no hover; e faz
- * LAZY-MOUNT por visibilidade — o conteúdo (JS do painel + seus fetches) só
+ * LAZY-MOUNT por visibilidade: o conteúdo (JS do painel + seus fetches) só
  * monta quando o bloco entra em vista (IntersectionObserver, rootMargin 250px).
  * Uma vez visto, permanece montado (não refaz fetch ao rolar de volta).
+ *
+ * Continua observando depois de montar: o painel sabe (por `useVisivel`) se
+ * está sendo visto AGORA, e a atualização periódica dele pausa fora da tela.
  */
 export function Block({ id, hidden, toggle, children }: { id: string; hidden: string[]; toggle: (id: string) => void; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const [seen, setSeen] = useState(false);
+  const [naTela, setNaTela] = useState(false);
+  const oculto = hidden.includes(id);
   useEffect(() => {
-    if (seen || !ref.current) return;
+    if (oculto || !ref.current) return;
     const io = new IntersectionObserver(
-      (e) => { if (e[0]?.isIntersecting) { setSeen(true); io.disconnect(); } },
+      (e) => {
+        const visto = Boolean(e[0]?.isIntersecting);
+        setNaTela(visto);
+        if (visto) setSeen(true);
+      },
       { rootMargin: "250px" },
     );
     io.observe(ref.current);
     return () => io.disconnect();
-  }, [seen]);
+  }, [oculto]);
 
   if (hidden.includes(id)) return null;
   return (
@@ -51,7 +61,7 @@ export function Block({ id, hidden, toggle, children }: { id: string; hidden: st
       >
         ⊖
       </button>
-      {seen ? children : <div aria-hidden style={{ minHeight: 72 }} />}
+      {seen ? <BlocoVisivel.Provider value={naTela}>{children}</BlocoVisivel.Provider> : <div aria-hidden style={{ minHeight: 72 }} />}
     </div>
   );
 }

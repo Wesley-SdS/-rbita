@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useAtualizacaoPeriodica } from "@/lib/use-visible";
 import { Card } from "@/components/ui";
 
 interface Action { id: string; kind: string; summary: string; createdAt: string }
@@ -17,11 +18,9 @@ export function ActionsPanel() {
   function load() {
     fetch("/api/actions").then((r) => r.json()).then((d) => setActions(d.actions ?? [])).catch(() => {});
   }
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 15000); // reflete propostas criadas no chat
-    return () => clearInterval(t);
-  }, []);
+  // reflete propostas criadas no chat; pausa com a aba escondida e confere na
+  // hora em que ela volta (proposta nova não pode esperar o próximo ciclo)
+  useAtualizacaoPeriodica(load, 15000);
 
   async function approve(id: string) {
     setBusy(id);

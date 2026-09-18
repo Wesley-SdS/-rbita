@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card, PanelTitle } from "@/components/ui";
+import { useVisivel } from "@/lib/use-visible";
 
 interface W { id: string; type: string; title: string; config: Record<string, unknown> }
 
@@ -93,13 +94,16 @@ function WidgetCard({ w, onRemove, onPatch }: { w: W; onRemove: () => void; onPa
 
 function LiveCard({ url, render }: { url: string; render: (d: any) => React.ReactNode }) { // eslint-disable-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const visivel = useVisivel();
   useEffect(() => {
+    // fora da tela ou com a aba escondida não atualiza; ao voltar, busca na hora
+    if (!visivel) return;
     let alive = true;
     const fetchData = () => fetch(url).then((r) => r.json()).then((d) => { if (alive) setData(d); }).catch(() => {});
     fetchData();
     const t = setInterval(fetchData, 120000); // atualiza a cada 2 min
     return () => { alive = false; clearInterval(t); };
-  }, [url]);
+  }, [url, visivel]);
   return <div className="mt-1">{data && !data.error ? render(data) : <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>…</span>}</div>;
 }
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Card, PanelTitle, ErrorRetry } from "@/components/ui";
 import { JobProgress } from "@/components/job-progress";
 import type { JobView } from "@/lib/jobs";
+import { useVisivel } from "@/lib/use-visible";
 
 const dim = { color: "var(--color-ink-dim)" } as const;
 
@@ -24,7 +25,10 @@ export function JobsPanel() {
   const [reload, setReload] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const visivel = useVisivel();
   useEffect(() => {
+    // fora da tela ou com a aba escondida não consulta; ao voltar, atualiza na hora
+    if (!visivel) return;
     let alive = true;
     setErr(null);
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -60,7 +64,7 @@ export function JobsPanel() {
     })();
 
     return () => { alive = false; if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [reload]);
+  }, [reload, visivel]);
 
   function refresh() { setReload((n) => n + 1); }
 

@@ -312,7 +312,7 @@ export function Console({
         <Block id="provedor" hidden={hidden} toggle={toggle}>
         <Card>
           <PanelTitle className="mb-2">Provedor de IA</PanelTitle>
-          <select value={privacyMode ? "local/qwen2.5:7b" : modelKey} disabled={privacyMode} onChange={(e) => setModelKey(e.target.value)}
+          <select value={privacyMode ? (modelGroups.byProvider.get("local")?.[0]?.key ?? modelKey) : modelKey} disabled={privacyMode} onChange={(e) => setModelKey(e.target.value)}
             className="w-full rounded-lg border px-2 py-2 text-xs disabled:opacity-60"
             style={{ borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" }}>
             {/* Auto primeiro, depois cada provedor em seu grupo separado */}
