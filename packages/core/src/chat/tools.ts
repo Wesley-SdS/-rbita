@@ -16,8 +16,8 @@ import { buildToolSet } from "../tools/index";
  * humano é derivado do risco pelo registro (CLAUDE.md §5.7). Aqui só resta a
  * montagem do ToolSet do turno, com seleção por relevância ao pedido.
  */
-export async function buildTools(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"]): Promise<ToolSet> {
-  return buildToolSet(userId, query, requester, origin, voiceRef);
+export async function buildTools(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"], dominios?: readonly string[]): Promise<ToolSet> {
+  return buildToolSet(userId, query, requester, origin, voiceRef, dominios);
 }
 
 /** Contexto temporal: injeta a data/hora atual (combate alucinação de "hoje/atual"). */
@@ -110,7 +110,18 @@ export async function getSkillInstructions(userId: string, query = ""): Promise<
  * Todas as ferramentas + extensões do usuário: tools base + conectores + MCP,
  * mais as instruções das skills. Retorna um cleanup que fecha as conexões MCP.
  */
-export async function buildAllTools(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"]): Promise<{ tools: ToolSet; cleanup: () => Promise<void>; skillInstructions: string }> {
+export async function buildAllTools(
+  userId: string,
+  query = "",
+  requester?: ToolContext["requester"],
+  origin?: ToolContext["origin"],
+  voiceRef?: ToolContext["voiceRef"],
+  opts: { dominios?: readonly string[] } = {},
+): Promise<{ tools: ToolSet; cleanup: () => Promise<void>; skillInstructions: string }> {
+  // caminho rápido (comando da casa): só as tools do domínio, sem MCP nem skills
+  if (opts.dominios?.length) {
+    return { tools: await buildTools(userId, query, requester, origin, voiceRef, opts.dominios), cleanup: async () => {}, skillInstructions: "" };
+  }
   const [base, mcp, skillInstructions] = await Promise.all([
     buildTools(userId, query, requester, origin, voiceRef),
     buildMcpTools(userId),

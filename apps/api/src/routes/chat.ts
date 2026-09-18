@@ -18,6 +18,7 @@ import { rateLimit, tooMany } from "@orbita/core/ratelimit";
 import { settings } from "@orbita/core/settings/index";
 import { applyLlmSettings } from "@orbita/core/settings/apply";
 import { parseVoiceClip, requesterResolver } from "@orbita/core/identity/requester";
+import { ehComandoDaCasa, vocabularioDaCasa } from "@orbita/core/chat/fast-path";
 
 const BodySchema = z.object({
   content: z.string().min(1).max(8000),
@@ -59,6 +60,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
     "chat.outputCapSmall", "chat.outputCapMedium", "chat.outputCapLarge",
     "prompt.budgetTokens", "prompt.priorityPersona", "prompt.priorityTemporal", "prompt.prioritySkills", "prompt.priorityRag",
     "rag.topK", "identity.commandClipMaxKB",
+    "chat.fastPathEnabled", "chat.fastPathMaxChars", "chat.fastPathHistory",
   ]);
   await applyLlmSettings();
   const OUT_CAP: Record<string, number> = { small: cfg["chat.outputCapSmall"], medium: cfg["chat.outputCapMedium"], large: cfg["chat.outputCapLarge"] };
@@ -101,8 +103,14 @@ export async function POST(req: Request, ctx: RouteCtx) {
   }
   if (!conv) return Response.json({ error: "Falha ao criar conversa" }, { status: 500 });
 
+  // CAMINHO RÁPIDO (B10.1): comando curto da casa não precisa de memória,
+  // persona, skills, MCP nem histórico longo. Ver chat/fast-path.ts.
+  const rapido =
+    cfg["chat.fastPathEnabled"] && !image && ehComandoDaCasa(content, await vocabularioDaCasa(session.user.id).catch(() => ({ verbos: [], alvos: [] })), cfg["chat.fastPathMaxChars"]);
+  if (rapido) log.info("chat.caminho_rapido", { userId: session.user.id });
+
   // histórico: janela das últimas mensagens (evita estourar contexto/custo).
-  const HISTORY_WINDOW = cfg["chat.historyWindow"];
+  const HISTORY_WINDOW = rapido ? cfg["chat.fastPathHistory"] : cfg["chat.historyWindow"];
   const recent = await db
     .select({ role: message.role, content: message.content })
     .from(message)
@@ -161,7 +169,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const c = content.trim();
   const personalHint = /\b(meu|minh|nosso|lembr|anot|salv|guard|document|arquivo|planilha|extrato|comprovante|reuni|combin|falei|conversa|discut|prometi|agend|tarefa|compromisso|gast|conta|financ|onde eu|quando eu|o que eu)/i.test(c);
   const conversational = /^(oi|ol[áa]|e a[íi]|bom dia|boa tarde|boa noite|tudo bem|como vai|obrigad|valeu|blz|beleza|legal|show|perfeito|[óo]timo|entendi|ok|opa|eai|e a[íi])\b/i.test(c) && c.length < cfg["chat.conversationalMaxChars"] && !personalHint;
-  const trivial = !image && (c.length < cfg["chat.trivialMaxChars"] || conversational);
+  const trivial = rapido || (!image && (c.length < cfg["chat.trivialMaxChars"] || conversational));
   const ragTask: Promise<RagHit[]> = trivial
     ? Promise.resolve([])
     : Promise.race([
@@ -179,8 +187,8 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if (clip) void quemPede.voice();
 
   const [personaCtx, toolsRes, ragHits] = await Promise.all([
-    buildPersonaContext(userId).catch(() => ""),
-    buildAllTools(userId, content, quemPede.resolve, quemPede.origin, quemPede.voiceRef),
+    rapido ? Promise.resolve("") : buildPersonaContext(userId).catch(() => ""),
+    buildAllTools(userId, content, quemPede.resolve, quemPede.origin, quemPede.voiceRef, rapido ? { dominios: ["casa"] } : {}),
     ragTask,
   ]);
   const { tools, cleanup, skillInstructions } = toolsRes;

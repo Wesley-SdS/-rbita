@@ -103,6 +103,13 @@ const list = (group: SettingGroupId, label: string, description: string, def: st
   sensitive: extra.sensitive,
   type: { kind: "list", maxItems: 200, itemMaxLength: 200 },
 });
+const bool = (group: SettingGroupId, label: string, description: string, def: boolean): SettingDef<boolean> => ({
+  group,
+  label,
+  description,
+  default: def,
+  type: { kind: "boolean" },
+});
 const text = (group: SettingGroupId, label: string, description: string, def: string, maxLength = 200, multiline = false, minLength?: number): SettingDef<string> => ({
   group,
   label,
@@ -124,6 +131,9 @@ export const SETTING_DEFS = {
   "chat.outputCapLarge": num("chat", "Resposta máxima (modelo forte)", "Tokens de saída para modelos de porte grande.", 4096, 128, 65536, { unit: "tokens" }),
   "chat.trivialMaxChars": num("chat", "Mensagem trivial até", "Mensagens mais curtas que isso começam a responder sem esperar a busca de contexto (RAG). O modelo ainda pode buscar sob demanda.", 14, 0, 200, { unit: "chars" }),
   "chat.conversationalMaxChars": num("chat", "Saudação curta até", "Saudações e agradecimentos até este tamanho, sem indício de assunto pessoal, também pulam a busca de contexto.", 40, 0, 400, { unit: "chars" }),
+  "chat.fastPathEnabled": bool("chat", "Caminho rápido para comando da casa", "Comando curto de casa (\"apaga a luz da sala\") vai direto, só com as ferramentas da casa, sem buscar na memória nem carregar extensões. Responde bem mais rápido.", true),
+  "chat.fastPathMaxChars": num("chat", "Caminho rápido: tamanho máximo", "Mensagem mais longa que isto nunca vai pelo caminho rápido: pedido longo costuma precisar de contexto.", 80, 10, 400, { unit: "chars" }),
+  "chat.fastPathHistory": num("chat", "Caminho rápido: mensagens de histórico", "Quantas mensagens anteriores o comando de casa leva (\"e a do quarto também\" precisa da anterior).", 2, 0, 20, { unit: "mensagens" }),
   "chat.rateLimitPerMinute": num("chat", "Limite de turnos por minuto", "Proteção contra loop de custo: cada turno dispara LLM, embeddings e RAG.", 30, 1, 600, { unit: "/min" }),
 
   // ── prompt (chat/compose.ts) ──

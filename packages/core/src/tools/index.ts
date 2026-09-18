@@ -105,12 +105,13 @@ export function enqueueFor(userId: string): Enqueue {
  * ToolSet do turno: tools ligadas, com exigências atendidas para este usuário,
  * selecionadas por relevância ao pedido, com o gate derivado do risco efetivo.
  */
-export async function buildToolSet(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"]): Promise<ToolSet> {
+export async function buildToolSet(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"], dominios?: readonly string[]): Promise<ToolSet> {
   const [overrides, connected, max, haConn, waConnected] = await Promise.all([
     loadToolOverrides(), connectedProviders(userId), settings.get("tools.maxPerTurn"), getHaConnection(userId), whatsappConfigured(userId),
   ]);
   const usable = availableFor(listRegisteredTools(), { connected, haConnected: haConn !== null, whatsappConnected: waConnected, overrides });
-  const chosen = selectRelevant(usable, query, max);
+  const doDominio = dominios?.length ? usable.filter((d) => dominios.includes(d.domain)) : usable;
+  const chosen = selectRelevant(doDominio, query, max);
   return toToolSet(chosen, { userId, requester, origin, voiceRef }, { overrides, enqueue: enqueueFor(userId) });
 }
 
