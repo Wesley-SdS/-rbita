@@ -1,19 +1,20 @@
-// Migrada do Next em paridade (apps/web/src/app/api/stt/route.ts).
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
-import { transcribeAudio } from "@orbita/core/stt/index";
+import { transcribeRecording } from "@orbita/core/meetings/transcribe";
 import { log } from "@orbita/core/observability/logger";
 import { settings } from "@orbita/core/settings/index";
-import { getOwnerId } from "@orbita/core/owner";
-import { identifyMeetingSpeakers } from "@orbita/core/identity/voice";
 
-/** Controller fino: autentica, valida o arquivo e delega ao serviço de STT. */
+/**
+ * Transcrição IMEDIATA: ditado de comando no navegador (quando não há Web
+ * Speech) e o app mobile, que espera o texto na resposta. É áudio de segundos.
+ * Reunião gravada NÃO passa aqui: vai para `/api/meeting/transcribe`, que é
+ * trabalho de fila. A lógica é a mesma (`meetings/transcribe.ts`).
+ */
 export async function POST(req: Request, ctx: RouteCtx) {
   const session = sessionOf(ctx);
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
 
-  // Teto de upload (config `limits.sttMaxMb`). Uma reunião de ~2h em WebM/Opus
-  // fica bem abaixo do default; acima é quase certo que algo saiu errado.
+  // Teto de upload (config `limits.sttMaxMb`)
   const MAX_BYTES = (await settings.get("limits.sttMaxMb")) * 1024 * 1024;
   const form = await req.formData();
   const file = form.get("file");
@@ -27,44 +28,22 @@ export async function POST(req: Request, ctx: RouteCtx) {
     );
   }
 
-  // Diarização é opt-in: reunião pede, comando de voz não (custa mais e o
-  // resultado de uma voz só não acrescenta nada).
+  // Diarização é opt-in e fica por compatibilidade (contrato da paridade); a
+  // tela de reunião usa a rota de fila
   const diarize = form.get("diarize") === "true";
   const expectedRaw = Number(form.get("speakers"));
   const expectedSpeakers = Number.isInteger(expectedRaw) && expectedRaw >= 2 && expectedRaw <= 10 ? expectedRaw : undefined;
 
   const started = Date.now();
   try {
-    const result = await transcribeAudio(file, { diarize, expectedSpeakers });
-    log.info("stt", {
-      userId: session.user.id,
-      provider: result.provider,
+    const r = await transcribeRecording(session.user.id, new Uint8Array(await file.arrayBuffer()), file.type || "audio/webm", {
       diarize,
-      speakers: result.speakers ?? 0,
-      bytes: file.size,
-      ms: Date.now() - started,
+      expectedSpeakers,
+      sourceRef: (form.get("documentId") as string | null) || null,
     });
-    // Nomes dos locutores (VZ.5): a diarização foi sobre o áudio INTEIRO; aqui
-    // só se calcula uma assinatura por etiqueta, LOCALMENTE. Fail-soft: sem o
-    // serviço de percepção, a reunião sai como antes ("Locutor A").
-    let speakerIdentities: Awaited<ReturnType<typeof identifyMeetingSpeakers>> | undefined;
-    if (diarize && result.utterances?.length && (await getOwnerId()) === session.user.id) {
-      const t = Date.now();
-      // `documentId` liga o desconhecido à reunião de origem: é o que permite
-      // depois dizer "esse Desconhecido 2 é a Anna" a partir da tela da reunião
-      const ref = (form.get("documentId") as string | null) || null;
-      speakerIdentities = await identifyMeetingSpeakers(session.user.id, new Uint8Array(await file.arrayBuffer()), file.type || "audio/webm", result.utterances, ref).catch((e) => {
-        log.warn("stt.locutores_falhou", { error: e instanceof Error ? e.message : String(e) });
-        return undefined;
-      });
-      if (speakerIdentities) log.info("stt.locutores", { reconhecidos: speakerIdentities.filter((s) => s.outcome === "identificado").length, total: speakerIdentities.length, ms: Date.now() - t });
-    }
-    return Response.json(speakerIdentities ? { ...result, speakerIdentities } : result);
+    return Response.json(r);
   } catch (e) {
     log.error("stt.failed", { error: e instanceof Error ? e.message : String(e), ms: Date.now() - started });
-    return Response.json(
-      { error: "Serviço de voz indisponível (apps/voice offline e sem AssemblyAI)" },
-      { status: 503 },
-    );
+    return Response.json({ error: "Serviço de voz indisponível (apps/voice offline e sem AssemblyAI)" }, { status: 503 });
   }
 }

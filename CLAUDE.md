@@ -222,7 +222,7 @@ dono faz pelo assistente. Crescer o catálogo é o objetivo, não um efeito a co
 Antes de considerar qualquer tarefa concluída:
 
 1. **`tsc --noEmit` limpo nos dois apps (`apps/web` e `apps/api`)** e **`vitest run` verde** (§3; baseline
-   após a auditoria da Fase 2: 60 arquivos, 540 testes, mais 34 testes Python em `apps/perception`). Sem exceção.
+   após a auditoria da Fase 2: 62 arquivos, 554 testes, mais 34 testes Python em `apps/perception`). Sem exceção.
 2. **Erro pré-existente conta.** Achou teste quebrado ou tipo vermelho que já estava assim?
    Corrija antes de fechar.
 3. **Código novo em `lib/` precisa de teste.** Caminho feliz + pelo menos um de erro. A suíte
@@ -253,6 +253,7 @@ Antes de considerar qualquer tarefa concluída:
 | Fila de trabalho pesado (claim, retry, zumbi, progresso) | `packages/core/src/jobs/` · rotas `apps/api/src/routes/jobs.ts` · `apps/api/src/http/job-response.ts` · laço no `SchedulerService` |
 | Acompanhar tarefa pela câmera ("me ajuda com essa receita") | `packages/core/src/guided/` · tools `domains/acompanhamento.ts` · rota `routes/guided.ts` |
 | Resumo de reunião, cupom, extrato, indexar arquivo (a lógica, fora das rotas) | `packages/core/src/meetings/summarize.ts` · `finance/documents.ts` · `rag/files.ts` |
+| Transcrição de gravação (uma lógica, dois jeitos de esperar) | `packages/core/src/meetings/transcribe.ts` · imediata em `routes/stt.ts` (comando, mobile) · fila em `routes/meeting-transcribe.ts` (reunião, encadeia o resumo) |
 | Aparelhos da casa (de onde é "aqui") | `packages/core/src/identity/device.ts` · aba "Aparelhos" em `components/home-panel.tsx` |
 | Regras proativas (motor puro + execução) | `packages/core/src/rules/` · tela `components/rules-panel.tsx` |
 | Rotinas (runner) · contas a vencer · refresh de token | `packages/core/src/routines/run.ts` · `finance/bill-due.ts` · `connectors/refresh.ts` |
@@ -270,7 +271,7 @@ Antes de considerar qualquer tarefa concluída:
 | JSON estruturado robusto a modelo local (sem `generateObject`) | `packages/core/src/meetings/structured.ts` |
 | Calendar watch (aviso pré-reunião, polling) | `packages/core/src/meetings/calendar-watch.ts` |
 | Gmail watch (e-mail importante, polling) | `packages/core/src/meetings/gmail-watch.ts` |
-| Nomear locutor pós-reunião (leve, sem voiceprint) | `apps/api/src/routes/meeting-speakers.ts` · `document.speakers` |
+| Nomear locutor pós-reunião | `apps/api/src/routes/meeting-speakers.ts` · `document.speakers` |
 | Schemas Drizzle + migrações | `packages/db/src/` · `packages/db/drizzle/` |
 | Dono da instância (quem altera config global) | `packages/core/src/owner.ts` · `apps/api/src/auth/owner.guard.ts` · tabela `instance_owner` |
 | Apagar/exportar conta (derivado do schema) | `packages/core/src/account/data.ts` |

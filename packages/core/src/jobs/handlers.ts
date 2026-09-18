@@ -1,10 +1,13 @@
 import { registerJobs, type JobDef, type JobRunContext } from "./registry";
-import { JobPermanentError } from "./queue";
+import { JobPermanentError, enqueueJob } from "./queue";
 // biometria só pela fachada: esta pasta também dispara trabalho que fala com
 // nuvem (resumo, cupom), e fica dentro da cerca do NV.1
 import { recalcularAssinaturasDeRosto, recalcularAssinaturasDeVoz } from "../identity/actions";
 import { IdentityError } from "../identity/errors";
 import { summarizeMeeting } from "../meetings/summarize";
+import { desconhecidosDaTranscricao, textoDaTranscricao, transcribeRecording } from "../meetings/transcribe";
+import { lerDataUrl } from "../finance/documents";
+import { createHash } from "node:crypto";
 import { importReceipt, importStatement, DocumentoIlegivelError } from "../finance/documents";
 import { indexFile } from "../rag/files";
 import { ingestDocument } from "../rag/ingest";
@@ -68,6 +71,41 @@ export const resumirReuniao: JobDef = {
     }),
 };
 
+/**
+ * Reunião inteira: transcreve (com quem falou) e, havendo texto, enfileira o
+ * resumo AQUI, no servidor. Antes quem encadeava era a aba do navegador, então
+ * fechar a aba no meio perdia a reunião. E são dois trabalhos, não um, de
+ * propósito: se o resumo falhar e for tentado de novo, não se paga (em tempo e,
+ * com AssemblyAI, em dinheiro) outra transcrição.
+ */
+export const transcreverReuniao: JobDef = {
+  kind: "reuniao.transcrever",
+  title: (p) => (texto(p, "title") ? `Transcrever a reunião "${texto(p, "title")}"` : "Transcrever a reunião"),
+  maxAttempts: 2,
+  run: async (ctx) => {
+    const arquivo = lerDataUrl(exigirInput(ctx));
+    if (!arquivo) throw new JobPermanentError("O áudio da reunião chegou corrompido.");
+    const speakers = typeof ctx.payload.speakers === "number" ? ctx.payload.speakers : undefined;
+    const r = await transcribeRecording(ctx.userId, new Uint8Array(arquivo.bytes), arquivo.mime, { diarize: true, expectedSpeakers: speakers }, ctx.progresso);
+
+    const transcricao = textoDaTranscricao(r);
+    let resumoJobId: string | null = null;
+    if (transcricao.trim() && ctx.payload.resumir !== false) {
+      const hash = createHash("sha256").update(transcricao).digest("hex").slice(0, 24);
+      const resumo = await enqueueJob(ctx.userId, {
+        kind: "reuniao.resumir",
+        input: transcricao,
+        payload: { title: texto(ctx.payload, "title") || null, desconhecidos: desconhecidosDaTranscricao(r) },
+        dedupKey: `resumir:${ctx.userId}:${hash}`,
+      });
+      resumoJobId = resumo.job.id;
+    }
+    // o resultado leva a transcrição (a tela mostra e deixa nomear os
+    // locutores) e o id do resumo, que a tela passa a acompanhar
+    return { ...r, resumoJobId };
+  },
+};
+
 export const indexarArquivo: JobDef = {
   kind: "rag.indexar_arquivo",
   title: (p) => `Indexar "${texto(p, "nome") || "arquivo"}"`,
@@ -98,4 +136,4 @@ export const lerExtrato: JobDef = {
   run: async (ctx) => semRetentarErroConhecido(async () => ({ ...(await importStatement(ctx.userId, exigirInput(ctx), texto(ctx.payload, "nome") || "extrato", ctx.progresso)) })),
 };
 
-registerJobs([recalcularVoz, recalcularRosto, resumirReuniao, indexarArquivo, indexarTexto, lerCupom, lerExtrato]);
+registerJobs([recalcularVoz, recalcularRosto, transcreverReuniao, resumirReuniao, indexarArquivo, indexarTexto, lerCupom, lerExtrato]);

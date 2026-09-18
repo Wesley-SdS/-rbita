@@ -1,4 +1,4 @@
-import { enrollFromMeetingRef, linkUnknownVoicesToMeeting, recomputeVoiceSignatures, type RecomputeProgress } from "./voice";
+import { enrollFromMeetingRef, identifyMeetingSpeakers, linkUnknownVoicesToMeeting, recomputeVoiceSignatures, type RecomputeProgress } from "./voice";
 import { recomputeFaceSignatures } from "./face";
 import { eraseBiometrics } from "./erase";
 
@@ -33,6 +33,22 @@ export async function usarFalaComoAmostra(ownerUserId: string, personId: string,
  */
 export async function ligarDesconhecidosAReuniao(ownerUserId: string, rotulos: readonly string[], documentId: string): Promise<number> {
   return linkUnknownVoicesToMeeting(ownerUserId, rotulos, documentId);
+}
+
+/**
+ * Quem é quem numa reunião já transcrita (VZ.5). O áudio ENTRA aqui (vai só
+ * para o serviço local de percepção) e o que sai são rótulos, nomes, confiança
+ * e uma referência efêmera: nenhum vetor. É o caminho do módulo de reuniões,
+ * que também manda a transcrição para o modelo (às vezes de nuvem).
+ */
+export async function identificarLocutoresDaReuniao(
+  ownerUserId: string,
+  audio: Uint8Array,
+  mime: string,
+  utterances: Parameters<typeof identifyMeetingSpeakers>[3],
+  sourceRef: string | null,
+) {
+  return identifyMeetingSpeakers(ownerUserId, audio, mime, utterances, sourceRef);
 }
 
 /** Recalcula as assinaturas de voz (troca de modelo). Devolve só contagens. */

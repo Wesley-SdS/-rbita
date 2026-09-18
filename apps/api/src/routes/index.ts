@@ -51,6 +51,7 @@ import * as identityPresence from "./identity-presence";
 import * as identityLimits from "./identity-limits";
 import * as guided from "./guided";
 import * as jobs from "./jobs";
+import * as meetingTranscribe from "./meeting-transcribe";
 import * as devices from "./devices";
 import * as channelsWhatsapp from "./channels-whatsapp";
 import * as cameras from "./cameras";
@@ -104,6 +105,7 @@ export const ROUTE_CONTROLLERS = [
   // fila de trabalho pesado: a lista e o recurso de status de cada trabalho
   webRoute("api/jobs", { GET: jobs.GET }),
   webRoute("api/jobs/:id", { GET: jobs.GET_ONE, DELETE: jobs.DELETE_ONE }),
+  webRoute("api/meeting/transcribe", meetingTranscribe),
   webRoute("api/devices", devices),
   webRoute("api/channels/whatsapp", channelsWhatsapp),
   webRoute("api/cameras", cameras),

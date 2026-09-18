@@ -41,9 +41,11 @@ usa. As que mais importam:
 | Rota | O que não pode mudar |
 |---|---|
 | `POST /api/chat` | Stream NDJSON com `{t:"text"\|"tool"\|"tool-done"\|"error"}`; headers `x-conversation-id` e `x-model`; 503 com mensagem acionável quando não há provedor |
-| `GET /api/health` | `{status, db, checks:{db,voice,ollama}}` |
+| `GET /api/health` | `{status, db, checks:{db,voice,ollama,perception}}` |
 | `GET /api/models` | `{models, env, defaultModel}` |
-| `POST /api/stt` | `{text, language, provider}` + `utterances[]`/`speakers` quando `diarize` |
+| `POST /api/stt` | IMEDIATO (ditado de comando e app mobile): `{text, language, provider}` + `utterances[]`/`speakers` quando `diarize`. O mobile depende deste formato |
+| `POST /api/meeting/transcribe`, `/api/meeting/summarize`, `/api/upload`, `/api/ingest`, `/api/finance/{receipt,statement}`, `identity/{voice,face}?acao=recalcular` | FILA: `202` + `Location: /api/jobs/<id>` + `Retry-After`, corpo já é o status. `200` com `jaExistia: true` quando o mesmo trabalho já estava na fila. Erro de validação continua `400`/`413` na hora |
+| `GET /api/jobs/:id` · `DELETE /api/jobs/:id` | Status (`progresso`, `erro`, `resultado` só em `feito`) · pedido de parada |
 | `POST /api/tts` | Áudio binário com `Content-Type` certo (Edge devolve `audio/mpeg`, Piper `audio/wav`) |
 | `GET/POST/DELETE /api/actions` | Fila e execução — o gate humano não pode afrouxar |
 | `/api/auth/*` | **Fica no Next.** Não migrar |

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, lt, or, sql } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { job, type Job } from "@orbita/db/job-schema";
 import { settings } from "../settings";
@@ -231,14 +231,22 @@ export async function cancelJob(userId: string, jobId: string): Promise<Job | nu
   return row ?? null;
 }
 
+/**
+ * Colunas para a TELA: tudo menos o `input`. O anexo de uma reunião longa tem
+ * mais de cem megas, e a tela pergunta o status a cada poucos segundos.
+ */
+const { input: _semAnexo, ...colunasDaTela } = getTableColumns(job);
+const semAnexo = (j: Omit<Job, "input">): Job => ({ ...j, input: null });
+
 export async function getJob(userId: string, jobId: string): Promise<Job | null> {
-  const [row] = await db.select().from(job).where(and(eq(job.id, jobId), eq(job.userId, userId))).limit(1);
-  return row ?? null;
+  const [row] = await db.select(colunasDaTela).from(job).where(and(eq(job.id, jobId), eq(job.userId, userId))).limit(1);
+  return row ? semAnexo(row) : null;
 }
 
 export async function listJobs(userId: string, opts: { status?: string[]; limite?: number } = {}): Promise<Job[]> {
   const onde = opts.status?.length ? and(eq(job.userId, userId), inArray(job.status, opts.status)) : eq(job.userId, userId);
-  return db.select().from(job).where(onde).orderBy(desc(job.createdAt)).limit(opts.limite ?? 30);
+  const rows = await db.select(colunasDaTela).from(job).where(onde).orderBy(desc(job.createdAt)).limit(opts.limite ?? 30);
+  return rows.map(semAnexo);
 }
 
 /** Trabalho ainda vivo deste tipo (a tela usa para não enfileirar duas vezes). */

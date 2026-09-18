@@ -86,6 +86,7 @@ export function MeetingPanel() {
   const [phase, setPhase] = useState<"idle" | "transcrevendo" | "resumindo">("idle");
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [summarizeJob, setSummarizeJob] = useState<JobView | null>(null);
+  const [transcribeJob, setTranscribeJob] = useState<JobView | null>(null);
   const [compromissos, setCompromissos] = useState<Compromisso[]>([]);
   const [addedTodos, setAddedTodos] = useState<Set<number>>(new Set());
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
@@ -130,7 +131,7 @@ export function MeetingPanel() {
 
   async function start() {
     setSummary(""); setTranscript(""); setPreview(""); setUtterances([]); setNote(null);
-    setDocumentId(null); setSummarizeJob(null); setCompromissos([]); setAddedTodos(new Set()); setSpeakerNames({}); setNamesSaved(false);
+    setDocumentId(null); setSummarizeJob(null); setTranscribeJob(null); setCompromissos([]); setAddedTodos(new Set()); setSpeakerNames({}); setNamesSaved(false);
     setSpeakerIdentities([]); setLinkPerson({}); setUseSample({}); setAmostras({});
 
     let capture: MeetingCapture;
@@ -181,70 +182,83 @@ export function MeetingPanel() {
       return;
     }
 
-    // 1) transcrição da reunião INTEIRA, com separação de vozes
+    // A reunião vai inteira para a fila: o servidor transcreve (com quem falou)
+    // e, havendo texto, ENCADEIA o resumo sozinho. Antes quem encadeava era esta
+    // aba, e fechá-la no meio perdia a reunião.
     setPhase("transcrevendo");
-    let texto = "";
-    // rótulos "Desconhecido N" criados nesta transcrição: ligados à reunião no
-    // passo seguinte, que é quando ela vira documento e ganha um id
-    let desconhecidosDaReuniao: string[] = [];
     try {
       const fd = new FormData();
       fd.append("file", blob, "reuniao.webm");
-      fd.append("diarize", "true");
-      const r = await fetch("/api/stt", { method: "POST", body: fd });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? "falha na transcrição");
-
-      if (d.utterances?.length) {
-        setUtterances(d.utterances);
-        texto = (d.utterances as SttUtterance[]).map((u) => `Locutor ${u.speaker}: ${u.text}`).join("\n");
-
-        // Onda 9: locutores reconhecidos por voz, se o serviço de percepção respondeu.
-        // Pré-vincula o seletor de pessoa à sugestão (identificado ou provável); sem
-        // sugestão o seletor começa vazio (não é correção, é vínculo novo).
-        const identities: SpeakerIdentity[] = d.speakerIdentities ?? [];
-        desconhecidosDaReuniao = identities.map((si) => si.unknownLabel).filter((l): l is string => Boolean(l));
-        if (identities.length) {
-          setSpeakerIdentities(identities);
-          const pre: Record<string, string> = {};
-          for (const si of identities) if (si.personId) pre[si.label] = si.personId;
-          setLinkPerson(pre);
-        }
-      } else {
-        texto = (d.text ?? "").trim();
-        if (d.diarizationUnavailable) {
-          setNote(
-            d.provider === "whisper-local"
-              ? "Transcrito no Whisper local, que não separa vozes. Configure ASSEMBLYAI_API_KEY para ter os locutores."
-              : "Só uma voz foi identificada no áudio.",
-          );
-        }
-      }
-      setTranscript(texto);
+      const r = await fetch("/api/meeting/transcribe", { method: "POST", body: fd });
+      setTranscribeJob(await enfileirar(r));
     } catch (e) {
       setPhase("idle");
-      setNote(e instanceof Error ? e.message : "Falha ao transcrever.");
-      return;
+      setNote(e instanceof Error ? e.message : "Falha ao enviar a gravação.");
     }
+  }
 
-    if (!texto.trim()) {
+  /** Transcrição terminou: mostra o texto, pré-vincula locutores e passa a acompanhar o resumo. */
+  async function onTranscribeChange(j: JobView) {
+    setTranscribeJob(j);
+    if (j.status === "falhou") {
       setPhase("idle");
-      setNote("A transcrição voltou vazia.");
+      setNote(j.erro?.mensagem ?? "Falha ao transcrever.");
+      return;
+    }
+    if (j.status === "cancelado") {
+      setPhase("idle");
+      setNote("Transcrição cancelada.");
+      return;
+    }
+    if (j.status !== "feito") return;
+
+    const d = (j.resultado ?? {}) as {
+      text?: string;
+      utterances?: SttUtterance[];
+      speakerIdentities?: SpeakerIdentity[];
+      diarizationUnavailable?: boolean;
+      provider?: string;
+      resumoJobId?: string | null;
+    };
+    let texto = "";
+    if (d.utterances?.length) {
+      setUtterances(d.utterances);
+      texto = d.utterances.map((u) => `Locutor ${u.speaker}: ${u.text}`).join("\n");
+      // Onda 9: locutores reconhecidos por voz, se o serviço de percepção respondeu.
+      // Pré-vincula o seletor de pessoa à sugestão (identificado ou provável); sem
+      // sugestão o seletor começa vazio (não é correção, é vínculo novo).
+      const identities = d.speakerIdentities ?? [];
+      if (identities.length) {
+        setSpeakerIdentities(identities);
+        const pre: Record<string, string> = {};
+        for (const si of identities) if (si.personId) pre[si.label] = si.personId;
+        setLinkPerson(pre);
+      }
+    } else {
+      texto = (d.text ?? "").trim();
+      if (d.diarizationUnavailable) {
+        setNote(
+          d.provider === "whisper-local"
+            ? "Transcrito no Whisper local, que não separa vozes. Configure ASSEMBLYAI_API_KEY para ter os locutores."
+            : "Só uma voz foi identificada no áudio.",
+        );
+      }
+    }
+    setTranscript(texto);
+
+    if (!texto.trim() || !d.resumoJobId) {
+      setPhase("idle");
+      if (!texto.trim()) setNote("A transcrição voltou vazia.");
       return;
     }
 
-    // 2) resumo + arquivamento no RAG: mapa-redução com uma chamada de LLM por
-    // bloco, leva minutos numa reunião longa, então virou trabalho de fila
+    // o resumo já foi enfileirado pelo servidor: só passa a acompanhar
     setPhase("resumindo");
     try {
-      const r = await fetch("/api/meeting/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // manda os desconhecidos desta transcrição: é neste passo que a
-        // reunião vira documento, e só então dá para ligar um ao outro
-        body: JSON.stringify({ transcript: texto, desconhecidos: desconhecidosDaReuniao }),
-      });
-      setSummarizeJob(await enfileirar(r));
+      const r = await fetch(`/api/jobs/${d.resumoJobId}`);
+      const v = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((v as { error?: string }).error ?? "Não consegui acompanhar o resumo.");
+      setSummarizeJob(v as JobView);
     } catch (e) {
       setSummary("⚠ " + (e instanceof Error ? e.message : "falha ao resumir"));
       setPhase("idle");
@@ -356,6 +370,13 @@ export function MeetingPanel() {
           {note && (
             <div className="rounded-lg border p-2 text-[11px]" style={{ borderColor: "color-mix(in oklab, var(--color-danger) 40%, var(--color-line))", color: "var(--color-ink-dim)" }}>
               {note}
+            </div>
+          )}
+
+          {phase === "transcrevendo" && transcribeJob && (
+            <div className="rounded-lg border p-2" style={boxed}>
+              <JobProgress job={transcribeJob} onChange={(j) => void onTranscribeChange(j)} compact />
+              <p className="mt-1 text-[10px]" style={dim}>Pode fechar esta aba: a reunião continua sendo processada e aparece em Trabalhos em segundo plano.</p>
             </div>
           )}
 
