@@ -44,6 +44,8 @@ const ToolsPanel = dynamic(() => import("@/components/tools-panel").then((m) => 
 const HomePanel = dynamic(() => import("@/components/home-panel").then((m) => m.HomePanel), { ssr: false, loading: PanelSkeleton });
 const HomePeoplePanel = dynamic(() => import("@/components/home-people-panel").then((m) => m.HomePeoplePanel), { ssr: false, loading: PanelSkeleton });
 const CameraPanel = dynamic(() => import("@/components/camera-panel").then((m) => m.CameraPanel), { ssr: false, loading: PanelSkeleton });
+const GuidedPanel = dynamic(() => import("@/components/guided-panel").then((m) => m.GuidedPanel), { ssr: false, loading: PanelSkeleton });
+const JobsPanel = dynamic(() => import("@/components/jobs-panel").then((m) => m.JobsPanel), { ssr: false, loading: PanelSkeleton });
 
 // rótulos amigáveis para a timeline de atividade (o que a Órbita está fazendo).
 const TOOL_LABELS: Record<string, string> = {
@@ -87,8 +89,10 @@ const BLOCKS = [
   { id: "casa", label: "Casa" },
   { id: "pessoas-casa", label: "Pessoas da casa" },
   { id: "cameras", label: "Câmeras" },
+  { id: "acompanhar", label: "Acompanhar tarefa" },
   { id: "proatividade", label: "Proatividade" },
   { id: "regras", label: "Regras proativas" },
+  { id: "trabalhos", label: "Trabalhos em segundo plano" },
   { id: "ferramentas", label: "Ferramentas" },
   { id: "push", label: "Notificações push" },
   { id: "ajustes", label: "Ajustes" },
@@ -509,8 +513,10 @@ export function Console({
         <Block id="casa" hidden={hidden} toggle={toggle}><HomePanel /></Block>
         <Block id="pessoas-casa" hidden={hidden} toggle={toggle}><HomePeoplePanel /></Block>
         <Block id="cameras" hidden={hidden} toggle={toggle}><CameraPanel /></Block>
+        <Block id="acompanhar" hidden={hidden} toggle={toggle}><GuidedPanel /></Block>
         <Block id="proatividade" hidden={hidden} toggle={toggle}><RoutinesPanel /></Block>
         <Block id="regras" hidden={hidden} toggle={toggle}><RulesPanel /></Block>
+        <Block id="trabalhos" hidden={hidden} toggle={toggle}><JobsPanel /></Block>
         <Block id="ferramentas" hidden={hidden} toggle={toggle}><ToolsPanel /></Block>
         <Block id="push" hidden={hidden} toggle={toggle}><PushToggle /></Block>
         <Block id="ajustes" hidden={hidden} toggle={toggle}><SettingsPanel /></Block>

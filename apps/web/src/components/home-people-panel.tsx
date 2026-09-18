@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, PanelTitle, Input, Button, ErrorRetry } from "@/components/ui";
 import { identityLimits, LIMITES_PADRAO, type IdentityLimits } from "@/lib/identity-limits";
+import { enfileirar, isJobTerminal, type JobView } from "@/lib/jobs";
+import { JobProgress } from "@/components/job-progress";
 
 /**
  * Pessoas da casa, acesso por cômodo e consentimento biométrico (Onda 8).
@@ -555,7 +557,7 @@ function VoiceTools({ voiceInfo, onRecalculated }: { voiceInfo: VoiceInfo | null
   const [remaining, setRemaining] = useState(0);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const [recalcBusy, setRecalcBusy] = useState(false);
+  const [recalcJob, setRecalcJob] = useState<JobView | null>(null);
   const [recalcMsg, setRecalcMsg] = useState<string | null>(null);
 
   async function testar() {
@@ -579,22 +581,28 @@ function VoiceTools({ voiceInfo, onRecalculated }: { voiceInfo: VoiceInfo | null
     });
   }
 
+  // recalcular vira trabalho de fila (N chamadas ao serviço local, 0,3 a
+  // 8,6 s cada, não cabe numa requisição): enfileira e acompanha pelo JobProgress
   async function recalcular() {
-    setRecalcBusy(true);
     setRecalcMsg(null);
     try {
       const r = await fetch("/api/identity/voice?acao=recalcular", { method: "POST" });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) setRecalcMsg(d.error ?? "Não foi possível recalcular.");
-      else {
-        setRecalcMsg(`${d.recalculadas} assinatura${d.recalculadas === 1 ? "" : "s"} recalculada${d.recalculadas === 1 ? "" : "s"} no modelo ${d.modelo}${d.semAudio ? `, ${d.semAudio} sem áudio guardado` : ""}.`);
-        onRecalculated();
-      }
-    } catch {
-      setRecalcMsg("Falha ao recalcular.");
-    } finally {
-      setRecalcBusy(false);
+      setRecalcJob(await enfileirar(r));
+    } catch (e) {
+      setRecalcMsg(e instanceof Error ? e.message : "Falha ao recalcular.");
     }
+  }
+
+  function onRecalcChange(j: JobView) {
+    setRecalcJob(j);
+    if (j.status !== "feito") return;
+    const d = j.resultado as { modelo: string; recalculadas: number; semAudio: number; falharam: number } | null;
+    if (!d) return;
+    setRecalcMsg(
+      `${d.recalculadas} assinatura${d.recalculadas === 1 ? "" : "s"} recalculada${d.recalculadas === 1 ? "" : "s"} no modelo ${d.modelo}` +
+        `${d.semAudio ? `, ${d.semAudio} sem áudio guardado` : ""}${d.falharam ? `, ${d.falharam} falharam` : ""}.`,
+    );
+    onRecalculated();
   }
 
   return (
@@ -611,9 +619,15 @@ function VoiceTools({ voiceInfo, onRecalculated }: { voiceInfo: VoiceInfo | null
         </Button>
       )}
       {result && <p className="text-[11px]" style={dim}>{result}</p>}
-      <button onClick={() => void recalcular()} disabled={recalcBusy} className="mt-1 self-start text-[11px] underline disabled:opacity-50" style={dim}>
-        {recalcBusy ? "recalculando…" : "Recalcular assinaturas"}
+      <button
+        onClick={() => void recalcular()}
+        disabled={recalcJob !== null && !isJobTerminal(recalcJob.status)}
+        className="mt-1 self-start text-[11px] underline disabled:opacity-50"
+        style={dim}
+      >
+        Recalcular assinaturas
       </button>
+      {recalcJob && <JobProgress job={recalcJob} onChange={onRecalcChange} compact />}
       {recalcMsg && <p className="text-[11px]" style={dim}>{recalcMsg}</p>}
     </div>
   );
@@ -794,7 +808,7 @@ function FaceTools({ faceInfo, onRecalculated }: { faceInfo: FaceInfo | null; on
   const [showCamera, setShowCamera] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const [recalcBusy, setRecalcBusy] = useState(false);
+  const [recalcJob, setRecalcJob] = useState<JobView | null>(null);
   const [recalcMsg, setRecalcMsg] = useState<string | null>(null);
 
   const percepcaoOk = faceInfo?.percepcao.ok ?? false;
@@ -815,22 +829,28 @@ function FaceTools({ faceInfo, onRecalculated }: { faceInfo: FaceInfo | null; on
     }
   }
 
+  // recalcular vira trabalho de fila (uma chamada ao serviço local por foto): enfileira e acompanha pelo JobProgress
   async function recalcular() {
-    setRecalcBusy(true);
     setRecalcMsg(null);
     try {
       const r = await fetch("/api/identity/face?acao=recalcular", { method: "POST" });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) setRecalcMsg(d.error ?? "Não foi possível recalcular.");
-      else {
-        setRecalcMsg(`${d.recalculadas} assinatura${d.recalculadas === 1 ? "" : "s"} recalculada${d.recalculadas === 1 ? "" : "s"} no modelo ${d.backend}${d.semFoto ? `, ${d.semFoto} sem foto guardada` : ""}.`);
-        onRecalculated();
-      }
-    } catch {
-      setRecalcMsg("Falha ao recalcular.");
-    } finally {
-      setRecalcBusy(false);
+      setRecalcJob(await enfileirar(r));
+    } catch (e) {
+      setRecalcMsg(e instanceof Error ? e.message : "Falha ao recalcular.");
     }
+  }
+
+  function onRecalcChange(j: JobView) {
+    setRecalcJob(j);
+    if (j.status !== "feito") return;
+    const d = j.resultado as { backend: string; recalculadas: number; semFoto: number; semRosto: number; falharam: number } | null;
+    if (!d) return;
+    // antes disto, semRosto e falharam sumiam calados (só semFoto virava texto)
+    setRecalcMsg(
+      `${d.recalculadas} assinatura${d.recalculadas === 1 ? "" : "s"} recalculada${d.recalculadas === 1 ? "" : "s"} no modelo ${d.backend}` +
+        `${d.semFoto ? `, ${d.semFoto} sem foto guardada` : ""}${d.semRosto ? `, ${d.semRosto} sem rosto detectado na foto` : ""}${d.falharam ? `, ${d.falharam} falharam` : ""}.`,
+    );
+    onRecalculated();
   }
 
   return (
@@ -863,9 +883,15 @@ function FaceTools({ faceInfo, onRecalculated }: { faceInfo: FaceInfo | null; on
         </div>
       )}
       {result && <p className="text-[11px]" style={dim}>{result}</p>}
-      <button onClick={() => void recalcular()} disabled={recalcBusy} className="mt-1 self-start text-[11px] underline disabled:opacity-50" style={dim}>
-        {recalcBusy ? "recalculando…" : "Recalcular assinaturas de rosto"}
+      <button
+        onClick={() => void recalcular()}
+        disabled={recalcJob !== null && !isJobTerminal(recalcJob.status)}
+        className="mt-1 self-start text-[11px] underline disabled:opacity-50"
+        style={dim}
+      >
+        Recalcular assinaturas de rosto
       </button>
+      {recalcJob && <JobProgress job={recalcJob} onChange={onRecalcChange} compact />}
       {recalcMsg && <p className="text-[11px]" style={dim}>{recalcMsg}</p>}
     </div>
   );

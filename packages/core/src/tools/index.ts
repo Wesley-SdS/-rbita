@@ -29,6 +29,7 @@ import "./domains/casa";
 import "./domains/teams";
 import "./domains/camera";
 import "./domains/identidade";
+import "./domains/acompanhamento";
 
 export * from "./registry";
 

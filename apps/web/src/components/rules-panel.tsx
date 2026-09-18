@@ -34,6 +34,8 @@ const EVENT_HINTS = [
   // Fase 2 (identidade e percepção)
   "identity.seen", "identity.presence_changed", "identity.gesture",
   "identity.consent_granted", "identity.consent_revoked", "identity.voice_enrolled", "identity.face_enrolled",
+  // fila de trabalho pesado e acompanhar tarefa passo a passo
+  "job.enqueued", "job.finished", "guided.started", "guided.step", "guided.finished",
 ];
 const dim = { color: "var(--color-ink-dim)" } as const;
 

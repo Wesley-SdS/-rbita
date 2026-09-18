@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Card, PanelTitle } from "@/components/ui";
+import { acompanharJob, enfileirar } from "@/lib/jobs";
 
 /* Tipos mínimos da File System Access API (não incluída no lib.dom padrão). */
 interface FSFileHandle { kind: "file"; name: string; getFile(): Promise<File> }
@@ -46,19 +47,31 @@ export function FolderPanel() {
       const files: { name: string; file: File }[] = [];
       setStatus("lendo arquivos…");
       await collect(dir, "", files, 0);
+      // cada /api/ingest agora enfileira (embeddings levam tempo): espera cada
+      // trabalho terminar antes de ir para o próximo arquivo, um de cada vez
+      // (mandar os N de uma vez sobrecarregaria a fila com um lote só)
       let indexed = 0;
+      let failed = 0;
       for (const { name, file } of files) {
         const content = await file.text();
         if (!content.trim()) continue;
-        const r = await fetch("/api/ingest", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: `${dir.name}/${name}`, content: content.slice(0, 100_000) }),
-        });
-        if (r.ok) indexed++;
+        setStatus(`indexando… ${indexed}/${files.length} (${name})`);
+        try {
+          const r = await fetch("/api/ingest", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: `${dir.name}/${name}`, content: content.slice(0, 100_000) }),
+          });
+          const inicial = await enfileirar(r);
+          const final = await acompanharJob(inicial, () => {});
+          if (final.status === "feito") indexed++;
+          else failed++;
+        } catch {
+          failed++;
+        }
         setStatus(`indexando… ${indexed}/${files.length}`);
       }
-      setStatus(`✓ ${indexed} arquivo(s) de "${dir.name}" indexados. Pergunte sobre eles no chat.`);
+      setStatus(`✓ ${indexed} arquivo(s) de "${dir.name}" indexados.${failed ? ` ${failed} falharam.` : ""} Pergunte sobre eles no chat.`);
     } catch (e) {
       setStatus(e instanceof Error && e.name === "AbortError" ? null : "não foi possível ler a pasta");
     } finally {

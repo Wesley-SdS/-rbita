@@ -401,3 +401,30 @@ sem estado). Migrações `0021`–`0028`.
 **Pendente de máquina** (precisa de tudo no ar, o dono derrubou o Docker durante a fase): aplicar
 `0026`–`0028`, teste real de rosto com as 12 fotos, validação no navegador (microfone, webcam,
 aparelho, gestos) e a camada 3 do roteiro de paridade.
+
+## Fila de trabalho pesado e acompanhamento de tarefa ✅ (2026-09-17, pós-auditoria)
+
+Pedido do dono depois da auditoria: nada pesado deve rodar com ele esperando a requisição, e o
+"me ajuda com essa receita" do PRD §5.4 deve acompanhar sozinho.
+
+- [x] **Fila em Postgres, desenhada a partir de pesquisa** (graphile-worker, pg-boss, River, Oban,
+  Solid Queue, Google AIP-151, Azure async request-reply, AWS backoff com jitter). Claim por UPDATE
+  atômico com `FOR UPDATE SKIP LOCKED` e commit imediato; coração do runner num relógio próprio
+  (uma chamada longa de LLM não parece trabalho morto); cerca para execução atrasada não
+  sobrescrever trabalho recuperado; dedup por índice único parcial; retentativa com full jitter;
+  erro permanente não retenta; cancelar é pedir para parar no próximo ponto seguro; o anexo é
+  apagado ao terminar (quando é áudio, é biometria). Tudo configurável na tela.
+- [x] **Sete rotas pesadas viraram trabalho de fila** com 202 + `Location` + `Retry-After`:
+  recalcular voz, recalcular rosto, resumir reunião, indexar arquivo, indexar texto, cupom e
+  extrato. A lógica saiu das rotas para o core, e cupom e extrato deixaram de usar
+  `generateObject` (que falha com modelo local).
+- [x] **Acompanhar tarefa passo a passo pela câmera.** A Órbita guarda os passos, olha a câmera
+  do cômodo a cada N segundos e avisa o próximo passo no aparelho de quem está fazendo. Na dúvida
+  não avança; câmera que identifica pessoas usa só modelo local; toda tarefa tem prazo e para
+  sozinha. Quatro tools novas (`acompanhar_tarefa`, `proximo_passo_da_tarefa`,
+  `status_da_tarefa`, `parar_acompanhamento`).
+- [x] **A cerca do NV.1 pegou um acoplamento novo** (resumo de reunião importando o módulo de
+  voz) e passou a cobrir `jobs`, `guided` e `finance`.
+
+**Pendente de máquina:** a query de claim e os índices parciais só se provam contra um Postgres de
+verdade (migração `0029`), junto com o resto da validação da Fase 2.

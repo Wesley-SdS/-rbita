@@ -262,7 +262,13 @@ export async function faceEnrollmentSummary(ownerUserId: string) {
 }
 
 /** Recalcula assinaturas de rosto depois de trocar o backend (só de quem consentiu). */
-export async function recomputeFaceSignatures(ownerUserId: string): Promise<{ backend: string; recalculadas: number; semFoto: number }> {
+export type RecomputeProgress = (feito: number, total: number, passo: string) => Promise<void>;
+
+/**
+ * O `progresso` é também o sinal de vida do trabalho na fila: sem ele, recalcular
+ * dezenas de fotos seria confundido com trabalho travado.
+ */
+export async function recomputeFaceSignatures(ownerUserId: string, progresso?: RecomputeProgress): Promise<{ backend: string; recalculadas: number; semFoto: number; semRosto: number; falharam: number }> {
   const cfg = await faceConfig();
   const consentidos = new Set((await consentedPeople(ownerUserId)).map((p) => p.id));
   const amostras = (await db.select().from(biometricFaceSample).where(eq(biometricFaceSample.userId, ownerUserId))).filter((a) => consentidos.has(a.personId));
@@ -271,8 +277,13 @@ export async function recomputeFaceSignatures(ownerUserId: string): Promise<{ ba
   );
   let recalculadas = 0;
   let semFoto = 0;
-  for (const a of amostras) {
-    if (jaTem.has(a.id)) continue;
+  // foto em que o modelo novo não achou rosto: antes sumia sem contar, e o dono
+  // não sabia que aquela pessoa tinha ficado com menos amostras
+  let semRosto = 0;
+  let falharam = 0;
+  const pendentes = amostras.filter((a) => !jaTem.has(a.id));
+  for (const [i, a] of pendentes.entries()) {
+    await progresso?.(i, pendentes.length, `recalculando a foto ${i + 1} de ${pendentes.length}`);
     if (!a.imageEnc) {
       semFoto++;
       continue;
@@ -282,12 +293,17 @@ export async function recomputeFaceSignatures(ownerUserId: string): Promise<{ ba
       const bytes = new Uint8Array(Buffer.from(decryptSecret(a.imageEnc), "base64"));
       const r = await embedFaces(bytes, a.mime ?? "image/jpeg", cfg.backend);
       const rosto = mainFace(r.faces, cfg.minSize);
-      if (!rosto) continue;
+      if (!rosto) {
+        semRosto++;
+        continue;
+      }
       await db.insert(biometricFaceEmbedding).values({ userId: ownerUserId, personId: a.personId, sampleId: a.id, backend: r.backend, dim: rosto.embedding.length, vector: rosto.embedding });
       recalculadas++;
     } catch (e) {
+      falharam++;
       log.warn("identity.recalculo_rosto_falhou", { sampleId: a.id, error: e instanceof Error ? e.message : String(e) });
     }
   }
-  return { backend: cfg.backend, recalculadas, semFoto };
+  await progresso?.(pendentes.length, pendentes.length, "pronto");
+  return { backend: cfg.backend, recalculadas, semFoto, semRosto, falharam };
 }

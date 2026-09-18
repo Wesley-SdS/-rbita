@@ -1,6 +1,7 @@
 // Migrada do Next em paridade (apps/web/src/app/api/ingest/route.ts).
 import { z } from "zod";
-import { ingestDocument } from "@orbita/core/rag/ingest";
+import { enqueueJob } from "@orbita/core/jobs/queue";
+import { jobAccepted } from "../http/job-response";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { rateLimit, tooMany } from "@orbita/core/ratelimit";
@@ -27,7 +28,8 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const parsed = Body.safeParse(body);
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message }, { status: 400 });
 
-  const res = await ingestDocument(session.user.id, parsed.data.title, parsed.data.content, "text");
-  if (!res.chunks) return Response.json({ error: "Conteúdo vazio" }, { status: 400 });
-  return Response.json({ title: parsed.data.title, ...res });
+  if (!parsed.data.content.trim()) return Response.json({ error: "Conteúdo vazio" }, { status: 400 });
+  // embeddings de muitos trechos levam tempo: vira trabalho de fila
+  const r = await enqueueJob(session.user.id, { kind: "rag.indexar_texto", input: parsed.data.content, payload: { title: parsed.data.title } });
+  return jobAccepted(r.job, r.jaExistia);
 }

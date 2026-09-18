@@ -400,12 +400,14 @@ export async function purgeExpiredUnknownVoices(): Promise<number> {
   return r.length;
 }
 
+export type RecomputeProgress = (feito: number, total: number, passo: string) => Promise<void>;
+
 /**
  * Troca de modelo (PRD §6): recalcula a assinatura de toda amostra de CADASTRO
  * que ainda tem o áudio cifrado e não tem vetor do modelo atual. Amostras de
  * reunião (sem áudio guardado) não voltam: o dono regrava se quiser.
  */
-export async function recomputeVoiceSignatures(ownerUserId: string): Promise<{ modelo: string; recalculadas: number; semAudio: number; falharam: number }> {
+export async function recomputeVoiceSignatures(ownerUserId: string, progresso?: RecomputeProgress): Promise<{ modelo: string; recalculadas: number; semAudio: number; falharam: number }> {
   const { model } = await matchConfig();
   // sem consentimento vigente não se gera vetor novo, nem de amostra antiga
   const consentidos = new Set((await consentedPeople(ownerUserId)).map((p) => p.id));
@@ -416,8 +418,10 @@ export async function recomputeVoiceSignatures(ownerUserId: string): Promise<{ m
   let recalculadas = 0;
   let semAudio = 0;
   let falharam = 0;
-  for (const a of amostras) {
-    if (jaTem.has(a.id)) continue;
+  const pendentes = amostras.filter((a) => !jaTem.has(a.id));
+  for (const [i, a] of pendentes.entries()) {
+    // o progresso também é o sinal de vida do trabalho na fila
+    await progresso?.(i, pendentes.length, `recalculando a amostra ${i + 1} de ${pendentes.length}`);
     if (!a.audioEnc) {
       semAudio++;
       continue;
@@ -434,5 +438,6 @@ export async function recomputeVoiceSignatures(ownerUserId: string): Promise<{ m
       log.warn("identity.recalculo_voz_falhou", { sampleId: a.id, error: e instanceof Error ? e.message : String(e) });
     }
   }
+  await progresso?.(pendentes.length, pendentes.length, "pronto");
   return { modelo: model, recalculadas, semAudio, falharam };
 }

@@ -1,9 +1,11 @@
 import { z } from "zod";
-import { enrollFace, faceEnrollmentSummary, identifyFace, recomputeFaceSignatures } from "@orbita/core/identity/face";
+import { enrollFace, faceEnrollmentSummary, identifyFace } from "@orbita/core/identity/face";
 import { PerceptionError, perceptionHealth } from "@orbita/core/perception/client";
 import { settings } from "@orbita/core/settings/index";
 import type { RouteCtx } from "../http/web";
 import { domainError, ownerOf } from "../http/owner-route";
+import { enqueueJob } from "@orbita/core/jobs/queue";
+import { jobAccepted } from "../http/job-response";
 
 function erro(e: unknown): Response {
   if (e instanceof PerceptionError) return Response.json({ error: e.message }, { status: e.status });
@@ -32,7 +34,10 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const acao = Acao.safeParse(new URL(req.url).searchParams.get("acao"));
   if (!acao.success) return Response.json({ error: "acao deve ser cadastrar, identificar ou recalcular" }, { status: 400 });
   try {
-    if (acao.data === "recalcular") return Response.json(await recomputeFaceSignatures(o.userId));
+    if (acao.data === "recalcular") {
+      const r = await enqueueJob(o.userId, { kind: "identidade.recalcular_rosto", dedupKey: `recalcular_rosto:${o.userId}` });
+      return jobAccepted(r.job, r.jaExistia);
+    }
 
     const form = await req.formData().catch(() => null);
     const file = form?.get("file");

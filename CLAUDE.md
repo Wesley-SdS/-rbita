@@ -200,6 +200,11 @@ dono faz pelo assistente. Crescer o catálogo é o objetivo, não um efeito a co
 - **Config que vale para a casa inteira** (tabela `setting`, `tool_config`, e na Fase 2 limiares biométricos) só muda com `OwnerGuard`. Chave com dado pessoal ganha `sensitive: true` em `defs.ts`.
 - **Tabela nova com dado de usuário** precisa de FK `onDelete: "cascade"` para `user` (ou para uma tabela do usuário): `account/data.test.ts` reprova `set null` sem exceção explícita, e o export/apagar a pega sozinho.
 - **Zod em toda entrada**, com limites explícitos de tamanho.
+- **Trabalho que leva mais de ~10 s não roda dentro da requisição.** Vira trabalho de fila: um
+  `JobDef` registrado em `packages/core/src/jobs/handlers.ts`, a rota valida (400 na hora) e chama
+  `enqueueJob`, e responde com `jobAccepted` (202 + `Location` + `Retry-After`). O handler recebe
+  `progresso(feito, total, passo)`, que é também o ponto onde o pedido de parar é visto. Erro que
+  não adianta retentar (validação, arquivo ilegível, sem consentimento) lança `JobPermanentError`.
 - **Fail-soft no caminho do chat:** persona, RAG, MCP e skills usam `.catch(() => vazio)`. Uma
   integração fora do ar degrada a resposta, não derruba o turno.
 - **Logger estruturado** (`lib/observability/logger.ts`), nunca `console.log` em código novo.
@@ -217,7 +222,7 @@ dono faz pelo assistente. Crescer o catálogo é o objetivo, não um efeito a co
 Antes de considerar qualquer tarefa concluída:
 
 1. **`tsc --noEmit` limpo nos dois apps (`apps/web` e `apps/api`)** e **`vitest run` verde** (§3; baseline
-   após a auditoria da Fase 2: 54 arquivos, 481 testes, mais 34 testes Python em `apps/perception`). Sem exceção.
+   após a auditoria da Fase 2: 60 arquivos, 540 testes, mais 34 testes Python em `apps/perception`). Sem exceção.
 2. **Erro pré-existente conta.** Achou teste quebrado ou tipo vermelho que já estava assim?
    Corrija antes de fechar.
 3. **Código novo em `lib/` precisa de teste.** Caminho feliz + pelo menos um de erro. A suíte
@@ -245,6 +250,9 @@ Antes de considerar qualquer tarefa concluída:
 | Cliente da percepção (único caminho para o :8002) | `packages/core/src/perception/client.ts` |
 | Guarda de saída (biometria nunca sai de casa) | `apps/api/src/egress-guard.ts` · `packages/core/src/privacy/egress.ts` |
 | Memória visual de objetos e gestos | `packages/core/src/vision/objects.ts` · `packages/core/src/identity/gesture.ts` |
+| Fila de trabalho pesado (claim, retry, zumbi, progresso) | `packages/core/src/jobs/` · rotas `apps/api/src/routes/jobs.ts` · `apps/api/src/http/job-response.ts` · laço no `SchedulerService` |
+| Acompanhar tarefa pela câmera ("me ajuda com essa receita") | `packages/core/src/guided/` · tools `domains/acompanhamento.ts` · rota `routes/guided.ts` |
+| Resumo de reunião, cupom, extrato, indexar arquivo (a lógica, fora das rotas) | `packages/core/src/meetings/summarize.ts` · `finance/documents.ts` · `rag/files.ts` |
 | Aparelhos da casa (de onde é "aqui") | `packages/core/src/identity/device.ts` · aba "Aparelhos" em `components/home-panel.tsx` |
 | Regras proativas (motor puro + execução) | `packages/core/src/rules/` · tela `components/rules-panel.tsx` |
 | Rotinas (runner) · contas a vencer · refresh de token | `packages/core/src/routines/run.ts` · `finance/bill-due.ts` · `connectors/refresh.ts` |
@@ -324,4 +332,10 @@ Antes de considerar qualquer tarefa concluída:
 - **`tesseract.js` precisa ficar em `serverExternalPackages`** e é copiado à mão no Dockerfile.
 - **O banco de dev tem 14 contas de teste.** O dono da instância é `wesley@orbita.local` (gravado em `instance_owner`); quem não é dono recebe 403 ao mudar Ajustes/Ferramentas. Instância órfã só volta por `ORBITA_OWNER_EMAIL`.
 - **Docker Desktop e os dev servers caem juntos** quando a VM satura: se tudo responder `000`, suba Docker, `apps/api`, `apps/web` e voz de novo (skill orbita-dev) antes de achar que é bug.
-- **`finance-receipt` e `finance-statement` ainda usam `generateObject`** com o modelo reserva: com modelo local isso falha (armadilha acima). Pendente.
+- **A fila roda no mesmo processo que a recebe.** Quem enfileira acorda o runner por chamada de
+  função; por isso não há `LISTEN`/`NOTIFY`. Se um dia existir um segundo processo consumindo a
+  fila, aí sim: conexão dedicada fora do pool, levando só o id.
+- **Zumbi é coração parado, não id de instância.** O coração é do runner (relógio próprio), não do
+  progresso do handler: uma chamada de LLM de minutos sem progresso não pode parecer trabalho
+  morto. E o `tsx watch` deixa dois processos vivos por segundos, então "outra instância" não é
+  zumbi na hora. Ver `jobs/policy.ts`.

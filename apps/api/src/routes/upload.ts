@@ -1,46 +1,19 @@
-// Migrada do Next em paridade (apps/web/src/app/api/upload/route.ts).
+import { enqueueJob } from "@orbita/core/jobs/queue";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
-import { ingestDocument } from "@orbita/core/rag/ingest";
+import { jobAccepted } from "../http/job-response";
+import { readUploadedFile } from "../http/upload-file";
 
-/** Upload de arquivo (PDF / imagem-OCR / texto) → extrai texto → indexa (RAG). */
+/**
+ * Upload de arquivo (PDF, imagem por OCR ou texto) para indexar no RAG. Virou
+ * trabalho de fila: PDF grande e OCR levam dezenas de segundos. A lógica está em
+ * `packages/core/src/rag/files.ts`.
+ */
 export async function POST(req: Request, ctx: RouteCtx) {
   const session = sessionOf(ctx);
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
-
-  const form = await req.formData();
-  const file = form.get("file");
-  if (!(file instanceof File)) return Response.json({ error: "Arquivo ausente" }, { status: 400 });
-
-  const name = file.name || "arquivo";
-  const type = file.type || "";
-  const buf = Buffer.from(await file.arrayBuffer());
-
-  let text = "";
-  let source = "file";
-  try {
-    if (name.toLowerCase().endsWith(".pdf") || type === "application/pdf") {
-      const { extractText, getDocumentProxy } = await import("unpdf");
-      const pdf = await getDocumentProxy(new Uint8Array(buf));
-      const r = await extractText(pdf, { mergePages: true });
-      text = Array.isArray(r.text) ? r.text.join("\n") : r.text;
-      source = "pdf";
-    } else if (type.startsWith("image/")) {
-      const { ocrImage } = await import("@orbita/core/ocr");
-      text = await ocrImage(buf);
-      source = "ocr";
-    } else {
-      text = buf.toString("utf-8");
-    }
-  } catch (e) {
-    return Response.json(
-      { error: "Falha ao extrair texto: " + (e instanceof Error ? e.message : "erro") },
-      { status: 400 },
-    );
-  }
-
-  if (!text.trim()) return Response.json({ error: "Nenhum texto extraído do arquivo" }, { status: 400 });
-
-  const res = await ingestDocument(session.user.id, name, text, source);
-  return Response.json({ title: name, source, ...res });
+  const f = await readUploadedFile(req, "Arquivo ausente");
+  if (f instanceof Response) return f;
+  const r = await enqueueJob(session.user.id, { kind: "rag.indexar_arquivo", input: f.dataUrl, payload: { nome: f.nome } });
+  return jobAccepted(r.job, r.jaExistia);
 }

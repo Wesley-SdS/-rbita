@@ -1,8 +1,10 @@
-import { enrollFromMeetingRef } from "./voice";
+import { enrollFromMeetingRef, linkUnknownVoicesToMeeting, recomputeVoiceSignatures, type RecomputeProgress } from "./voice";
+import { recomputeFaceSignatures } from "./face";
 import { eraseBiometrics } from "./erase";
 
 /**
- * FACHADA de identidade para o caminho do LLM (tools).
+ * FACHADA de identidade para quem fala com nuvem (tools, resumo de reunião,
+ * fila de trabalho).
  *
  * A cerca do NV.1 (PRD §4.9) proíbe `tools/**` de importar os módulos
  * biométricos (`identity/voice`, `identity/face`): é lá que vivem vetores e
@@ -22,6 +24,25 @@ export async function usarFalaComoAmostra(ownerUserId: string, personId: string,
   } catch (e) {
     return { erro: e instanceof Error ? e.message : "Não consegui usar essa fala como amostra." };
   }
+}
+
+/**
+ * Liga os "Desconhecido N" de uma reunião ao documento dela. Quem chama é o
+ * resumo de reunião, que manda a transcrição para o modelo (às vezes de nuvem):
+ * por isso ele passa por aqui. Entram só rótulos e o id; sai uma contagem.
+ */
+export async function ligarDesconhecidosAReuniao(ownerUserId: string, rotulos: readonly string[], documentId: string): Promise<number> {
+  return linkUnknownVoicesToMeeting(ownerUserId, rotulos, documentId);
+}
+
+/** Recalcula as assinaturas de voz (troca de modelo). Devolve só contagens. */
+export async function recalcularAssinaturasDeVoz(ownerUserId: string, progresso?: RecomputeProgress) {
+  return recomputeVoiceSignatures(ownerUserId, progresso);
+}
+
+/** Recalcula as assinaturas de rosto (troca de backend). Devolve só contagens. */
+export async function recalcularAssinaturasDeRosto(ownerUserId: string, progresso?: RecomputeProgress) {
+  return recomputeFaceSignatures(ownerUserId, progresso);
 }
 
 /** Apaga toda a biometria de alguém. Devolve só o que foi limpo, sem nenhum dado. */

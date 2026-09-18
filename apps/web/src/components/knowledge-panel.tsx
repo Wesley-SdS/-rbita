@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Card, PanelTitle, Input, Textarea, Button } from "@/components/ui";
+import { enfileirar, isJobTerminal, type JobView } from "@/lib/jobs";
+import { JobProgress } from "@/components/job-progress";
 
 interface Counts { documents: number; chunks: number; memories: number }
 interface Mem { id: string; content: string }
@@ -15,6 +17,8 @@ export function KnowledgePanel() {
   const [busy, setBusy] = useState(false);
   const [mems, setMems] = useState<Mem[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
+  const [ingestJob, setIngestJob] = useState<JobView | null>(null);
+  const [uploadJob, setUploadJob] = useState<JobView | null>(null);
 
   const refresh = () => {
     fetch("/api/knowledge").then((r) => r.json()).then(setCounts).catch(() => {});
@@ -22,15 +26,34 @@ export function KnowledgePanel() {
   };
   useEffect(refresh, []);
 
+  // indexar (embeddings de N trechos) virou trabalho de fila: enfileira e o
+  // JobProgress cuida do acompanhamento até "feito"
   async function ingest() {
     if (!title.trim() || !docText.trim() || busy) return;
     setBusy(true); setMsg(null);
     try {
       const r = await fetch("/api/ingest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, content: docText }) });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? "falha");
-      setMsg(`✓ ${d.chunks} trecho(s) indexado(s)`); setTitle(""); setDocText(""); refresh();
-    } catch (e) { setMsg("✗ " + (e instanceof Error ? e.message : "erro")); } finally { setBusy(false); }
+      setIngestJob(await enfileirar(r));
+      setTitle(""); setDocText("");
+    } catch (e) {
+      setMsg("✗ " + (e instanceof Error ? e.message : "erro"));
+      setBusy(false);
+    }
+  }
+
+  function onIngestChange(j: JobView) {
+    setIngestJob(j);
+    if (!isJobTerminal(j.status)) return;
+    setBusy(false);
+    if (j.status === "feito") {
+      const d = j.resultado as { chunks: number } | null;
+      setMsg(`✓ ${d?.chunks ?? 0} trecho(s) indexado(s)`);
+      refresh();
+    } else if (j.status === "falhou") {
+      setMsg("✗ " + (j.erro?.mensagem ?? "erro"));
+    } else {
+      setMsg("Indexação cancelada.");
+    }
   }
 
   async function remember() {
@@ -49,18 +72,33 @@ export function KnowledgePanel() {
   }
 
   const fileRef = useRef<HTMLInputElement>(null);
+  // PDF grande e OCR levam dezenas de segundos: também virou trabalho de fila
   async function upload(f: File) {
-    setBusy(true); setMsg(`⏳ processando ${f.name}…`);
+    setBusy(true); setMsg(`⏳ enviando ${f.name}…`);
     const fd = new FormData();
     fd.append("file", f);
     try {
       const r = await fetch("/api/upload", { method: "POST", body: fd });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? "falha");
-      setMsg(`✓ ${d.title}: ${d.chunks} trecho(s)`); refresh();
+      setUploadJob(await enfileirar(r));
     } catch (e) {
       setMsg("✗ " + (e instanceof Error ? e.message : "erro"));
-    } finally { setBusy(false); }
+      setBusy(false);
+    }
+  }
+
+  function onUploadChange(j: JobView) {
+    setUploadJob(j);
+    if (!isJobTerminal(j.status)) return;
+    setBusy(false);
+    if (j.status === "feito") {
+      const d = j.resultado as { title: string; chunks: number } | null;
+      setMsg(d ? `✓ ${d.title}: ${d.chunks} trecho(s)` : "✓ arquivo processado");
+      refresh();
+    } else if (j.status === "falhou") {
+      setMsg("✗ " + (j.erro?.mensagem ?? "erro"));
+    } else {
+      setMsg("Processamento cancelado.");
+    }
   }
 
   return (
@@ -78,10 +116,12 @@ export function KnowledgePanel() {
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título do documento" />
           <Textarea size="sm" value={docText} onChange={(e) => setDocText(e.target.value)} placeholder="Cole um texto para a Órbita indexar (RAG)…" rows={3} />
           <Button variant="primary" size="md" onClick={ingest} disabled={busy}>Ingerir documento</Button>
+          {ingestJob && <JobProgress job={ingestJob} onChange={onIngestChange} compact />}
 
           <input ref={fileRef} type="file" accept=".pdf,.txt,.md,image/*" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
           <Button variant="outline" size="md" onClick={() => fileRef.current?.click()} disabled={busy}>📎 Enviar arquivo (PDF / imagem / txt)</Button>
+          {uploadJob && <JobProgress job={uploadJob} onChange={onUploadChange} compact />}
 
           <div className="mt-1 flex gap-2">
             <Input value={fact} onChange={(e) => setFact(e.target.value)} onKeyDown={(e) => e.key === "Enter" && remember()} placeholder="Lembrar um fato sobre você…" className="flex-1" />

@@ -1,9 +1,11 @@
 import { z } from "zod";
-import { enrollVoice, identifyVoice, recomputeVoiceSignatures, voiceEnrollmentSummary } from "@orbita/core/identity/voice";
+import { enrollVoice, identifyVoice, voiceEnrollmentSummary } from "@orbita/core/identity/voice";
 import { PerceptionError, perceptionHealth } from "@orbita/core/perception/client";
 import { settings } from "@orbita/core/settings/index";
 import type { RouteCtx } from "../http/web";
 import { domainError, ownerOf } from "../http/owner-route";
+import { enqueueJob } from "@orbita/core/jobs/queue";
+import { jobAccepted } from "../http/job-response";
 
 /** Erro da percepção vira o status dela (503 fora do ar, 422 áudio ruim). */
 function erro(e: unknown): Response {
@@ -49,7 +51,11 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const acao = Acao.safeParse(new URL(req.url).searchParams.get("acao"));
   if (!acao.success) return Response.json({ error: "acao deve ser cadastrar, identificar ou recalcular" }, { status: 400 });
   try {
-    if (acao.data === "recalcular") return Response.json(await recomputeVoiceSignatures(o.userId));
+    if (acao.data === "recalcular") {
+      // N chamadas ao serviço local, 0,3 a 8,6 s cada: não cabe numa requisição
+      const r = await enqueueJob(o.userId, { kind: "identidade.recalcular_voz", dedupKey: `recalcular_voz:${o.userId}` });
+      return jobAccepted(r.job, r.jaExistia);
+    }
     const a = await lerAudio(req, acao.data);
     if (a instanceof Response) return a;
     if (acao.data === "identificar") {

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Card, PanelTitle } from "@/components/ui";
+import { enfileirar, isJobTerminal, type JobView } from "@/lib/jobs";
+import { JobProgress } from "@/components/job-progress";
 
 interface Entry { id: string; description: string; category: string | null; amount: number; kind: string; dueDate: string | null; paid: boolean }
 interface Totals { gastos: number; aPagar: number; aReceber: number; saldoProjetado: number }
@@ -14,6 +16,8 @@ export function FinancePanel() {
   const [totals, setTotals] = useState<Totals | null>(null);
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
+  const [statementJob, setStatementJob] = useState<JobView | null>(null);
+  const [receiptJob, setReceiptJob] = useState<JobView | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const pdfRef = useRef<HTMLInputElement>(null);
 
@@ -22,34 +26,66 @@ export function FinancePanel() {
   }
   useEffect(load, []);
 
+  // ler extrato/comprovante (OCR + modelo estruturando campos) virou trabalho
+  // de fila: enfileira e o JobProgress acompanha até "feito"
   async function importStatement(file: File) {
-    setBusy(true); setFlash("lendo extrato…");
+    setBusy(true); setFlash(null); setStatementJob(null);
     try {
       const fd = new FormData();
       fd.append("file", file);
       const r = await fetch("/api/finance/statement", { method: "POST", body: fd });
-      const d = await r.json();
-      if (r.ok) { setFlash(`✓ ${d.importados} lançamento(s) importado(s)`); load(); }
-      else setFlash("⚠ " + (d.error ?? "falha"));
-    } finally {
+      setStatementJob(await enfileirar(r));
+    } catch (e) {
       setBusy(false);
+      setFlash("⚠ " + (e instanceof Error ? e.message : "falha"));
       setTimeout(() => setFlash(null), 6000);
     }
   }
 
+  function onStatementChange(j: JobView) {
+    setStatementJob(j);
+    if (!isJobTerminal(j.status)) return;
+    setBusy(false);
+    if (j.status === "feito") {
+      const d = j.resultado as { importados: number } | null;
+      setFlash(`✓ ${d?.importados ?? 0} lançamento(s) importado(s)`);
+      load();
+    } else if (j.status === "falhou") {
+      setFlash("⚠ " + (j.erro?.mensagem ?? "falha"));
+    } else {
+      setFlash("Importação cancelada.");
+    }
+    setTimeout(() => setFlash(null), 6000);
+  }
+
   async function uploadReceipt(file: File) {
-    setBusy(true); setFlash("lendo comprovante…");
+    setBusy(true); setFlash(null); setReceiptJob(null);
     try {
       const fd = new FormData();
       fd.append("file", file);
       const r = await fetch("/api/finance/receipt", { method: "POST", body: fd });
-      const d = await r.json();
-      if (r.ok) { setFlash(`✓ ${d.lancamento.descricao} — ${brl(d.lancamento.valor)} (${d.lancamento.tipo})`); load(); }
-      else setFlash("⚠ " + (d.error ?? "falha"));
-    } finally {
+      setReceiptJob(await enfileirar(r));
+    } catch (e) {
       setBusy(false);
+      setFlash("⚠ " + (e instanceof Error ? e.message : "falha"));
       setTimeout(() => setFlash(null), 6000);
     }
+  }
+
+  function onReceiptChange(j: JobView) {
+    setReceiptJob(j);
+    if (!isJobTerminal(j.status)) return;
+    setBusy(false);
+    if (j.status === "feito") {
+      const d = j.resultado as { lancamento: { descricao: string; valor: number; tipo: string } } | null;
+      setFlash(d ? `✓ ${d.lancamento.descricao} · ${brl(d.lancamento.valor)} (${d.lancamento.tipo})` : "✓ comprovante lido");
+      load();
+    } else if (j.status === "falhou") {
+      setFlash("⚠ " + (j.erro?.mensagem ?? "falha"));
+    } else {
+      setFlash("Leitura cancelada.");
+    }
+    setTimeout(() => setFlash(null), 6000);
   }
 
   async function togglePaid(e: Entry) {
@@ -93,6 +129,8 @@ export function FinancePanel() {
         </button>
       </div>
       {flash && <div className="mt-1 text-[10px]" style={{ color: "var(--color-ink-dim)" }}>{flash}</div>}
+      {statementJob && !isJobTerminal(statementJob.status) && <JobProgress job={statementJob} onChange={onStatementChange} compact />}
+      {receiptJob && !isJobTerminal(receiptJob.status) && <JobProgress job={receiptJob} onChange={onReceiptChange} compact />}
 
       {open && (
         <div className="mt-3 flex flex-col gap-2">

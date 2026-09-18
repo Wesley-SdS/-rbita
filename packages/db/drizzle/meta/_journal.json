@@ -204,6 +204,13 @@
       "when": 1789671443338,
       "tag": "0028_onda12_dispositivo_comodo",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1789689120261,
+      "tag": "0029_overjoyed_echo",
+      "breakpoints": true
     }
   ]
 }

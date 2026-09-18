@@ -16,6 +16,13 @@ import { purgeExpiredUnknownVoices } from "@orbita/core/identity/voice";
 import { purgeExpiredUnknownFaces } from "@orbita/core/identity/face";
 import { purgeExpiredVisualObjects } from "@orbita/core/vision/objects";
 import { installCameraIdentityListener } from "@orbita/core/identity/camera-listener";
+import { tickGuidedTasks } from "@orbita/core/guided/watch";
+import { purgeOldGuidedTasks } from "@orbita/core/guided/task";
+import { onJobEnqueued, purgeJobs, recoverZombies } from "@orbita/core/jobs/queue";
+import { drainJobs, jobsEmExecucao } from "@orbita/core/jobs/runner";
+// registra os trabalhos pesados (como os domínios de tool): ninguém os chama pelo nome
+import "@orbita/core/jobs/handlers";
+import { randomUUID } from "node:crypto";
 import { log } from "@orbita/core/observability/logger";
 
 /**
@@ -45,6 +52,36 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
    */
   private haWatchers = new Map<string, { watcher: HomeAssistantWatcher; fingerprint: string }>();
 
+  /**
+   * Id desta instância do processo, gravado em cada trabalho que ela pega: é o
+   * que diz, no banco, QUEM está rodando o quê (diagnóstico). Quem decide o que
+   * é zumbi é o coração parado (ver `ehZumbi` em jobs/policy.ts).
+   */
+  private readonly instancia = randomUUID();
+  private drenando = false;
+  private acordarDeNovo = false;
+
+  /**
+   * Esvazia a fila sem sobrepor execuções. Quem enfileira chama isto na hora
+   * (mesmo processo, então é chamada de função); o laço de polling é só o piso
+   * para retentativa agendada e fila herdada.
+   */
+  private async drenarFila(): Promise<void> {
+    if (this.drenando) {
+      this.acordarDeNovo = true;
+      return;
+    }
+    this.drenando = true;
+    try {
+      do {
+        this.acordarDeNovo = false;
+        await drainJobs(this.instancia);
+      } while (this.acordarDeNovo);
+    } finally {
+      this.drenando = false;
+    }
+  }
+
   async onModuleInit() {
     // regras de evento: em processo, disparam na hora
     // sem await: uma ação `prompt` (LLM) não pode segurar a resposta HTTP de quem emitiu
@@ -56,6 +93,14 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     // rosto e gesto reagem a `camera.detected` (com freio por câmera), em vez de
     // a ingestão chamar biometria direto (NV.1 + rajada do Frigate)
     installCameraIdentityListener();
+
+    // fila de trabalho pesado: recupera o que um processo anterior deixou no
+    // meio, e passa a acordar na hora em que alguém enfileira
+    await recoverZombies(jobsEmExecucao()).catch((e) => log.warn("jobs.recuperacao_falhou", { error: String(e) }));
+    onJobEnqueued(() => void this.drenarFila().catch((e) => log.error("jobs.drenar_falhou", { error: String(e) })));
+    this.loop("jobs", () => settings.get("jobs.pollSeconds").then((s) => s * 1000), () => this.drenarFila());
+    // coração parado (handler travou vivo): a cada minuto, independente da fila
+    this.loop("jobs-zumbis", async () => 60_000, () => recoverZombies(jobsEmExecucao()));
 
     this.loop("routines", () => settings.get("routines.tickSeconds").then((s) => s * 1000), () => this.tickRoutines());
     this.loop("events", () => settings.get("events.pollMs"), () => this.drainOutbox());
@@ -76,7 +121,13 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       await purgeExpiredUnknownVoices();
       await purgeExpiredUnknownFaces();
       await purgeExpiredVisualObjects();
+      await purgeOldGuidedTasks(await settings.get("guided.retentionDays"));
+      const j = await settings.getMany(["jobs.keepDoneDays", "jobs.keepFailedDays"]);
+      await purgeJobs(j["jobs.keepDoneDays"], j["jobs.keepFailedDays"]);
     });
+    // acompanhar tarefa (PRD §5.4): a volta é metade do intervalo configurado,
+    // para a olhada cair perto da hora sem o laço ficar acordando à toa
+    this.loop("guided", () => settings.get("guided.intervalSeconds").then((s) => Math.max(5, Math.floor(s / 2)) * 1000), () => tickGuidedTasks());
     log.info("scheduler.up", { loops: this.loops.map((l) => l.name) });
   }
 

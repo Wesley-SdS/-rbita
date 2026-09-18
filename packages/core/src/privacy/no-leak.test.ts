@@ -69,6 +69,12 @@ const PASTAS_NUVEM = [
   "packages/core/src/meetings",
   "packages/core/src/voice",
   "packages/core/src/tools",
+  // fila de trabalho: dispara resumo e leitura de cupom (LLM e visão)
+  "packages/core/src/jobs",
+  // acompanhar tarefa: pergunta à câmera pelo modelo de visão
+  "packages/core/src/guided",
+  // cupom e extrato: OCR, visão e LLM
+  "packages/core/src/finance",
 ];
 
 describe("NV.1: guard de saída de biometria", () => {

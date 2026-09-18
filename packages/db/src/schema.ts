@@ -52,6 +52,10 @@ export * from "./presence-schema";
 export * from "./visual-schema";
 // Dispositivo e cômodo: o "aqui" dos comandos (Onda 12).
 export * from "./device-schema";
+// Fila de trabalho pesado (recalcular assinaturas, resumir, indexar, OCR).
+export * from "./job-schema";
+// Acompanhar uma tarefa passo a passo pela câmera ("me ajuda com essa receita").
+export * from "./guided-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {

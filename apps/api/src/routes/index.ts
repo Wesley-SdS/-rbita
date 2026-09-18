@@ -49,6 +49,8 @@ import * as identityVoice from "./identity-voice";
 import * as identityFace from "./identity-face";
 import * as identityPresence from "./identity-presence";
 import * as identityLimits from "./identity-limits";
+import * as guided from "./guided";
+import * as jobs from "./jobs";
 import * as devices from "./devices";
 import * as channelsWhatsapp from "./channels-whatsapp";
 import * as cameras from "./cameras";
@@ -98,6 +100,10 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/identity/face", identityFace),
   webRoute("api/identity/presence", identityPresence),
   webRoute("api/identity/limits", identityLimits),
+  webRoute("api/guided", guided),
+  // fila de trabalho pesado: a lista e o recurso de status de cada trabalho
+  webRoute("api/jobs", { GET: jobs.GET }),
+  webRoute("api/jobs/:id", { GET: jobs.GET_ONE, DELETE: jobs.DELETE_ONE }),
   webRoute("api/devices", devices),
   webRoute("api/channels/whatsapp", channelsWhatsapp),
   webRoute("api/cameras", cameras),

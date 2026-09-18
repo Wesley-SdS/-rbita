@@ -58,6 +58,8 @@ export const SETTING_GROUPS = {
   home: { label: "Casa (Home Assistant)", order: 64 },
   cameras: { label: "Câmeras", order: 64.5 },
   vision: { label: "Visão: objetos e gestos", order: 64.8 },
+  guided: { label: "Acompanhar tarefa (receita passo a passo)", order: 64.9 },
+  jobs: { label: "Trabalhos em segundo plano", order: 65.5 },
   events: { label: "Eventos", order: 65 },
   connectors: { label: "Conectores", order: 70 },
   finance: { label: "Finanças", order: 75 },
@@ -236,6 +238,7 @@ export const SETTING_DEFS = {
   "finance.billDueHour": num("finance", "Hora do aviso de contas", "Hora local em que o aviso diário é gerado.", 8, 0, 23, { unit: "h" }),
 
   // ── limites de entrada ──
+  "limits.uploadMaxMb": num("limits", "Arquivo máximo enviado", "Tamanho máximo de arquivo para indexar, comprovante e extrato. O arquivo fica guardado até o trabalho terminar, e é apagado em seguida.", 25, 1, 200, { unit: "MB" }),
   "limits.sttMaxMb": num("limits", "Áudio máximo para transcrição", "Tamanho máximo aceito em /api/stt.", 120, 1, 1024, { unit: "MB" }),
   "limits.ingestPerMinute": num("limits", "Documentos indexados por minuto", "Limite de /api/ingest por conta (cada documento gera embeddings).", 20, 1, 600, { unit: "/min" }),
   "limits.reindexPerMinute": num("limits", "Reindexações por minuto", "Limite do botão Reindexar (refaz todos os embeddings da conta).", 3, 1, 60, { unit: "/min" }),
@@ -258,6 +261,29 @@ export const SETTING_DEFS = {
       { value: "quando_houver_chave", label: "Sim, quando houver chave" },
       { value: "nunca", label: "Não, só nesta casa" },
     ],
+  ),
+
+  // ── fila de trabalho pesado ──
+  "jobs.pollSeconds": num("jobs", "Conferir a fila a cada", "Piso de segurança: o trabalho novo acorda o processo na hora, então isto só pega retentativa agendada e fila herdada de um processo que caiu.", 3, 1, 300, { unit: "s" }),
+  "jobs.maxAttempts": num("jobs", "Tentativas por trabalho", "Quantas vezes tentar antes de desistir e mostrar o erro na tela. Erro de validação ou falta de consentimento não retenta nunca, independente disto.", 3, 1, 10),
+  "jobs.retryBaseSeconds": num("jobs", "Espera base da retentativa", "A espera é sorteada entre zero e o dobro da anterior, a partir desta base (backoff com jitter).", 10, 1, 600, { unit: "s" }),
+  "jobs.retryMaxSeconds": num("jobs", "Espera máxima da retentativa", "Teto da espera entre tentativas.", 600, 5, 86400, { unit: "s" }),
+  "jobs.staleMinutes": num("jobs", "Trabalho parado vira zumbi após", "Trabalho que está rodando mas parou de dar sinal de vida por este tempo é recuperado. O sinal vem junto com o progresso, então trabalho vivo nunca é morto por engano.", 5, 1, 240, { unit: "min" }),
+  "jobs.keepDoneDays": num("jobs", "Guardar trabalhos concluídos por", "Depois disso a Órbita apaga o registro dos que deram certo.", 7, 1, 365, { unit: "dias" }),
+  "jobs.keepFailedDays": num("jobs", "Guardar trabalhos que falharam por", "Falha fica mais tempo que sucesso: é o que explica o que deu errado.", 30, 1, 365, { unit: "dias" }),
+
+  // ── acompanhar tarefa passo a passo (PRD §5.4) ──
+  "guided.intervalSeconds": num("guided", "Olhar a cada", "De quanto em quanto tempo a Órbita olha a câmera para ver se você terminou o passo. Muito curto pesa na máquina (cada olhada é uma chamada ao modelo de visão); muito longo faz ela avisar tarde.", 45, 10, 600, { unit: "s" }),
+  "guided.maxMinutes": num("guided", "Prazo da tarefa", "Toda tarefa acompanhada encerra sozinha depois disso. É a trava para acompanhamento esquecido não virar câmera vigiando o cômodo.", 120, 5, 480, { unit: "min" }),
+  "guided.maxSteps": num("guided", "Máximo de passos", "Teto de passos por tarefa. Receita com mais que isso vira lista impossível de acompanhar por voz.", 30, 1, 100),
+  "guided.retentionDays": num("guided", "Guardar tarefas encerradas por", "Depois disso a Órbita apaga o histórico de tarefas acompanhadas.", 30, 1, 365, { unit: "dias" }),
+  "guided.question": text(
+    "guided",
+    "Pergunta feita à câmera",
+    "O que a Órbita pergunta ao modelo de visão a cada olhada. Use {passo} para o passo atual e {tarefa} para o nome da tarefa. Modelo de visão pequeno responde melhor com pergunta curta e fechada.",
+    "Nesta imagem, a pessoa já terminou este passo: \"{passo}\"? Responda começando com SIM ou NÃO, e depois uma frase curta dizendo o que você está vendo. Se a imagem não deixar claro, comece com NÃO DÁ PARA SABER.",
+    400,
+    true,
   ),
 
   // ── visão: memória de objetos e gestos (Onda 11) ──

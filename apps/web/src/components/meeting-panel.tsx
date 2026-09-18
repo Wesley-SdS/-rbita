@@ -6,6 +6,8 @@ import { ContinuousRecorder, startMeetingCapture, type MeetingCapture } from "@/
 import { ContinuousDictation, getRecognitionCtor } from "@/lib/voice/speech";
 import type { SttUtterance } from "@orbita/core/stt/types";
 import { parsePrazo, type Compromisso } from "@orbita/core/meetings/compromissos";
+import { enfileirar, type JobView } from "@/lib/jobs";
+import { JobProgress } from "@/components/job-progress";
 
 /** Locutor reconhecido por voz nesta reunião (Onda 9), como o /api/stt devolve junto das utterances. */
 interface SpeakerIdentity {
@@ -83,6 +85,7 @@ export function MeetingPanel() {
   const [note, setNote] = useState<string | null>(null);
   const [phase, setPhase] = useState<"idle" | "transcrevendo" | "resumindo">("idle");
   const [documentId, setDocumentId] = useState<string | null>(null);
+  const [summarizeJob, setSummarizeJob] = useState<JobView | null>(null);
   const [compromissos, setCompromissos] = useState<Compromisso[]>([]);
   const [addedTodos, setAddedTodos] = useState<Set<number>>(new Set());
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
@@ -127,7 +130,7 @@ export function MeetingPanel() {
 
   async function start() {
     setSummary(""); setTranscript(""); setPreview(""); setUtterances([]); setNote(null);
-    setDocumentId(null); setCompromissos([]); setAddedTodos(new Set()); setSpeakerNames({}); setNamesSaved(false);
+    setDocumentId(null); setSummarizeJob(null); setCompromissos([]); setAddedTodos(new Set()); setSpeakerNames({}); setNamesSaved(false);
     setSpeakerIdentities([]); setLinkPerson({}); setUseSample({}); setAmostras({});
 
     let capture: MeetingCapture;
@@ -230,7 +233,8 @@ export function MeetingPanel() {
       return;
     }
 
-    // 2) resumo + arquivamento no RAG
+    // 2) resumo + arquivamento no RAG: mapa-redução com uma chamada de LLM por
+    // bloco, leva minutos numa reunião longa, então virou trabalho de fila
     setPhase("resumindo");
     try {
       const r = await fetch("/api/meeting/summarize", {
@@ -240,17 +244,29 @@ export function MeetingPanel() {
         // reunião vira documento, e só então dá para ligar um ao outro
         body: JSON.stringify({ transcript: texto, desconhecidos: desconhecidosDaReuniao }),
       });
-      const d = await r.json();
-      if (r.ok) {
+      setSummarizeJob(await enfileirar(r));
+    } catch (e) {
+      setSummary("⚠ " + (e instanceof Error ? e.message : "falha ao resumir"));
+      setPhase("idle");
+    }
+  }
+
+  /** Resultado do resumo, quando o trabalho de fila termina (status feito/falhou/cancelado). */
+  function onSummarizeChange(j: JobView) {
+    setSummarizeJob(j);
+    if (j.status === "feito") {
+      const d = j.resultado as { summary: string; compromissos?: Compromisso[]; documentId?: string | null; archived?: boolean } | null;
+      if (d) {
         setSummary(d.summary + (d.archived ? "\n\n📎 salvo na sua memória." : ""));
         setCompromissos(d.compromissos ?? []);
         setDocumentId(d.documentId ?? null);
-      } else {
-        setSummary("⚠ " + (d.error ?? "falha ao resumir"));
       }
-    } catch {
-      setSummary("⚠ falha ao resumir");
-    } finally {
+      setPhase("idle");
+    } else if (j.status === "falhou") {
+      setSummary("⚠ " + (j.erro?.mensagem ?? "falha ao resumir"));
+      setPhase("idle");
+    } else if (j.status === "cancelado") {
+      setSummary("⚠ resumo cancelado.");
       setPhase("idle");
     }
   }
@@ -340,6 +356,12 @@ export function MeetingPanel() {
           {note && (
             <div className="rounded-lg border p-2 text-[11px]" style={{ borderColor: "color-mix(in oklab, var(--color-danger) 40%, var(--color-line))", color: "var(--color-ink-dim)" }}>
               {note}
+            </div>
+          )}
+
+          {phase === "resumindo" && summarizeJob && (
+            <div className="rounded-lg border p-2" style={boxed}>
+              <JobProgress job={summarizeJob} onChange={onSummarizeChange} compact />
             </div>
           )}
 
