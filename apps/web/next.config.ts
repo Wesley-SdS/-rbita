@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { fileURLToPath } from "node:url";
+import { securityHeaders } from "./src/lib/security/headers";
 
 /**
  * O que NÃO vai para o apps/api: lookahead negativo usado em `rewrites`.
@@ -34,21 +35,10 @@ const nextConfig: NextConfig = {
       beforeFiles: [{ source: `/api/:path(${API_KEPT_IN_NEXT}.*)`, destination: `${api}/api/:path` }],
     };
   },
-  // Headers de segurança seguros p/ o app (não mexem em mic/câmera/ws/data:).
-  // CSP estrito e HSTS ficam de fora por ora: exigem mapear todas as conexões
-  // (ollama, voz ws://:8001, AssemblyAI, data:/blob:) e HTTPS real — ver S1 no CHECKLIST.
+  // Cabeçalhos de segurança, com CSP e HSTS (ver security-headers.ts para o
+  // mapa do que o navegador acessa fora da própria origem)
   async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "X-DNS-Prefetch-Control", value: "off" },
-        ],
-      },
-    ];
+    return [{ source: "/:path*", headers: securityHeaders(process.env, process.env.NODE_ENV !== "production") }];
   },
 };
 
