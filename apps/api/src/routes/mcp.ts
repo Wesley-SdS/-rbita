@@ -7,6 +7,7 @@ import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { assertPublicUrl, SsrfError } from "@orbita/core/net/ssrf";
 import { ownerOf } from "../http/owner-route";
+import { forgetMcpServer } from "@orbita/core/mcp/client";
 
 const Body = z.object({
   name: z.string().min(1).max(60),
@@ -18,7 +19,18 @@ export async function GET(_req: Request, ctx: RouteCtx) {
   const s = sessionOf(ctx);
   if (!s) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const rows = await db
-    .select({ id: mcpServer.id, name: mcpServer.name, url: mcpServer.url, enabled: mcpServer.enabled, risk: mcpServer.risk })
+    .select({
+      id: mcpServer.id,
+      name: mcpServer.name,
+      url: mcpServer.url,
+      enabled: mcpServer.enabled,
+      risk: mcpServer.risk,
+      // para a tela dizer por que um servidor está fora e quantas tools ele tem
+      toolsCatalog: mcpServer.toolsCatalog,
+      catalogAt: mcpServer.catalogAt,
+      lastError: mcpServer.lastError,
+      lastErrorAt: mcpServer.lastErrorAt,
+    })
     .from(mcpServer)
     .where(eq(mcpServer.userId, s.user.id))
     .orderBy(desc(mcpServer.createdAt));
@@ -62,6 +74,8 @@ export async function PATCH(req: Request, ctx: RouteCtx) {
   if (p.data.risk) set.risk = p.data.risk;
   if (!Object.keys(set).length) return Response.json({ error: "Nada para alterar" }, { status: 400 });
   await db.update(mcpServer).set(set).where(and(eq(mcpServer.id, p.data.id), eq(mcpServer.userId, dono.userId)));
+  // desligado ou com risco novo: a conexão viva e o que se sabia dele recomeçam
+  await forgetMcpServer(p.data.id);
   return Response.json({ ok: true });
 }
 
@@ -71,5 +85,6 @@ export async function DELETE(req: Request, ctx: RouteCtx) {
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return Response.json({ error: "id obrigatório" }, { status: 400 });
   await db.delete(mcpServer).where(and(eq(mcpServer.id, id), eq(mcpServer.userId, dono.userId)));
+  await forgetMcpServer(id);
   return Response.json({ ok: true });
 }

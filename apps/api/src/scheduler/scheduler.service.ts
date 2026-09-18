@@ -20,6 +20,7 @@ import { tickGuidedTasks } from "@orbita/core/guided/watch";
 import { purgeOldGuidedTasks } from "@orbita/core/guided/task";
 import { onJobEnqueued, purgeJobs, recoverZombies } from "@orbita/core/jobs/queue";
 import { drainJobs, jobsEmExecucao } from "@orbita/core/jobs/runner";
+import { closeIdleMcpConnections } from "@orbita/core/mcp/client";
 // registra os trabalhos pesados (como os domínios de tool): ninguém os chama pelo nome
 import "@orbita/core/jobs/handlers";
 import { randomUUID } from "node:crypto";
@@ -101,6 +102,8 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     this.loop("jobs", () => settings.get("jobs.pollSeconds").then((s) => s * 1000), () => this.drenarFila());
     // coração parado (handler travou vivo): a cada minuto, independente da fila
     this.loop("jobs-zumbis", async () => 60_000, () => recoverZombies(jobsEmExecucao()));
+    // MCP: a conexão fica viva entre mensagens; a parada há muito tempo fecha aqui
+    this.loop("mcp-ociosas", async () => 60_000, () => closeIdleMcpConnections());
 
     this.loop("routines", () => settings.get("routines.tickSeconds").then((s) => s * 1000), () => this.tickRoutines());
     this.loop("events", () => settings.get("events.pollMs"), () => this.drainOutbox());

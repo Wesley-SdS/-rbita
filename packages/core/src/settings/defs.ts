@@ -263,6 +263,13 @@ export const SETTING_DEFS = {
     ],
   ),
 
+  // ── servidores MCP: conexão só quando precisa ──
+  "mcp.connectTimeoutMs": num("tools", "MCP: tempo para conectar", "Quanto esperar um servidor MCP responder ao conectar. Servidor fora do ar custa no máximo isto, e só quando uma tool dele é usada.", 5000, 500, 60000, { unit: "ms" }),
+  "mcp.callTimeoutMs": num("tools", "MCP: tempo máximo de uma chamada", "Quanto esperar a resposta de uma tool MCP.", 60000, 1000, 600000, { unit: "ms" }),
+  "mcp.idleMinutes": num("tools", "MCP: fechar conexão parada após", "Conexão sem uso por este tempo é fechada. A próxima chamada reabre sozinha.", 15, 1, 1440, { unit: "min" }),
+  "mcp.catalogRefreshHours": num("tools", "MCP: atualizar a lista de tools a cada", "A lista de tools de cada servidor fica guardada e é o que o modelo enxerga, sem conectar a cada mensagem. De tempos em tempos ela é buscada de novo.", 24, 1, 720, { unit: "h" }),
+  "mcp.retryAfterSeconds": num("tools", "MCP: esperar antes de tentar de novo", "Servidor que nunca respondeu (sem lista de tools guardada) espera isto antes de uma nova tentativa, para não custar um timeout em toda mensagem.", 60, 5, 3600, { unit: "s" }),
+
   // ── fila de trabalho pesado ──
   "jobs.pollSeconds": num("jobs", "Conferir a fila a cada", "Piso de segurança: o trabalho novo acorda o processo na hora, então isto só pega retentativa agendada e fila herdada de um processo que caiu.", 3, 1, 300, { unit: "s" }),
   "jobs.maxAttempts": num("jobs", "Tentativas por trabalho", "Quantas vezes tentar antes de desistir e mostrar o erro na tela. Erro de validação ou falta de consentimento não retenta nunca, independente disto.", 3, 1, 10),

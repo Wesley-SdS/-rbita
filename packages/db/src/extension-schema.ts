@@ -38,6 +38,15 @@ export const mcpServer = pgTable("mcp_server", {
   // padrão, ou seja, toda tool MCP passa pelo gate humano até o dono marcar o
   // servidor como somente leitura. Um MCP desconhecido nunca executa sozinho.
   risk: text("risk").notNull().default("efeito_externo"),
+  // Catálogo das tools do servidor, guardado da última conexão boa. É o que
+  // permite NÃO conectar a cada mensagem: o modelo vê as tools pelo catálogo,
+  // e a conexão só acontece quando uma delas é de fato chamada (se o servidor
+  // caiu, a reconexão é nessa hora, não antes).
+  toolsCatalog: jsonb("tools_catalog").$type<{ name: string; description?: string; inputSchema?: unknown }[]>(),
+  catalogAt: timestamp("catalog_at"),
+  /** último erro de conexão, para a tela mostrar por que o servidor está fora */
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
