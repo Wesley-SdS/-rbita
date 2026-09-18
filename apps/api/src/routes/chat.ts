@@ -1,6 +1,6 @@
 // Migrada do Next em paridade (apps/web/src/app/api/chat/route.ts).
 import { streamText, stepCountIs } from "ai";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   resolveModel, resolveVisionModel, getModelInfo, routeModelKey, providerEnv, discoveredSnapshot,
@@ -19,6 +19,8 @@ import { settings } from "@orbita/core/settings/index";
 import { applyLlmSettings } from "@orbita/core/settings/apply";
 import { parseVoiceClip, requesterResolver } from "@orbita/core/identity/requester";
 import { ehComandoDaCasa, vocabularioDaCasa } from "@orbita/core/chat/fast-path";
+import { blocoDoResumo, inicioDoHistorico, quantasDobrar } from "@orbita/core/chat/conversation-summary";
+import { enqueueJob } from "@orbita/core/jobs/queue";
 
 const BodySchema = z.object({
   content: z.string().min(1).max(8000),
@@ -61,6 +63,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
     "prompt.budgetTokens", "prompt.priorityPersona", "prompt.priorityTemporal", "prompt.prioritySkills", "prompt.priorityRag",
     "rag.topK", "identity.commandClipMaxKB",
     "chat.fastPathEnabled", "chat.fastPathMaxChars", "chat.fastPathHistory",
+    "chat.summaryEnabled", "chat.summaryMaxPending", "prompt.prioritySummary",
   ]);
   await applyLlmSettings();
   const OUT_CAP: Record<string, number> = { small: cfg["chat.outputCapSmall"], medium: cfg["chat.outputCapMedium"], large: cfg["chat.outputCapLarge"] };
@@ -109,15 +112,32 @@ export async function POST(req: Request, ctx: RouteCtx) {
     cfg["chat.fastPathEnabled"] && !image && ehComandoDaCasa(content, await vocabularioDaCasa(session.user.id).catch(() => ({ verbos: [], alvos: [] })), cfg["chat.fastPathMaxChars"]);
   if (rapido) log.info("chat.caminho_rapido", { userId: session.user.id });
 
-  // histórico: janela das últimas mensagens (evita estourar contexto/custo).
-  const HISTORY_WINDOW = rapido ? cfg["chat.fastPathHistory"] : cfg["chat.historyWindow"];
-  const recent = await db
-    .select({ role: message.role, content: message.content })
-    .from(message)
-    .where(eq(message.conversationId, conv.id))
-    .orderBy(desc(message.createdAt))
-    .limit(HISTORY_WINDOW);
-  const history = recent.reverse();
+  // HISTÓRICO. Com o resumo ligado (B4.2), vai INTEIRO tudo que ainda não está
+  // no resumo da conversa, e o resumo vai no prompt: nenhuma mensagem fica de
+  // fora. O caminho rápido de casa leva só as últimas poucas, de propósito.
+  const comResumo = cfg["chat.summaryEnabled"] && !rapido;
+  let history: { role: "user" | "assistant" | "system"; content: string }[];
+  if (comResumo) {
+    const [{ total } = { total: 0 }] = await db.select({ total: count() }).from(message).where(eq(message.conversationId, conv.id));
+    const { inicio, foraDoTurno } = inicioDoHistorico(Number(total), conv.summaryCount, cfg["chat.summaryMaxPending"]);
+    history = await db
+      .select({ role: message.role, content: message.content })
+      .from(message)
+      .where(eq(message.conversationId, conv.id))
+      .orderBy(asc(message.createdAt), asc(message.id))
+      .offset(inicio);
+    // conversa antiga, com muito pendente: o resumo começa já, em paralelo
+    if (foraDoTurno > 0) void pedirResumoDaConversa(userId, conv.id);
+  } else {
+    const HISTORY_WINDOW = rapido ? cfg["chat.fastPathHistory"] : cfg["chat.historyWindow"];
+    const recent = await db
+      .select({ role: message.role, content: message.content })
+      .from(message)
+      .where(eq(message.conversationId, conv.id))
+      .orderBy(desc(message.createdAt))
+      .limit(HISTORY_WINDOW);
+    history = recent.reverse();
+  }
 
   // persiste a mensagem do usuário (marca se veio com imagem)
   await db.insert(message).values({ conversationId: conv.id, role: "user", content: image ? content + " [imagem anexada]" : content });
@@ -206,6 +226,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
     { content: buildTemporalContext(), priority: cfg["prompt.priorityTemporal"] },
   ];
   if (personaCtx) chunks.push({ content: personaCtx, priority: cfg["prompt.priorityPersona"] });
+  if (comResumo && conv.summary) chunks.push({ content: blocoDoResumo(conv.summary), priority: cfg["prompt.prioritySummary"] });
   if (skillInstructions) chunks.push({ content: skillInstructions, priority: cfg["prompt.prioritySkills"] });
   if (ragHits.length) {
     chunks.push({
@@ -250,6 +271,8 @@ export async function POST(req: Request, ctx: RouteCtx) {
           modelKey: persistKey, tokens: tokens ?? undefined, latencyMs,
         });
         await db.update(conversation).set({ updatedAt: new Date(), modelKey: persistKey }).where(eq(conversation.id, conv.id));
+        // o que saiu da janela vai para o resumo, em segundo plano (fila)
+        if (comResumo) void pedirResumoDaConversa(userId, conv.id);
         log.info("chat", {
           userId, model: persistKey, tokens: tokens ?? 0, latencyMs, conv: conv.id,
           cacheRead: anth?.cacheReadInputTokens ?? 0, cacheWrite: anth?.cacheCreationInputTokens ?? 0,
@@ -332,4 +355,21 @@ export async function POST(req: Request, ctx: RouteCtx) {
   }
   await cleanupOnce();
   return Response.json({ error: providerDownMessage(candidates[0]) + " Tente de novo." }, { status: 503, headers });
+}
+
+/**
+ * Pede para dobrar no resumo o que saiu da janela, se houver. Fila com chave
+ * de dedup por conversa: duas mensagens seguidas geram UM trabalho. Nunca
+ * derruba o turno.
+ */
+async function pedirResumoDaConversa(userId: string, conversationId: string): Promise<void> {
+  try {
+    const janela = await settings.get("chat.historyWindow");
+    const [conv] = await db.select({ summaryCount: conversation.summaryCount }).from(conversation).where(eq(conversation.id, conversationId)).limit(1);
+    const [{ total } = { total: 0 }] = await db.select({ total: count() }).from(message).where(eq(message.conversationId, conversationId));
+    if (!conv || !quantasDobrar(Number(total), conv.summaryCount, janela)) return;
+    await enqueueJob(userId, { kind: "conversa.resumir", payload: { conversationId }, dedupKey: `resumo-conversa:${conversationId}` });
+  } catch (e) {
+    log.warn("chat.resumo_nao_enfileirado", { conversationId, error: e instanceof Error ? e.message : String(e) });
+  }
 }

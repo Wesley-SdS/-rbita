@@ -8,6 +8,16 @@ export const conversation = pgTable("conversation", {
     .references(() => user.id, { onDelete: "cascade" }),
   title: text("title").notNull().default("Nova conversa"),
   modelKey: text("model_key").notNull(),
+  // RESUMO ACUMULADO da conversa (B4.2). Toda mensagem está sempre num de dois
+  // lugares: na janela recente, que vai inteira para o modelo, ou aqui. Antes a
+  // mensagem que saía da janela de histórico sumia para sempre.
+  summary: text("summary"),
+  /**
+   * Quantas mensagens (na ordem createdAt, id) já estão dentro do resumo.
+   * Contagem e não horário de corte: duas mensagens no mesmo milissegundo
+   * cairiam no vão entre o resumo e a janela.
+   */
+  summaryCount: integer("summary_count").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

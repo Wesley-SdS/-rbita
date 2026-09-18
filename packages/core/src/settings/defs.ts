@@ -131,6 +131,11 @@ export const SETTING_DEFS = {
   "chat.outputCapLarge": num("chat", "Resposta máxima (modelo forte)", "Tokens de saída para modelos de porte grande.", 4096, 128, 65536, { unit: "tokens" }),
   "chat.trivialMaxChars": num("chat", "Mensagem trivial até", "Mensagens mais curtas que isso começam a responder sem esperar a busca de contexto (RAG). O modelo ainda pode buscar sob demanda.", 14, 0, 200, { unit: "chars" }),
   "chat.conversationalMaxChars": num("chat", "Saudação curta até", "Saudações e agradecimentos até este tamanho, sem indício de assunto pessoal, também pulam a busca de contexto.", 40, 0, 400, { unit: "chars" }),
+  "chat.summaryEnabled": bool("chat", "Resumo da conversa", "Conversa longa não esquece nada: o que sai da janela de histórico é resumido e continua indo para o modelo. Desligado, o que sai da janela some.", true),
+  "chat.summaryBatch": num("chat", "Resumo: mensagens por vez", "Quantas mensagens o resumo junta em cada chamada ao modelo.", 40, 5, 200, { unit: "mensagens" }),
+  "chat.summaryMaxChars": num("chat", "Resumo: tamanho máximo", "Teto do resumo acumulado de uma conversa. Maior guarda mais detalhe e pesa mais em cada mensagem.", 6000, 500, 40000, { unit: "chars" }),
+  "chat.summaryModel": text("chat", "Resumo: modelo", "Modelo usado para resumir a conversa. Vazio usa o modelo reserva.", ""),
+  "chat.summaryMaxPending": num("chat", "Resumo: teto de mensagens não resumidas por turno", "Só vale para conversa antiga, de antes do resumo existir: o turno leva estas mais recentes e o resto é resumido logo em seguida.", 60, 10, 500, { unit: "mensagens" }),
   "chat.fastPathEnabled": bool("chat", "Caminho rápido para comando da casa", "Comando curto de casa (\"apaga a luz da sala\") vai direto, só com as ferramentas da casa, sem buscar na memória nem carregar extensões. Responde bem mais rápido.", true),
   "chat.fastPathMaxChars": num("chat", "Caminho rápido: tamanho máximo", "Mensagem mais longa que isto nunca vai pelo caminho rápido: pedido longo costuma precisar de contexto.", 80, 10, 400, { unit: "chars" }),
   "chat.fastPathHistory": num("chat", "Caminho rápido: mensagens de histórico", "Quantas mensagens anteriores o comando de casa leva (\"e a do quarto também\" precisa da anterior).", 2, 0, 20, { unit: "mensagens" }),
@@ -138,6 +143,7 @@ export const SETTING_DEFS = {
 
   // ── prompt (chat/compose.ts) ──
   "prompt.budgetTokens": num("prompt", "Orçamento do system prompt", "Acima disso, os blocos compressíveis de menor prioridade (RAG, skills) são cortados.", 3200, 500, 50000, { unit: "tokens" }),
+  "prompt.prioritySummary": num("prompt", "Prioridade: resumo da conversa", "O que já foi conversado e saiu da janela de histórico.", 110, 0, 129),
   "prompt.priorityPersona": num("prompt", "Prioridade: persona", "Maior sobrevive ao corte por mais tempo. Segurança e identidade são fixas em 130.", 120, 0, 129),
   "prompt.priorityTemporal": num("prompt", "Prioridade: contexto temporal", "Data, hora e dia da semana.", 90, 0, 129),
   "prompt.prioritySkills": num("prompt", "Prioridade: skills ativas", "Instruções das skills roteadas para o turno.", 70, 0, 129),

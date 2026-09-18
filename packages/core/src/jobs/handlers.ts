@@ -5,6 +5,7 @@ import { JobPermanentError, enqueueJob } from "./queue";
 import { recalcularAssinaturasDeRosto, recalcularAssinaturasDeVoz } from "../identity/actions";
 import { IdentityError } from "../identity/errors";
 import { summarizeMeeting } from "../meetings/summarize";
+import { foldConversation } from "../chat/conversation-summary";
 import { desconhecidosDaTranscricao, textoDaTranscricao, transcribeRecording } from "../meetings/transcribe";
 import { lerDataUrl } from "../finance/documents";
 import { createHash } from "node:crypto";
@@ -106,6 +107,18 @@ export const transcreverReuniao: JobDef = {
   },
 };
 
+/** Dobra no resumo da conversa o que saiu da janela de histórico (B4.2). */
+export const resumirConversa: JobDef = {
+  kind: "conversa.resumir",
+  title: () => "Resumir a conversa",
+  maxAttempts: 3,
+  run: async (ctx) => {
+    const id = texto(ctx.payload, "conversationId");
+    if (!id) throw new JobPermanentError("Conversa não informada.");
+    return { ...(await foldConversation(id, ctx.progresso)) };
+  },
+};
+
 export const indexarArquivo: JobDef = {
   kind: "rag.indexar_arquivo",
   title: (p) => `Indexar "${texto(p, "nome") || "arquivo"}"`,
@@ -136,4 +149,4 @@ export const lerExtrato: JobDef = {
   run: async (ctx) => semRetentarErroConhecido(async () => ({ ...(await importStatement(ctx.userId, exigirInput(ctx), texto(ctx.payload, "nome") || "extrato", ctx.progresso)) })),
 };
 
-registerJobs([recalcularVoz, recalcularRosto, transcreverReuniao, resumirReuniao, indexarArquivo, indexarTexto, lerCupom, lerExtrato]);
+registerJobs([recalcularVoz, recalcularRosto, transcreverReuniao, resumirReuniao, resumirConversa, indexarArquivo, indexarTexto, lerCupom, lerExtrato]);
