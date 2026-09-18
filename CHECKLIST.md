@@ -9,15 +9,15 @@
 Retomar por aqui na próxima sessão. Cada item tem o ponteiro de arquivo.
 
 **Chat / LLM**
-- [ ] **Responde em INGLÊS** — o Claude às vezes responde em inglês. Reforçar pt-BR SEMPRE no `SYSTEM_PROMPT` (`apps/web/src/lib/chat/tools.ts`), e como o prefixo de identidade Claude Code é em inglês (`route.ts` `CLAUDE_CODE_IDENTITY`), adicionar regra explícita "responda SEMPRE em português do Brasil, independentemente do idioma do system".
-- [ ] **Excesso de travessões (—)** — o modelo enche os textos de em-dash. Adicionar regra no SYSTEM_PROMPT: "não use travessões (—/–); use vírgula, parênteses ou ponto".
-- [ ] **Não dá pra PARAR a resposta** — falta botão "parar" + `AbortController` no cliente (`console.tsx` `sendMessage` — abortar o `fetch`/reader; o server já tem `onAbort`).
+- [x] **Responde em INGLÊS** (resolvido: regra absoluta de pt-BR no `SYSTEM_PROMPT`, CLAUDE.md §5.3) — o Claude às vezes responde em inglês. Reforçar pt-BR SEMPRE no `SYSTEM_PROMPT` (`apps/web/src/lib/chat/tools.ts`), e como o prefixo de identidade Claude Code é em inglês (`route.ts` `CLAUDE_CODE_IDENTITY`), adicionar regra explícita "responda SEMPRE em português do Brasil, independentemente do idioma do system".
+- [x] **Excesso de travessões (—)** (resolvido: regra no `SYSTEM_PROMPT`) — o modelo enche os textos de em-dash. Adicionar regra no SYSTEM_PROMPT: "não use travessões (—/–); use vírgula, parênteses ou ponto".
+- [x] **Não dá pra PARAR a resposta** (resolvido: `AbortController` em `console/use-chat-stream.ts`) — falta botão "parar" + `AbortController` no cliente (`console.tsx` `sendMessage` — abortar o `fetch`/reader; o server já tem `onAbort`).
 - [ ] **Lentidão intermitente (40s no Claude)** — mesmo com as correções de RAG (paralelo/timeout/keep_alive), houve pico de 40s. Investigar: cold do `next dev`, carga da máquina, ou o embedding local. Considerar build de produção. Ver commits `e2315d1`/`869ee36`/`0d37dfe`.
 
 **UI / Compositor** (`apps/web/src/components/console.tsx`)
 - [x] **Vários botões soltos ao lado da barra → menu "+"** — ✅ consolidados num único **"+"** (`MenuItem` + dropdown com clique-fora) com Voz/Ouvir/Imagem/Áudio/Ver-tela (+ Tempo real se `OPENAI_API_KEY`). Barra inferior agora: `+` · textarea · 🎙️ · Enviar. **Verificado em produção** (print do menu aberto, 0 erros).
 - [x] **Campo de escrita → TEXTAREA** — ✅ `<input>` virou `<textarea>` auto-grow (até 160px), Enter envia / Shift+Enter quebra linha (guarda de IME `isComposing`), reseta altura ao enviar. Placeholder explica o atalho. Verificado em produção.
-- [ ] **Miniatura do upload não aparece** — ao anexar imagem/arquivo, a bolha da mensagem do usuário não mostra o thumbnail. Renderizar a imagem anexada na mensagem (hoje só há preview no compositor via `imageAttach`, some ao enviar).
+- [x] **Miniatura do upload não aparece** (resolvido: a bolha da mensagem mostra a imagem anexada, `console.tsx`) — ao anexar imagem/arquivo, a bolha da mensagem do usuário não mostra o thumbnail. Renderizar a imagem anexada na mensagem (hoje só há preview no compositor via `imageAttach`, some ao enviar).
 
 **Auth / Mobile**
 - [ ] **No iPhone não consegui criar conta** — signup falha no Safari (PWA/web em `http://192.168.15.8:3000`). Investigar cookie de sessão do Better Auth no Safari sobre HTTP/IP (flags Secure/SameSite; Safari bloqueia cookie sem HTTPS?) em `apps/web/src/lib/auth.ts` + `app/login/page.tsx`.
@@ -177,7 +177,7 @@ Pedido: "o front precisa ser instantâneo, usabilidade fluida, tudo async, cache
 - [x] **P6. Cache nas APIs read-only** — ✅ `Cache-Control: private, max-age` em `/api/models` (60s), `/api/realtime/config` (300s), `/api/voice-config` (10s). Verificado via curl (headers servidos).
 - [x] **P7. Prefetch de navegação** — ✅ `<a>`→`<Link prefetch>` em `/` (Entrar) e no botão Insights do `console.tsx`.
 - [x] **P8. Produção — RODADO E MEDIDO** — ✅ `next build` passou (exit 0, BUILD_ID gerado; compilou em 29s + typecheck) e `next start` sobe em 558ms. **Medido prod × dev**: login→/app **1,25s (dev 9,9s, ~8x)**, /insights **1,9s (dev 7,5s, ~4x)**, /login **0,10s (dev cold 22,6s)**, 0 erros. **Confirma: rodar em produção é o maior salto de fluidez.** Script `pnpm --filter @orbita/web prod`. ⚠️ com `output: standalone`, o ideal p/ deploy é `node .next/standalone/apps/web/server.js` (o `next start` funciona e serve tudo, mas o Next avisa).
-- [ ] **P9. Lazy-load por visibilidade** dos painéis abaixo da dobra (fetch só quando o bloco aparece) — parcialmente coberto por P3 (o JS já é adiado); o fetch-on-visible é refinamento futuro.
+- [x] **P9. Lazy-load por visibilidade** (18/09: painel monta ao aparecer e pausa a atualização periódica fora da tela, `lib/use-visible.ts`) dos painéis abaixo da dobra (fetch só quando o bloco aparece) — parcialmente coberto por P3 (o JS já é adiado); o fetch-on-visible é refinamento futuro.
 - [~] **P-SRP. Front sem lógica de negócio (pedido do Wesley)** — clean code/SOLID. **FEITO (seguro, verificado)**: extraídos `components/console/{types.ts, use-orb-mode.ts, use-conversations.ts}` — o `console.tsx` deixou de ter os tipos inline + estado/funções de conversas + o mirror do modeRef. Typecheck exit 0, 0 erros de console no browser, app 100% funcional. **FALTA (coupled, ciclo chat↔voz por barge-in/conversa-contínua)**: `useChatStream` + `useVoice` (quebrar o ciclo via ref). Fica como próximo passo focado e verificado à parte.
 
 ---
@@ -224,13 +224,13 @@ Exercitei a app inteira via Playwright headless (login→chat→painéis→foco�
 **Próximos passos documentados (refactors grandes, NÃO feitos — não são stubs, são escopo maior):**
 - [x] **Velocidade do chat (RAG não trava mais)** — diagnóstico: o embedding da query no ollama local (~20s cold sem GPU) travava TODA resposta, até Claude/Gateway. Correções (commits `e2315d1`,`869ee36`,`0d37dfe`): timeout de 3,5s no RAG + pré-processo em PARALELO (persona+tools+RAG, fail-soft) + skip em saudação + **embedding residente (`keep_alive=60m` via API nativa do ollama) + cache LRU**. **Medido: Claude 27s → ~2,5s (saudação) / ~3,7s (normal warm)**; embedding 20s→0,64s. ✅
 - [ ] **RAG nível Adalink (precisa de chave de nuvem)** — estudo dos repos Adalink/Vektus: (1) **embedding de query em API** (Gemini `text-embedding-004`/OpenAI, 768d = bate com nossa coluna, re-embedar corpus) → ~150ms, dispensa o teto; (2) **abrir o stream antes do RAG** (TTFT desacoplado); (3) **cache de resultado de busca** (60s); (4) **hybrid BM25+vetor (RRF) + rerank cross-encoder** (Cohere) time-boxed; (5) **pipeline OCR completo** (Tesseract + fallback visão por confiança de página, dedup SHA-256, cross-modal, chunking tabular) — que hoje não temos. Arquivos citados no relatório.
-- [ ] **Failover cross-model + circuit breaker** por provedor (hoje só `maxRetries`; padrão `resilient-provider-factory` da Adalink).
+- [x] **Failover cross-model + circuit breaker** (resolvido: `packages/llm/src/failover.ts`, com disjuntor) por provedor (hoje só `maxRetries`; padrão `resilient-provider-factory` da Adalink).
 - [x] **Reindex do corpus** — `/api/account/reindex` (POST) re-embeda docs+memórias com prefixo `search_document`. Verificado (1 chunk + 7 memórias). ✅
 - [~] **Split do `console.tsx`** — painéis extraídos p/ `side-panels.tsx` (833→692 linhas, verificado). **Falta**: hooks `useChatStream`/`useVoice`/`useConversations` + **design system** (`components/ui/*`, skeletons, estados de erro/retry em TODOS os painéis).
-- [ ] **Orçamento do PromptComposer por TOKENS** (hoje por chars) + `ContextChunk`/`BudgetAllocator` tipados (padrão Adalink).
+- [x] **Orçamento do PromptComposer por TOKENS** (resolvido: `chat/compose.ts`, `prompt.budgetTokens`) (hoje por chars) + `ContextChunk`/`BudgetAllocator` tipados (padrão Adalink).
 - [ ] **Voz streaming**: STT parcial ao vivo + TTS em chunks + `silero-vad` (endpointing) no lugar do VAD por energia; reunião com buffer contínuo (hoje perde áudio entre janelas de 8s).
 - [ ] **Reranking** (cross-encoder) + hybrid search (BM25+vetor) no RAG; chunking por token com offset/página p/ citação real.
-- [ ] Headers de segurança (helmet/CSP/HSTS) + validação de `Origin` nas rotas mutantes.
+- [x] Headers de segurança (CSP, HSTS, Permissions-Policy) + validação de `Origin` nas rotas mutantes (18/09: `core/csrf.ts`, `web/src/lib/security/headers.ts`).
 
 ---
 
@@ -428,3 +428,20 @@ Pedido do dono depois da auditoria: nada pesado deve rodar com ele esperando a r
 
 **Pendente de máquina:** a query de claim e os índices parciais só se provam contra um Postgres de
 verdade (migração `0029`), junto com o resto da validação da Fase 2.
+
+## Backlog atacado em 18/09/2026
+
+- [x] **MCP conecta só quando é preciso.** Catálogo de tools guardado no banco; a conexão abre quando
+  uma tool é chamada e fica viva; se caiu, reconecta nessa hora. Efeito externo nunca é repetido por
+  causa de reconexão (ping antes, chamada única). Migração `0030`.
+- [x] **Caminho rápido para comando da casa (B10.1).** Só as tools da casa e histórico curto, sem RAG,
+  persona, skills nem MCP. Detecção pelo vocabulário que já é dado (keywords das tools, cômodos,
+  dispositivos do HA), exigindo verbo e alvo.
+- [x] **Resumo de conversa cobrindo 100% das mensagens (B4.2).** Toda mensagem está na parte não
+  resumida (que vai inteira) ou no resumo acumulado; o que sai da janela é dobrado por trabalho de
+  fila. Migração `0031`.
+- [x] **Segurança HTTP.** Anti-CSRF nas rotas que alteram dados, CSP, HSTS e Permissions-Policy.
+- [x] **Painéis sob demanda.** Atualização periódica pausa fora da tela ou com a aba escondida.
+- [ ] **Memória: perguntar quando não tiver certeza (B4.1).** Próxima sessão.
+- [ ] **RAG: busca híbrida, reordenação e citação com página (R2).** Próxima sessão, com pesquisa.
+- [ ] **OCR completo (R5).** Próxima sessão, com pesquisa.
