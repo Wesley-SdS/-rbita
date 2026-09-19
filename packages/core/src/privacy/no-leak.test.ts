@@ -75,6 +75,10 @@ const PASTAS_NUVEM = [
   "packages/core/src/guided",
   // cupom e extrato: OCR, visão e LLM
   "packages/core/src/finance",
+  // leitura de documento: página mal lida vai para o modelo de visão (nuvem)
+  "packages/core/src/ocr",
+  // memória que pergunta: manda a conversa para o LLM extrair fatos
+  "packages/core/src/memory",
 ];
 
 describe("NV.1: guard de saída de biometria", () => {

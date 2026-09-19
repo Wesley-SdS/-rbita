@@ -129,22 +129,60 @@ export function resolveModel(key: string): LanguageModel {
 }
 
 /**
- * Modelo de visão para "ver a tela" e para narrar câmera: OpenAI gpt-4o se
- * OPENAI_API_KEY estiver configurada; senão um modelo local do Ollama
- * (`vision.localModel`, ex.: moondream, qwen2.5vl).
+ * Modelo de visão para "ver a tela", narrar câmera e LER PÁGINA DE DOCUMENTO
+ * que o OCR leu mal.
+ *
+ * A nuvem é escolhida pela chave que existe, nesta ordem: OpenAI, Gemini,
+ * Vercel AI Gateway. Antes só a OpenAI era considerada, então numa casa com
+ * chave do Gemini a "leitura na nuvem" caía calada para o modelo local, que em
+ * CPU leva minutos por página. Cada provedor tem um default sensato no código,
+ * sobrescrevível pela config (`vision.cloudModel`) ou pelo ambiente.
  *
  * `localOnly` é a regra 2 de privacidade da Fase 2 (PRD §4.2):
  * câmera com identificação ligada NUNCA manda o recorte para a nuvem, mesmo
- * havendo chave configurada.
+ * havendo chave configurada. `preferLocal` é a mesma ideia vinda da config do
+ * dono (ler documento só em casa).
  */
-export function resolveVisionModel(opts: { localOnly?: boolean; local?: string; cloud?: string } = {}): LanguageModel {
-  if (!opts.localOnly && process.env.OPENAI_API_KEY) {
-    const openai = createOpenAICompatible({
-      name: "openai",
-      baseURL: "https://api.openai.com/v1",
-      apiKey: process.env.OPENAI_API_KEY,
+export type VisionCloudProvider = "auto" | "openai" | "gemini" | "gateway";
+
+/** Qual provedor de nuvem atende a visão, dada a preferência e as chaves. Puro. */
+export function escolherProvedorDeVisao(preferencia: VisionCloudProvider, chaves: { openai: boolean; gemini: boolean; gateway: boolean }): "openai" | "gemini" | "gateway" | null {
+  if (preferencia !== "auto") return chaves[preferencia] ? preferencia : null;
+  if (chaves.openai) return "openai";
+  if (chaves.gemini) return "gemini";
+  if (chaves.gateway) return "gateway";
+  return null;
+}
+
+export function resolveVisionModel(opts: { localOnly?: boolean; preferLocal?: boolean; local?: string; cloud?: string; cloudProvider?: VisionCloudProvider } = {}): LanguageModel {
+  const gemini = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+  const escolhido =
+    opts.localOnly || opts.preferLocal
+      ? null
+      : escolherProvedorDeVisao(opts.cloudProvider ?? "auto", {
+          openai: Boolean(process.env.OPENAI_API_KEY),
+          gemini: Boolean(gemini),
+          gateway: Boolean(process.env.AI_GATEWAY_API_KEY),
+        });
+  const modeloPedido = opts.cloud?.trim();
+
+  if (escolhido === "openai") {
+    const openai = createOpenAICompatible({ name: "openai", baseURL: "https://api.openai.com/v1", apiKey: process.env.OPENAI_API_KEY! });
+    return openai.chatModel(modeloPedido || process.env.VISION_MODEL_OPENAI || "gpt-4o");
+  }
+  if (escolhido === "gemini") {
+    const google = createOpenAICompatible({
+      name: "gemini",
+      baseURL: process.env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta/openai/",
+      apiKey: gemini!,
     });
-    return openai.chatModel(opts.cloud?.trim() || process.env.VISION_MODEL_OPENAI || "gpt-4o");
+    // modelo da OpenAI configurado não serve aqui: cada provedor tem o seu
+    const pedido = modeloPedido && !/^gpt-/i.test(modeloPedido) ? modeloPedido : "";
+    return google.chatModel(pedido || process.env.VISION_MODEL_GEMINI || "gemini-2.5-flash");
+  }
+  if (escolhido === "gateway") {
+    const gateway = createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY! });
+    return gateway(modeloPedido?.includes("/") ? modeloPedido : process.env.VISION_MODEL_GATEWAY || "openai/gpt-4o");
   }
   const ollama = createOpenAICompatible({
     name: "ollama",

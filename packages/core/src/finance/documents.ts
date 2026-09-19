@@ -1,12 +1,12 @@
-import { generateText } from "ai";
 import { z } from "zod";
-import { resolveModel, resolveVisionModel, fallbackModelKey } from "@orbita/llm";
+import { resolveModel, fallbackModelKey } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { expense } from "@orbita/db/finance-schema";
 import { settings } from "../settings";
 import { log } from "../observability/logger";
 import { generateStructured } from "../meetings/structured";
 import { parseYmd } from "./date";
+import { lerDocumento } from "../ocr/index";
 
 /**
  * Cupom (foto) e extrato (PDF) viram lançamentos. Saiu das rotas para cá ao
@@ -21,12 +21,14 @@ import { parseYmd } from "./date";
 
 export type Progresso = (feito: number, total: number | null, passo: string) => Promise<void>;
 
-/** Data URL "data:image/png;base64,..." → bytes + mime. */
-export function lerDataUrl(dataUrl: string): { bytes: Buffer; mime: string } | null {
-  const m = /^data:([\w/+.-]+)(?:;[\w=.-]+)*;base64,(.+)$/s.exec(dataUrl);
-  if (!m) return null;
-  return { bytes: Buffer.from(m[2]!, "base64"), mime: m[1]! };
-}
+// A leitura de data URL e o erro de "não consegui ler" moraram aqui primeiro;
+// hoje são de todo mundo que recebe arquivo (ver arquivos.ts). Reexportados
+// para não quebrar quem já importava daqui.
+import { lerDataUrl, DocumentoIlegivelError } from "../arquivos";
+export { lerDataUrl, DocumentoIlegivelError };
+
+/** Separador entre páginas lidas (escrito assim para não virar byte solto num patch). */
+const QUEBRA = String.fromCharCode(10);
 
 // ── cupom / comprovante ─────────────────────────────────────────────────────
 
@@ -42,13 +44,6 @@ const INSTRUCAO_CUPOM =
   "Extraia os dados do comprovante/cupom fiscal a seguir. Regras: cupom de compra já paga = expense; " +
   "boleto/fatura a vencer = payable; nota a receber = receivable. Se não achar o valor total, use 0.\n\nTexto:\n\n";
 
-export class DocumentoIlegivelError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "DocumentoIlegivelError";
-  }
-}
-
 export interface ReceiptResult {
   id: string | undefined;
   lancamento: { descricao: string; valor: number; categoria: string; tipo: string; vencimento: string | null };
@@ -59,37 +54,19 @@ export async function importReceipt(userId: string, dataUrl: string, progresso?:
   const arquivo = lerDataUrl(dataUrl);
   if (!arquivo) throw new DocumentoIlegivelError("Imagem inválida.");
 
-  // 1) OCR (tesseract pt+en); se vier vazio ou curto, cai para o modelo de visão
+  // 1) leitura do comprovante pelo pipeline do R5: OCR local com CONFIANÇA e,
+  // quando a página sai ruim, o modelo de visão. O gatilho antigo era "menos de
+  // 10 caracteres", que deixava passar cupom lido pela metade: valor e data
+  // errados entravam no financeiro sem ninguém perceber.
   await progresso?.(0, 3, "lendo o texto da imagem");
   let ocrText = "";
   try {
-    const { ocrImage } = await import("../ocr");
-    ocrText = (await ocrImage(arquivo.bytes)).trim();
+    const lido = await lerDocumento(arquivo.bytes, { nome: "comprovante", mime: arquivo.mime, progresso });
+    ocrText = lido.textos.join(QUEBRA).trim();
   } catch (e) {
     log.error("finance.receipt.ocr", { error: e instanceof Error ? e.message : String(e) });
   }
 
-  if (ocrText.length < 10) {
-    await progresso?.(1, 3, "olhando a imagem com o modelo de visão");
-    try {
-      const vis = await settings.getMany(["vision.localModel", "vision.cloudModel"]);
-      const { text } = await generateText({
-        model: resolveVisionModel({ local: vis["vision.localModel"], cloud: vis["vision.cloudModel"] }),
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: "Transcreva TODO o texto visível deste comprovante/cupom (valores, itens, datas)." },
-              { type: "image", image: dataUrl },
-            ],
-          },
-        ],
-      });
-      if (text.trim().length > ocrText.length) ocrText = text.trim();
-    } catch (e) {
-      log.error("finance.receipt.vision", { error: e instanceof Error ? e.message : String(e) });
-    }
-  }
   if (ocrText.length < 3) throw new DocumentoIlegivelError("Não consegui ler texto na imagem.");
 
   // 2) o modelo estrutura os campos
@@ -165,23 +142,21 @@ export async function importStatement(userId: string, dataUrl: string, nome: str
   const arquivo = lerDataUrl(dataUrl);
   if (!arquivo) throw new DocumentoIlegivelError("Arquivo inválido.");
 
-  // 1) texto do PDF (unpdf), ou texto puro
+  // 1) leitura pelo pipeline do R5: página com texto usa o texto (e a tabela
+  // vira tabela); página escaneada passa pelo OCR. Antes, extrato escaneado
+  // batia num "PDF sem texto extraível" e o dono não tinha o que fazer.
   await progresso?.(0, 2, "lendo o arquivo");
   let text = "";
   try {
-    if (nome.toLowerCase().endsWith(".pdf") || arquivo.mime === "application/pdf") {
-      const { extractText, getDocumentProxy } = await import("unpdf");
-      const pdf = await getDocumentProxy(new Uint8Array(arquivo.bytes));
-      const r = await extractText(pdf, { mergePages: true });
-      text = Array.isArray(r.text) ? r.text.join("\n") : r.text;
-    } else {
-      text = arquivo.bytes.toString("utf-8");
-    }
+    const lido = await lerDocumento(arquivo.bytes, { nome, mime: arquivo.mime, progresso });
+    // a página vai marcada: um lançamento cortado entre blocos continua
+    // rastreável, e o modelo não junta linhas de páginas diferentes sem saber
+    text = lido.paginas.map((p) => `--- Página ${p.numero} ---${QUEBRA}${p.texto}`).join(QUEBRA + QUEBRA);
   } catch (e) {
     log.error("finance.statement.parse", { error: e instanceof Error ? e.message : String(e) });
-    throw new DocumentoIlegivelError("Falha ao ler o PDF.");
+    throw new DocumentoIlegivelError(e instanceof DocumentoIlegivelError ? e.message : "Falha ao ler o arquivo.");
   }
-  if (!text.trim()) throw new DocumentoIlegivelError("PDF sem texto extraível. Se for uma foto, mande como comprovante.");
+  if (!text.trim()) throw new DocumentoIlegivelError("Não consegui extrair texto deste extrato.");
 
   // 2) o modelo extrai bloco a bloco (extrato longo não é truncado)
   const model = resolveModel(await fallbackModelKey());
