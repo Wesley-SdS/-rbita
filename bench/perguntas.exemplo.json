@@ -1,0 +1,12 @@
+[
+ {
+  "_comentario": "Formato do gabarito de medição do RAG. O arquivo de verdade é bench/perguntas.json, que fica FORA do git: ele cita nomes de arquivos pessoais do dono. Copie este exemplo, renomeie e escreva as suas perguntas.",
+  "_tipos": "numero (valor ou quantidade exata) · exato (código, nome próprio, documento) · parafrase (dito com outras palavras) · sem_acento (testa a configuração portuguese_unaccent) · sem_resposta (não existe no acervo: serve para medir falso positivo)",
+  "_gabarito": "documento + páginas onde a resposta está. Aponta para a PÁGINA, não para o id do trecho, para o gabarito sobreviver a mudanças no corte."
+ },
+ { "id": 1, "tipo": "numero", "pergunta": "Qual o valor da conta de luz que vence em agosto?", "gabarito": [{ "doc": "conta-de-luz.pdf", "paginas": [1] }] },
+ { "id": 2, "tipo": "exato", "pergunta": "Qual é o meu número de cliente na distribuidora?", "gabarito": [{ "doc": "conta-de-luz.pdf", "paginas": [2] }] },
+ { "id": 3, "tipo": "parafrase", "pergunta": "Posso derrubar uma parede para reformar o apartamento?", "gabarito": [{ "doc": "manual-do-proprietario.pdf", "paginas": [1, 13, 16] }] },
+ { "id": 4, "tipo": "sem_acento", "pergunta": "area privativa e numero de vagas do apartamento", "gabarito": [{ "doc": "proposta-do-apartamento.pdf", "paginas": [2] }] },
+ { "id": 5, "tipo": "sem_resposta", "pergunta": "Qual o valor do meu seguro de vida?", "gabarito": [] }
+]

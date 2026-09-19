@@ -16,7 +16,10 @@ export async function applyLlmSettings(): Promise<void> {
 
 // A preferência de embedding é lida NO embed (getter), para valer em qualquer
 // rota que embede (reindexar, ingest, memória, skills), não só no chat.
-configureEmbeddings({ provider: () => settings.get("embeddings.provider") });
+configureEmbeddings({
+  provider: () => settings.get("embeddings.provider"),
+  localModel: () => settings.get("embeddings.localModel"),
+});
 
 // Mesma ideia para a política de modelos: getters, lidos por quem precisa
 // (descoberta, modelo padrão, modelo reserva) sem cada rota lembrar de aplicar.

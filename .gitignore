@@ -50,3 +50,9 @@ apps/perception/**/*.npy
 
 # artefato de build do tsc (entrou no repo por engano)
 *.tsbuildinfo
+
+# medição de RAG e OCR: documentos reais do dono, nunca commitados (repo público).
+# O gabarito também fica de fora: ele cita nome de arquivo pessoal (um deles tem
+# o CPF do dono no nome). O formato está em bench/perguntas.exemplo.json.
+bench/data
+bench/perguntas.json

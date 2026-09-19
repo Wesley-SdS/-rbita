@@ -7,7 +7,9 @@
     "./*": "./src/*.ts"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@napi-rs/canvas": "^1.0.9",
     "@orbita/db": "workspace:*",
     "@orbita/llm": "workspace:*",
     "ai": "^7.0.31",
@@ -15,6 +17,7 @@
     "croner": "^10.0.1",
     "drizzle-orm": "^0.45.2",
     "duck-duck-scrape": "^2.2.7",
+    "gpt-tokenizer": "^4.0.0",
     "tesseract.js": "^7.0.0",
     "unpdf": "^1.6.2",
     "web-push": "^3.6.7",

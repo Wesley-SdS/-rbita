@@ -18,6 +18,8 @@ import * as account from "./account";
 import * as accountExport from "./account-export";
 import * as accountReindex from "./account-reindex";
 import * as knowledge from "./knowledge";
+import * as knowledgeSearch from "./knowledge-search";
+import * as memoryCandidates from "./memory-candidates";
 import * as knowledgeGraph from "./knowledge-graph";
 import * as models from "./models";
 import * as connectors from "./connectors";
@@ -83,6 +85,8 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/memory", memory),
   webRoute("api/knowledge", knowledge),
   webRoute("api/knowledge/graph", knowledgeGraph),
+  webRoute("api/knowledge/busca", knowledgeSearch),
+  webRoute("api/memory/candidatos", memoryCandidates),
   webRoute("api/ingest", ingest),
   webRoute("api/meeting/summarize", meetingSummarize),
   webRoute("api/meeting/:id/speakers", meetingSpeakers),

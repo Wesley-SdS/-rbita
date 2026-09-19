@@ -48,6 +48,7 @@ export const SETTING_GROUPS = {
   chat: { label: "Motor do chat", order: 10 },
   prompt: { label: "Prompt", order: 20 },
   rag: { label: "Conhecimento (RAG)", order: 30 },
+  ocr: { label: "Leitura de documentos (OCR)", order: 32 },
   memory: { label: "Memória", order: 40 },
   embeddings: { label: "Embeddings", order: 45 },
   models: { label: "Modelos", order: 47 },
@@ -155,12 +156,84 @@ export const SETTING_DEFS = {
   "rag.memoryMinSim": num("rag", "Similaridade mínima (memória)", "Corte para fatos da memória de longo prazo.", 0.4, 0, 1, { step: 0.01 }),
   "rag.cacheTtlMs": num("rag", "Cache de busca", "Por quanto tempo a mesma pergunta reaproveita o resultado da busca.", 60000, 0, 3600000, { unit: "ms" }),
   "rag.cacheMax": num("rag", "Tamanho do cache de busca", "Entradas guardadas em memória por processo.", 200, 0, 10000),
-  "rag.chunkSize": num("rag", "Tamanho do trecho", "Caracteres por trecho ao indexar um documento. Vale para documentos novos.", 1000, 100, 8000, { unit: "chars" }),
-  "rag.chunkOverlap": num("rag", "Sobreposição entre trechos", "Caracteres repetidos entre trechos vizinhos, para não cortar contexto.", 150, 0, 2000, { unit: "chars" }),
+  "rag.chunkTokens": num("rag", "Tamanho do trecho", "Tokens por trecho ao indexar um documento. Trecho menor acha o detalhe, trecho maior guarda o contexto em volta. Vale para documentos novos e para a reindexação.", 400, 64, 2000, { unit: "tokens", warning: "Documentos já indexados continuam com o tamanho antigo até você reindexar." }),
+  "rag.chunkOverlapTokens": num("rag", "Sobreposição entre trechos", "Tokens repetidos entre trechos vizinhos, para uma frase cortada não sumir dos dois lados.", 60, 0, 500, { unit: "tokens" }),
+  // ── busca híbrida (R2) ──
+  "rag.hybrid": bool("rag", "Busca híbrida", "Procura por significado (vetor) e por palavra exata (texto) ao mesmo tempo, e funde as duas listas. Número, nome próprio e código só aparecem bem no lado da palavra exata.", true),
+  "rag.rrfK": num("rag", "Amortecimento da fusão (k do RRF)", "Quanto peso os primeiros lugares de cada lista têm. Menor confia mais em quem ficou em primeiro; maior distribui. 60 é o valor do artigo que criou a técnica.", 60, 1, 1000),
+  "rag.weightVector": num("rag", "Peso da busca por significado", "Quanto a lista do vetor pesa na fusão.", 1, 0, 10, { step: 0.1 }),
+  "rag.weightText": num("rag", "Peso da busca por palavra", "Quanto a lista de palavra exata pesa na fusão.", 1, 0, 10, { step: 0.1 }),
+  "rag.textMode": sel(
+    "rag",
+    "Como interpretar a pergunta na busca por palavra",
+    "Medido com os seus documentos: exigir todas as palavras acertou 6,7% das perguntas; aceitar qualquer palavra e ordenar por relevância acertou 56,7%.",
+    "ou",
+    [
+      { value: "ou", label: "Qualquer palavra, ordenado por relevância (recomendado)" },
+      { value: "and", label: "Todas as palavras no mesmo trecho (busca estrita)" },
+    ],
+  ),
+  "rag.textMinRank": num("rag", "Relevância mínima na busca por palavra", "Corte do ranking textual: abaixo disso a palavra bateu por acaso.", 0.02, 0, 1, { step: 0.001 }),
+  "rag.candidates": num("rag", "Candidatos por busca", "Quantos trechos cada lado traz antes da fusão e da reordenação. Mais candidatos acham mais, custam mais tempo.", 30, 4, 200, { unit: "trechos" }),
+  // ── reordenação (rag/rerank.ts) ──
+  "rag.rerank": sel(
+    "rag",
+    "Reordenar os candidatos",
+    "Depois da busca, um modelo lê a pergunta junto com cada trecho e decide a ordem. É o que mais melhora o acerto, e é o que mais custa tempo.",
+    "nenhum",
+    [
+      { value: "nenhum", label: "Não reordenar (mais rápido)" },
+      { value: "local", label: "Modelo local em CPU (nada sai de casa)" },
+      { value: "cohere", label: "Cohere (precisa de COHERE_API_KEY; o trecho sai de casa)" },
+    ],
+  ),
+  "rag.rerankModel": text("rag", "Reordenação: modelo", "Modelo do reordenador. Local: repositório no Hugging Face. Cohere: nome do modelo da API.", "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"),
+  "rag.rerankFile": text("rag", "Reordenação: arquivo ONNX", "Qual arquivo do repositório carregar. O quantizado (int8) roda bem mais rápido em CPU.", "model_quint8_avx2"),
+  "rag.rerankCandidates": num("rag", "Reordenação: quantos trechos", "Teto de trechos que vão ao reordenador. Cada trecho a mais é tempo a mais.", 20, 2, 100, { unit: "trechos" }),
+  "rag.rerankMaxChars": num("rag", "Reordenação: tamanho do trecho", "Trecho maior que isso é cortado antes de ir ao reordenador (o modelo tem limite de contexto).", 1200, 100, 8000, { unit: "chars" }),
+  "rag.excerptContextChars": num("rag", "Contexto ao abrir um trecho", "Quantos caracteres antes e depois do trecho a tela mostra ao abrir a citação.", 600, 0, 5000, { unit: "chars" }),
+  "rag.rerankTimeoutMs": num("rag", "Reordenação: tempo máximo", "Passou disso, a ordem da fusão vale e o turno segue.", 2500, 100, 30000, { unit: "ms" }),
+
+  // ── leitura de documentos (ocr/index.ts) ──
+  "ocr.enabled": bool("ocr", "Ler página escaneada", "Página de PDF sem texto (escaneada ou fotografada) passa pelo OCR em vez de ser ignorada. Desligado, só o texto nativo é indexado.", true),
+  "ocr.minPageConfidence": num("ocr", "Confiança mínima da página", "Abaixo disso a leitura do OCR é considerada ruim e o modelo de visão lê a página. A confiança é a média das palavras, ponderada pelo tamanho.", 0.6, 0, 1, { step: 0.01 }),
+  "ocr.minChars": num("ocr", "Mínimo de caracteres por página", "Página com menos texto que isso conta como não lida (e vai para o modelo de visão).", 80, 0, 2000, { unit: "chars" }),
+  "ocr.maxLowWordRatio": num("ocr", "Tolerância a palavras ruins", "Fração de palavras com confiança muito baixa que ainda se aceita. Acima disso a página vai para o modelo de visão, mesmo com média boa (o caso da tabela).", 0.25, 0, 1, { step: 0.01 }),
+  "ocr.renderScale": num("ocr", "Resolução da página", "Multiplicador do tamanho ao transformar a página em imagem. Maior lê melhor letra pequena e gasta mais memória e tempo.", 2.5, 1, 6, { step: 0.1 }),
+  "ocr.maxPages": num("ocr", "Teto de páginas por documento", "Documento maior que isso é lido só até esta página.", 100, 1, 2000, { unit: "páginas" }),
+  "ocr.languages": text("ocr", "Idiomas do OCR", "Idiomas que o OCR carrega, separados por +. Mais idiomas custam mais tempo por página.", "por+eng", 60),
+  "ocr.tableMinRows": num("ocr", "Tabela: mínimo de linhas", "Sequências de linhas alinhadas a partir deste número viram tabela em vez de texto corrido.", 3, 2, 50, { unit: "linhas" }),
+  "ocr.tableMinColumns": num("ocr", "Tabela: mínimo de colunas", "Linha com menos colunas que isso não é considerada parte de tabela.", 3, 2, 20, { unit: "colunas" }),
+  "ocr.visionProvider": sel(
+    "ocr",
+    "Quem lê a página que o OCR leu mal",
+    "Documento pessoal (extrato, imposto de renda, receita médica, contrato) pode sair de casa? Nesta casa a escolha é do dono.",
+    "auto",
+    [
+      { value: "auto", label: "Nuvem quando houver chave, senão local" },
+      { value: "nuvem", label: "Sempre na nuvem (mais rápido e melhor em tabela)" },
+      { value: "local", label: "Sempre local (nada sai de casa; minutos por página em CPU)" },
+      { value: "nunca", label: "Não usar modelo de visão (fica só o que o OCR leu)" },
+    ],
+    "No plano gratuito do Gemini o conteúdo enviado é usado para melhorar os produtos do Google. Para documento pessoal, use uma chave paga ou a opção local.",
+  ),
+  "ocr.visionMaxTokens": num("ocr", "Visão: tamanho da resposta", "Teto de tokens que o modelo de visão pode devolver por página.", 4096, 256, 32000, { unit: "tokens" }),
 
   // ── memória (chat/tools.ts) ──
   "memory.dedupSim": num("memory", "Similaridade para deduplicar", "Fato novo com similaridade acima disso é considerado repetido e não é gravado.", 0.92, 0.5, 1, { step: 0.01 }),
   "memory.forgetMinSim": num("memory", "Similaridade mínima para esquecer", "Ao pedir para esquecer algo, só memórias acima disso são apagadas.", 0.4, 0, 1, { step: 0.01 }),
+  // ── memória que pergunta (memory/candidates.ts, B4.1) ──
+  "memory.extractEnabled": bool("memory", "Aprender sozinha com a conversa", "Depois de cada conversa, a Órbita procura fatos que valem a pena lembrar. Confiança alta ela guarda e avisa; o resto ela pergunta.", true),
+  "memory.autoSaveMin": num("memory", "Guardar sozinha a partir de", "Confiança a partir da qual um fato é guardado sem perguntar (você sempre pode desfazer).", 0.85, 0.5, 1, { step: 0.01 }),
+  "memory.askMin": num("memory", "Perguntar a partir de", "Abaixo desta confiança o fato é descartado sem incomodar você.", 0.5, 0, 1, { step: 0.01 }),
+  "memory.sensitiveCategories": list("memory", "Assuntos que sempre perguntam", "Fato destes assuntos nunca é guardado sozinho, por mais certo que pareça.", ["saude", "dinheiro", "terceiros", "relacionamento"]),
+  "memory.categories": list("memory", "Categorias de memória", "Categorias que a Órbita pode usar ao classificar um fato.", ["geral", "preferencia", "casa", "pessoas", "compromisso", "trabalho", "saude", "dinheiro", "terceiros", "relacionamento"]),
+  "memory.similarSim": num("memory", "Parecida com uma memória existente", "Acima desta similaridade, o fato novo ATUALIZA a memória parecida em vez de virar uma segunda.", 0.85, 0.5, 1, { step: 0.01 }),
+  "memory.maxPerTurn": num("memory", "Fatos por conversa", "Teto de fatos considerados a cada vez, para uma conversa longa não virar uma enxurrada de perguntas.", 3, 1, 20, { unit: "fatos" }),
+  "memory.extractWindow": num("memory", "Mensagens lidas", "Quantas mensagens recentes da conversa a extração lê.", 12, 2, 100, { unit: "mensagens" }),
+  "memory.extractMaxChars": num("memory", "Tamanho lido", "Teto de caracteres da conversa enviados ao modelo na extração.", 6000, 500, 40000, { unit: "chars" }),
+  "memory.extractModel": text("memory", "Modelo da extração", "Modelo que lê a conversa e propõe os fatos. Vazio usa o modelo reserva.", ""),
+  "memory.candidateRetentionDays": num("memory", "Sugestão pendente expira em", "Fato proposto e não decidido some depois deste tempo.", 30, 1, 365, { unit: "dias" }),
 
   // ── embeddings (packages/llm/src/embeddings.ts) ──
   "embeddings.provider": sel(
@@ -174,6 +247,14 @@ export const SETTING_DEFS = {
       { value: "cloud", label: "Sempre nuvem" },
     ],
     "Trocar o provedor de embedding invalida os vetores já gravados. Depois de mudar, use \"Reindexar\" na conta.",
+  ),
+
+  "embeddings.localModel": text(
+    "embeddings",
+    "Modelo de embedding local",
+    "Modelo do Ollama que gera os vetores quando a busca roda em casa. O padrão é multilíngue: o modelo antigo era treinado só em inglês e perdia metade das respostas num acervo em português. Trocar de modelo invalida os vetores gravados, então depois use \"Reindexar acervo\".",
+    "nomic-embed-text-v2-moe",
+    80,
   ),
 
   // ── modelos (packages/llm/src/policy.ts, via settings/apply.ts) ──
@@ -258,6 +339,7 @@ export const SETTING_DEFS = {
   "limits.sttMaxMb": num("limits", "Áudio máximo para transcrição", "Tamanho máximo aceito em /api/stt.", 120, 1, 1024, { unit: "MB" }),
   "limits.ingestPerMinute": num("limits", "Documentos indexados por minuto", "Limite de /api/ingest por conta (cada documento gera embeddings).", 20, 1, 600, { unit: "/min" }),
   "limits.reindexPerMinute": num("limits", "Reindexações por minuto", "Limite do botão Reindexar (refaz todos os embeddings da conta).", 3, 1, 60, { unit: "/min" }),
+  "limits.searchPerMinute": num("limits", "Buscas no acervo por minuto", "Limite da busca feita pela tela (cada busca gera um embedding da pergunta).", 60, 1, 600, { unit: "/min" }),
   "limits.summaryMaxChars": num("limits", "Limiar do resumo em blocos", "Até este tamanho a reunião é resumida em uma passada só. Acima disso, o resumo vira mapa-redução (por blocos, depois consolidado) em vez de cortar a transcrição.", 100000, 1000, 2000000, { unit: "chars" }),
 
   // ── grafo (api/knowledge/graph) ──

@@ -44,6 +44,13 @@ const BodySchema = z.object({
 
 const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.\n\n";
 
+/** "Manual Olimpic.pdf, página 16" — a citação que o dono consegue conferir. */
+export function fonteDoTrecho(h: Pick<RagHit, "source" | "pageStart" | "pageEnd">): string {
+  if (h.pageStart == null) return h.source;
+  const pagina = h.pageEnd && h.pageEnd !== h.pageStart ? `páginas ${h.pageStart} a ${h.pageEnd}` : `página ${h.pageStart}`;
+  return `${h.source}, ${pagina}`;
+}
+
 /** Mensagem amigável e ACIONÁVEL por provedor (não vaza detalhe interno). */
 function providerDownMessage(key: string): string {
   if (key.startsWith("claude/")) return "O Claude Max está indisponível (limite ou instabilidade).";
@@ -232,7 +239,9 @@ export async function POST(req: Request, ctx: RouteCtx) {
     chunks.push({
       content:
         "\n\nContexto do usuário (use quando relevante e cite a fonte entre colchetes):\n" +
-        ragHits.map((h, i) => `[${i + 1}] (${h.source}) ${h.content}`).join("\n\n"),
+        // a fonte leva a PÁGINA quando existe: "documento X, página 4" é o que
+        // permite ao dono conferir, e a tela abre o trecho exato a partir disso
+        ragHits.map((h, i) => `[${i + 1}] (${fonteDoTrecho(h)}) ${h.content}`).join("\n\n"),
       priority: cfg["prompt.priorityRag"],
       compressible: true,
     });
@@ -273,6 +282,8 @@ export async function POST(req: Request, ctx: RouteCtx) {
         await db.update(conversation).set({ updatedAt: new Date(), modelKey: persistKey }).where(eq(conversation.id, conv.id));
         // o que saiu da janela vai para o resumo, em segundo plano (fila)
         if (comResumo) void pedirResumoDaConversa(userId, conv.id);
+        // e a conversa é lida em busca de fatos que valham a pena lembrar (B4.1)
+        void pedirExtracaoDeMemoria(userId, conv.id);
         log.info("chat", {
           userId, model: persistKey, tokens: tokens ?? 0, latencyMs, conv: conv.id,
           cacheRead: anth?.cacheReadInputTokens ?? 0, cacheWrite: anth?.cacheCreationInputTokens ?? 0,
@@ -355,6 +366,20 @@ export async function POST(req: Request, ctx: RouteCtx) {
   }
   await cleanupOnce();
   return Response.json({ error: providerDownMessage(candidates[0]) + " Tente de novo." }, { status: 503, headers });
+}
+
+/**
+ * Pede a extração de candidatos a memória da conversa (B4.1). Dedup por
+ * conversa: uma rajada de mensagens gera UM trabalho, e a extração lê a janela
+ * inteira de uma vez. Nunca derruba o turno.
+ */
+async function pedirExtracaoDeMemoria(userId: string, conversationId: string): Promise<void> {
+  try {
+    if (!(await settings.get("memory.extractEnabled"))) return;
+    await enqueueJob(userId, { kind: "memoria.extrair", payload: { conversationId }, dedupKey: `memoria-extrair:${conversationId}` });
+  } catch (e) {
+    log.warn("chat.memoria_nao_enfileirada", { conversationId, error: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /**

@@ -11,8 +11,14 @@ onlyBuiltDependencies:
   - sharp
 
 # Bloqueio explícito do build do tesseract.js (baixa o core em runtime).
+# `onnxruntime-node` e `protobufjs` (do @huggingface/transformers, usado na
+# reordenação do RAG) também ficam de fora: o pacote já vem com o binário
+# pronto para win/linux/mac, e o script de instalação só baixaria de novo.
+# Verificado nesta máquina: o reordenador carrega e pontua sem rodar o build.
 ignoredBuiltDependencies:
   - tesseract.js
+  - onnxruntime-node
+  - protobufjs
 
 # pnpm 11.8 trata "build scripts ignorados" como ERRO FATAL em modo não-interativo
 # (quebra o `pnpm install --frozen-lockfile` do Docker mesmo com a allowlist acima).

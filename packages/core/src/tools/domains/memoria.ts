@@ -66,7 +66,14 @@ export const buscar_conhecimento: ToolDef<z.ZodObject<{ consulta: z.ZodString }>
   inputSchema: z.object({ consulta: z.string() }),
   run: async ({ consulta }, { userId }) => {
     const hits = await retrieveContext(userId, consulta, await settings.get("rag.topK"));
-    return { resultados: hits.map((h) => ({ fonte: h.source, trecho: h.content })) };
+    // a página vai junto: é o que permite a resposta dizer onde conferir
+    return {
+      resultados: hits.map((h) => ({
+        fonte: h.source,
+        pagina: h.pageStart == null ? undefined : h.pageEnd && h.pageEnd !== h.pageStart ? `${h.pageStart}-${h.pageEnd}` : String(h.pageStart),
+        trecho: h.content,
+      })),
+    };
   },
 };
 

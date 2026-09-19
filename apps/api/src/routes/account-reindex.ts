@@ -1,32 +1,26 @@
-// Migrada do Next em paridade (apps/web/src/app/api/account/reindex/route.ts).
-import { eq } from "drizzle-orm";
-import { embedTexts } from "@orbita/llm";
-import { db } from "@orbita/db";
-import { chunk, memory } from "@orbita/db/knowledge-schema";
+// Migrada do Next em paridade (apps/web/src/app/api/account/reindex/route.ts),
+// e depois virou trabalho de fila (R2): reindexar o acervo inteiro é uma
+// chamada de embedding por lote para todos os documentos e memórias. Com modelo
+// local isso passa de minutos, e ninguém segura uma requisição HTTP nisso.
+import { z } from "zod";
 import type { RouteCtx } from "../http/web";
 import { settings } from "@orbita/core/settings/index";
 import { sessionOf } from "../http/web-route";
 import { rateLimit, tooMany } from "@orbita/core/ratelimit";
+import { enqueueJob } from "@orbita/core/jobs/queue";
+import { tamanhoDoAcervo } from "@orbita/core/rag/reindex";
+import { jobAccepted } from "../http/job-response";
 
-/**
- * Recalcula os embeddings dos documentos e memórias do usuário com os prefixos
- * de tarefa corretos (search_document). Necessário uma vez após introduzir os
- * prefixos, vetores antigos foram gerados sem prefixo. Também serve de
- * manutenção se o modelo de embedding mudar.
- */
-async function reembedInBatches<T extends { id: string; content: string }>(
-  rows: T[],
-  update: (id: string, emb: number[]) => Promise<unknown>,
-  batchSize = 32,
-): Promise<number> {
-  let done = 0;
-  for (let i = 0; i < rows.length; i += batchSize) {
-    const batch = rows.slice(i, i + batchSize);
-    const embs = await embedTexts(batch.map((r) => r.content), "document");
-    await Promise.all(batch.map((r, j) => update(r.id, embs[j])));
-    done += batch.length;
-  }
-  return done;
+const Body = z.object({
+  /** recortar = corta os documentos de novo (dá página aos antigos); recalcular = só refaz os vetores */
+  modo: z.enum(["recortar", "recalcular"]).default("recortar"),
+});
+
+/** Quanto há para reindexar: a tela mostra antes de o dono mandar. */
+export async function GET(_req: Request, ctx: RouteCtx) {
+  const session = sessionOf(ctx);
+  if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
+  return Response.json(await tamanhoDoAcervo(session.user.id));
 }
 
 export async function POST(req: Request, ctx: RouteCtx) {
@@ -37,17 +31,20 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const rl = rateLimit(`reindex:${uid}`, await settings.get("limits.reindexPerMinute"), 60_000);
   if (!rl.ok) return tooMany(rl.retryAfterSec);
 
-  const [chunks, mems] = await Promise.all([
-    db.select({ id: chunk.id, content: chunk.content }).from(chunk).where(eq(chunk.userId, uid)),
-    db.select({ id: memory.id, content: memory.content }).from(memory).where(eq(memory.userId, uid)),
-  ]);
+  let body: unknown = {};
+  try {
+    body = await req.json();
+  } catch {
+    /* corpo vazio é válido: usa o padrão */
+  }
+  const parsed = Body.safeParse(body ?? {});
+  if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message }, { status: 400 });
 
-  const reChunks = await reembedInBatches(chunks, (id, emb) =>
-    db.update(chunk).set({ embedding: emb }).where(eq(chunk.id, id)),
-  );
-  const reMems = await reembedInBatches(mems, (id, emb) =>
-    db.update(memory).set({ embedding: emb }).where(eq(memory.id, id)),
-  );
-
-  return Response.json({ ok: true, chunks: reChunks, memorias: reMems });
+  // dedup: duas reindexações do mesmo acervo ao mesmo tempo só gastariam CPU
+  const r = await enqueueJob(uid, {
+    kind: "rag.reindexar",
+    payload: { modo: parsed.data.modo },
+    dedupKey: `reindexar:${uid}`,
+  });
+  return jobAccepted(r.job, r.jaExistia);
 }

@@ -1,4 +1,15 @@
-export const EMBED_MODEL = process.env.EMBED_MODEL || "nomic-embed-text";
+/**
+ * Modelo de embedding LOCAL (Ollama). O padrão é multilíngue de propósito: o
+ * `nomic-embed-text` v1, que era o default, é descrito pelo próprio autor como
+ * modelo SÓ DE INGLÊS, e o acervo desta casa é em português. Medido com os
+ * documentos do dono (bench/MEDICAO-RAG-OCR.md), a troca levou o acerto da
+ * busca vetorial de 50,0% para 76,7%.
+ *
+ * O valor efetivo vem da config (`embeddings.localModel`, na tela de Ajustes);
+ * isto é só o default, e a variável de ambiente continua valendo como
+ * bootstrap. Trocar o modelo INVALIDA os vetores gravados: precisa reindexar.
+ */
+export const EMBED_MODEL = process.env.EMBED_MODEL || "nomic-embed-text-v2-moe";
 export const EMBED_DIMS = 768;
 
 /**
@@ -8,6 +19,21 @@ export const EMBED_DIMS = 768;
  * ATENÇÃO: os prefixos são específicos do nomic (local); modelos de nuvem não os usam.
  */
 export type EmbedKind = "query" | "document";
+/** O modelo local em uso, resolvido por chamada (a config pode mudar sem restart). */
+type ModelSource = string | (() => Promise<string> | string);
+let localModel: ModelSource = EMBED_MODEL;
+async function resolveLocalModel(): Promise<string> {
+  try {
+    const m = typeof localModel === "function" ? await localModel() : localModel;
+    return m?.trim() || EMBED_MODEL;
+  } catch {
+    return EMBED_MODEL;
+  }
+}
+/** Modelos da família nomic dependem de prefixo de tarefa; os outros, não. */
+export function usaPrefixoDeTarefa(modelo: string): boolean {
+  return /nomic/i.test(modelo);
+}
 const PREFIX: Record<EmbedKind, string> = {
   query: "search_query: ",
   document: "search_document: ",
@@ -41,8 +67,9 @@ export type EmbedPreference = "auto" | "local" | "cloud";
 // ingest, memória e skills, e vale logo depois de um restart.
 type PreferenceSource = EmbedPreference | (() => Promise<EmbedPreference> | EmbedPreference);
 let preference: PreferenceSource = "auto";
-export function configureEmbeddings(p: { provider?: PreferenceSource }): void {
+export function configureEmbeddings(p: { provider?: PreferenceSource; localModel?: ModelSource }): void {
   if (p.provider) preference = p.provider;
+  if (p.localModel) localModel = p.localModel;
 }
 async function resolvePreference(): Promise<EmbedPreference> {
   try {
@@ -92,11 +119,11 @@ function cacheSet(k: string, v: number[]) {
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);
 }
 
-async function ollamaEmbed(inputs: string[]): Promise<number[][]> {
+async function ollamaEmbed(inputs: string[], modelo: string): Promise<number[][]> {
   const r = await fetch(OLLAMA + "/api/embed", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: EMBED_MODEL, input: inputs, keep_alive: KEEP_ALIVE }),
+    body: JSON.stringify({ model: modelo, input: inputs, keep_alive: KEEP_ALIVE }),
   });
   if (!r.ok) throw new Error(`embed_failed:${r.status}`);
   const j = (await r.json()) as { embeddings?: number[][] };
@@ -127,7 +154,10 @@ async function embed(inputs: string[], kind: EmbedKind): Promise<number[][]> {
   const cfg = pref === "local" ? null : cloudConfig();
   if (pref === "cloud" && !cfg) throw new Error("embeddings.provider = nuvem, mas não há chave de embedding (GEMINI_API_KEY ou OPENAI_API_KEY)");
   if (cfg) return cloudEmbed(inputs, cfg); // nuvem: sem prefixo de tarefa
-  return ollamaEmbed(inputs.map((v) => PREFIX[kind] + v));
+  const modelo = await resolveLocalModel();
+  // só a família nomic usa prefixo de tarefa; mandar "search_query: " para um
+  // modelo que não o espera é texto lixo dentro da consulta
+  return ollamaEmbed(usaPrefixoDeTarefa(modelo) ? inputs.map((v) => PREFIX[kind] + v) : inputs, modelo);
 }
 
 export async function embedText(value: string, kind: EmbedKind = "query"): Promise<number[]> {

@@ -1,42 +1,58 @@
-import { ingestDocument, type Progresso } from "./ingest";
-import { lerDataUrl, DocumentoIlegivelError } from "../finance/documents";
+import { ingestPaginas, hashArquivo, type Progresso, type IngestResultado } from "./ingest";
+import { lerDataUrl, DocumentoIlegivelError } from "../arquivos";
+import { lerDocumento, type DocumentoLido } from "../ocr/index";
 
 /**
- * Arquivo (PDF, imagem por OCR ou texto) vira documento indexado. Saiu da rota
- * de upload para cá ao virar trabalho de fila: extrair texto de um PDF grande
- * ou rodar OCR numa foto não cabe numa requisição HTTP.
+ * Arquivo (PDF, imagem ou texto) vira documento indexado, PÁGINA A PÁGINA.
+ *
+ * O que mudou com o R5: a leitura não é mais "extrai texto do PDF e pronto".
+ * Cada página é resolvida do jeito dela (texto nativo, OCR, modelo de visão), a
+ * página é gravada em cada trecho, e o arquivo inteiro ganha um SHA-256 para o
+ * mesmo documento não ser indexado duas vezes.
  */
+
+export interface ArquivoIndexado extends IngestResultado {
+  title: string;
+  source: string;
+  leitura: DocumentoLido["resumo"];
+}
 
 export interface TextoExtraido {
   text: string;
   source: "pdf" | "ocr" | "file";
+  paginas: string[];
+  leitura: DocumentoLido["resumo"];
 }
 
-export async function extractFileText(dataUrl: string, nome: string): Promise<TextoExtraido> {
+/** Compatível com quem só quer o texto (rotas antigas, testes). */
+export async function extractFileText(dataUrl: string, nome: string, progresso?: Progresso): Promise<TextoExtraido> {
   const arquivo = lerDataUrl(dataUrl);
   if (!arquivo) throw new DocumentoIlegivelError("Arquivo inválido.");
-  try {
-    if (nome.toLowerCase().endsWith(".pdf") || arquivo.mime === "application/pdf") {
-      const { extractText, getDocumentProxy } = await import("unpdf");
-      const pdf = await getDocumentProxy(new Uint8Array(arquivo.bytes));
-      const r = await extractText(pdf, { mergePages: true });
-      return { text: Array.isArray(r.text) ? r.text.join("\n") : r.text, source: "pdf" };
-    }
-    if (arquivo.mime.startsWith("image/")) {
-      const { ocrImage } = await import("../ocr");
-      return { text: await ocrImage(arquivo.bytes), source: "ocr" };
-    }
-    return { text: arquivo.bytes.toString("utf-8"), source: "file" };
-  } catch (e) {
-    throw new DocumentoIlegivelError(`Falha ao extrair texto: ${e instanceof Error ? e.message : "erro desconhecido"}`);
-  }
+  const lido = await lerDocumento(arquivo.bytes, { nome, mime: arquivo.mime, progresso });
+  const origemPrincipal = lido.resumo.ocr + lido.resumo.visao > lido.resumo.nativas ? "ocr" : lido.paginas[0]?.origem === "texto" ? "file" : "pdf";
+  return { text: lido.textos.join("\n\n"), source: origemPrincipal as TextoExtraido["source"], paginas: lido.textos, leitura: lido.resumo };
 }
 
-export async function indexFile(userId: string, dataUrl: string, nome: string, progresso?: Progresso) {
-  await progresso?.(0, 3, "extraindo o texto do arquivo");
-  const { text, source } = await extractFileText(dataUrl, nome);
-  if (!text.trim()) throw new DocumentoIlegivelError("Nenhum texto extraído do arquivo.");
-  // as duas etapas do ingest viram as etapas 2 e 3 deste trabalho
-  const res = await ingestDocument(userId, nome, text, source, progresso ? (feito, _t, passo) => progresso(feito + 1, 3, passo) : undefined);
-  return { title: nome, source, ...res };
+export async function indexFile(userId: string, dataUrl: string, nome: string, progresso?: Progresso): Promise<ArquivoIndexado> {
+  const arquivo = lerDataUrl(dataUrl);
+  if (!arquivo) throw new DocumentoIlegivelError("Arquivo inválido.");
+
+  const hash = hashArquivo(arquivo.bytes);
+  await progresso?.(0, 3, "lendo o arquivo");
+  const lido = await lerDocumento(arquivo.bytes, {
+    nome,
+    mime: arquivo.mime,
+    // a leitura é a etapa 1 de 3; ela reporta o progresso por página dentro dela
+    progresso: progresso ? async (feito, total, passo) => progresso(feito / Math.max(1, total ?? 1), 3, passo) : undefined,
+  });
+
+  const origem = lido.resumo.visao > 0 ? "visao" : lido.resumo.ocr > 0 ? "ocr" : lido.paginas[0]?.origem === "texto" ? "text" : "pdf";
+  const res = await ingestPaginas(userId, nome, lido.textos, {
+    source: origem,
+    fileHash: hash,
+    progresso: progresso ? (feito, _t, passo) => progresso(feito + 1, 3, passo) : undefined,
+  });
+  return { title: nome, source: origem, leitura: lido.resumo, ...res };
 }
+
+export { DocumentoIlegivelError };

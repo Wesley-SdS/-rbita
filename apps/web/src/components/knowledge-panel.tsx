@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { Card, PanelTitle, Input, Textarea, Button } from "@/components/ui";
 import { enfileirar, isJobTerminal, type JobView } from "@/lib/jobs";
 import { JobProgress } from "@/components/job-progress";
+import { KnowledgeSearch } from "@/components/knowledge-search";
 
 interface Counts { documents: number; chunks: number; memories: number }
+interface Acervo { documentos: number; trechos: number; memorias: number; semPagina: number }
 interface Mem { id: string; content: string }
 
 export function KnowledgePanel() {
@@ -19,10 +21,13 @@ export function KnowledgePanel() {
   const [msg, setMsg] = useState<string | null>(null);
   const [ingestJob, setIngestJob] = useState<JobView | null>(null);
   const [uploadJob, setUploadJob] = useState<JobView | null>(null);
+  const [reindexJob, setReindexJob] = useState<JobView | null>(null);
+  const [acervo, setAcervo] = useState<Acervo | null>(null);
 
   const refresh = () => {
     fetch("/api/knowledge").then((r) => r.json()).then(setCounts).catch(() => {});
     fetch("/api/memory").then((r) => r.json()).then((d) => setMems(d.memories ?? [])).catch(() => {});
+    fetch("/api/account/reindex").then((r) => r.json()).then(setAcervo).catch(() => {});
   };
   useEffect(refresh, []);
 
@@ -71,6 +76,36 @@ export function KnowledgePanel() {
     refresh();
   }
 
+  // reindexar: refaz os cortes e os vetores do acervo inteiro. É o caminho
+  // depois de trocar o modelo de embedding, e é o que dá PÁGINA aos documentos
+  // antigos, indexados quando o corte ainda não guardava de onde o trecho veio.
+  async function reindexar() {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch("/api/account/reindex", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ modo: "recortar" }) });
+      setReindexJob(await enfileirar(r));
+    } catch (e) {
+      setMsg("✗ " + (e instanceof Error ? e.message : "erro"));
+      setBusy(false);
+    }
+  }
+
+  function onReindexChange(j: JobView) {
+    setReindexJob(j);
+    if (!isJobTerminal(j.status)) return;
+    setBusy(false);
+    if (j.status === "feito") {
+      const d = j.resultado as { trechos: number; memorias: number; recortados: number } | null;
+      setMsg(`✓ ${d?.trechos ?? 0} trecho(s) e ${d?.memorias ?? 0} memória(s) reindexados`);
+      refresh();
+    } else if (j.status === "falhou") {
+      setMsg("✗ " + (j.erro?.mensagem ?? "erro"));
+    } else {
+      setMsg("Reindexação cancelada.");
+    }
+  }
+
   const fileRef = useRef<HTMLInputElement>(null);
   // PDF grande e OCR levam dezenas de segundos: também virou trabalho de fila
   async function upload(f: File) {
@@ -91,8 +126,16 @@ export function KnowledgePanel() {
     if (!isJobTerminal(j.status)) return;
     setBusy(false);
     if (j.status === "feito") {
-      const d = j.resultado as { title: string; chunks: number } | null;
-      setMsg(d ? `✓ ${d.title}: ${d.chunks} trecho(s)` : "✓ arquivo processado");
+      const d = j.resultado as { title: string; chunks: number; duplicado?: boolean; leitura?: { ocr: number; visao: number; nativas: number } } | null;
+      if (d?.duplicado) {
+        // mesmo arquivo (mesmo SHA-256) já indexado: não vira documento repetido
+        setMsg(`✓ ${d.title} já estava indexado, não dupliquei`);
+      } else if (d) {
+        const lido = d.leitura && d.leitura.ocr + d.leitura.visao > 0 ? ` (${d.leitura.ocr} página(s) por OCR, ${d.leitura.visao} pelo modelo de visão)` : "";
+        setMsg(`✓ ${d.title}: ${d.chunks} trecho(s)${lido}`);
+      } else {
+        setMsg("✓ arquivo processado");
+      }
       refresh();
     } else if (j.status === "falhou") {
       setMsg("✗ " + (j.erro?.mensagem ?? "erro"));
@@ -113,6 +156,8 @@ export function KnowledgePanel() {
 
       {open && (
         <div className="mt-3 flex flex-col gap-2">
+          <KnowledgeSearch />
+
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título do documento" />
           <Textarea size="sm" value={docText} onChange={(e) => setDocText(e.target.value)} placeholder="Cole um texto para a Órbita indexar (RAG)…" rows={3} />
           <Button variant="primary" size="md" onClick={ingest} disabled={busy}>Ingerir documento</Button>
@@ -127,6 +172,16 @@ export function KnowledgePanel() {
             <Input value={fact} onChange={(e) => setFact(e.target.value)} onKeyDown={(e) => e.key === "Enter" && remember()} placeholder="Lembrar um fato sobre você…" className="flex-1" />
             <Button variant="outline" size="md" onClick={remember} disabled={busy}>Lembrar</Button>
           </div>
+
+          <div className="mt-1 flex items-center gap-2">
+            <Button variant="outline" size="md" onClick={reindexar} disabled={busy}>Reindexar acervo</Button>
+            {acervo && acervo.semPagina > 0 && (
+              <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>
+                {acervo.semPagina} trecho(s) ainda sem página
+              </span>
+            )}
+          </div>
+          {reindexJob && <JobProgress job={reindexJob} onChange={onReindexChange} compact />}
 
           {msg && <div className="text-[10px]" style={{ color: msg.startsWith("✓") ? "#8ac98f" : "var(--color-danger)" }}>{msg}</div>}
 
