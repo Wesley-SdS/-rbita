@@ -1,0 +1,952 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f7f2">
+  <meta name="description" content="Órbita Presença: proposta interativa de identidade visual e experiência. Dados demonstrativos, sem conexão com serviços reais.">
+  <title>Órbita · Presença</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%2317302b'/%3E%3Cellipse cx='32' cy='32' rx='23' ry='12' transform='rotate(-35 32 32)' fill='none' stroke='%23c9f4b0' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%23c9f4b0'/%3E%3C/svg%3E">
+  <style>
+/* Presença: superfícies minerais, tipografia humana e um núcleo orgânico. */
+:root{color-scheme:light;--bg:#f6f7f2;--panel:#fff;--panel-soft:#f1f3ee;--ink:#243b33;--muted:#788278;--line:#e4e8df;--forest:#214e3e;--green:#527b55;--mint:#d5efbe;--mint-bright:#c9f4b0;--lavender:#ece7f4;--peach:#f6e8da;--orb-bg:#edf2e8;--sidebar:#fcfcf9;--shadow:0 16px 60px #183a2910;--radius:22px;--motion:1;font-family:"Segoe UI Variable Text","Segoe UI",Arial,sans-serif;font-synthesis:none}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.55}button,input,textarea,select{font:inherit}button,a,input,textarea,select{-webkit-tap-highlight-color:transparent}button{cursor:pointer;color:inherit}button{border:0;background:none}a{color:inherit;text-decoration:none}button:disabled{opacity:.45;cursor:not-allowed}button,a{touch-action:manipulation}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--green);outline-offset:4px}h1,h2,h3,p{margin:0}h1,h2,h3{font-weight:550;letter-spacing:-.04em}h1{font-size:35px;line-height:1.25}h2{font-size:22px}h3{font-size:17px}svg.icon{width:20px;height:20px;display:block;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}span[data-icon]{display:inline-flex;flex-shrink:0}button{transition:background .18s,transform .18s,color .18s,box-shadow .18s}button:active{transform:translateY(1px)}[hidden]{display:none!important}::selection{background:var(--mint);color:#193b29}.skip-link{position:fixed;top:-60px;left:20px;z-index:100;padding:12px;background:var(--forest);color:white}.skip-link:focus{top:12px}
+.sidebar{width:234px;background:var(--sidebar);border-right:1px solid var(--line);height:100dvh;position:fixed;left:0;top:0;z-index:30;display:flex;flex-direction:column;padding:27px 18px 14px;overflow-y:auto}.brand{display:flex;align-items:center;gap:10px;font-size:39px;line-height:1;font-weight:620;letter-spacing:-2.8px;padding:3px 15px 26px}.brand-period{color:#749377}.brand-symbol{position:relative;display:block;flex-shrink:0;width:29px;height:34px;border:1.7px solid currentColor;border-radius:50%;transform:rotate(38deg)}.brand-symbol:before{content:"";position:absolute;inset:7px -9px;border:1.5px solid currentColor;border-radius:50%;transform:rotate(-10deg)}.brand-symbol:after{content:"";position:absolute;background:currentColor;width:10px;height:10px;border-radius:50%;left:8px;top:11px}.workspace{display:flex;align-items:center;gap:9px;padding:14px 10px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:0 4px 20px}.workspace-icon{width:29px;height:31px;background:var(--panel-soft);border-radius:9px;align-items:center;justify-content:center}.workspace-icon .icon{width:16px}.workspace strong{display:block;font-weight:550;font-size:11px}.workspace div>span{display:block;color:var(--muted);font-size:10px;margin-top:2px}.tiny-dot,.status-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#83a77a;flex-shrink:0}.workspace>.tiny-dot{margin-left:auto;width:5px;height:5px}.search-trigger{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:10px 8px;font-size:10px;color:var(--muted);white-space:nowrap}.search-trigger .icon{width:14px;height:14px}.search-trigger kbd{font:9px "Segoe UI",sans-serif;margin-left:auto}.nav-caption{font-size:9px;color:#90978d;font-weight:600;letter-spacing:1.6px;margin:24px 12px 10px}.nav-main{display:flex;flex-direction:column;gap:4px}.nav-link{display:flex;align-items:center;text-align:left;width:100%;gap:12px;padding:10px 13px;border-radius:9px;font-size:12px;color:#7c857c;position:relative;transition:all .2s}.nav-link .icon{width:18px;height:18px}.nav-link:hover{background:var(--panel-soft);color:var(--ink)}.nav-link.active{background:#e8efdf;color:#315135;font-weight:600}.nav-active-dot{display:none;width:5px;height:5px;background:var(--forest);border-radius:50%;margin-left:auto}.active .nav-active-dot{display:block}.nav-count{margin-left:auto;background:var(--panel-soft);border:1px solid var(--line);border-radius:5px;font-size:9px;padding:0 5px}.sidebar-bottom{margin-top:auto;padding-top:30px}.focus-teaser{padding:16px;position:relative;border-radius:12px;background:#eff2e9;width:100%;text-align:left;margin-bottom:15px;overflow:hidden}.focus-teaser:after{content:"";position:absolute;border:1px solid #cfdcc6;border-radius:50%;width:100px;height:140px;right:-39px;top:-13px;transform:rotate(33deg)}.focus-symbol{color:#7b9b67;margin-bottom:10px}.focus-teaser strong{display:block;line-height:1.5;font-weight:500;letter-spacing:-.2px}.focus-teaser>span:last-child{display:flex;align-items:center;gap:9px;font-size:10px;color:#7b8576;margin-top:12px}.focus-teaser .icon{height:16px;width:16px}.lab-link{font-size:10px;gap:9px}.new-dot{margin-left:auto;width:5px;height:5px;border-radius:50%;background:#9cb67e}.profile{margin-top:15px;padding:18px 8px 0;border-top:1px solid var(--line);display:flex;text-align:left;align-items:center;gap:10px;width:100%}.avatar{width:32px;height:32px;background:#e5dcc9;border:2px solid #fff;border-radius:50%;display:grid;place-items:center;color:#715f43;font:15px Georgia,serif}.profile strong{display:block;font-size:12px;font-weight:600}.profile small{display:block;font-size:9px;color:var(--muted);margin-top:2px}.profile>span:last-child{margin-left:auto;color:var(--muted)}.profile .icon{height:15px}
+.app-shell{margin-left:234px;min-height:100vh}.topbar{height:78px;display:flex;align-items:center;justify-content:space-between;padding:0 42px;border-bottom:1px solid var(--line);gap:16px}.breadcrumb{display:flex;align-items:center;gap:17px;font-size:11px;white-space:nowrap}.breadcrumb-universe{color:var(--muted)}.breadcrumb strong{font-weight:500}.slash{color:#bcc3b7}.topbar-actions{display:flex;align-items:center;gap:16px}.prototype-badge{font-size:8px;letter-spacing:1.25px;color:var(--muted)}.privacy-pill{display:flex;align-items:center;gap:7px;font-size:10px;color:#708268}.privacy-pill .icon{width:14px;height:14px}.topbar-divider{height:18px;width:1px;background:var(--line)}.icon-button{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;flex-shrink:0;color:var(--muted)}.icon-button:hover{background:var(--panel-soft);color:var(--ink)}.icon-button .icon{width:18px;height:18px}.notification-button{position:relative}.notification-button i{position:absolute;right:8px;top:6px;width:5px;height:5px;border-radius:50%;background:#9aa782;border:1px solid var(--bg)}main{max-width:1640px;margin:auto;padding:37px 42px 28px}.page-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;gap:20px}.eyebrow{font-size:9px;letter-spacing:1.8px;font-weight:550;color:var(--muted);display:flex;align-items:center;gap:8px}.page-heading h1{margin-top:10px}.page-heading p{color:var(--muted);font-size:12px;margin-top:10px}.mint-period{color:#86aa70}.day-chip{display:flex;align-items:center;gap:12px;flex-shrink:0;margin-top:20px}.day-chip>span{color:#809271}.day-chip .icon{width:27px;height:27px;stroke-width:1.1}.day-chip strong{display:block;font-size:10px;font-weight:500}.day-chip div>span{display:block;font-size:9px;color:var(--muted);margin-top:4px}.home-grid{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(270px,1fr);gap:26px}.presence-card{border:1px solid #e3e9dd;border-radius:var(--radius);background:radial-gradient(ellipse at 48% 28%,#e3ebdc 0,#eff3e9 42%,#f1f5eb 80%);position:relative;overflow:hidden;min-width:0}.presence-top{display:flex;justify-content:space-between;align-items:center;padding:17px 23px 0;position:relative;z-index:2}.presence-top .eyebrow{font-size:8px;letter-spacing:1.4px;color:#75866b}.presence-top .status-dot{width:5px;height:5px}.orb-stage{height:270px;width:100%;position:relative;isolation:isolate}.orb-stage:before{content:"";position:absolute;inset:5% 15%;border-radius:50%;background:radial-gradient(ellipse,#9bb79b25,transparent 68%);z-index:-1}#orb-canvas{height:100%;width:100%;display:block}.orb-cross{position:absolute;color:#9daf91;font-size:14px;font-weight:200;z-index:1}.cross-one{left:17%;top:23%}.cross-two{right:17%;bottom:20%}.orb-tag{position:absolute;border:1px solid #ffffff8c;background:#ffffff7a;backdrop-filter:blur(10px);border-radius:6px;display:flex;align-items:center;gap:7px;font-size:8px;color:#74816b;padding:8px 10px;box-shadow:0 3px 18px #5d806008;pointer-events:none}.orb-tag .icon{width:12px;height:12px}.orb-tag-left{top:40%;left:7%}.orb-tag-right{right:5%;bottom:23%}.orb-coordinate{position:absolute;font:7px Consolas,monospace;letter-spacing:1.5px;color:#8f9b87;bottom:20px}.coordinate-left{left:26px}.coordinate-right{right:26px}.presence-copy{text-align:center;padding:0 20px}.state-indicator{display:flex;align-items:center;justify-content:center;gap:7px;font-size:10px;color:#748669;margin-bottom:10px}.state-indicator .status-dot{width:5px;height:5px;box-shadow:0 0 0 4px #9fbd8720}.presence-copy h2{font-size:29px;line-height:1.3;color:#294631}.presence-copy p{font-size:10px;margin-top:9px;color:#84917b;min-height:16px}.voice-actions{display:flex;justify-content:center;gap:11px;margin:22px 18px 25px}.button{display:inline-flex;justify-content:center;align-items:center;gap:9px;padding:12px 17px;font-size:11px;font-weight:500;border-radius:9px;min-height:42px;border:1px solid transparent;white-space:nowrap}.button .icon{width:16px;height:16px}.primary{background:var(--forest);color:#f1f9ea;box-shadow:0 4px 8px #14301c0c}.primary:hover{background:#31614b;box-shadow:0 5px 15px #14301c20;transform:translateY(-1px)}.secondary{border-color:var(--line);background:var(--panel);color:var(--ink)}.secondary:hover{border-color:#b4c4aa;background:var(--panel-soft)}.subtle{background:var(--panel-soft)}.danger{color:#a05343;background:#f8e9e2}.full-width{width:100%}.presence-foot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #dbe4d4;padding:13px 23px;color:#8b9781;gap:14px}.presence-foot>span{display:flex;align-items:center;gap:6px;font-size:8px}.presence-foot .icon{width:11px;height:11px}.text-button{display:inline-flex;align-items:center;gap:8px;color:var(--forest);font-size:10px;padding:2px 0;font-weight:500}.text-button:hover{color:#79a05e}.text-button .icon{width:14px;height:14px}.presence-foot .text-button{font-size:8px;color:#6e8261}.day-panel{display:flex;flex-direction:column;min-width:0}.section-heading{display:flex;align-items:center;justify-content:space-between;gap:14px}.section-heading h2{font-size:17px;letter-spacing:-.4px}.small-tag{font-size:8px;padding:2px 6px;border:1px solid var(--line);color:var(--muted);border-radius:4px;letter-spacing:.8px}.briefing-card{position:relative;border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin-top:15px;background:var(--panel);overflow:hidden}.briefing-icon{width:31px;height:31px;display:grid!important;place-items:center;color:#98a380;background:#f0f3e7;border-radius:50%;margin-bottom:12px}.briefing-icon .icon{width:17px;height:17px}.briefing-card .eyebrow{font-size:7px;letter-spacing:1.4px}.briefing-card h3{font-size:21px;line-height:1.45;margin-top:10px;letter-spacing:-.7px;position:relative;z-index:1}.briefing-card p{font-size:10px;line-height:1.9;color:var(--muted);margin-top:8px;max-width:230px;position:relative;z-index:1}.briefing-card .text-button{margin-top:16px;font-size:10px;position:relative;z-index:1}.briefing-art{position:absolute;right:-54px;top:35px;width:160px;height:200px;opacity:.43;transform:rotate(-28deg)}.briefing-art i{position:absolute;border:1px solid #c0d3b2;border-radius:50%;inset:0}.briefing-art i:nth-child(2){inset:10px 24px}.briefing-art i:nth-child(3){inset:10px 48px}.timeline-header{display:flex;justify-content:space-between;align-items:center;margin:20px 0 8px}.timeline-header h3{font-size:12px;letter-spacing:0}.timeline-header>span{font-size:9px;color:var(--muted)}.agenda-row{display:flex;align-items:center;text-align:left;width:100%;padding:12px 0;gap:13px}.agenda-row:hover{background:var(--panel-soft);border-radius:6px}.agenda-time{font-size:10px;color:var(--muted)}.agenda-line{width:3px;height:29px;border-radius:8px}.lavender{background:#c9b5df}.mint{background:#c3d7a6}.agenda-row strong{display:block;font-size:11px;font-weight:500}.agenda-row small{display:block;font-size:9px;color:var(--muted);margin-top:3px}.agenda-row>span:last-child{margin-left:auto;color:#a4ad9d}.agenda-row .icon{width:14px;height:14px}.insight-card{display:flex;gap:12px;text-align:left;background:var(--lavender);padding:15px;border-radius:12px;margin-top:auto}.insight-icon{color:#9783b3;padding-top:2px}.insight-icon .icon{width:16px;height:16px}.insight-card .eyebrow{font-size:7px;letter-spacing:1.05px;color:#9b8cab}.insight-card p{font-size:10px;line-height:1.8;margin:6px 0 7px;color:#80758d}.insight-card strong{display:flex;align-items:center;gap:8px;font-size:9px;font-weight:500;color:#7b6c8e}.insight-card strong .icon{width:13px;height:13px}.quick-heading{margin:32px 0 17px}.quick-heading p{font-size:10px;color:var(--muted);margin-top:5px}.quick-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.quick-card{position:relative;border:1px solid var(--line);border-radius:14px;padding:21px;text-align:left;background:var(--panel);transition:transform .25s,box-shadow .25s,border-color .25s}.quick-card:hover{transform:translateY(-4px);box-shadow:var(--shadow);border-color:#bfd0b3}.quick-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center}.quick-icon .icon{width:19px;height:19px}.lavender-bg{background:var(--lavender);color:#9c89b3}.mint-bg{background:#eff4e7;color:#8ba273}.peach-bg{background:var(--peach);color:#bd9a7d}.quick-arrow{position:absolute;right:20px;top:24px;color:#aab4a3}.quick-arrow .icon{width:15px;height:15px}.quick-card h3{font-size:14px;letter-spacing:-.25px;margin-top:17px}.quick-card p{font-size:10px;line-height:1.8;color:var(--muted);margin-top:8px}.card-foot{display:flex;align-items:center;gap:6px;border-top:1px solid var(--line);margin-top:18px;padding-top:12px;font-size:8px;color:#8c9585}.card-foot .tiny-dot{width:4px;height:4px}.purple{background:#b7a2cc}.orange{background:#cdab8b}.page-footer{display:flex;justify-content:space-between;align-items:center;font-size:8px;color:#98a08f;gap:20px;margin:25px 0 14px}.page-footer>span:first-child{display:flex;align-items:center;gap:6px}.page-footer>span:last-child{font-size:7px;letter-spacing:1.3px}.page-footer .tiny-dot{width:4px;height:4px}.footer-version{margin-left:12px;color:#b3b8ad}.demo-caption{position:fixed;bottom:9px;right:18px;display:flex;align-items:center;gap:8px;font-size:8px;color:var(--muted);background:var(--bg);padding:3px 8px;border-radius:6px;z-index:35;border:1px solid var(--line)}.demo-caption>span{opacity:.5}.demo-caption button{padding:0;display:flex}.demo-caption .icon{width:12px;height:12px}.mobile-menu,.mobile-scrim{display:none}
+/* Secondary spaces share the same rhythm; detail appears only when requested. */
+.view{animation:reveal .35s ease both}.view-heading{margin:3px 0 28px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px}.view-heading h1{margin:10px 0}.view-heading p{font-size:12px;color:var(--muted);max-width:590px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:17px;padding:24px}.panel h2{font-size:19px}.panel p.description{font-size:12px;color:var(--muted);margin:10px 0 20px;line-height:1.9}.two-columns{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,1fr);gap:22px}.three-columns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.grid-stack{display:flex;flex-direction:column;gap:18px}.tag{display:inline-flex;align-items:center;gap:6px;border-radius:5px;background:var(--panel-soft);padding:4px 8px;font-size:9px;color:var(--muted)}.tag.green{background:#e8f3de;color:#63794e}.tag.purple-tag{background:var(--lavender);color:#88719e}.tag.orange-tag{background:var(--peach);color:#a78262}.filter-bar{display:flex;align-items:center;gap:8px;margin:20px 0;flex-wrap:wrap}.filter-chip{border:1px solid var(--line);padding:8px 14px;border-radius:7px;font-size:11px;color:var(--muted)}.filter-chip.active{background:var(--forest);color:white;border-color:var(--forest)}.field{display:flex;flex-direction:column;gap:7px;font-size:11px;margin:18px 0}.field input,.field textarea,.field select,.inline-input{border:1px solid var(--line);background:var(--panel-soft);color:var(--ink);padding:12px;border-radius:8px;min-width:0;width:100%;outline-offset:2px}.field textarea{resize:vertical;min-height:100px}.form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}.empty-state{text-align:center;color:var(--muted);padding:35px;font-size:12px}.list-row{display:flex;align-items:center;gap:12px;padding:16px 0;border-bottom:1px solid var(--line)}.list-row:last-child{border:0}.list-row>div{min-width:0;flex:1}.list-row strong{font-size:12px;font-weight:500;display:block}.list-row small{font-size:10px;color:var(--muted);display:block;margin-top:4px}.list-row .tag{flex-shrink:0}.panel-label{font-size:9px;letter-spacing:1.5px;color:var(--muted);margin-bottom:13px}.mini-orb{width:33px;height:33px;display:inline-block;flex-shrink:0;border-radius:50%;background:radial-gradient(circle at 28% 22%,#ecffd4 0,#a6ceb0 16%,#507d61 40%,#1b473c 68%,#143c30 82%,#87b58a 100%);box-shadow:inset -3px -4px 6px #113c2a55,0 0 15px #a7c18d33}
+.chat-layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:20px;min-height:630px}.chat-history{padding:18px 14px}.chat-history .button{font-size:10px}.chat-history .panel-label{margin:28px 7px 12px}.history-item{width:100%;text-align:left;padding:13px 10px;font-size:10px;border-radius:7px;display:flex;gap:8px}.history-item .icon{width:14px;height:14px;color:var(--muted)}.history-item.active,.history-item:hover{background:var(--panel-soft)}.chat-main{padding:0;overflow:hidden;display:flex;flex-direction:column;min-height:630px}.chat-top{padding:17px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}.chat-top h2{font-size:15px}.chat-top p{font-size:9px;color:var(--muted);margin-top:3px}.chat-top .tag{margin-left:auto}.chat-messages{flex:1;padding:25px;max-height:530px;overflow-y:auto;scroll-behavior:smooth}.message{display:flex;gap:10px;margin-bottom:22px;animation:reveal .25s ease}.message .mini-orb{width:24px;height:24px}.message-body{max-width:90%;font-size:12px;line-height:1.9}.message-author{font-size:9px;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;gap:8px}.message p{white-space:pre-wrap}.message.user{justify-content:flex-end}.message.user .message-body{background:var(--panel-soft);border:1px solid var(--line);border-radius:14px 14px 3px 14px;padding:10px 16px}.message-assistant-card{background:var(--panel-soft);border:1px solid var(--line);padding:14px 17px;border-radius:10px;margin-top:12px;font-size:11px}.message-assistant-card strong{font-weight:600}.message-assistant-card .text-button{margin-top:8px}.chat-suggestions{display:flex;gap:7px;flex-wrap:wrap;margin:16px 0}.chat-suggestions button{border:1px solid var(--line);padding:7px 11px;border-radius:7px;font-size:10px;background:var(--panel)}.chat-suggestions button:hover{background:var(--mint)}.composer{padding:14px 20px 12px;border-top:1px solid var(--line)}.composer-inner{display:flex;gap:10px;align-items:flex-end;background:var(--panel-soft);border:1px solid var(--line);border-radius:12px;padding:10px}.composer textarea{resize:none;flex:1;min-width:0;height:40px;max-height:110px;background:transparent;border:0;color:var(--ink);font-size:11px;outline:none;padding:10px 0}.composer textarea:focus-visible{outline:none}.composer-inner:focus-within{border-color:#9db58b;box-shadow:0 0 0 2px #aac79022}.send-button{background:var(--forest);color:white}.send-button:hover{background:#497252;color:white}.composer-hint{display:flex;justify-content:space-between;color:var(--muted);font-size:8px;margin:8px 4px 0;gap:12px}.typing-dot{display:inline-block;width:5px;height:5px;background:#92ad7e;border-radius:50%;margin:8px 2px;animation:typing 1s infinite alternate}.typing-dot:nth-child(2){animation-delay:.2s}.typing-dot:nth-child(3){animation-delay:.4s}.attachment-chip{display:flex;align-items:center;gap:7px;background:var(--lavender);padding:7px 10px;margin-bottom:8px;border-radius:6px;font-size:10px}
+.memory-card{text-align:left;width:100%;display:flex;flex-direction:column;gap:12px;transition:transform .2s,box-shadow .2s}.memory-card:hover{transform:translateY(-3px);box-shadow:var(--shadow)}.memory-card h3{font-size:15px}.memory-card p{font-size:11px;color:var(--muted);line-height:1.85;flex:1}.memory-card .tag{align-self:flex-start}.memory-meta{font-size:9px;color:#9ba18f;border-top:1px solid var(--line);padding-top:12px;width:100%;display:flex;justify-content:space-between}.memory-banner{display:flex;gap:16px;align-items:center;background:var(--lavender);padding:21px 24px;border-radius:14px;margin-bottom:20px}.memory-banner>span{color:#9781b0}.memory-banner p{font-size:11px;color:#8d7c9c;margin-top:4px}.memory-banner h3{font-size:14px}.memory-banner .button{margin-left:auto}.memory-graph{height:330px;position:relative;background:radial-gradient(ellipse at center,#dfebd538,transparent 65%);overflow:hidden}.memory-graph svg{width:100%;height:100%}.memory-graph line{stroke:var(--line);stroke-width:1.5}.memory-graph circle{fill:var(--panel);stroke:#b6cba5;stroke-width:1.5}.memory-graph .core-node{fill:var(--forest);stroke:none}.memory-graph text{fill:var(--muted);font:10px "Segoe UI",sans-serif}.memory-graph .core-label{fill:#f2f8ec;font-size:14px}.routine-card{padding:24px;position:relative}.routine-top{display:flex;align-items:center;justify-content:space-between}.routine-card h3{margin:18px 0 8px;font-size:18px}.routine-card p{font-size:11px;color:var(--muted);line-height:1.9}.routine-flow{margin:24px 0;display:flex;flex-direction:column;gap:0}.flow-step{display:flex;align-items:center;gap:10px;font-size:10px;padding:9px 0}.flow-step>span:first-child{border:1px solid var(--line);border-radius:6px;display:grid;place-items:center;width:27px;height:27px;color:var(--green);background:var(--panel-soft)}.flow-step .icon{width:14px;height:14px}.flow-connector{border-left:1px dashed #bfd0b5;height:13px;margin-left:13px}.routine-bottom{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding-top:16px}.routine-bottom>span{font-size:9px;color:var(--muted)}.switch{width:35px;height:20px;padding:0;border-radius:20px;background:#ced4c9;position:relative;flex-shrink:0}.switch:after{content:"";position:absolute;width:14px;height:14px;top:3px;left:3px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #0001;transition:transform .2s}.switch[aria-checked=true]{background:#55794a}.switch[aria-checked=true]:after{transform:translateX(15px)}.room-card{overflow:hidden;padding:0}.room-visual{height:156px;background:#e8ecde;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}.room-visual:before{content:"";position:absolute;width:140px;height:140px;border-radius:50%;background:#ccd5ba;filter:blur(25px);right:5%;top:15%}.room-visual.office{background:#eae5ef}.room-visual.office:before{background:#c7c0d8}.room-visual.bedroom{background:#eee4d9}.room-visual.bedroom:before{background:#d0bfa9}.room-illustration{z-index:1;width:130px;height:85px;border:1px solid #9cac8a;border-radius:3px;position:relative;transform:skewY(-5deg);opacity:.8}.room-illustration:before{content:"";position:absolute;bottom:12px;left:16px;right:16px;height:31px;border:1px solid #7e9471;border-radius:7px 7px 1px 1px;box-shadow:0 7px 0 -1px #cedbbd,0 8px 0 #7e9471}.room-illustration:after{content:"";position:absolute;top:11px;left:25px;width:30px;height:25px;border:1px solid #8fa67c;box-shadow:46px 0 0 -1px #e4ecd9,46px 0 0 #8fa67c}.room-body{padding:20px}.room-body h3{font-size:17px}.room-body p{font-size:10px;color:var(--muted);margin:5px 0 18px}.room-label{display:flex;align-items:center;justify-content:space-between}.room-controls{display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-top:1px solid var(--line);font-size:11px}.scene-grid{display:flex;gap:12px;margin-top:18px;flex-wrap:wrap}.scene-button{border:1px solid var(--line);border-radius:10px;display:flex;align-items:center;gap:10px;padding:15px 20px;font-size:11px}.scene-button.active{background:var(--mint);border-color:#b3cf9a}.meeting-live{background:var(--forest);color:#f2f7ed;position:relative;overflow:hidden;padding:30px}.meeting-live .eyebrow{color:#b8cbaa}.meeting-live h2{font-size:26px;margin:14px 0 10px}.meeting-live p{color:#bacdb2;font-size:12px}.meeting-live .button{background:#d0ecb9;color:#365238;border:0;margin-top:22px}.waveform{display:flex;height:70px;gap:4px;align-items:center;margin-top:23px}.waveform i{display:block;width:4px;border-radius:4px;background:#baddab;height:var(--h);opacity:.65}.waveform.running i{animation:wave 1s ease-in-out infinite alternate;animation-delay:var(--delay)}.meeting-live .tag{background:#ffffff12;color:#d9e7d1;float:right}.transcript{max-height:290px;overflow:auto}.transcript-row{font-size:11px;color:var(--muted);padding:12px 0;border-bottom:1px solid var(--line);line-height:1.9}.transcript-row strong{color:var(--ink);display:block;font-size:10px;margin-bottom:5px}.transcript-row time{color:var(--muted);font-weight:400;margin-left:8px}.meeting-summary{margin-top:20px;animation:reveal .35s ease}.meeting-summary ul{padding-left:19px;color:var(--muted);font-size:12px;line-height:2}.stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-bottom:22px}.stat-card{padding:22px}.stat-card>span{font-size:10px;color:var(--muted)}.stat-value{font-size:30px;letter-spacing:-1px;margin:9px 0;font-weight:500}.stat-card small{color:var(--green);font-size:10px}.finance-chart{display:flex;gap:12px;align-items:flex-end;height:170px;border-bottom:1px solid var(--line);margin-top:25px;padding:0 8px}.chart-column{display:flex;align-items:center;justify-content:flex-end;flex-direction:column;height:100%;flex:1;gap:9px}.chart-bar{background:#c5d8b8;border-radius:5px 5px 0 0;width:100%;max-width:36px;min-height:5px;height:var(--height);transition:height .8s}.chart-column:last-child .chart-bar{background:var(--forest)}.chart-column span{font-size:8px;color:var(--muted);padding-bottom:9px}.money-value{font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}.connector-card{padding:24px}.connector-card .connector-top{display:flex;align-items:center;justify-content:space-between}.connector-logo{width:40px;height:40px;border:1px solid var(--line);background:var(--panel-soft);border-radius:12px;display:grid;place-items:center;font-size:18px;font-weight:600;letter-spacing:-1px}.connector-card h3{margin-top:18px}.connector-card p{font-size:11px;color:var(--muted);margin:10px 0 20px;line-height:1.8;min-height:40px}.connector-card .button{width:100%}.setting-row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 0;border-bottom:1px solid var(--line)}.setting-row strong{font-weight:500;font-size:12px}.setting-row p{font-size:10px;color:var(--muted);margin-top:6px;line-height:1.7}.setting-row:last-child{border:0}.setting-row select{padding:8px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font-size:11px;max-width:150px}.color-preview{display:flex;gap:6px}.color-preview i{width:18px;height:18px;border-radius:50%;background:var(--swatch)}.checkbox-row{display:flex;align-items:center;gap:10px;font-size:12px;padding:10px 0}.checkbox-row input{accent-color:var(--forest)}.notice{padding:14px 17px;border:1px solid var(--line);border-radius:9px;background:var(--panel-soft);font-size:11px;color:var(--muted);line-height:1.9;margin:18px 0}.notice .icon{width:15px;height:15px}.approval-card{padding:22px;background:var(--peach);border-radius:14px;margin:23px 0}.approval-card .eyebrow{color:#a28c73}.approval-card h3{margin:10px 0;font-size:17px}.approval-card p{font-size:11px;color:#998974;line-height:1.9}.approval-card .form-actions{justify-content:flex-start}.approval-preview{padding:13px;margin-top:14px;background:#ffffff55;border:1px solid #bda2852e;border-radius:7px;font-size:11px;color:#8b7a64;line-height:1.8}.activity-item{display:flex;gap:13px;padding:18px 0;border-bottom:1px solid var(--line);font-size:11px}.activity-item>span{color:var(--green)}.activity-item p{color:var(--muted);font-size:10px;margin-top:5px}.activity-item small{font-size:9px;color:var(--muted)}
+/* Dialogs preserve focus, escape and backdrop behavior natively. */
+dialog{color:var(--ink);border:1px solid var(--line);background:var(--panel);padding:0;box-shadow:0 25px 100px #162b2826;max-height:88dvh;overflow-y:auto}dialog::backdrop{background:#17322a30;backdrop-filter:blur(5px)}dialog[open]{animation:reveal .22s ease both}.detail-dialog{width:min(550px,calc(100% - 32px));border-radius:20px;padding:24px 28px 28px}.dialog-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:19px}.dialog-top .eyebrow{font-size:8px}.detail-dialog h2{font-size:28px;line-height:1.35}.detail-dialog .dialog-description{font-size:12px;color:var(--muted);line-height:1.9;margin:14px 0}.detail-list{display:flex;flex-direction:column;gap:17px;margin:25px 0}.detail-list>div{display:flex;align-items:flex-start;gap:13px;font-size:12px}.detail-list span[data-icon]{color:var(--green);padding-top:1px}.detail-list p{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.8}.drawer{left:auto;right:0;top:0;bottom:0;margin:0;width:410px;max-width:100%;height:100dvh;max-height:100dvh;border-radius:20px 0 0 20px;padding:29px 26px;border-right:0}.drawer[open]{animation:slide-in .3s ease both}.drawer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}.drawer-head .eyebrow{font-size:8px;letter-spacing:1.5px}.drawer-head h2{margin-top:10px;font-size:24px}.drawer-intro{font-size:12px;color:var(--muted);line-height:1.9;margin-bottom:23px}.state-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.state-button{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:14px 4px;font-size:9px;display:flex;align-items:center;flex-direction:column;gap:8px}.state-button .icon{width:20px;height:20px;color:var(--muted)}.state-button[aria-pressed=true]{background:#eaf2df;border-color:#a8c392;color:#516b3a}.state-button[aria-pressed=true] .icon{color:#6f954f}.lab-note{min-height:69px;font-size:11px;color:var(--muted);line-height:1.8;margin:15px 0}.lab-drawer .setting-row{margin-top:7px}.lab-drawer output{font-size:11px;color:var(--muted)}input[type=range]{width:100%;accent-color:#6e9456;height:4px;cursor:pointer}.palette-block{margin-top:28px}.palette{display:flex;justify-content:space-between;gap:8px;margin:15px 0}.palette>span{flex:1;text-align:center;font-size:8px;color:var(--muted)}.palette>span:before{content:"";display:block;height:38px;background:var(--swatch);border-radius:7px;margin-bottom:8px;border:1px solid #7a8e7512}.lab-footer{display:flex;gap:9px;font-size:10px;color:var(--muted);line-height:1.85;border-top:1px solid var(--line);padding-top:19px;margin-top:24px}.lab-footer .icon{width:15px;height:15px;flex-shrink:0;margin-top:2px}.lab-drawer::backdrop{background:#17322a08;backdrop-filter:none}.search-dialog{width:min(570px,calc(100% - 32px));border-radius:16px;top:12vh;margin-top:0}.search-input-wrap{padding:19px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line)}.search-input-wrap>span{color:var(--muted)}.search-input-wrap input{background:none;border:0;outline:none;color:var(--ink);flex:1;min-width:0;font-size:14px}.key-button,kbd{font-family:inherit}.key-button{font-size:9px;border:1px solid var(--line);border-radius:5px;padding:3px 6px;color:var(--muted)}#search-results{padding:10px;max-height:380px;overflow-y:auto}.search-result{display:flex;align-items:center;gap:12px;padding:12px;text-align:left;width:100%;border-radius:8px}.search-result:hover,.search-result:focus-visible{background:var(--panel-soft)}.search-result .icon{width:17px;height:17px;color:var(--muted)}.search-result strong{display:block;font-size:12px;font-weight:500}.search-result small{display:block;font-size:9px;color:var(--muted);margin-top:3px}.search-result>span:last-child{margin-left:auto;color:var(--muted);font-size:9px}.search-footer{padding:13px 20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;font-size:9px;color:var(--muted)}.toast{position:fixed;bottom:40px;left:calc(50% + 100px);max-width:calc(100vw - 30px);transform:translate(-50%,20px);display:flex;align-items:center;gap:12px;background:var(--forest);color:#f3faec;box-shadow:0 8px 40px #1e3f2726;border:1px solid #ffffff10;border-radius:11px;padding:11px 15px;z-index:100;opacity:0;pointer-events:none;transition:.25s;min-width:250px}.toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}.toast>.icon{width:17px;height:17px}.toast #toast-text{font-size:11px;max-width:390px}.toast .icon-button{width:25px;height:25px;color:#c6ddb5}.focus-overlay{position:fixed;inset:0;z-index:60;background:radial-gradient(ellipse at 50% 45%,#e0e9d9,#f2f5ed 65%);overflow:auto;display:flex;flex-direction:column;align-items:center;padding:34px}.focus-overlay header{display:flex;width:100%;align-items:center;justify-content:space-between;gap:20px}.focus-overlay .brand{font-size:28px;padding:0;gap:14px}.focus-overlay .brand-symbol{width:22px;height:26px}.focus-overlay .brand-symbol:after{width:7px;height:7px;left:6px;top:8px}.focus-overlay .brand-symbol:before{inset:6px -7px}.focus-eyebrow{font-size:9px;letter-spacing:2px;color:#93a289}.focus-overlay .orb-stage{height:360px;max-width:730px;margin-top:12px}.focus-overlay #focus-stage-slot{display:flex;justify-content:center;align-items:center;width:100%;flex:1}.focus-copy{text-align:center;max-width:90vw;padding-bottom:25px}.focus-copy>.eyebrow{justify-content:center}.focus-copy h2{font-size:31px;margin:15px 0 0;color:#294631}.focus-copy>p{font-size:56px;font-weight:250;font-variant-numeric:tabular-nums;letter-spacing:-2px;color:#6d8960;margin-top:8px}.focus-buttons{display:flex;justify-content:center;gap:10px;margin:20px 0 15px}.focus-overlay footer{font-size:10px;color:#92a086;margin:10px}.focus-overlay .orb-tag{font-size:9px}.focus-overlay .coordinate-right,.focus-overlay .coordinate-left{display:none}
+/* Dark mode is an alternative material, not a separate identity. */
+[data-theme=dark]{color-scheme:dark;--bg:#17231f;--panel:#1e2d26;--panel-soft:#27362d;--ink:#e2eadc;--muted:#95a68e;--line:#334336;--forest:#bddaa6;--green:#a8c692;--mint:#42533b;--mint-bright:#c9f4b0;--lavender:#35343e;--peach:#3c372b;--sidebar:#192820;--orb-bg:#253b2c;--shadow:0 16px 60px #0002}
+[data-theme=dark] .primary,[data-theme=dark] .send-button{color:#243b24;background:#bed6a7}[data-theme=dark] .primary:hover{background:#d2e9bc}[data-theme=dark] .presence-card{background:radial-gradient(ellipse at 48% 28%,#37543b,#283d2c 45%,#243929);border-color:#3a4d34}[data-theme=dark] .presence-copy h2{color:#d7e9c6}[data-theme=dark] .presence-copy p,[data-theme=dark] .presence-top .eyebrow,[data-theme=dark] .state-indicator{color:#a3b695}[data-theme=dark] .presence-foot{border-color:#3b5134}[data-theme=dark] .orb-tag{background:#d2ebbd14;border-color:#ccedb018;color:#aabe9b}[data-theme=dark] .nav-link.active{background:#33482e;color:#c9dfb8}[data-theme=dark] .focus-teaser{background:#2a3b2b}[data-theme=dark] .focus-teaser:after{border-color:#48603c}[data-theme=dark] .nav-link{color:#a2b19a}[data-theme=dark] .nav-link:hover{color:#e2ebda}[data-theme=dark] .mint-bg,[data-theme=dark] .briefing-icon{background:#35472b}[data-theme=dark] .briefing-art{opacity:.12}[data-theme=dark] .insight-card p,[data-theme=dark] .insight-card strong,[data-theme=dark] .memory-banner p{color:#c5b6d1}[data-theme=dark] .tag.green{background:#354c2d;color:#bbd59c}[data-theme=dark] .state-button[aria-pressed=true]{background:#344a2c;border-color:#7a9f58;color:#d3e7bf}[data-theme=dark] .meeting-live{background:#2c462d}[data-theme=dark] .approval-card p,[data-theme=dark] .approval-preview{color:#d0b998}[data-theme=dark] .approval-preview{background:#ffffff06}[data-theme=dark] .focus-overlay{background:radial-gradient(ellipse at 50% 40%,#344e34,#1b2c22 70%)}[data-theme=dark] .focus-copy h2{color:#d4e6c4}[data-theme=dark] .focus-copy>p{color:#a4c38b}[data-theme=dark] .toast{background:#314d31;color:#f2f8ec}[data-theme=dark] .room-visual{filter:brightness(.6) saturate(.7)}[data-theme=dark] .chat-suggestions button:hover{color:#e5efd8}[data-theme=dark] .memory-graph .core-label{fill:#223d22}
+@keyframes reveal{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}@keyframes slide-in{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}@keyframes typing{from{transform:translateY(0);opacity:.4}to{transform:translateY(-4px);opacity:1}}@keyframes wave{from{transform:scaleY(.4)}to{transform:scaleY(1.15)}}
+@media(min-width:1500px){main{padding:44px 55px 30px}.topbar{padding:0 55px}.orb-stage{height:305px}.presence-copy h2{font-size:33px}.presence-copy p{font-size:12px}.voice-actions{margin:26px 20px 30px}.briefing-card{padding:26px}.briefing-card h3{font-size:25px}.briefing-card p{font-size:12px}.agenda-row{padding:15px 0}.insight-card{padding:20px}.insight-card p{font-size:12px}.quick-card{padding:25px}.quick-card h3{font-size:17px}.quick-card p{font-size:12px}.card-foot{font-size:10px}}
+@media(max-width:1190px){.sidebar{width:205px;padding-left:12px;padding-right:12px}.app-shell{margin-left:205px}.topbar{padding:0 28px}.topbar-actions{gap:11px}main{padding:30px 28px}.day-chip{display:none}.home-grid{gap:19px;grid-template-columns:minmax(0,1.6fr) minmax(250px,1fr)}.presence-top{padding-left:18px;padding-right:15px}.presence-top .eyebrow{font-size:7px}.orb-tag-left{left:4%;top:31%}.orb-tag-right{right:3%;bottom:17%}.presence-copy h2{font-size:26px}.voice-actions{gap:7px}.voice-actions .button{padding:11px 12px;font-size:10px}.presence-foot{padding:12px 16px;gap:6px}.presence-foot>span{font-size:7px}.presence-foot .text-button{font-size:7px}.prototype-badge{display:none}.three-columns{grid-template-columns:repeat(2,minmax(0,1fr))}.quick-card{padding:18px}.quick-card h3{font-size:13px}.quick-grid{gap:12px}.brand{font-size:36px}.search-trigger{font-size:9px}.search-trigger kbd{font-size:8px}.chat-layout{grid-template-columns:170px minmax(0,1fr)}}
+@media(max-width:950px){.sidebar{width:185px;padding-left:10px;padding-right:10px}.app-shell{margin-left:185px}main{padding:27px 23px}.topbar{padding:0 23px}.home-grid{grid-template-columns:1fr}.day-panel{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}.day-panel>.section-heading{grid-column:1/-1;margin-bottom:0}.briefing-card{grid-row:2/6;margin:16px 0 0}.timeline-header{margin-top:18px}.agenda-row{padding:8px 0}.insight-card{margin-top:10px}.home-grid .presence-card{min-height:490px}.orb-stage{height:260px}.presence-top .eyebrow{font-size:8px}.presence-foot>span,.presence-foot .text-button{font-size:9px}.presence-copy p{font-size:11px}.nav-link{font-size:11px;padding-left:10px;gap:9px}.search-trigger>span:nth-child(2){font-size:8px}.search-trigger kbd{display:none}.brand{font-size:34px;padding-left:10px}.workspace strong{font-size:9px}.workspace div>span{font-size:8px}.workspace{padding-left:5px;gap:7px}.two-columns{grid-template-columns:1fr}.quick-card p{font-size:9px}.quick-card h3{font-size:12px}.card-foot{font-size:7px}.page-footer>span:last-child{display:none}.privacy-pill{font-size:9px}.chat-layout{grid-template-columns:1fr}.chat-history{display:none}.stat-value{font-size:25px}.memory-banner .button{font-size:9px}.view-heading h1{font-size:30px}.view-heading{align-items:center}.profile small{font-size:8px}.lab-link{font-size:9px}}
+@media(max-width:690px){.sidebar{transform:translateX(-100%);transition:transform .25s;width:234px;z-index:80}.sidebar.open{transform:translateX(0)}.sidebar .brand{font-size:37px}.sidebar .nav-link{font-size:13px;padding:11px 13px}.sidebar .lab-link{font-size:11px}.sidebar .workspace strong{font-size:11px}.sidebar .workspace div>span{font-size:10px}.sidebar .search-trigger>span:nth-child(2){font-size:10px}.sidebar .profile small{font-size:9px}.mobile-scrim.open{display:block;position:fixed;inset:0;background:#162e2850;backdrop-filter:blur(4px);z-index:79}.app-shell{margin-left:0}.mobile-menu{display:flex}.topbar{height:65px;padding:0 16px}.breadcrumb{gap:8px;font-size:11px}.breadcrumb-universe,.slash{display:none}.topbar-actions{gap:7px}.topbar-divider{display:none}.privacy-pill{font-size:8px}.privacy-pill .icon{width:12px;height:12px}main{padding:26px 18px 30px}.page-heading{margin-bottom:22px}.page-heading h1{font-size:28px;max-width:330px;line-height:1.3;letter-spacing:-1px}.page-heading .eyebrow{font-size:8px;letter-spacing:1.5px}.page-heading p{font-size:11px;max-width:285px;line-height:1.8;margin-top:8px}.home-grid{gap:26px}.presence-card{border-radius:18px}.presence-top{padding:13px 15px 0}.presence-top .eyebrow{font-size:6.5px;letter-spacing:1.05px}.orb-stage{height:245px}.home-grid .presence-card{min-height:0}.orb-tag{font-size:7px;padding:6px;gap:4px}.orb-tag-left{left:3%;top:33%}.orb-tag-right{right:3%;bottom:18%}.orb-tag .icon{width:10px;height:10px}.orb-tag .tiny-dot{width:4px;height:4px}.presence-copy h2{font-size:25px}.presence-copy p{font-size:10px;max-width:260px;margin:10px auto 0}.state-indicator{font-size:9px}.voice-actions{margin:20px 12px 23px}.voice-actions .button{font-size:9px;padding:11px 10px;gap:6px}.voice-actions .button .icon{width:14px;height:14px}.presence-foot{padding:13px 12px;gap:12px}.presence-foot>span{font-size:6.5px;gap:4px}.presence-foot .text-button{font-size:7px;gap:4px}.presence-foot .icon{width:9px;height:9px}.day-panel{display:flex;gap:0}.day-panel>.section-heading{margin-bottom:0}.briefing-card{margin-top:15px;padding:23px}.briefing-card h3{font-size:23px}.briefing-card p{font-size:11px;max-width:250px}.briefing-card .eyebrow{font-size:8px}.briefing-card .text-button{font-size:11px}.briefing-art{right:-10px;width:170px}.timeline-header{margin-top:22px}.agenda-row{padding:13px 0;gap:18px}.agenda-row strong{font-size:12px}.agenda-row small{font-size:10px}.agenda-time{font-size:11px}.insight-card{padding:20px;margin-top:17px}.insight-card .eyebrow{font-size:7px}.insight-card p{font-size:11px}.insight-card strong{font-size:10px}.quick-heading{margin-top:30px}.quick-heading h2{font-size:16px}.quick-heading .text-button{font-size:9px}.quick-heading p{font-size:9px}.quick-grid{grid-template-columns:1fr;gap:12px}.quick-card{padding:20px 20px 16px;display:grid;grid-template-columns:42px 1fr;column-gap:12px}.quick-icon{grid-row:1/3}.quick-card h3{font-size:15px;margin:0;padding-right:18px}.quick-card p{font-size:11px;margin-top:5px}.quick-card p br{display:none}.card-foot{grid-column:2;margin-top:12px;font-size:9px;padding-top:10px}.quick-arrow{right:18px;top:22px}.page-footer{font-size:7px;margin-top:24px}.demo-caption{font-size:7px;bottom:6px;right:8px}.view-heading{align-items:flex-start;flex-direction:column}.view-heading h1{font-size:30px}.view-heading p{font-size:11px}.view-heading>.button{font-size:10px}.three-columns,.stat-grid{grid-template-columns:1fr}.stat-grid{gap:12px}.stat-card{display:grid;grid-template-columns:1fr auto;gap:5px 10px;padding:20px}.stat-value{grid-column:2;grid-row:1/3;margin:0;align-self:center;font-size:27px}.stat-card small{grid-column:1}.memory-banner{flex-wrap:wrap;padding:20px;gap:12px}.memory-banner .button{margin:0}.memory-banner>div{flex:1;min-width:180px}.chat-main{min-height:620px}.chat-messages{padding:20px 16px;max-height:440px}.chat-top{padding:15px}.chat-top .tag{font-size:7px}.composer{padding:12px}.composer-hint{font-size:7px}.composer textarea{font-size:12px}.chat-suggestions button{font-size:9px}.message-body{max-width:93%;font-size:12px}.drawer{border-radius:16px 0 0 16px;width:min(385px,95vw);padding:25px 22px}.detail-dialog{padding:20px}.detail-dialog h2{font-size:24px}.toast{left:50%;bottom:35px;min-width:280px}.toast #toast-text{font-size:10px}.focus-overlay{padding:22px 18px}.focus-eyebrow{display:none}.focus-overlay .orb-stage{height:300px;margin-top:20px}.focus-copy h2{font-size:26px;max-width:280px;margin:16px auto 0}.focus-copy>p{font-size:50px}.focus-copy .button{font-size:9px;padding:11px}.focus-overlay footer{font-size:9px}.scene-button{padding:12px;font-size:10px}.setting-row{gap:13px}.setting-row select{max-width:130px;font-size:10px}}
+#orb-canvas,#lab-canvas{cursor:crosshair;touch-action:manipulation}
+.mini-orb{position:relative;border:1px solid #69cda899;background:radial-gradient(circle at 50% 50%,#ecfff3 0,#baffdf 5%,#398f73 13%,#133e37 32%,#0a2527 66%,#447c6366 95%);box-shadow:0 0 12px #65d8ac25}
+.mini-orb:after{content:"";position:absolute;inset:3px;border:1px dashed #6dd4b06b;border-radius:50%;transform:rotate(-30deg)}
+body[data-orb-state=thinking] .mini-orb:after,body[data-orb-state=executing] .mini-orb:after{animation:core-spin 2s linear infinite}
+body[data-orb-state=speaking] .mini-orb{animation:core-speak .65s ease-in-out infinite alternate}
+@keyframes core-spin{to{transform:rotate(330deg)}}@keyframes core-speak{to{box-shadow:0 0 17px #65d8ac75;transform:scale(1.08)}}
+.message{animation:none}
+/* Volumetric reactor: a larger, grounded stage with an uninterrupted silhouette. */
+.orb-stage{height:470px;margin-top:-12px}
+.orb-stage:before{content:"";position:absolute;z-index:-1;top:auto;left:20%;right:20%;width:auto;height:38px;bottom:24px;border-radius:50%;background:radial-gradient(ellipse,#183f3647,transparent 69%);filter:blur(10px);transform:scaleY(.65)}
+.orb-stage:after{content:"";position:absolute;z-index:-2;inset:12% 4% 0;background:radial-gradient(ellipse at 50% 48%,#b9efcb44,transparent 66%);pointer-events:none}
+.orb-tag-left{left:4%;top:16%}.orb-tag-right{right:4%;bottom:13%}.orb-coordinate{opacity:.65}
+.presence-copy{margin-top:-3px}.voice-actions{margin-bottom:13px}
+.research-trigger{display:flex;align-items:center;justify-content:center;gap:10px;width:max-content;max-width:92%;margin:0 auto 24px;padding:8px 13px;border:1px solid #829d7635;border-radius:8px;color:var(--green);font-size:10px;background:#f9fff02e;transition:background .2s}
+.research-trigger:hover{background:#c9f4b040}.research-trigger-icon{font-size:22px;line-height:15px}.research-trigger>span:last-child{margin-left:5px}
+.research-panel{border:1px solid var(--line);border-radius:18px;background:var(--panel);padding:23px;min-width:0;align-self:start}
+.research-heading{display:flex;align-items:flex-start;gap:12px;justify-content:space-between}.research-heading .eyebrow{font-size:7px;letter-spacing:1.5px}.research-heading h2{font-size:23px;font-weight:450;line-height:1.3;letter-spacing:-.7px;margin-top:10px}.research-close{font-size:22px;color:var(--muted);line-height:1;width:25px;height:25px;border-radius:6px;flex-shrink:0}.research-close:hover{background:var(--panel-soft)}
+.research-query{display:flex;gap:12px;align-items:center;background:var(--panel-soft);border:1px solid var(--line);border-radius:9px;padding:12px;margin:19px 0 16px}.research-query>span{font-size:24px;color:var(--green)}.research-query small{display:block;font-size:7px;letter-spacing:1.2px;color:var(--muted);margin-bottom:4px}.research-query strong{font-size:10px;font-weight:500}
+.research-status{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted)}.research-status strong{font-weight:500;color:var(--ink)}.research-status>span:last-child{margin-left:auto;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:9px}.research-beacon{width:6px;height:6px;border-radius:50%;background:#77a887;flex-shrink:0}.research-beacon.is-scanning{animation:source-beacon 1.2s infinite alternate}.research-track{height:2px;background:var(--line);border-radius:9px;overflow:hidden;margin:11px 0 17px}.research-track i{display:block;height:100%;background:#8dbd7b;transition:width .5s ease}
+.source-list{display:grid;gap:11px}.source-card{display:block;text-decoration:none;color:var(--ink);border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:14px;transition:transform .2s,border-color .2s,box-shadow .2s;animation:source-arrive .5s cubic-bezier(.2,.8,.2,1) both;min-width:0}.source-card:hover{transform:translateY(-3px);border-color:#a1bb90;box-shadow:0 8px 25px #173d340b}.source-card:focus-visible{outline:2px solid var(--green);outline-offset:3px}.source-card-top{display:flex;gap:8px;align-items:center}.source-mark{width:27px;height:27px;display:grid;place-items:center;font-size:13px;font-weight:700;border-radius:7px;flex-shrink:0}.source-mark.mint{background:#dfedd8;color:#405f32}.source-mark.violet{background:#eae3f1;color:#6b567c}.source-mark.peach{background:#f3e2d3;color:#8b694c}.source-card-top strong{display:block;font-weight:550;font-size:10px}.source-card-top small{display:block;color:var(--muted);font-size:8px;margin-top:2px;overflow-wrap:anywhere}.source-arrow{margin-left:auto;font-size:13px;color:var(--muted)}.source-type{display:flex;justify-content:space-between;gap:5px;font-size:6px;letter-spacing:.7px;color:var(--muted);margin:14px 0 7px}.source-type>span{color:var(--green);white-space:nowrap}.source-card h3{font-size:13px;line-height:1.4;font-weight:550;letter-spacing:-.15px}.source-card p{font-size:10px;line-height:1.7;margin:7px 0 11px;color:var(--muted)}.source-card-bottom{border-top:1px solid var(--line);padding-top:9px;display:flex;gap:6px;align-items:center;font-size:8px;color:var(--green)}.source-card-bottom>span:last-child{margin-left:auto}.source-check{width:12px;height:12px;display:grid;place-items:center;border:1px solid #7fa27266;border-radius:50%;font-size:8px}
+.source-skeleton{padding:14px;border:1px dashed var(--line);border-radius:11px;display:grid;gap:8px}.source-skeleton i{height:7px;border-radius:4px;background:var(--panel-soft);animation:source-beacon 1.2s infinite alternate}.source-skeleton i:first-child{width:45%;height:17px}.source-skeleton i:last-child{width:72%}.research-disclaimer{font-size:8px;line-height:1.7;color:var(--muted);margin-top:17px;padding-top:13px;border-top:1px solid var(--line)}.research-disclaimer>span{display:block;font-size:6px;letter-spacing:1px;margin-bottom:4px}.research-demo-note{font-size:9px!important;color:var(--muted);line-height:1.65!important;margin:9px 0 14px!important}.chat-research{margin:13px 0;min-width:0}.chat-source-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.chat-source-grid .source-card{padding:11px;animation:none}.chat-source-grid .source-card h3{font-size:11px}.chat-source-grid .source-card-top{gap:6px;flex-wrap:wrap}.chat-source-grid .source-card-top small{font-size:7px}.chat-source-grid .source-type{font-size:5px;letter-spacing:.3px}.source-empty{font-size:10px;color:var(--muted);padding:14px 0}
+.focus-overlay .orb-stage{height:min(62vh,630px);max-width:1000px;margin:0}.focus-overlay .orb-stage:before{bottom:32px}
+@keyframes source-arrive{from{opacity:0;transform:translateY(15px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes source-beacon{to{opacity:.35}}
+[data-theme=dark] .orb-stage:before{background:radial-gradient(ellipse,#070e0ccc,transparent 69%)}[data-theme=dark] .orb-stage:after{background:radial-gradient(ellipse,#51b59217,transparent 67%)}
+@media(min-width:1600px){.orb-stage{height:530px}}
+@media(max-width:1190px){.orb-stage{height:410px}.research-panel{padding:18px}.research-heading h2{font-size:21px}.chat-source-grid{grid-template-columns:1fr}.chat-source-grid .source-card-top{flex-wrap:nowrap}}
+@media(max-width:950px){.orb-stage{height:460px}.source-list{grid-template-columns:repeat(3,minmax(0,1fr))}.research-heading h2{font-size:24px}.source-card{padding:12px}.source-type{font-size:5px}.research-panel{padding:22px}.research-query{max-width:430px}.chat-source-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:690px){.orb-stage{height:350px;margin-top:0}.orb-tag-left{top:9%;font-size:6px}.orb-tag-right{bottom:9%;font-size:6px}.orb-stage:before{bottom:15px}.research-trigger{font-size:9px;margin-bottom:20px}.source-list,.chat-source-grid{grid-template-columns:1fr}.research-panel{padding:20px}.source-card{padding:15px}.source-card h3{font-size:14px}.source-card p{font-size:11px}.source-type{font-size:6px}.research-heading h2{font-size:25px}.source-card-top strong{font-size:11px}.source-card-top small{font-size:9px}.focus-overlay .orb-stage{height:390px;max-height:53vh}.source-card-bottom{font-size:9px}.chat-source-grid .source-card h3{font-size:13px}}
+@media(max-width:360px){.orb-stage{height:310px}}
+.lab-preview{display:none;width:100%;height:165px;border-radius:12px;background:var(--orb-bg);margin:0 0 16px}
+@media(max-width:690px){.lab-preview{display:block;position:sticky;top:0;z-index:2}.lab-drawer .drawer-intro{font-size:10px;margin-bottom:14px}.lab-drawer .state-button{padding:10px 4px}.lab-drawer .drawer-head{margin-bottom:14px}.lab-drawer .lab-note{font-size:10px;min-height:57px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}}
+html[data-reduced=true] *,html[data-reduced=true] *:before,html[data-reduced=true] *:after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
+
+</style>
+</head>
+<body>
+  <a href="#main" class="skip-link">Pular para o conteúdo</a>
+  <div class="mobile-scrim" id="mobile-scrim"></div>
+  <aside class="sidebar" id="sidebar" aria-label="Navegação principal">
+    <a class="brand" href="#inicio" aria-label="Órbita, início"><span class="brand-symbol" aria-hidden="true"></span><span>órbita<span class="brand-period">.</span></span></a>
+    <div class="workspace"><span class="workspace-icon" data-icon="home"></span><div><strong>Seu universo pessoal</strong><span>Um espaço só seu</span></div><span class="tiny-dot"></span></div>
+    <button class="search-trigger" data-action="search"><span data-icon="search"></span><span>Encontre qualquer coisa</span><kbd>⌘ K</kbd></button>
+    <p class="nav-caption">SEU ESPAÇO</p>
+    <nav class="nav-main">
+      <a href="#inicio" class="nav-link active" data-view="inicio"><span data-icon="orbit"></span>Visão geral<span class="nav-active-dot"></span></a>
+      <a href="#conversa" class="nav-link" data-view="conversa"><span data-icon="chat"></span>Conversas</a>
+      <a href="#memoria" class="nav-link" data-view="memoria"><span data-icon="network"></span>Memória</a>
+      <a href="#rotinas" class="nav-link" data-view="rotinas"><span data-icon="flow"></span>Rotinas<span class="nav-count" id="routine-count">3</span></a>
+    </nav>
+    <p class="nav-caption">CONECTADO A VOCÊ</p>
+    <nav class="nav-main">
+      <a href="#casa" class="nav-link" data-view="casa"><span data-icon="home"></span>Minha casa</a>
+      <a href="#reunioes" class="nav-link" data-view="reunioes"><span data-icon="wave"></span>Reuniões</a>
+      <a href="#financas" class="nav-link" data-view="financas"><span data-icon="wallet"></span>Finanças</a>
+      <a href="#conexoes" class="nav-link" data-view="conexoes"><span data-icon="plug"></span>Conexões</a>
+    </nav>
+    <div class="sidebar-bottom">
+      <button class="focus-teaser" data-action="focus"><span class="focus-symbol" data-icon="spark"></span><strong>Menos ruído.<br>Mais presença.</strong><span>Entre no modo foco <span data-icon="arrow-up-right"></span></span></button>
+      <button class="nav-link lab-link" data-action="lab"><span data-icon="sliders"></span>Explorar o novo design<span class="new-dot"></span></button>
+      <a href="#ajustes" class="nav-link" data-view="ajustes"><span data-icon="settings"></span>Preferências</a>
+      <button class="profile" data-action="profile"><span class="avatar">W</span><span><strong>Wesley</strong><small>Em casa, no seu ritmo.</small></span><span data-icon="chevrons"></span></button>
+    </div>
+  </aside>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="breadcrumb"><button class="icon-button mobile-menu" data-action="menu" aria-label="Abrir navegação"><span data-icon="menu"></span></button><span class="breadcrumb-universe">Meu universo</span><span class="slash">/</span><strong id="breadcrumb">Visão geral</strong></div>
+      <div class="topbar-actions"><span class="prototype-badge">PROPOSTA INTERATIVA</span><button class="privacy-pill" data-action="privacy"><span data-icon="shield"></span><span id="privacy-label">Local por escolha</span></button><span class="topbar-divider"></span><button class="icon-button" data-action="theme" aria-label="Alternar tema" title="Alternar tema"><span data-icon="moon" id="theme-icon"></span></button><button class="icon-button notification-button" data-action="activity" aria-label="Abrir atividade e aprovações" title="Atividade e aprovações"><span data-icon="bell"></span><i id="notification-dot"></i></button></div>
+    </header>
+    <main id="main" tabindex="-1">
+      <section class="view" id="view-inicio" aria-label="Visão geral">
+        <div class="page-heading"><div><div class="eyebrow">SEU DIA, COM MAIS ESPAÇO.</div><h1>Bom ter você aqui, Wesley<span class="mint-period">.</span></h1><p>Um pouco de clareza. Um mundo de possibilidades.</p></div><div class="day-chip"><span data-icon="sun"></span><div><strong>Sábado, 19 de setembro</strong><span>Uma boa hora para respirar</span></div></div></div>
+        <div class="home-grid">
+          <article class="presence-card" id="presence-card">
+            <div class="presence-top"><span class="eyebrow"><span class="status-dot"></span> UMA PRESENÇA, NÃO SÓ UMA IA</span><button class="icon-button" data-action="focus" aria-label="Expandir para modo foco" title="Modo foco"><span data-icon="expand"></span></button></div>
+            <div class="orb-stage" id="orb-stage">
+              <div class="orb-cross cross-one">+</div><div class="orb-cross cross-two">+</div>
+              <canvas id="orb-canvas" role="img" aria-label="Núcleo orgânico animado da Órbita, em repouso"></canvas>
+              <div class="orb-tag orb-tag-left"><span class="tiny-dot"></span><span id="orb-tag-label">Tudo no seu ritmo</span></div>
+              <div class="orb-tag orb-tag-right"><span data-icon="spark"></span>Contexto conectado</div>
+              <span class="orb-coordinate coordinate-left">O / 01</span><span class="orb-coordinate coordinate-right">PRESENÇA</span>
+            </div>
+            <div class="presence-copy"><div class="state-indicator" id="state-indicator"><span class="status-dot"></span><span id="state-label">Estou por aqui</span></div><h2 id="orb-title">O que vamos fazer hoje?</h2><p id="orb-description">Uma ideia, um plano ou só uma conversa. Estou com você.</p></div>
+            <div class="voice-actions"><button class="button primary voice-button" data-action="voice"><span data-icon="mic"></span><span id="voice-label">Conversar com a Órbita</span></button><button class="button secondary" data-action="write"><span data-icon="keyboard"></span>Prefiro escrever</button></div>
+            <div class="presence-foot"><span><span data-icon="shield"></span>Você decide o que compartilhar</span><button class="text-button" data-action="lab">Experimentar estados <span data-icon="arrow-right"></span></button></div>
+          </article>
+          <aside class="day-panel">
+            <div class="section-heading"><h2>Seu dia em órbita</h2><span class="small-tag">DEMO</span></div>
+            <article class="briefing-card"><div class="briefing-icon" data-icon="sun"></div><span class="eyebrow">UM RESUMO, SEM PRESSA</span><h3>Já organizei o essencial<br>para você.</h3><p>2 compromissos, uma ideia para retomar e um tempo só seu.</p><button class="text-button" data-action="briefing">Me conte sobre meu dia <span data-icon="arrow-right"></span></button><div class="briefing-art" aria-hidden="true"><i></i><i></i><i></i></div></article>
+            <div class="timeline-header"><h3>A seguir</h3><span>Hoje</span></div>
+            <button class="agenda-row" data-action="meeting-detail"><span class="agenda-time">14:00</span><span class="agenda-line lavender"></span><span><strong>Alinhamento de projeto</strong><small>45 min · Reunião de exemplo</small></span><span data-icon="arrow-up-right"></span></button>
+            <button class="agenda-row" data-action="focus"><span class="agenda-time">16:00</span><span class="agenda-line mint"></span><span><strong>Espaço para criar</strong><small>60 min · Seu tempo protegido</small></span><span data-icon="arrow-up-right"></span></button>
+            <button class="insight-card" data-action="memory-recall"><span class="insight-icon" data-icon="spark"></span><div><span class="eyebrow">UMA CONEXÃO INTERESSANTE</span><p>A ideia que você anotou ontem combina com o projeto de hoje.</p><strong>Vamos retomar? <span data-icon="arrow-right"></span></strong></div></button>
+          </aside>
+        </div>
+        <div class="section-heading quick-heading"><div><h2>Menos esforço. Mais vida.</h2><p>Pequenos caminhos para o que importa.</p></div><button class="text-button" data-action="personalize">Personalizar <span data-icon="sliders"></span></button></div>
+        <div class="quick-grid">
+          <button class="quick-card" data-goto="memoria"><span class="quick-icon lavender-bg" data-icon="network"></span><span class="quick-arrow" data-icon="arrow-up-right"></span><h3>Sua segunda memória</h3><p>Ideias que se conectam.<br>Nada importante se perde.</p><div class="card-foot"><span class="tiny-dot purple"></span><span id="memory-total-label">12 memórias neste universo</span></div></button>
+          <button class="quick-card" data-goto="casa"><span class="quick-icon mint-bg" data-icon="home"></span><span class="quick-arrow" data-icon="arrow-up-right"></span><h3>Uma casa que acompanha</h3><p>O ambiente certo<br>para o seu momento.</p><div class="card-foot"><span class="tiny-dot"></span>3 ambientes em harmonia</div></button>
+          <button class="quick-card" data-goto="rotinas"><span class="quick-icon peach-bg" data-icon="flow"></span><span class="quick-arrow" data-icon="arrow-up-right"></span><h3>O cotidiano, mais leve</h3><p>Pequenas rotinas.<br>Grandes respiros no dia.</p><div class="card-foot"><span class="tiny-dot orange"></span><span id="routine-summary">3 rotinas cuidando do resto</span></div></button>
+        </div>
+        <footer class="page-footer"><span><span class="tiny-dot"></span>Feita para estar perto. Projetada para dar espaço.</span><span>ÓRBITA / PRESENÇA <span class="footer-version">CONCEITO 01</span></span></footer>
+      </section>
+      <section class="view" id="view-conversa" hidden></section>
+      <section class="view" id="view-memoria" hidden></section>
+      <section class="view" id="view-rotinas" hidden></section>
+      <section class="view" id="view-casa" hidden></section>
+      <section class="view" id="view-reunioes" hidden></section>
+      <section class="view" id="view-financas" hidden></section>
+      <section class="view" id="view-conexoes" hidden></section>
+      <section class="view" id="view-ajustes" hidden></section>
+    </main>
+  </div>
+  <dialog id="detail-dialog" class="detail-dialog" aria-labelledby="dialog-title"><div class="dialog-top"><span class="eyebrow">SEU UNIVERSO, EM DETALHE</span><button class="icon-button" data-action="close-dialog" aria-label="Fechar"><span data-icon="close"></span></button></div><div id="dialog-content"></div></dialog>
+  <dialog id="search-dialog" class="search-dialog" aria-label="Busca no protótipo"><div class="search-input-wrap"><span data-icon="search"></span><input id="global-search" type="search" placeholder="O que você quer encontrar?" aria-label="Buscar no seu universo"><button class="key-button" data-action="close-search">Esc</button></div><div id="search-results"></div><div class="search-footer"><span>Busque telas, memórias e ações de exemplo</span><kbd>↵ abrir</kbd></div></dialog>
+  <dialog id="lab-dialog" class="drawer lab-drawer" aria-labelledby="lab-title"><div class="drawer-head"><div><span class="eyebrow">LABORATÓRIO DE PRESENÇA</span><h2 id="lab-title">Uma identidade viva.</h2></div><button class="icon-button" data-action="close-lab" aria-label="Fechar laboratório"><span data-icon="close"></span></button></div><p class="drawer-intro">A forma, o ritmo e a luz contam o que a Órbita está fazendo. Experimente cada estado.</p><div id="state-controls" class="state-grid"></div><div class="lab-note" id="state-note"></div><button class="button primary full-width" data-action="demo-sequence"><span data-icon="play"></span>Percorrer uma conversa</button><div class="setting-row"><div><strong>Intensidade da presença</strong><p>Do sutil ao expressivo.</p></div><output id="intensity-value">65%</output></div><input type="range" id="intensity" aria-label="Intensidade da animação" min="15" max="100" value="65"><div class="setting-row"><div><strong>Movimento reduzido</strong><p>Uma presença mais tranquila.</p></div><button class="switch" id="reduced-toggle" role="switch" aria-checked="false" aria-label="Movimento reduzido" data-action="reduce-motion"></button></div><div class="palette-block"><span class="eyebrow">A PALETA DO SEU UNIVERSO</span><div class="palette"><span style="--swatch:#173d34">Floresta</span><span style="--swatch:#c9f4b0">Brotar</span><span style="--swatch:#e3dbf2">Névoa</span><span style="--swatch:#f3dfcf">Argila</span><span style="--swatch:#f6f7f2">Mineral</span></div></div><div class="lab-footer"><span data-icon="info"></span>Este é um front demonstrativo. Voz, integrações, finanças e ações exibem cenários de exemplo.</div></dialog>
+  <dialog id="activity-dialog" class="drawer" aria-labelledby="activity-title"><div class="drawer-head"><div><span class="eyebrow">TRANSPARÊNCIA, SEM RUÍDO</span><h2 id="activity-title">O que está acontecendo.</h2></div><button class="icon-button" data-action="close-activity" aria-label="Fechar atividade"><span data-icon="close"></span></button></div><div id="activity-content"></div></dialog>
+  <div class="focus-overlay" id="focus-overlay" hidden role="dialog" aria-modal="true" aria-label="Modo foco" tabindex="-1"><header><span class="brand"><span class="brand-symbol"></span>órbita.</span><span class="focus-eyebrow">SÓ VOCÊ. UMA COISA DE CADA VEZ.</span><button class="icon-button" data-action="close-focus" aria-label="Sair do modo foco"><span data-icon="close"></span></button></header><div id="focus-stage-slot"></div><div class="focus-copy"><span class="eyebrow" id="focus-state">ESTOU POR AQUI</span><h2>Espaço para estar presente.</h2><p id="focus-timer">25:00</p><div class="focus-buttons"><button class="button primary" id="focus-start" data-action="focus-timer"><span data-icon="play"></span>Começar meu momento</button><button class="button secondary" data-action="voice"><span data-icon="mic"></span>Conversar</button></div><button class="text-button" data-action="focus-reset">Recomeçar o tempo</button></div><footer>Sem notificações. Sem pressa. No seu ritmo.</footer></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"><span data-icon="check"></span><span id="toast-text"></span><button class="icon-button" data-action="dismiss-toast" aria-label="Fechar aviso"><span data-icon="close"></span></button></div>
+  <div class="demo-caption">CONCEITO 01 <span>·</span> Dados demonstrativos <button data-action="about" aria-label="Sobre esta proposta"><span data-icon="info"></span></button></div>
+<script>
+/* Núcleo holográfico: malha neural volumétrica, giroscópios e reações por operação.
+   Canvas 2D sem WebGL. Ritmos de fala/escuta são demonstrativos, sem capturar áudio. */
+(() => {
+  'use strict';
+  const TAU=Math.PI*2;
+  const definitions={
+    idle:{label:'Presença',status:'Núcleo ativo · aguardando seu comando',icon:'orbit',hue:[65,212,162],speed:.3,energy:.36,title:'O que vamos fazer hoje?',description:'Uma ideia, um plano ou só uma conversa. Estou com você.',note:'Sistema online: giroscópios independentes, impulsos nas sinapses e um reator em respiração. Mova o cursor ou clique no núcleo para energizá-lo.'},
+    listening:{label:'Escutando',status:'Canal de escuta aberto',icon:'mic',hue:[47,219,228],speed:.4,energy:.8,title:'Pode falar. Estou aqui.',description:'Escuta demonstrativa. Seu microfone continua desligado.',note:'Os anéis se abrem como uma antena. Um espectro radial reage ao ritmo demonstrativo, enquanto ondas de entrada convergem para o núcleo.'},
+    thinking:{label:'Pensando',status:'Processando · conectando possibilidades',icon:'network',hue:[163,135,255],speed:.72,energy:.9,title:'Deixe eu ligar os pontos.',description:'Buscando sentido entre o que você disse e o que importa.',note:'Pacotes de energia percorrem a malha neural; arcos internos aceleram em direções opostas. O processamento acontece por toda a estrutura, não apenas na cor.'},
+    speaking:{label:'Falando',status:'Transmitindo resposta',icon:'wave',hue:[91,236,186],speed:.46,energy:.95,title:'Encontrei um bom caminho.',description:'A estrutura inteira acompanha o ritmo de uma fala demonstrativa.',note:'A malha se expande com a cadência da fala, o reator pulsa e o espectro externo projeta a voz. A amplitude é ilustrativa, não uma leitura de áudio real.'},
+    searching:{label:'Pesquisando',status:'Varredura de contexto em andamento',icon:'search',hue:[79,173,255],speed:.9,energy:.8,title:'Um olhar um pouco mais longe.',description:'Percorrendo as fontes do cenário de demonstração.',note:'Um radar volumétrico varre a esfera. Alvos se acendem ao serem encontrados, enquanto o anel de busca rastreia o perímetro.'},
+    connecting:{label:'Conectando',status:'Estabelecendo conexões',icon:'plug',hue:[44,212,199],speed:.56,energy:.78,title:'Tudo começa a se conectar.',description:'Canais separados encontram um mesmo centro.',note:'Satélites se acoplam ao núcleo por feixes de dados. Partículas trafegam nos dois sentidos e a órbita oscila até estabilizar.'},
+    executing:{label:'Executando',status:'Comando em execução · demonstração',icon:'flow',hue:[100,231,157],speed:1,energy:1,title:'Transformando intenção em ação.',description:'Acompanhe a execução visual. Nenhuma máquina real está conectada.',note:'O núcleo entra em modo de operação: trilhos de energia, setores de progresso e giroscópios rápidos. Representa uma IA acionando ferramentas e controlando sistemas.'},
+    success:{label:'Concluído',status:'Execução concluída',icon:'check',hue:[156,245,115],speed:.34,energy:.9,title:'Feito. Mais espaço no seu dia.',description:'Um pulso de confirmação. Pronta para o próximo comando.',note:'Uma onda de energia atravessa a estrutura, libera partículas e estabiliza um sinal de confirmação no centro.'},
+    attention:{label:'Sua decisão',status:'Aguardando autorização',icon:'shield',hue:[246,184,80],speed:.12,energy:.55,title:'O próximo passo é seu.',description:'Antes de agir, quero ter certeza de que você está de acordo.',note:'A rotação freia e um campo hexagonal se fecha em âmbar. O sistema mantém energia, mas segura a operação até a sua decisão.'},
+    error:{label:'Imprevisto',status:'Interrupção detectada · recuperação disponível',icon:'refresh',hue:[245,120,94],speed:.16,energy:.5,title:'Uma pausa. Não um ponto final.',description:'Algo não saiu como esperado. Vamos por outro caminho?',note:'Segmentos das órbitas se desacoplam e surgem falhas localizadas na malha. O reator permanece ativo. Sem flashes rápidos, com recuperação sempre possível.'}
+  };
+  class PresenceOrb{
+    constructor(canvas){
+      this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:true});
+      this.state='idle';this.intensity=.85;this.reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+      this.hue=[...definitions.idle.hue];this.energy=.36;this.time=0;this.spin=0;
+      this.last=0;this.lastDraw=0;this.frameId=0;this.visible=true;this.dirty=true;
+      this.pointer={x:0,y:0};this.tilt={x:0,y:0};this.impulse=0;this.hover=0;this.hoverTarget=0;
+      this.nodes=Array.from({length:116},(_,i)=>{const y=1-i/115*2,rr=Math.sqrt(1-y*y),a=i*2.39996323;return{x:Math.cos(a)*rr,y,z:Math.sin(a)*rr,phase:i*1.73};});
+      this.edges=[];
+      for(let i=0;i<this.nodes.length;i++)for(let j=i+1;j<this.nodes.length;j++){
+        const a=this.nodes[i],b=this.nodes[j];if(Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z)<.43)this.edges.push({a:i,b:j});
+      }
+      const sprite=document.createElement('canvas');sprite.width=sprite.height=64;
+      const g=sprite.getContext('2d'),glow=g.createRadialGradient(32,32,0,32,32,32);
+      glow.addColorStop(0,'#fff');glow.addColorStop(.07,'rgba(235,255,248,.95)');glow.addColorStop(.24,'rgba(145,255,211,.35)');glow.addColorStop(1,'rgba(80,250,198,0)');
+      g.fillStyle=glow;g.fillRect(0,0,64,64);this.sprite=sprite;
+      this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(canvas);
+      this.intersectionObserver=new IntersectionObserver(([e])=>{this.visible=e.isIntersecting;this.schedule();});this.intersectionObserver.observe(canvas);
+      document.addEventListener('visibilitychange',()=>this.schedule());
+      canvas.setAttribute('role','button');canvas.tabIndex=0;
+      canvas.title='Mova o cursor para orientar o núcleo. Clique ou pressione Enter para energizar.';
+      canvas.addEventListener('pointermove',e=>{const r=canvas.getBoundingClientRect();this.pointer.x=(e.clientX-r.left)/r.width-.5;this.pointer.y=(e.clientY-r.top)/r.height-.5;this.hoverTarget=1;});
+      canvas.addEventListener('pointerleave',()=>{this.pointer={x:0,y:0};this.hoverTarget=0;});
+      canvas.addEventListener('click',()=>this.energize());
+      canvas.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();this.energize();}});
+      this.resize();
+    }
+    energize(){this.impulse=1;this.dirty=true;this.canvas.dataset.pulse=String(Date.now());this.schedule();}
+    resize(){
+      const rect=this.canvas.getBoundingClientRect();if(!rect.width||!rect.height)return;
+      this.width=rect.width;this.height=rect.height;const dpr=Math.min(devicePixelRatio||1,1.6);
+      this.canvas.width=Math.round(rect.width*dpr);this.canvas.height=Math.round(rect.height*dpr);this.ctx.setTransform(dpr,0,0,dpr,0,0);
+      this.draw();this.dirty=false;this.schedule();
+    }
+    setState(mode){if(!definitions[mode])return;this.state=mode;this.dirty=true;this.canvas.setAttribute('aria-label',`Núcleo holográfico da Órbita: ${definitions[mode].label}. Clique para energizar.`);this.schedule();}
+    setReduced(reduced){this.reduced=reduced;this.dirty=true;this.schedule();}
+    schedule(){cancelAnimationFrame(this.frameId);if(!this.visible||document.hidden){this.last=0;return;}this.frameId=requestAnimationFrame(t=>this.frame(t));}
+    frame(now){
+      if(!this.visible||document.hidden){this.last=0;return;}
+      const dt=this.last?Math.min((now-this.last)/1000,.06):.016;this.last=now;
+      if(!this.reduced){this.time+=dt;this.spin+=dt*definitions[this.state].speed;this.impulse=Math.max(0,this.impulse-dt*.54);}
+      if(now-this.lastDraw>=(this.state==='idle'?1000/24:1000/30)||this.dirty){if(!this.reduced||this.dirty)this.draw();this.lastDraw=now;this.dirty=false;}
+      if(!this.reduced)this.frameId=requestAnimationFrame(t=>this.frame(t));
+    }
+    draw(){
+      if(!this.width||!this.height)return;
+      const ctx=this.ctx,w=this.width,h=this.height,cfg=definitions[this.state],s=this.state;
+      const t=this.reduced?2.3:this.time,spin=this.reduced?.4:this.spin,blend=this.reduced?1:.085;
+      this.hue=this.hue.map((v,i)=>v+(cfg.hue[i]-v)*blend);this.energy+=(cfg.energy-this.energy)*blend;
+      this.tilt.x+=(this.pointer.x-this.tilt.x)*.085;this.tilt.y+=(this.pointer.y-this.tilt.y)*.085;this.hover+=(this.hoverTarget-this.hover)*.08;
+      const [rr,gg,bb]=this.hue.map(Math.round),dark=document.documentElement.dataset.theme==='dark';
+      const color=(a,white=0)=>`rgba(${Math.round(rr+(255-rr)*white)},${Math.round(gg+(255-gg)*white)},${Math.round(bb+(255-bb)*white)},${a})`;
+      const trace=a=>dark?color(a):`rgba(${Math.round(rr*.26)},${Math.round(gg*.46)},${Math.round(bb*.43)},${a})`;
+      const amp=.4+this.intensity*.6,E=this.energy,impact=this.reduced?0:this.impulse;
+      const voice=s==='speaking'?(Math.sin(t*8.8)*.045+Math.sin(t*15.5)*.028)*amp:0;
+      const r=Math.min(h*.315,w*.245)*(1+Math.sin(t*1.65)*.014+voice+impact*.065);
+      const cx=w/2+(this.reduced?0:this.tilt.x*10),cy=h*.48+(this.reduced?0:this.tilt.y*7);
+      const yaw=spin*.35+(this.reduced?0:this.tilt.x*.62),pitch=-.24+Math.sin(t*.36)*.1+(this.reduced?0:this.tilt.y*.45);
+      const project=(p,scale=1)=>{
+        const x=p.x*Math.cos(yaw)+p.z*Math.sin(yaw),z=-p.x*Math.sin(yaw)+p.z*Math.cos(yaw);
+        const y=p.y*Math.cos(pitch)-z*Math.sin(pitch),zz=p.y*Math.sin(pitch)+z*Math.cos(pitch),perspective=3.8/(3.8-zz*.22);
+        return{x:cx+x*r*scale*perspective,y:cy+y*r*scale*perspective,z:zz};
+      };
+      const glow=(x,y,size,alpha=1)=>{ctx.globalAlpha=alpha;ctx.drawImage(this.sprite,x-size,y-size,size*2,size*2);ctx.globalAlpha=1;};
+      const dot=(x,y,size,fill)=>{ctx.fillStyle=fill;ctx.beginPath();ctx.arc(x,y,size,0,TAU);ctx.fill();};
+      ctx.clearRect(0,0,w,h);
+      const aura=ctx.createRadialGradient(cx,cy,r*.38,cx,cy,r*1.9);
+      aura.addColorStop(0,color(dark?.25:.14));aura.addColorStop(.6,color(.05));aura.addColorStop(1,color(0));ctx.fillStyle=aura;ctx.fillRect(0,0,w,h);
+      // Giroscópios 3D divididos em trás/frente para oclusão real.
+      const ringConfigs=[{rx:.37,rz:-.43,rad:1.47},{rx:1.04,rz:.69,rad:1.37},{rx:-.7,rz:1.6,rad:1.27}];
+      const ringPoint=(angle,index)=>{
+        const o=ringConfigs[index],tilt=o.rx+Math.sin(t*.3+index)*.18;
+        const radius=o.rad+(s==='connecting'?Math.sin(t*2.2+index)*.12:0)+this.hover*.025;
+        const x=Math.cos(angle)*radius,y=Math.sin(angle)*radius*Math.cos(tilt),z=Math.sin(angle)*radius*Math.sin(tilt);
+        const turn=o.rz+spin*(index===1?-.19:.14);
+        return project({x:x*Math.cos(turn)-y*Math.sin(turn),y:x*Math.sin(turn)+y*Math.cos(turn),z});
+      };
+      const rings=front=>{
+        for(let k=0;k<3;k++){
+          for(let layer=0;layer<2;layer++){
+            ctx.beginPath();let pen=false;
+            for(let i=0;i<=144;i++){
+              const angle=i/144*TAU,p=ringPoint(angle,k),gap=((i+k*5+Math.floor(spin*9))%36)>29;
+              if((p.z>=0)!==front||(s==='error'&&i%38>20)||(layer===1&&gap)){pen=false;continue;}
+              const off=layer?1:1.012,x=cx+(p.x-cx)*off,y=cy+(p.y-cy)*off;
+              if(pen)ctx.lineTo(x,y);else ctx.moveTo(x,y);pen=true;
+            }
+            ctx.strokeStyle=layer?trace(front?.66:.23):trace(.12);ctx.lineWidth=layer?(k===0?1.15:.7):.5;ctx.stroke();
+          }
+          const a=spin*(k===1?-1.5:1.3)+k*2.2,p=ringPoint(a,k);
+          if((p.z>=0)===front){glow(p.x,p.y,8,.5);dot(p.x,p.y,2.1,dark?color(1,.7):trace(.9));}
+        }
+      };
+      rings(false);
+      // Casca escura torna circuitos emissivos legíveis nos dois temas.
+      ctx.save();ctx.beginPath();ctx.arc(cx,cy,r*1.035,0,TAU);ctx.clip();
+      const shell=ctx.createRadialGradient(cx-r*.2,cy-r*.2,r*.03,cx,cy,r*1.07);
+      shell.addColorStop(0,'rgba(9,32,32,.97)');shell.addColorStop(.58,'rgba(8,27,30,.96)');shell.addColorStop(.84,'rgba(12,44,43,.94)');shell.addColorStop(1,'rgba(43,91,73,.13)');
+      ctx.fillStyle=shell;ctx.fillRect(cx-r*1.1,cy-r*1.1,r*2.2,r*2.2);
+      const points=this.nodes.map((n,i)=>{
+        const fluctuation=1+Math.sin(t*(s==='thinking'?3.1:1.4)+n.phase)*.022*E*amp;
+        let p=project(n,fluctuation);if(s==='error'&&i%7===0)p.x+=Math.sin(Math.floor(t*2)+i)*r*.045;return p;
+      });
+      ctx.globalCompositeOperation='screen';
+      for(let bucket=0;bucket<6;bucket++){
+        ctx.beginPath();
+        for(const edge of this.edges){
+          const a=points[edge.a],b=points[edge.b],depth=(a.z+b.z+2)/4;
+          if(Math.min(5,Math.floor(depth*6))!==bucket||(s==='error'&&edge.a%9<2))continue;
+          ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
+        }
+        ctx.strokeStyle=color(.05+bucket*.038+E*.035);ctx.lineWidth=.35+bucket*.08;ctx.stroke();
+      }
+      for(let latitude=-2;latitude<=2;latitude++){
+        const ly=latitude*.31,rad=Math.sqrt(1-ly*ly);ctx.beginPath();let pen=false;
+        for(let i=0;i<=80;i++){
+          const a=i/80*TAU,p=project({x:Math.cos(a)*rad,y:ly,z:Math.sin(a)*rad});
+          if(p.z<0||i%27>23){pen=false;continue;}if(pen)ctx.lineTo(p.x,p.y);else ctx.moveTo(p.x,p.y);pen=true;
+        }
+        ctx.strokeStyle=color(.15,.24);ctx.lineWidth=.5;ctx.stroke();
+      }
+      const sweep=(t*1.65)%TAU;
+      for(let i=0;i<points.length;i++){
+        const p=points[i],depth=(p.z+1)/2;let brightness=.25+depth*.6;
+        if(s==='searching'){
+          const delta=Math.abs(Math.atan2(Math.sin(Math.atan2(p.y-cy,p.x-cx)-sweep),Math.cos(Math.atan2(p.y-cy,p.x-cx)-sweep)));
+          if(delta<.4)brightness+=1-delta/.4;
+        }
+        const neuralFire=Math.max(0,Math.sin(t*(s==='thinking'?4:1.6)-i*.8)-.78);brightness+=neuralFire*(s==='thinking'?3:1.2);
+        const size=(i%9===0?1.6:.8)*(.6+depth*.6);
+        if(i%6===0||brightness>.9)glow(p.x,p.y,size*6,Math.min(.8,brightness*.55));dot(p.x,p.y,size,color(Math.min(1,brightness),.35));
+      }
+      const packetCount=s==='thinking'?24:s==='executing'?28:s==='connecting'?15:7;
+      for(let i=0;i<packetCount;i++){
+        const edge=this.edges[(i*23+Math.floor(i/4)*17)%this.edges.length],a=points[edge.a],b=points[edge.b];
+        const progress=(t*(.35+(i%5)*.14)*(s==='thinking'||s==='executing'?2.6:1)+i*.173)%1;
+        const x=a.x+(b.x-a.x)*progress,y=a.y+(b.y-a.y)*progress;glow(x,y,5,.7);dot(x,y,1.05,color(.95,.85));
+      }
+      if(s==='searching'){
+        ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r*1.03,sweep-.38,sweep);ctx.closePath();ctx.fillStyle=color(.12);ctx.fill();
+        ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(sweep)*r,cy+Math.sin(sweep)*r);ctx.strokeStyle=color(.8,.55);ctx.lineWidth=1.3;ctx.stroke();
+      }
+      ctx.restore();
+      // Reator: fonte energética central e anéis segmentados de contenção.
+      const reactorBeat=1+Math.sin(t*2.3)*.08+(s==='speaking'?(Math.sin(t*8.8)*.18+Math.sin(t*15.5)*.1):0)+impact*.7;
+      glow(cx,cy,r*(.7+E*.17)*reactorBeat,.5+E*.25);
+      const inner=ctx.createRadialGradient(cx,cy,0,cx,cy,r*.45*reactorBeat);
+      inner.addColorStop(0,'rgba(248,255,255,.98)');inner.addColorStop(.09,'rgba(233,255,250,.96)');inner.addColorStop(.23,color(.85,.7));inner.addColorStop(.43,color(.24));inner.addColorStop(1,color(0));
+      ctx.fillStyle=inner;ctx.beginPath();ctx.arc(cx,cy,r*.45*reactorBeat,0,TAU);ctx.fill();
+      for(let k=0;k<3;k++){
+        const radius=r*(.14+k*.08)*(1+voice*1.4),rotation=spin*(k%2?-2.5:2)+k;
+        for(let segment=0;segment<3;segment++){const a=rotation+segment*TAU/3;ctx.beginPath();ctx.arc(cx,cy,radius,a,a+1.44);ctx.strokeStyle=color(.8-k*.15,.5);ctx.lineWidth=k===0?2:1;ctx.stroke();}
+      }
+      ctx.beginPath();ctx.arc(cx,cy,r*1.025,0,TAU);ctx.strokeStyle=color(.28,.2);ctx.lineWidth=.8;ctx.stroke();rings(true);
+      const perimeter=r*1.17;
+      for(let i=0;i<64;i++){
+        const a=i/64*TAU-spin*.08,major=i%8===0,rad=perimeter+(s==='executing'?Math.sin(t*3-i*.18)*2:0);
+        ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad);ctx.lineTo(cx+Math.cos(a)*(rad+(major?5:2)),cy+Math.sin(a)*(rad+(major?5:2)));
+        ctx.strokeStyle=trace(major?.47:.19);ctx.lineWidth=major?1:.65;ctx.stroke();
+      }
+      if(s==='listening'||s==='speaking'){
+        const bars=72,base=r*(s==='listening'?1.23:1.18);
+        for(let i=0;i<bars;i++){
+          const a=i/bars*TAU,signal=(Math.sin(i*.43+t*7.5)*.45+Math.sin(i*.79-t*4.1)*.3+Math.sin(t*2.7)*.2),length=(3+Math.abs(signal)*(s==='speaking'?26:18))*amp;
+          ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*base,cy+Math.sin(a)*base);ctx.lineTo(cx+Math.cos(a)*(base+length),cy+Math.sin(a)*(base+length));ctx.strokeStyle=trace(.3+Math.abs(signal)*.4);ctx.lineWidth=1.5;ctx.stroke();
+        }
+        if(s==='speaking'){ctx.beginPath();for(let i=0;i<=100;i++){const x=(i/100-.5)*r*1.68,y=cy+Math.sin(i*.26-t*9)*Math.sin(i/100*Math.PI)*r*.13*amp;i?ctx.lineTo(cx+x,y):ctx.moveTo(cx+x,y);}ctx.strokeStyle=color(.9,.65);ctx.lineWidth=1.6;ctx.stroke();}
+      }
+      if(s==='connecting'||s==='executing'){
+        const count=s==='executing'?4:6;
+        for(let i=0;i<count;i++){
+          const a=i/count*TAU+spin*.15,rad=r*(1.6+Math.sin(t*1.7+i)*.08),x=cx+Math.cos(a)*rad,y=cy+Math.sin(a)*rad*.7;
+          ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.strokeStyle=trace(.24);ctx.lineWidth=.7;ctx.stroke();ctx.strokeStyle=trace(.65);ctx.strokeRect(x-3,y-3,6,6);
+          for(let j=0;j<3;j++){const p=(t*(s==='executing'?.8:.45)+j/3+i*.12)%1,px=cx+(x-cx)*p,py=cy+(y-cy)*p;glow(px,py,6,.6);dot(px,py,1.4,trace(.8));}
+        }
+        if(s==='executing')for(let i=0;i<4;i++){const a=i*TAU/4+spin*.4;ctx.beginPath();ctx.arc(cx,cy,r*1.32,a,a+.24+(Math.sin(t*2+i)+1)*.3);ctx.strokeStyle=trace(.7);ctx.lineWidth=3;ctx.stroke();}
+      }
+      if(s==='attention'){
+        for(let k=0;k<2;k++){ctx.beginPath();for(let i=0;i<=6;i++){const a=i/6*TAU-Math.PI/6,rad=r*(1.27+k*.09);i?ctx.lineTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad):ctx.moveTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad);}ctx.strokeStyle=trace(k?.2:.65);ctx.lineWidth=k?.6:1.2;ctx.stroke();}
+        ctx.fillStyle=color(.9,.6);ctx.fillRect(cx-4,cy-7,2,14);ctx.fillRect(cx+2,cy-7,2,14);
+      }
+      if(s==='error'){
+        for(let i=0;i<5;i++){const a=i*1.28+.4,offset=Math.sin(Math.floor(t*2)+i)*3;ctx.beginPath();ctx.arc(cx+offset,cy,r*(1.17+i%2*.04),a,a+.46);ctx.strokeStyle=trace(.65);ctx.lineWidth=1.7;ctx.stroke();}
+        ctx.beginPath();ctx.moveTo(cx,cy-7);ctx.lineTo(cx,cy+2);ctx.strokeStyle=color(.95,.6);ctx.lineWidth=2;ctx.stroke();dot(cx,cy+6,1.1,color(1,.7));
+      }
+      if(s==='success'){
+        ctx.beginPath();ctx.moveTo(cx-8,cy);ctx.lineTo(cx-2,cy+6);ctx.lineTo(cx+9,cy-7);ctx.strokeStyle='#fff';ctx.lineWidth=2.2;ctx.stroke();
+        for(let i=0;i<22;i++){const a=i*2.4,p=(t*.35+i*.073)%1,rad=r*(.9+p*.85);dot(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad*.75,1.1,trace((1-p)*.55));}
+      }
+      if(s==='listening'||s==='success'||impact>0){
+        for(let i=0;i<2;i++){let phase=(t*.6+i*.5)%1;if(s==='listening')phase=1-phase;if(impact>0)phase=(1-impact+i*.22)%1;ctx.beginPath();ctx.arc(cx,cy,r*(.95+phase*.68),0,TAU);ctx.strokeStyle=trace((1-phase)*(.22+impact*.4));ctx.lineWidth=impact>0?1.5:.8;ctx.stroke();}
+      }
+      if(w>470){
+        const left=cx-r*1.72,right=cx+r*1.72;ctx.font='7px Consolas, monospace';ctx.fillStyle=trace(.6);ctx.textAlign='right';ctx.fillText('NEURAL / '+String(this.nodes.length).padStart(3,'0'),left,cy-r*.65);
+        ctx.textAlign='left';ctx.fillText(s==='executing'?'EXEC / DEMO':s==='listening'?'INPUT / DEMO':'CORE / ONLINE',right,cy+r*.69);ctx.strokeStyle=trace(.25);ctx.lineWidth=.6;
+        ctx.beginPath();ctx.moveTo(left-12,cy-r*.58);ctx.lineTo(left+18,cy-r*.58);ctx.lineTo(cx-r*.82,cy-r*.38);ctx.stroke();ctx.beginPath();ctx.moveTo(right+39,cy+r*.56);ctx.lineTo(right-9,cy+r*.56);ctx.lineTo(cx+r*.83,cy+r*.38);ctx.stroke();
+      }
+      if(this.hover>.03&&!this.reduced){
+        const x=cx+this.tilt.x*w*.45,y=cy+this.tilt.y*h*.45;ctx.strokeStyle=trace(this.hover*.4);ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(x-7,y);ctx.lineTo(x-3,y);ctx.moveTo(x+3,y);ctx.lineTo(x+7,y);ctx.moveTo(x,y-7);ctx.lineTo(x,y-3);ctx.moveTo(x,y+3);ctx.lineTo(x,y+7);ctx.stroke();
+      }
+    }
+  }
+  window.ORBITA_STATES=definitions;window.PresenceOrb=PresenceOrb;
+})();
+
+</script>
+<script>
+/* Geometria 3D real em WebGL: vidro, metal, núcleo emissivo e giroscópios.
+   Sem CDN. O renderer Canvas continua disponível se WebGL não for suportado. */
+(() => {
+  'use strict';
+  const Fallback=window.PresenceOrb, TAU=Math.PI*2;
+  const identity=()=>new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);
+  function mul(a,b){const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++)for(let k=0;k<4;k++)o[c*4+r]+=a[k*4+r]*b[c*4+k];return o;}
+  function matrix(scale=1,rx=0,ry=0,rz=0,x=0,y=0,z=0){
+    const X=identity(),Y=identity(),Z=identity(),S=identity();
+    X[5]=X[10]=Math.cos(rx);X[6]=Math.sin(rx);X[9]=-Math.sin(rx);
+    Y[0]=Y[10]=Math.cos(ry);Y[2]=-Math.sin(ry);Y[8]=Math.sin(ry);
+    Z[0]=Z[5]=Math.cos(rz);Z[1]=Math.sin(rz);Z[4]=-Math.sin(rz);
+    S[0]=S[5]=S[10]=scale;const out=mul(Z,mul(Y,mul(X,S)));out[12]=x;out[13]=y;out[14]=z;return out;
+  }
+  function perspective(aspect){const f=1/Math.tan(.7/2),n=.1,far=30;return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+n)/(n-far),-1,0,0,2*far*n/(n-far),0]);}
+  const VERTEX=`
+    attribute vec3 aPosition; attribute vec3 aNormal; attribute vec2 aUv;
+    uniform mat4 uModel; uniform mat4 uVP; uniform float uPoint; uniform float uPixel;
+    varying vec3 vPosition; varying vec3 vNormal; varying vec3 vLocal; varying vec2 vUv;
+    void main(){ vec4 world=uModel*vec4(aPosition,1.); vPosition=world.xyz;
+      vNormal=normalize(mat3(uModel)*aNormal);vLocal=aPosition;vUv=aUv;
+      gl_Position=uVP*world;gl_PointSize=clamp(uPoint*uPixel/max(.3,gl_Position.w),1.,160.);
+    }`;
+  const FRAGMENT=`
+    precision highp float;
+    varying vec3 vPosition;varying vec3 vNormal;varying vec3 vLocal;varying vec2 vUv;
+    uniform vec3 uColor;uniform vec3 uCamera;uniform float uTime;uniform float uKind;
+    uniform float uEnergy;uniform float uState;uniform float uDark;uniform float uOpacity;
+    const float PI=3.14159265;
+    float hash(vec3 p){p=fract(p*.3183099+vec3(.1,.2,.3));p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
+    float noise(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+      return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+      mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);}
+    vec3 environment(vec3 direction){
+      float ceiling=smoothstep(-.15,.8,direction.y);
+      vec3 low=mix(vec3(.1,.19,.16),vec3(.008,.025,.035),uDark);
+      vec3 high=mix(vec3(.85,.96,.87),vec3(.18,.36,.32),uDark);
+      vec3 env=mix(low,high,ceiling);
+      float softbox=pow(max(0.,dot(direction,normalize(vec3(-.6,1.,1.2)))),22.);
+      float strip=pow(max(0.,dot(direction,normalize(vec3(1.,.35,.65)))),70.);
+      return env+vec3(1.6,1.8,1.65)*softbox+vec3(.4,1.1,1.35)*strip;
+    }
+    vec3 light(vec3 N,vec3 V,vec3 L,vec3 tint,float roughness,vec3 albedo,float metal){
+      vec3 H=normalize(V+L);float nv=max(dot(N,V),.001),nl=max(dot(N,L),.001),nh=max(dot(N,H),.001),hv=max(dot(H,V),.001);
+      float a=roughness*roughness,a2=a*a,denom=nh*nh*(a2-1.)+1.;
+      float distribution=a2/(PI*denom*denom+.0001);float k=(roughness+1.)*(roughness+1.)/8.;
+      float geometry=(nv/(nv*(1.-k)+k))*(nl/(nl*(1.-k)+k));
+      vec3 F0=mix(vec3(.04),albedo,metal);vec3 F=F0+(1.-F0)*pow(1.-hv,5.);
+      vec3 spec=distribution*geometry*F/(4.*nv*nl+.001);
+      return ((1.-F)*(1.-metal)*albedo/PI+spec)*tint*nl;
+    }
+    void main(){
+      if(uKind>5.5){vec2 q=gl_PointCoord-.5;float d=length(q)*2.;if(d>1.)discard;
+        if(uKind>6.5){float a=exp(-d*d*8.)*.22*uOpacity;gl_FragColor=vec4(uColor,a);}
+        else{float a=pow(1.-d,2.)*uOpacity;gl_FragColor=vec4(mix(uColor,vec3(1.),pow(1.-d,8.)),a);}return;}
+      vec3 N=normalize(vNormal),V=normalize(uCamera-vPosition);if(!gl_FrontFacing)N=-N;
+      float nv=max(dot(N,V),0.);float fresnel=pow(1.-nv,3.5);
+      float flow=noise(vLocal*4.+vec3(0.,uTime*.09,0.));
+      vec3 albedo=uColor*.09+vec3(.018,.032,.036);float rough=.22,metal=.78,alpha=1.;vec3 emission=vec3(0.);
+      if(uKind<.5){
+        albedo=mix(vec3(.006,.022,.021),uColor*.065,.35);rough=.2;metal=.87;
+        float longitude=atan(vLocal.z,vLocal.x),latitude=asin(clamp(vLocal.y,-1.,1.));
+        float filament=pow(max(0.,1.-abs(sin(longitude*9.+latitude*8.+flow*5.-uTime*.24))),26.);
+        float micro=pow(max(0.,sin(latitude*62.+flow*3.)),22.)*.17;
+        emission=uColor*(filament*(.8+uEnergy*1.2)+micro);
+        float cut=smoothstep(.42,.85,nv);alpha=1.;
+        emission+=uColor*cut*.08;
+      }else if(uKind<1.5){
+        albedo=mix(vec3(.38,.48,.44),uColor*.4,.25);rough=.18;metal=.97;
+        float panel=step(.28,fract(vUv.x*36.));albedo*=.55+.45*panel;
+        emission=uColor*pow(max(0.,cos(vUv.y*6.28318)),28.)*(.6+uEnergy*.4);
+      }else if(uKind<2.5){
+        albedo=uColor*.6;rough=.15;metal=.4;
+        float plasma=noise(vLocal*7.+uTime*.25);emission=uColor*(1.3+plasma*1.7)+vec3(.3)*pow(nv,8.);
+      }else if(uKind<3.5){
+        vec3 R=reflect(-V,N),T=refract(-V,N,1./1.46);
+        vec3 env=environment(R),transmission=environment(T);
+        vec3 reflection=mix(uColor*.045,env,.2+fresnel*.72);
+        float rim=pow(max(0.,dot(N,normalize(vec3(-.7,.9,.6)))),46.);
+        float line=pow(max(0.,dot(N,normalize(vec3(.95,.08,.3)))),100.);
+        reflection+=vec3(1.3)*rim+uColor*line*.9;
+        float innerDepth=clamp(1.-nv,0.,1.);reflection+=transmission*uColor*.025*innerDepth;
+        alpha=.025+fresnel*.5+rim*.48+line*.42;
+        gl_FragColor=vec4(pow(max(reflection,vec3(0.)),vec3(.8)),clamp(alpha,0.,.92)*uOpacity);return;
+      }else if(uKind<4.5){gl_FragColor=vec4(uColor*(.7+uEnergy*.5),uOpacity);return;}
+      else{
+        float ring=1.-abs(vUv.y-.5)*2.;gl_FragColor=vec4(uColor,max(0.,ring)*uOpacity);return;
+      }
+      vec3 reflected=environment(reflect(-V,N));
+      vec3 shaded=albedo*.16+reflected*mix(.18,.43,metal)*(fresnel*.7+.2);
+      shaded+=light(N,V,normalize(vec3(-2.,3.,4.)),vec3(4.,4.5,4.1),rough,albedo,metal);
+      shaded+=light(N,V,normalize(vec3(3.,.3,1.)),vec3(.3,1.5,1.8),rough+.1,albedo,metal);
+      shaded+=light(N,V,normalize(vec3(-.5,-2.,-2.)),uColor*1.3,.4,albedo,metal);
+      if(uKind<.5)shaded=albedo*.4+reflected*.018+uColor*fresnel*.12;
+      shaded+=emission;
+      if(uState>3.5&&uState<4.5){float sweep=sin(vPosition.y*5.-uTime*3.);shaded+=uColor*pow(max(sweep,0.),18.)*.8;}
+      shaded=shaded/(shaded+vec3(.72));shaded=pow(shaded,vec3(.7));
+      gl_FragColor=vec4(shaded,alpha*uOpacity);
+    }`;
+  function sphere(){const vertices=[],indices=[],w=72,h=40;for(let y=0;y<=h;y++)for(let x=0;x<=w;x++){
+    const a=x/w*TAU,b=y/h*Math.PI,s=Math.sin(b),nx=Math.cos(a)*s,ny=Math.cos(b),nz=Math.sin(a)*s;
+    vertices.push(nx,ny,nz,nx,ny,nz,x/w,y/h);
+  }for(let y=0;y<h;y++)for(let x=0;x<w;x++){const a=y*(w+1)+x,b=a+w+1;indices.push(a,a+1,b,b,a+1,b+1);}return{vertices,indices};}
+  function torus(radius,tube,arc=TAU){const vertices=[],indices=[],aCount=120,bCount=10;for(let a=0;a<=aCount;a++)for(let b=0;b<=bCount;b++){
+    const u=a/aCount*arc,v=b/bCount*TAU,c=Math.cos(u),s=Math.sin(u),cv=Math.cos(v),sv=Math.sin(v);
+    vertices.push((radius+tube*cv)*c,(radius+tube*cv)*s,tube*sv,cv*c,cv*s,sv,a/aCount,b/bCount);
+  }for(let a=0;a<aCount;a++)for(let b=0;b<bCount;b++){const p=a*(bCount+1)+b,q=p+bCount+1;indices.push(p,q,p+1,q,q+1,p+1);}return{vertices,indices};}
+  class Orb3D{
+    constructor(canvas,gl){
+      this.canvas=canvas;this.gl=gl;this.state='idle';this.intensity=.85;this.energy=.36;this.hue=[65/255,212/255,162/255];
+      this.reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;this.time=0;this.spin=0;this.last=0;this.lastDraw=0;this.frameId=0;this.visible=true;this.dirty=true;
+      this.pointer={x:0,y:0};this.tilt={x:0,y:0};this.impulse=0;this.contextLost=false;
+      this.init();canvas.dataset.renderer='webgl';canvas.setAttribute('role','button');canvas.tabIndex=0;
+      canvas.title='Mova o cursor para ver a profundidade. Clique ou pressione Enter para energizar.';
+      canvas.addEventListener('pointermove',e=>{const r=canvas.getBoundingClientRect();this.pointer={x:(e.clientX-r.left)/r.width-.5,y:(e.clientY-r.top)/r.height-.5};this.dirty=true;this.schedule();});
+      canvas.addEventListener('pointerleave',()=>{this.pointer={x:0,y:0};this.dirty=true;this.schedule();});
+      canvas.addEventListener('click',()=>this.energize());canvas.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();this.energize();}});
+      canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();this.contextLost=true;cancelAnimationFrame(this.frameId);});
+      canvas.addEventListener('webglcontextrestored',()=>{this.contextLost=false;this.init();this.resize();});
+      this.ro=new ResizeObserver(()=>this.resize());this.ro.observe(canvas);
+      this.io=new IntersectionObserver(([e])=>{this.visible=e.isIntersecting;this.schedule();});this.io.observe(canvas);
+      document.addEventListener('visibilitychange',()=>this.schedule());this.resize();
+    }
+    init(){const gl=this.gl;const compile=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;};
+      const vs=compile(gl.VERTEX_SHADER,VERTEX),fs=compile(gl.FRAGMENT_SHADER,FRAGMENT),program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program));gl.deleteShader(vs);gl.deleteShader(fs);this.program=program;
+      this.locations={};['uModel','uVP','uPoint','uPixel','uColor','uCamera','uTime','uKind','uEnergy','uState','uDark','uOpacity'].forEach(n=>this.locations[n]=gl.getUniformLocation(program,n));
+      this.attributes=['aPosition','aNormal','aUv'].map(n=>gl.getAttribLocation(program,n));
+      this.meshes={sphere:this.mesh(sphere()),ring:this.mesh(torus(1.3,.025,TAU*.92)),inner:this.mesh(torus(.74,.037,TAU*.9)),arc:this.mesh(torus(1.13,.014,TAU*.72)),wave:this.mesh(torus(1.18,.008,TAU))};
+      this.nodes=Array.from({length:132},(_,i)=>{const y=1-i/131*2,r=Math.sqrt(1-y*y),a=i*2.39996;return[Math.cos(a)*r*.88,y*.88,Math.sin(a)*r*.88];});
+      const pointVertices=[],lineVertices=[];this.nodes.forEach((p,i)=>pointVertices.push(...p,...p,i/132,0));
+      for(let i=0;i<this.nodes.length;i++)for(let j=i+1;j<this.nodes.length;j++){const a=this.nodes[i],b=this.nodes[j];if(Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2])<.34)lineVertices.push(...a,...a,0,0,...b,...b,0,0);}
+      this.meshes.nodes=this.mesh({vertices:pointVertices});this.meshes.lines=this.mesh({vertices:lineVertices});this.meshes.glow=this.mesh({vertices:[0,0,0,0,0,1,0,0]});
+      const bars=[];for(let i=0;i<96;i++){const a=i/96*TAU;bars.push(Math.cos(a)*1.17,Math.sin(a)*1.17,0,0,0,1,i/96,0,Math.cos(a)*1.34,Math.sin(a)*1.34,0,0,0,1,i/96,1);}
+      this.meshes.bars=this.mesh({vertices:bars});
+      gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.disable(gl.CULL_FACE);gl.clearColor(0,0,0,0);
+    }
+    mesh({vertices,indices}){const gl=this.gl,v=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,v);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.STATIC_DRAW);let index=null;if(indices){index=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,index);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(indices),gl.STATIC_DRAW);}return{v,index,count:indices?indices.length:vertices.length/8};}
+    energize(){this.impulse=1;this.canvas.dataset.pulse=String(Date.now());this.dirty=true;this.schedule();}
+    setState(mode){if(!window.ORBITA_STATES[mode])return;this.state=mode;this.dirty=true;this.canvas.setAttribute('aria-label',`Órbita 3D: ${window.ORBITA_STATES[mode].label}. Mova o cursor ou clique para interagir.`);this.schedule();}
+    setReduced(value){this.reduced=value;this.dirty=true;this.schedule();}
+    resize(){const rect=this.canvas.getBoundingClientRect();if(!rect.width||!rect.height||this.contextLost)return;this.width=rect.width;this.height=rect.height;this.dpr=Math.min(devicePixelRatio||1,1.4);this.canvas.width=Math.round(rect.width*this.dpr);this.canvas.height=Math.round(rect.height*this.dpr);this.gl.viewport(0,0,this.canvas.width,this.canvas.height);this.dirty=true;this.draw();this.schedule();}
+    schedule(){cancelAnimationFrame(this.frameId);if(!this.visible||document.hidden||this.contextLost){this.last=0;return;}this.frameId=requestAnimationFrame(t=>this.frame(t));}
+    frame(now){if(!this.visible||document.hidden||this.contextLost)return;const dt=this.last?Math.min((now-this.last)/1000,.07):.016;this.last=now;
+      if(!this.reduced){this.time+=dt;this.spin+=dt*window.ORBITA_STATES[this.state].speed;this.impulse=Math.max(0,this.impulse-dt*.6);}
+      if(now-this.lastDraw>=(this.state==='idle'?1000/24:1000/30)||this.dirty){if(!this.reduced||this.dirty)this.draw();this.lastDraw=now;this.dirty=false;}
+      if(!this.reduced)this.frameId=requestAnimationFrame(t=>this.frame(t));
+    }
+    drawMesh(name,model,kind,opacity=1,primitive,point=1,color=this.hue){const gl=this.gl,m=this.meshes[name],l=this.locations;gl.bindBuffer(gl.ARRAY_BUFFER,m.v);const sizes=[3,3,2],offsets=[0,12,24];this.attributes.forEach((a,i)=>{if(a>=0){gl.enableVertexAttribArray(a);gl.vertexAttribPointer(a,sizes[i],gl.FLOAT,false,32,offsets[i]);}});gl.uniformMatrix4fv(l.uModel,false,model);gl.uniform1f(l.uKind,kind);gl.uniform1f(l.uOpacity,opacity);gl.uniform1f(l.uPoint,point);gl.uniform3fv(l.uColor,color);if(m.index){gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.index);gl.drawElements(primitive||gl.TRIANGLES,m.count,gl.UNSIGNED_SHORT,0);}else gl.drawArrays(primitive||gl.POINTS,0,m.count);}
+    draw(){if(!this.width||this.contextLost)return;const gl=this.gl,l=this.locations,cfg=window.ORBITA_STATES[this.state],s=this.state;
+      const t=this.reduced?2.3:this.time,spin=this.reduced?.6:this.spin,ease=this.reduced?1:.085;
+      this.energy+=(cfg.energy-this.energy)*ease;this.hue=this.hue.map((v,i)=>v+(cfg.hue[i]/255-v)*ease);this.tilt.x+=(this.pointer.x-this.tilt.x)*.07;this.tilt.y+=(this.pointer.y-this.tilt.y)*.07;
+      const beat=s==='speaking'?(Math.sin(t*9)*.045+Math.sin(t*14)*.025)*this.intensity:Math.sin(t*1.5)*.012;
+      const pulse=this.reduced?0:this.impulse,scale=1+beat+pulse*.045;
+      const camera=[0,.1,this.width<420?4.9:4.35];const view=identity();view[13]=-camera[1];view[14]=-camera[2];
+      gl.useProgram(this.program);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.uniformMatrix4fv(l.uVP,false,mul(perspective(this.width/this.height),view));gl.uniform3fv(l.uCamera,camera);gl.uniform1f(l.uPixel,this.canvas.height/470);gl.uniform1f(l.uTime,t);gl.uniform1f(l.uEnergy,this.energy);gl.uniform1f(l.uDark,document.documentElement.dataset.theme==='dark'?1:0);gl.uniform1f(l.uState,Object.keys(window.ORBITA_STATES).indexOf(s));
+      const base=matrix(scale,.15+this.tilt.y*.85,spin*.18+this.tilt.x*1.1,Math.sin(t*.15)*.08);
+      gl.depthMask(true);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+      // Three solid, lit gyroscopes occupy different planes around the sphere.
+      this.drawMesh('ring',mul(base,matrix(1,.72+Math.sin(t*.23)*.15,spin*.13,-.4)),1);
+      this.drawMesh('ring',mul(base,matrix(.88,-.76,1.1+spin*.17,spin*-.21)),1,.93);
+      this.drawMesh('arc',mul(base,matrix(1,1.35,-.3,spin*.4)),1);
+      this.drawMesh('inner',mul(base,matrix(1,1.2+spin*.27,spin*-.32,.6)),1);
+      this.drawMesh('inner',mul(base,matrix(.76,-.5,spin*.37,-.4)),1);
+      this.drawMesh('sphere',mul(base,matrix(.25*(1+beat*2+pulse*.18))),2);
+      for(let i=0;i<7;i++){const a=spin*.6+i*TAU/7,x=Math.cos(a)*1.3,y=Math.sin(a)*1.03,z=Math.sin(a)*.7;this.drawMesh('sphere',mul(base,matrix(.028,0,0,0,x,y,z)),2);}
+      gl.depthMask(false);
+      // Dark inner back wall gives transmission an actual depth reference, not the page color.
+      gl.enable(gl.CULL_FACE);gl.cullFace(gl.FRONT);
+      this.drawMesh('sphere',mul(base,matrix(.88,spin*.05,spin*.16)),0,1);
+      gl.disable(gl.CULL_FACE);
+      this.drawMesh('lines',base,4,.21,gl.LINES);
+      this.drawMesh('nodes',base,6,.86,gl.POINTS,19);
+      const count=s==='thinking'||s==='executing'?25:9;
+      for(let i=0;i<count;i++){const a=this.nodes[(i*13)%132],b=this.nodes[(i*13+17)%132],p=(t*(s==='thinking'?.65:.26)+i*.131)%1;this.drawMesh('glow',mul(base,matrix(1,0,0,0,a[0]+(b[0]-a[0])*p,a[1]+(b[1]-a[1])*p,a[2]+(b[2]-a[2])*p)),6,.9,gl.POINTS,20);}
+      // Clearcoat is drawn back-to-front over the internal machinery.
+      gl.enable(gl.CULL_FACE);gl.cullFace(gl.FRONT);this.drawMesh('sphere',base,3,.55);gl.cullFace(gl.BACK);this.drawMesh('sphere',base,3,1);gl.disable(gl.CULL_FACE);
+      if(s==='listening'||s==='speaking'){
+        const radial=1+Math.sin(t*7)*.04+Math.sin(t*13)*.025;
+        this.drawMesh('bars',matrix(radial,Math.sin(t*.5)*.18,Math.cos(t*.3)*.18,spin*.16),4,.58,gl.LINES);
+        for(let i=0;i<2;i++){const p=(t*.55+i*.5)%1;this.drawMesh('wave',matrix(.95+p*.38,.2,0,0),5,(1-p)*.4);}
+      }
+      if(s==='searching'){this.drawMesh('arc',matrix(1.05,1.12,0,t*1.8),2,.85);this.drawMesh('wave',matrix(.75+Math.sin(t*1.3)*.2,1.57,0,0,0,Math.sin(t*1.3)*.72,0),4,.65);}
+      if(s==='connecting'||s==='executing'){
+        for(let i=0;i<4;i++){const a=i*TAU/4+spin*.15,p=(t*.7+i*.25)%1;this.drawMesh('sphere',matrix(.045,0,0,0,Math.cos(a)*1.5,Math.sin(a)*1.12,.1),2);this.drawMesh('glow',matrix(1,0,0,0,Math.cos(a)*1.5*p,Math.sin(a)*1.12*p,.1),6,.9,gl.POINTS,30);}
+        if(s==='executing')this.drawMesh('arc',matrix(1.1,.2,0,spin*1.3),2,.8);
+      }
+      if(s==='attention'){this.drawMesh('wave',matrix(1.12,.13,0,0),1,.8);this.drawMesh('wave',matrix(1.18,.13,0,0),4,.35);}
+      if(s==='error'){this.drawMesh('arc',matrix(1.07,.3,0,Math.floor(t*2)*.04),1,.7);}
+      if(s==='success'||pulse>0){const p=pulse>0?1-pulse:(t*.45)%1;this.drawMesh('wave',matrix(.9+p*.55,.25,0,0),4,(1-p)*.7);}
+      gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+      this.drawMesh('glow',matrix(1,0,0,0,0,0,.6),7,.43+pulse*.5,gl.POINTS,360*(1+beat*2));
+      gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(true);
+    }
+  }
+  window.PresenceOrb=class{
+    constructor(canvas){let gl;try{gl=canvas.getContext('webgl',{alpha:true,antialias:true,premultipliedAlpha:false,preserveDrawingBuffer:true,powerPreference:'high-performance'});}catch{}
+      if(!gl){canvas.dataset.renderer='canvas-fallback';return new Fallback(canvas);}
+      try{return new Orb3D(canvas,gl);}catch(error){console.warn('Órbita: usando renderização de compatibilidade.',error.message);const replacement=canvas.cloneNode();canvas.replaceWith(replacement);replacement.dataset.renderer='canvas-fallback';return new Fallback(replacement);}
+    }
+  };
+})();
+
+</script>
+<script>
+/* Fontes reais; descoberta e resposta roteirizadas para avaliar somente o front. */
+(() => {
+  'use strict';
+  const sources = [
+    {name:'MDN Web Docs',domain:'developer.mozilla.org',mark:'M',type:'DOCUMENTAÇÃO',title:'Gráficos 3D no navegador',excerpt:'Como o WebGL desenha gráficos interativos no canvas, com aceleração por hardware.',url:'https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API',color:'mint'},
+    {name:'Three.js',domain:'threejs.org',mark:'△',type:'REFERÊNCIA TÉCNICA',title:'Geometrias, luzes e materiais',excerpt:'Uma referência para explorar os componentes de uma cena tridimensional na web.',url:'https://threejs.org/docs/',color:'violet'},
+    {name:'Khronos Group',domain:'khronos.org',mark:'K',type:'PADRÃO ABERTO',title:'O padrão por trás do 3D na web',excerpt:'Visão oficial da API WebGL e de seu papel nos gráficos 3D para navegadores.',url:'https://www.khronos.org/webgl/',color:'peach'}
+  ];
+  let found=[],timers=[],active=false,completed=false,started=0;
+  const original=document.querySelector('.day-panel');
+  const panel=document.createElement('aside');panel.id='research-panel';panel.className='research-panel';panel.hidden=true;
+  original.insertAdjacentElement('afterend',panel);
+  const trigger=document.createElement('button');trigger.type='button';trigger.className='research-trigger';trigger.dataset.action='research-demo';
+  trigger.innerHTML='<span class="research-trigger-icon" aria-hidden="true">⌕</span> Pesquisar com fontes <span aria-hidden="true">↗</span>';
+  document.querySelector('.presence-foot').insertAdjacentElement('beforebegin',trigger);
+  const status=()=>completed?'Pesquisa concluída':active?'Consultando referências…':'Pesquisa interrompida';
+  function card(source,index){return `<a class="source-card" href="${source.url}" target="_blank" rel="noopener noreferrer" style="--source-order:${index}"><span class="source-card-top"><span class="source-mark ${source.color}" aria-hidden="true">${source.mark}</span><span><strong>${source.name}</strong><small>${source.domain}</small></span><span class="source-arrow" aria-hidden="true">↗</span></span><span class="source-type">${source.type} <span>FONTE ${String(index+1).padStart(2,'0')}</span></span><h3>${source.title}</h3><p>${source.excerpt}</p><span class="source-card-bottom"><span class="source-check" aria-hidden="true">✓</span> Abrir fonte original <span>↗</span></span></a>`;}
+  function cards(){return found.map(card).join('');}
+  function chatHTML(){return `<section class="chat-research"><div class="research-status"><span class="research-beacon ${active?'is-scanning':''}"></span><strong>${status()}</strong><span>${found.length}/3 fontes</span></div><p class="research-demo-note">Exemplo: interfaces 3D na web. Fontes reais; descoberta simulada.</p><div class="chat-source-grid">${cards()||'<div class="source-empty">Preparando a primeira referência…</div>'}</div></section>`;}
+  function render(){panel.innerHTML=`<header class="research-heading"><div><span class="eyebrow">INVESTIGAÇÃO EM CURSO</span><h2>Conhecimento com origem.</h2></div><button type="button" class="research-close" data-research-close aria-label="Fechar fontes de pesquisa">×</button></header><div class="research-query"><span aria-hidden="true">⌕</span><div><small>EXEMPLO DE PESQUISA</small><strong>Interfaces 3D no navegador</strong></div></div><div class="research-status" role="status"><span class="research-beacon ${active?'is-scanning':''}"></span><strong>${status()}</strong><span>${found.length}/3</span></div><div class="research-track"><i style="width:${found.length/3*100}%"></i></div><div class="source-list">${cards()}${active&&found.length<3?'<div class="source-skeleton" aria-hidden="true"><i></i><i></i><i></i></div>':''}</div><div class="research-disclaimer"><span>DEMONSTRAÇÃO DO FRONT</span>Os links são reais. A descoberta é roteirizada, sem busca conectada.</div>`;document.dispatchEvent(new CustomEvent('orbita:research-update'));}
+  function stop(){timers.forEach(clearTimeout);timers=[];active=false;render();}
+  function start(){timers.forEach(clearTimeout);timers=[];found=[];active=true;completed=false;started++;const run=started;panel.hidden=false;original.hidden=true;render();
+    sources.forEach((source,index)=>timers.push(setTimeout(()=>{if(run!==started||!active)return;found.push(source);if(found.length===sources.length){active=false;completed=true;}render();if(completed)document.dispatchEvent(new CustomEvent('orbita:research-complete'));},800+index*1050)));
+  }
+  function close(){started++;stop();panel.hidden=true;original.hidden=false;document.dispatchEvent(new CustomEvent('orbita:research-close'));}
+  document.addEventListener('click',e=>{if(e.target.closest('[data-research-close]'))close();if(e.target.closest('[data-action="research-demo"]')){document.dispatchEvent(new CustomEvent('orbita:research-start'));if(!active)start();}});
+  new MutationObserver(()=>{if(document.body.dataset.orbState==='searching'&&!active)start();}).observe(document.body,{attributes:true,attributeFilter:['data-orb-state']});
+  window.orbitaResearch={start,stop,close,chatHTML,get sources(){return found;},get active(){return active;},get complete(){return completed;}};
+  addEventListener('pagehide',()=>timers.forEach(clearTimeout));
+})();
+
+</script>
+<script>
+/* Front demonstrativo isolado: todos os dados e ações vivem neste navegador.
+   Nenhuma chamada à API, autenticação, microfone ou dispositivo da casa. */
+(() => {
+  'use strict';
+  const $ = (s, root = document) => root.querySelector(s);
+  const $$ = (s, root = document) => [...root.querySelectorAll(s)];
+  const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const paths = {
+    orbit:'<circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="11" ry="5" transform="rotate(-35 12 12)"/>',
+    home:'<path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/>',
+    search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
+    chat:'<path d="M20 11a8 8 0 0 1-8 8H5l-3 3V11a9 9 0 0 1 18 0Z"/><path d="M7 10h8M7 14h5"/>',
+    network:'<circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 7 3 3m4 4 3 3M14 10l3-3M7 17l3-3"/>',
+    flow:'<rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="15" width="6" height="6" rx="1.5"/><path d="M6 9v7a2 2 0 0 0 2 2h7M15 6h5m-2-2 2 2-2 2"/>',
+    wave:'<path d="M3 10v4m4-8v12m5-16v20m5-16v12m4-8v4"/>',
+    wallet:'<path d="M20 8V5H5a2 2 0 0 0 0 4h16v11H5a2 2 0 0 1-2-2V7"/><path d="M21 12h-5v5h5M17 14.5h.5"/>',
+    plug:'<path d="m8 8 8 8M5 11l6-6 8 8-6 6a5.5 5.5 0 0 1-8-8ZM14 6l3-3m1 7 3-3M6 18l-3 3"/>',
+    spark:'<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5ZM20 2v4m-2-2h4"/>',
+    sliders:'<path d="M4 6h7m4 0h5M4 12h2m4 0h10M4 18h10m4 0h2"/><circle cx="13" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="18" r="2"/>',
+    settings:'<path d="m9 3-1 3-3 1-2 4 2 2v3l3 2 2 3h4l2-3 3-2v-3l2-2-2-4-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/>',
+    chevrons:'<path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/>',
+    'arrow-up-right':'<path d="M6 18 18 6M6 6h12v12"/>',
+    'arrow-right':'<path d="M4 12h16m-6-6 6 6-6 6"/>',
+    shield:'<path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6Z"/><path d="m8 12 3 3 5-6"/>',
+    sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
+    moon:'<path d="M20.8 13.3A9 9 0 0 1 10.7 3.2 9 9 0 1 0 20.8 13.3Z"/>',
+    bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',
+    expand:'<path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5"/>',
+    mic:'<rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/>',
+    keyboard:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.1M10 9h.1M14 9h.1M18 9h.1M6 12h.1M10 12h.1M14 12h.1M18 12h.1M8 16h8"/>',
+    close:'<path d="m6 6 12 12M6 18 18 6"/>',
+    menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+    info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/>',
+    check:'<path d="m5 12 4 4L19 6"/>',
+    play:'<path d="m8 4 12 8-12 8Z"/>',
+    pause:'<path d="M8 5v14M16 5v14"/>',
+    refresh:'<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 6a8 8 0 0 1 13 3M5 15a8 8 0 0 0 13 3"/>',
+    plus:'<path d="M12 4v16M4 12h16"/>',
+    send:'<path d="m4 4 17 8-17 8 3-8Zm3 8h14"/>',
+    stop:'<rect x="5" y="5" width="14" height="14" rx="2"/>',
+    file:'<path d="M14 2H5v20h14V7Zm0 0v5h5M8 12h8m-8 4h6"/>',
+    clock:'<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>',
+    calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 2v6m10-6v6M3 11h18m-14 4h2m4 0h2"/>',
+    mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m3 5 9 8 9-8"/>',
+    light:'<path d="M9 18h6m-6 3h6M8 14a6 6 0 1 1 8 0c-1 1-1 3-1 3H9s0-2-1-3Z"/>',
+    temperature:'<path d="M9 15V5a3 3 0 0 1 6 0v10a5 5 0 1 1-6 0ZM12 9v9"/>',
+    lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4m-4 5v2"/>',
+    music:'<path d="M9 18V5l12-2v13M9 8l12-2"/><ellipse cx="6" cy="18" rx="3" ry="3"/><ellipse cx="18" cy="16" rx="3" ry="3"/>',
+    volume:'<path d="M4 9h4l5-5v16l-5-5H4Zm12-1a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',
+    trash:'<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/>',
+    download:'<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
+    leaf:'<path d="M20 3C5 2 1 9 5 16s16 7 15-13ZM5 20 16 9"/>',
+    link:'<path d="m10 14 4-4M8 16l-2 2a4 4 0 0 1-6-6l5-5a4 4 0 0 1 6 0m2 1 2-2a4 4 0 0 1 6 6l-5 5a4 4 0 0 1-6 0"/>',
+  };
+  const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.spark}</svg>`;
+  function hydrate(root = document) { const nodes=$$('[data-icon]',root);if(root.matches?.('[data-icon]'))nodes.unshift(root);nodes.forEach(el=>{el.innerHTML=icon(el.dataset.icon);}); }
+  const storageKey = 'orbita-presenca-prototype-v1';
+  let storageWarning = false;
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}') || {}; } catch { saved = {}; }
+  const initialMemories = [
+    {id:'m1',title:'Manhãs são para criar',type:'Preferência',body:'Você prefere reservar as primeiras horas do dia para trabalho criativo, sem reuniões.',source:'Conversa de exemplo · 17 set',confidence:'Confirmada por você'},
+    {id:'m2',title:'Uma ideia para a Órbita',type:'Ideia',body:'Uma presença que entende o seu ritmo. Interfaces calmas, respostas claras e menos interrupções.',source:'Nota de exemplo · ontem',confidence:'Anotação sua'},
+    {id:'m3',title:'Próximos passos do projeto',type:'Projeto',body:'Explorar uma identidade visual mais orgânica e trazer memória e casa para perto da conversa.',source:'Reunião de exemplo · 16 set',confidence:'Fonte disponível'},
+    {id:'m4',title:'O ritual do fim do dia',type:'Preferência',body:'Luzes mais quentes, música tranquila e um resumo breve do que ficou para amanhã.',source:'Conversa de exemplo · 15 set',confidence:'Confirmada por você'},
+    {id:'m5',title:'A leitura que ficou',type:'Ideia',body:'Ferramentas boas devolvem tempo. Ferramentas excelentes devolvem atenção.',source:'Nota de exemplo · 14 set',confidence:'Anotação sua'},
+    {id:'m6',title:'O escritório é seu lugar de foco',type:'Casa',body:'Seu ambiente preferido para criar, com luz da mesa acesa e notificações pausadas.',source:'Preferência de exemplo · 12 set',confidence:'Confirmada por você'},
+    {id:'m7',title:'Respostas mais diretas',type:'Preferência',body:'Você gosta de respostas em português, com ações claras e sem excesso de formalidade.',source:'Conversa de exemplo · 10 set',confidence:'Confirmada por você'},
+    {id:'m8',title:'Encontros que viram ação',type:'Projeto',body:'Toda reunião deve terminar com uma decisão, um responsável e um próximo passo.',source:'Reunião de exemplo · 9 set',confidence:'Fonte disponível'},
+    {id:'m9',title:'A casa ao anoitecer',type:'Casa',body:'A cena Aconchego reúne luz suave na sala e uma playlist tranquila.',source:'Cena de exemplo · 8 set',confidence:'Confirmada por você'},
+    {id:'m10',title:'Tempo para aprender',type:'Ideia',body:'Separar um pequeno bloco semanal para testar uma ideia sem compromisso de entrega.',source:'Nota de exemplo · 6 set',confidence:'Anotação sua'},
+    {id:'m11',title:'Planejamento sem ruído',type:'Projeto',body:'Escolher três prioridades por dia e deixar o resto em uma lista para depois.',source:'Nota de exemplo · 5 set',confidence:'Anotação sua'},
+    {id:'m12',title:'Um domingo mais leve',type:'Preferência',body:'Você prefere sugestões discretas e nenhuma notificação de trabalho no domingo.',source:'Conversa de exemplo · 3 set',confidence:'Confirmada por você'},
+  ];
+  const state = {
+    view:'inicio', theme:saved.theme === 'dark' ? 'dark' : 'light',
+    reduced:typeof saved.reduced === 'boolean' ? saved.reduced : matchMedia('(prefers-reduced-motion: reduce)').matches,
+    intensity:Number.isFinite(saved.intensity) ? Math.min(100,Math.max(15,saved.intensity)) : 85,
+    memories:Array.isArray(saved.memories) && saved.memories.every(m => m && ['id','title','type','body','source','confidence'].every(k => typeof m[k] === 'string')) ? saved.memories : initialMemories,
+    routines:[{id:'r1',name:'Um bom começo',description:'O essencial do dia, antes de o mundo pedir sua atenção.',time:'Todos os dias · 08:00',icon:'sun',steps:['Ao começar o dia','Consultar agenda e prioridades','Preparar seu briefing'],active:true},{id:'r2',name:'Hora de mergulhar',description:'Prepare o ambiente e proteja um espaço para criar.',time:'Dias úteis · 09:00',icon:'spark',steps:['No horário de foco','Ajustar a luz do escritório','Pausar interrupções'],active:true},{id:'r3',name:'Desacelerar',description:'Feche os ciclos de hoje e dê espaço para o amanhã.',time:'Todos os dias · 19:00',icon:'moon',steps:['Ao encerrar o trabalho','Reunir pendências do dia','Ativar a cena Aconchego'],active:true}],
+    rooms:[{id:'sala',name:'Sala de estar',subtitle:'Um espaço para desacelerar',className:'',light:true,brightness:65,temp:23},{id:'escritorio',name:'Escritório',subtitle:'Seu espaço para criar',className:'office',light:true,brightness:85,temp:22},{id:'quarto',name:'Quarto',subtitle:'Silêncio também é cuidado',className:'bedroom',light:false,brightness:30,temp:24}],
+    connections:{calendar:true,mail:true,notion:false,home:true,slack:false,whatsapp:false},
+    privacy:true, proactivity:true, memoryFilter:'Tudo', memoryQuery:'', memoryMode:'cards', scene:'',
+    approved:null, activities:[], busy:false, chatRun:0, chatTimers:[], demoTimers:[], demoRun:0,
+    messages:[{role:'assistant',text:'Oi, Wesley. Que bom ter você por aqui.\n\nPodemos organizar seu dia, retomar uma ideia ou encontrar um pouco de espaço para criar. Por onde começamos?',card:'welcome'}],
+    meetingRunning:false, meetingSeconds:0, meetingSummary:false, meetingInterval:null,
+    focusSeconds:1500, focusRunning:false, focusDeadline:0, focusInterval:null, focusTrigger:null,
+    expenses:[{name:'Mercado da semana',category:'Alimentação',value:286.4,icon:'leaf'},{name:'Internet de casa',category:'Casa',value:129.9,icon:'home'},{name:'Assinaturas e ferramentas',category:'Trabalho',value:89,icon:'plug'}],
+    attachment:'', lastAnswer:'',
+  };
+  const names = {inicio:'Visão geral',conversa:'Conversas',memoria:'Memória',rotinas:'Rotinas',casa:'Minha casa',reunioes:'Reuniões',financas:'Finanças',conexoes:'Conexões',ajustes:'Preferências'};
+  const orb = new window.PresenceOrb($('#orb-canvas'));
+  const labCanvas=document.createElement('canvas');labCanvas.id='lab-canvas';labCanvas.className='lab-preview';labCanvas.setAttribute('role','img');
+  $('.drawer-intro',$('#lab-dialog')).before(labCanvas);
+  const labOrb=new window.PresenceOrb(labCanvas);
+  const states = window.ORBITA_STATES;
+  function persist() {
+    try { localStorage.setItem(storageKey,JSON.stringify({theme:state.theme,reduced:state.reduced,intensity:state.intensity,memories:state.memories})); }
+    catch { if(!storageWarning){ storageWarning=true; toast('As alterações funcionam nesta sessão, mas o navegador não permitiu salvá-las.'); } }
+  }
+  let toastTimer;
+  function toast(message) { $('#toast-text').textContent=message; $('#toast').classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),4700); }
+  function updateTheme() { document.documentElement.dataset.theme=state.theme; $('#theme-icon').dataset.icon=state.theme==='dark'?'sun':'moon'; hydrate($('#theme-icon')); [orb,labOrb].forEach(o=>{o.dirty=true;o.schedule();}); persist(); }
+  function updateReduced() { document.documentElement.dataset.reduced=String(state.reduced); $('#reduced-toggle').setAttribute('aria-checked',String(state.reduced)); [orb,labOrb].forEach(o=>o.setReduced(state.reduced)); persist(); }
+  function updateCounts(){ $('#memory-total-label').textContent=`${state.memories.length} memórias neste universo`;const count=state.routines.filter(r=>r.active).length;$('#routine-count').textContent=count;$('#routine-summary').textContent=`${count} rotinas cuidando do resto`; }
+  let researchReply=null;
+  document.addEventListener('orbita:research-start',()=>{stopDemo();if(state.busy)stopChat();navigate('inicio');setOrb('searching');});
+  document.addEventListener('orbita:research-update',()=>{if(researchReply){researchReply.researchHTML=window.orbitaResearch.chatHTML();renderMessages();}});
+  document.addEventListener('orbita:research-complete',()=>{if(!state.busy&&orb.state==='searching'){setOrb('success');later(()=>{if(orb.state==='success')setOrb('idle');},1900);}});
+  document.addEventListener('orbita:research-close',()=>{if(orb.state==='searching')setOrb('idle');});
+  function setOrb(mode) {
+    orb.setState(mode); labOrb.setState(mode); const cfg=states[mode];
+    document.body.dataset.orbState=mode;
+    $('#state-label').textContent=cfg.status; $('#orb-title').textContent=cfg.title;
+    $('#orb-description').textContent=cfg.description; $('#orb-tag-label').textContent=mode==='idle'?'Tudo no seu ritmo':cfg.label;
+    $('#focus-state').textContent=cfg.status.toUpperCase(); $('#state-note').textContent=cfg.note;
+    $$('.state-button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.state===mode)));
+  }
+  function stopDemo() { state.demoRun++; state.demoTimers.forEach(clearTimeout); state.demoTimers=[]; }
+  function later(fn,delay) { const run=state.demoRun; state.demoTimers.push(setTimeout(()=>{if(run===state.demoRun)fn();},delay)); }
+  function log(title,detail,ico='check') {state.activities.unshift({title,detail,icon:ico}); if($('#activity-dialog').open) renderActivity();}
+  function viewHeading(eyebrow,title,subtitle,action='') { return `<div class="view-heading"><div><span class="eyebrow">${eyebrow}</span><h1>${title}<span class="mint-period">.</span></h1><p>${subtitle}</p></div>${action}</div>`; }
+  const button=(text,action,ico='plus',type='primary')=>`<button class="button ${type}" data-action="${action}">${icon(ico)}${text}</button>`;
+  function navigate(view){ if(!names[view])view='inicio'; if(location.hash!==`#${view}`)location.hash=view; else renderView(view); }
+  function renderView(view) {
+    if(!names[view])view='inicio'; state.view=view;
+    $$('.view').forEach(el=>el.hidden=el.id!==`view-${view}`);
+    $$('[data-view]').forEach(el=>{el.classList.toggle('active',el.dataset.view===view); if(el.dataset.view===view)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});
+    $('#breadcrumb').textContent=names[view]; document.title=`${names[view]} · Órbita Presença`;
+    closeMenu(); const renderers={conversa:renderChat,memoria:renderMemory,rotinas:renderRoutines,casa:renderHome,reunioes:renderMeetings,financas:renderFinance,conexoes:renderConnections,ajustes:renderSettings};
+    renderers[view]?.(); hydrate($(`#view-${view}`));
+    window.scrollTo({top:0,behavior:'instant'});
+    if(view==='inicio'){orb.resize();updateCounts();}
+  }
+  function closeMenu(){$('#sidebar').classList.remove('open');$('#mobile-scrim').classList.remove('open');}
+  function openDialog(title,content) {const dialog=$('#detail-dialog');$('#dialog-content').innerHTML=`<h2 id="dialog-title">${title}</h2>${content}`;hydrate(dialog); if(!dialog.open)dialog.showModal();}
+  function closeDialog(){$('#detail-dialog').close();}
+
+  function renderChat() {
+    $('#view-conversa').innerHTML=viewHeading('UM PENSAMENTO PUXA O OUTRO','Vamos conversar','Uma conversa que pode virar memória, plano ou próximo passo.')+`<div class="chat-layout"><aside class="panel chat-history">${button('Nova conversa','new-chat','plus','secondary full-width')}<div class="panel-label">ESPAÇOS DE CONVERSA</div><button class="history-item active" data-action="current-chat">${icon('chat')}Seu momento de hoje</button><button class="history-item" data-action="project-chat">${icon('chat')}Uma nova Órbita</button><button class="history-item" data-action="home-chat">${icon('chat')}A casa no meu ritmo</button><div class="notice">Conversas e respostas demonstrativas. Nenhum modelo de IA está conectado.</div></aside><article class="panel chat-main"><div class="chat-top"><span class="mini-orb"></span><div><h2>Uma presença para pensar junto</h2><p>Seu contexto. Seu ritmo. Sua escolha.</p></div><span class="tag green">DEMO INTERATIVA</span></div><div class="chat-messages" id="chat-messages" role="log" aria-label="Conversa demonstrativa" aria-live="polite"></div><form class="composer" id="chat-form"><div id="attachment-slot"></div><div class="composer-inner"><button type="button" class="icon-button" data-action="attach" aria-label="Anexar arquivo à demonstração">${icon('plus')}</button><textarea id="chat-input" rows="1" maxlength="3000" aria-label="Mensagem para a Órbita" placeholder="O que está passando pela sua cabeça?"></textarea><button type="button" class="icon-button" data-action="voice" aria-label="Experimentar conversa por voz">${icon('mic')}</button><button type="submit" class="icon-button send-button" id="chat-send" aria-label="${state.busy?'Parar resposta':'Enviar mensagem'}">${icon(state.busy?'stop':'send')}</button></div><div class="composer-hint"><span>Enter para enviar · Shift + Enter para uma nova linha</span><span>Respostas de exemplo</span></div></form></article></div>`;
+    renderMessages(); renderAttachment();
+    $('#chat-form').addEventListener('submit',e=>{e.preventDefault();if(state.busy){stopChat();return;}const input=$('#chat-input');const text=input.value.trim();if(text||state.attachment){sendMessage(text||`Veja o arquivo ${state.attachment}`);input.value='';}});
+    $('#chat-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('#chat-form').requestSubmit();}});
+  }
+  function renderMessages() {
+    const logEl=$('#chat-messages');if(!logEl)return;
+    logEl.innerHTML=state.messages.map(m=>`<div class="message ${m.role}">${m.role==='assistant'?'<span class="mini-orb"></span>':''}<div class="message-body"><div class="message-author">${m.role==='assistant'?'Órbita · cenário demonstrativo':'Você'}${m.partial?' · interrompida':''}</div>${m.attachment?`<div class="attachment-chip">${icon('file')}${escape(m.attachment)}</div>`:''}<p>${escape(m.text)}</p>${m.typing?'<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>':''}${m.card==='welcome'?'<div class="chat-suggestions"><button data-prompt="Como está meu dia?">Organizar meu dia</button><button data-prompt="Vamos retomar minha ideia para a Órbita">Retomar uma ideia</button><button data-prompt="Quero um momento de foco">Criar espaço para focar</button></div>':''}${m.card==='briefing'?'<div class="message-assistant-card"><strong>Seu dia, com respiro</strong><p>14:00 · Alinhamento de projeto\n16:00 · Espaço para criar\nUma prioridade: explorar a nova identidade da Órbita.</p><button class="text-button" data-action="focus">Proteger meu momento '+icon('arrow-right')+'</button></div>':''}${m.card==='approval'?'<div class="message-assistant-card"><strong>Uma ação esperando sua decisão</strong><p>Preparei um convite de exemplo. Você pode revisar cada detalhe antes de aprovar.</p><button class="text-button" data-action="activity">Revisar a proposta '+icon('arrow-right')+'</button></div>':''}${m.card==='memory'?'<div class="message-assistant-card"><strong>De onde veio essa conexão</strong><p>“Uma ideia para a Órbita” + “Próximos passos do projeto”. Memórias demonstrativas, com fonte visível.</p><button class="text-button" data-goto="memoria">Explorar memórias '+icon('arrow-right')+'</button></div>':''}${m.role==='assistant'&&!m.typing&&m.card!=='welcome'&&m.text?'<div class="chat-suggestions"><button data-action="save-answer">Guardar como memória</button><button data-action="read-answer">Ouvir com a voz do navegador</button></div>':''}</div></div>`).join('');
+    $$('.message',logEl).forEach((el,index)=>{const message=state.messages[index];if(message.card==='research')$('.message-body',el).insertAdjacentHTML('beforeend',message.researchHTML||window.orbitaResearch.chatHTML());});
+    const welcome=$('.chat-suggestions',logEl);if(state.messages[0]?.card==='welcome'&&welcome&&!$('[data-research-prompt]',welcome))welcome.insertAdjacentHTML('beforeend','<button data-research-prompt data-prompt="Pesquise interfaces 3D no navegador">Pesquisar com fontes</button>');
+    logEl.scrollTop=logEl.scrollHeight;
+    if($('#chat-send')){ $('#chat-send').innerHTML=icon(state.busy?'stop':'send');$('#chat-send').setAttribute('aria-label',state.busy?'Parar resposta':'Enviar mensagem'); }
+  }
+  function demoAnswer(text){const lower=text.toLocaleLowerCase('pt-BR');if(/(agenda|meu dia|bom dia|organizar)/.test(lower))return{text:'Vamos abrir um pouco de espaço no seu dia. Neste cenário, você tem dois compromissos e pode reservar um intervalo para explorar suas ideias. Separei o essencial abaixo.',card:'briefing'};if(/(email|e-mail|convite|agendar|marcar)/.test(lower))return{text:'Posso ajudar a transformar isso em um próximo passo. Neste exemplo, preparei um convite para uma conversa sobre o projeto. Ele fica esperando sua revisão; nada será enviado.',card:'approval'};if(/(ideia|mem[oó]ria|[oó]rbita|projeto)/.test(lower))return{text:'Há uma conexão interessante aqui: você anotou que uma boa ferramenta deve devolver atenção, e o projeto de hoje fala justamente sobre uma interface mais calma. Podemos partir disso para explorar uma presença mais orgânica, com menos interrupções.',card:'memory'};if(/(foco|concentr|pausa|cansad)/.test(lower))return{text:'Podemos começar pequeno: um momento de 25 minutos, uma única prioridade e nenhuma pressa. O modo foco deste protótipo tem um temporizador real, que você pode pausar e retomar. Abra “Modo foco” para experimentar.'};if(/(casa|luz|sala)/.test(lower))return{text:'Uma casa pode acompanhar seu ritmo. Na tela Minha casa, experimente as cenas Criar, Aconchego e Boa noite. As luzes e os controles mudam apenas nesta demonstração; nenhum dispositivo real será acionado.'};if(/(finan|gast|conta|dinheiro)/.test(lower))return{text:'Na tela Finanças, você encontra um cenário de exemplo com saldo, despesas e categorias. Experimente registrar um gasto para ver os totais mudarem. Os valores são fictícios e não vêm de nenhuma conta bancária.'};if(/(arquivo|anexo)/.test(lower))return{text:'O anexo aparece na conversa para demonstrar a experiência visual. Este protótipo não lê nem envia o conteúdo do arquivo. Na versão integrada, este seria o ponto de extrair informações e mostrar a origem de cada resposta.'};return{text:'Sua mensagem entrou no protótipo. Aqui, as respostas são roteiros de demonstração, sem um modelo de IA conectado.\n\nPara explorar a experiência, experimente “como está meu dia?”, “retomar uma ideia”, “preparar um convite” ou “quero um momento de foco”.'};}
+  function sendMessage(text){
+    if(state.busy)return; stopDemo(); state.busy=true; const run=++state.chatRun;
+    state.messages.push({role:'user',text,attachment:state.attachment});state.attachment='';renderAttachment();
+    const isResearch=/(pesquis|busc|fontes|refer[eê]ncia)/i.test(text);
+    const answer=isResearch?{text:'Neste exemplo de pesquisa, reuni três referências oficiais sobre interfaces 3D no navegador: MDN, Three.js e Khronos. Os cards mostram a origem e permitem abrir cada documento.\n\nEsta é uma demonstração visual: os links são reais, mas a descoberta e esta resposta são roteirizadas. Uma busca conectada poderá usar a mesma experiência para o tema que você solicitar.',card:'research'}:demoAnswer(text);
+    const reply={role:'assistant',text:'',typing:true,card:isResearch?'research':undefined};state.messages.push(reply);
+    if(isResearch){researchReply=reply;window.orbitaResearch.start();setOrb('searching');}else setOrb('thinking');renderMessages();
+    const wait=setTimeout(()=>{
+      if(run!==state.chatRun)return;reply.typing=false;setOrb('speaking');let cursor=0;
+      const stream=setInterval(()=>{
+        if(run!==state.chatRun){clearInterval(stream);return;}
+        cursor+=7;reply.text=answer.text.slice(0,cursor);renderMessages();
+        if(cursor>=answer.text.length){clearInterval(stream);reply.card=answer.card;state.busy=false;state.lastAnswer=answer.text;if(researchReply===reply)researchReply=null;setOrb(answer.card==='approval'?'attention':'idle');renderMessages();}
+      },24);state.chatTimers.push(stream);
+    },isResearch?3300:850);state.chatTimers.push(wait);renderMessages();
+  }
+  function stopChat(){state.chatRun++;state.chatTimers.forEach(clearTimeout);state.chatTimers.forEach(clearInterval);state.chatTimers=[];state.busy=false;if(researchReply){window.orbitaResearch.stop();researchReply=null;}const last=state.messages.at(-1);if(last?.role==='assistant'&&(last.typing||last.text)){last.typing=false;last.partial=true;if(!last.text)last.text='Resposta interrompida. Podemos recomeçar quando você quiser.';}setOrb('idle');renderMessages();}
+  function renderAttachment(){const slot=$('#attachment-slot');if(slot)slot.innerHTML=state.attachment?`<div class="attachment-chip">${icon('file')}${escape(state.attachment)}<button type="button" class="icon-button" data-action="remove-attachment" aria-label="Remover anexo">${icon('close')}</button></div>`:'';}
+
+  function renderMemory(){
+    $('#view-memoria').innerHTML=viewHeading('IDEIAS QUE SE ENCONTRAM','Sua segunda memória','Mais do que guardar. Conectar o que você sabe ao que está vivendo.',button('Guardar uma ideia','add-memory'))+`<div class="memory-banner">${icon('spark')}<div><h3>Uma conexão esperando por você</h3><p>Sua ideia de uma interface calma pode ser o começo do próximo projeto.</p></div>${button('Explorar conexão','memory-recall','arrow-right','secondary')}</div><div class="section-heading"><div class="filter-bar">${['Tudo','Ideia','Preferência','Projeto','Casa'].map(t=>`<button class="filter-chip ${state.memoryFilter===t?'active':''}" data-memory-filter="${t}">${t==='Tudo'?'Todas':t}</button>`).join('')}</div><button class="text-button" data-action="memory-view">${icon(state.memoryMode==='cards'?'network':'file')}${state.memoryMode==='cards'?'Ver conexões':'Ver cartões'}</button></div><label class="field" style="margin-top:0"><span class="panel-label">ENCONTRE UMA LEMBRANÇA</span><input id="memory-search" type="search" placeholder="Busque por uma ideia, preferência ou projeto..." value="${escape(state.memoryQuery)}"></label><div id="memory-results"></div>`;
+    $('#memory-search').addEventListener('input',e=>{state.memoryQuery=e.target.value;renderMemoryResults();});renderMemoryResults();
+  }
+  function renderMemoryResults(){
+    const memories=state.memories.filter(m=>(state.memoryFilter==='Tudo'||m.type===state.memoryFilter)&&`${m.title} ${m.body}`.toLocaleLowerCase('pt-BR').includes(state.memoryQuery.toLocaleLowerCase('pt-BR')));
+    if(state.memoryMode==='graph'){
+      const nodes=memories.slice(0,8);$('#memory-results').innerHTML=`<div class="panel"><div class="memory-graph"><svg viewBox="0 0 700 330" role="img" aria-label="Mapa ilustrativo das memórias filtradas conectadas ao seu contexto">${nodes.map((m,i)=>{const a=i/nodes.length*Math.PI*2,x=350+Math.cos(a)*225,y=165+Math.sin(a)*112;return `<line x1="350" y1="165" x2="${x}" y2="${y}"/><circle cx="${x}" cy="${y}" r="16"/><text x="${x}" y="${y+32}" text-anchor="middle">${escape(m.title.slice(0,27))}</text>`;}).join('')}<circle class="core-node" cx="350" cy="165" r="42"/><text class="core-label" x="350" y="170" text-anchor="middle">você.</text></svg></div><p class="description">Mapa ilustrativo de ${nodes.length} memórias do filtro atual. Selecione uma abaixo para consultar ou editar a fonte.</p>${nodes.map(m=>`<button class="filter-chip" data-memory="${m.id}">${escape(m.title)}</button>`).join(' ')}</div>`;return;
+    }
+    $('#memory-results').innerHTML=memories.length?`<div class="three-columns">${memories.map(m=>`<button class="panel memory-card" data-memory="${m.id}"><span class="tag ${m.type==='Ideia'?'purple-tag':m.type==='Casa'?'orange-tag':'green'}">${escape(m.type)}</span><h3>${escape(m.title)}</h3><p>${escape(m.body)}</p><span class="memory-meta"><span>${escape(m.source)}</span>${icon('arrow-up-right')}</span></button>`).join('')}</div>`:'<div class="panel empty-state">Nenhuma memória por aqui ainda. Experimente outro termo ou guarde uma ideia.</div>';
+  }
+  function memoryForm(memory){openDialog(memory?'Uma memória, do seu jeito.':'Uma ideia para guardar.',`<form id="memory-form"><label class="field">Título<input name="title" required maxlength="90" value="${escape(memory?.title||'')}" placeholder="O que vale lembrar?"></label><label class="field">Tipo<select name="type">${['Ideia','Preferência','Projeto','Casa'].map(t=>`<option ${memory?.type===t?'selected':''}>${t}</option>`).join('')}</select></label><label class="field">Sua anotação<textarea name="body" required maxlength="2000" placeholder="Conte um pouco mais...">${escape(memory?.body||'')}</textarea></label>${memory?`<div class="notice">Fonte: ${escape(memory.source)}<br>Confiança: ${escape(memory.confidence)}<br>Você pode corrigir ou esquecer esta memória a qualquer momento.</div>`:''}<div class="form-actions">${memory?`<button type="button" class="button danger" data-delete-memory="${memory.id}">${icon('trash')}Esquecer</button>`:''}<button type="button" class="button secondary" data-action="close-dialog">Cancelar</button><button class="button primary" type="submit">${icon('check')}Guardar memória</button></div></form>`);
+    $('#memory-form').addEventListener('submit',e=>{e.preventDefault();const form=new FormData(e.target);const title=form.get('title').trim(),body=form.get('body').trim();if(!title||!body){toast('Escreva um título e uma anotação.');return;}if(memory){memory.title=title;memory.body=body;memory.type=form.get('type');memory.confidence='Confirmada por você';}else state.memories.unshift({id:crypto.randomUUID(),title,body,type:form.get('type'),source:'Criada neste protótipo',confidence:'Confirmada por você'});persist();updateCounts();closeDialog();if(state.view==='memoria')renderMemory();toast('Memória guardada neste navegador.');log('Uma ideia ganhou espaço',title,'network');});
+  }
+
+  function renderRoutines(){
+    $('#view-rotinas').innerHTML=viewHeading('O COTIDIANO PODE SER MAIS LEVE','Pequenos rituais, grandes respiros','Você escolhe a intenção. A Órbita cuida da sequência.',button('Criar rotina','add-routine'))+`<div class="three-columns">${state.routines.map(r=>`<article class="panel routine-card"><div class="routine-top"><span class="quick-icon ${r.icon==='sun'?'peach-bg':r.icon==='moon'?'lavender-bg':'mint-bg'}">${icon(r.icon)}</span><button class="switch" role="switch" aria-checked="${r.active}" aria-label="Ativar rotina ${escape(r.name)}" data-routine-toggle="${r.id}"></button></div><h3>${escape(r.name)}</h3><p>${escape(r.description)}</p><div class="routine-flow">${r.steps.map((s,i)=>`${i?'<div class="flow-connector"></div>':''}<div class="flow-step"><span>${icon(['clock','network','check'][i]||'check')}</span>${escape(s)}</div>`).join('')}</div><div class="routine-bottom"><span>${escape(r.time)}</span><button class="text-button" data-run-routine="${r.id}" ${r.active?'':'disabled'}>Testar ${icon('play')}</button></div></article>`).join('')}</div><div class="notice">Ative, pause ou teste as rotinas. Nesta proposta, os passos são simulados e não alteram agenda, notificações ou dispositivos.</div>`;
+  }
+  function routineForm(){openDialog('Um ritual que combina com você.',`<form id="routine-form"><label class="field">Nome da rotina<input name="name" required maxlength="60" placeholder="Ex.: Minha pausa da tarde"></label><label class="field">Quando começa?<input name="time" type="time" required value="15:00"></label><label class="field">Qual é a intenção?<textarea name="description" required maxlength="300" placeholder="Uma pausa, um lembrete, um ambiente melhor..."></textarea></label><label class="field">O que acontece depois?<select name="effect"><option>Preparar um lembrete gentil</option><option>Reservar um momento de foco</option><option>Sugerir uma cena para a casa</option></select></label><div class="form-actions"><button type="button" class="button secondary" data-action="close-dialog">Cancelar</button><button type="submit" class="button primary">Criar rotina de exemplo</button></div></form>`);$('#routine-form').addEventListener('submit',e=>{e.preventDefault();const f=new FormData(e.target);const name=f.get('name').trim(),description=f.get('description').trim();if(!name||!description)return;state.routines.push({id:crypto.randomUUID(),name,description,time:`Todos os dias · ${f.get('time')}`,icon:'spark',steps:[`Às ${f.get('time')}`,'Considerar seu contexto',f.get('effect')],active:true});closeDialog();renderRoutines();updateCounts();toast('Nova rotina adicionada à demonstração.');});}
+  function runRoutine(id){const routine=state.routines.find(r=>r.id===id);if(!routine?.active)return;openDialog(`Experimentando: ${escape(routine.name)}`,`<p class="dialog-description">Veja como a Órbita comunica cada etapa. Esta execução é apenas visual.</p><div id="routine-progress" class="detail-list">${routine.steps.map((s,i)=>`<div id="routine-step-${i}"><span>${icon('clock')}</span><div><strong>${escape(s)}</strong><p>Aguardando</p></div></div>`).join('')}</div><div class="form-actions"><button class="button secondary" data-action="close-dialog">Fechar</button></div>`);stopDemo();setOrb('connecting');routine.steps.forEach((s,i)=>later(()=>{const row=$(`#routine-step-${i}`);if(row){$('span',row).innerHTML=icon('check');$('p',row).textContent='Etapa demonstrada';}if(i===routine.steps.length-1){setOrb('success');log('Rotina testada',`${routine.name} · apenas nesta demonstração`,'flow');toast('Fluxo demonstrado. Nenhuma ação real foi executada.');}},700+i*1100));}
+
+  function renderHome(){
+    $('#view-casa').innerHTML=viewHeading('TECNOLOGIA QUE SABE ACOLHER','Uma casa no seu ritmo','Ambientes que acompanham seu momento. Você continua no controle.',`<span class="tag green">${icon('shield')}CASA DEMONSTRATIVA</span>`)+`<div class="three-columns">${state.rooms.map(r=>`<article class="panel room-card"><div class="room-visual ${r.className}"><div class="room-illustration" aria-hidden="true"></div></div><div class="room-body"><div class="room-label"><h3>${r.name}</h3><span class="tag">${r.temp} °C</span></div><p>${r.subtitle}</p><div class="room-controls"><span>Luz ${r.light?'acesa':'apagada'}</span><button class="switch" role="switch" aria-checked="${r.light}" aria-label="Luz da ${r.name}" data-room-light="${r.id}"></button></div><div class="room-controls"><label for="brightness-${r.id}">Intensidade</label><output id="output-${r.id}">${r.brightness}%</output></div><input id="brightness-${r.id}" type="range" data-brightness="${r.id}" min="0" max="100" value="${r.brightness}" aria-label="Intensidade da luz ${r.name}" ${r.light?'':'disabled'}></div></article>`).join('')}</div><article class="panel" style="margin-top:22px"><span class="eyebrow">CENAS PARA O SEU MOMENTO</span><h2 style="margin-top:8px">Como você quer se sentir?</h2><div class="scene-grid">${[['criar','spark','Criar'],['aconchego','sun','Aconchego'],['noite','moon','Boa noite']].map(([id,ico,label])=>`<button class="scene-button ${state.scene===id?'active':''}" data-scene="${id}">${icon(ico)}${label}</button>`).join('')}</div><p class="description" style="margin-bottom:0">As cenas ajustam os controles deste protótipo. Nenhuma conexão com Home Assistant ou dispositivos reais está ativa.</p></article><div class="two-columns" style="margin-top:22px"><article class="panel"><h2>Objetos também têm memória</h2><p class="description">Uma proposta para encontrar o que ficou fora de vista.</p>${button('Onde deixei minha chave?','find-object','search','secondary')}</article><article class="panel"><h2>O controle continua seu</h2><p class="description">Portas, alarmes e outras ações sensíveis pedem uma confirmação clara.</p>${button('Ver uma aprovação','door-approval','lock','secondary')}</article></div>`;
+  }
+  function applyScene(id){state.scene=id;state.rooms.forEach((r,i)=>{r.light=id==='criar'?i===1:id==='aconchego'?i===0:false;r.brightness=id==='criar'?85:id==='aconchego'?35:0;});renderHome();setOrb('success');toast(`Cena ${id==='criar'?'Criar':id==='aconchego'?'Aconchego':'Boa noite'} aplicada apenas à demonstração.`);log('O ambiente mudou de ritmo','Cena demonstrativa aplicada aos controles locais.','home');}
+
+  const meetingLines=[['Wesley','Vamos buscar uma experiência mais calma, que deixe a presença da Órbita no centro.'],['Marina','Podemos organizar a navegação por momentos, em vez de mostrar todos os painéis juntos.'],['Wesley','E quero enxergar claramente quando ela está ouvindo, pensando ou esperando minha decisão.'],['Marina','Então o próximo passo é experimentar os estados e validar a proposta no celular.']];
+  function renderMeetings(){
+    $('#view-reunioes').innerHTML=viewHeading('ESTEJA NA CONVERSA','O que foi dito ganha um depois','Uma escuta atenta. Decisões claras. Próximos passos que não se perdem.')+`<div class="two-columns"><article class="panel meeting-live"><span class="tag">DEMONSTRAÇÃO</span><span class="eyebrow">SUA PRÓXIMA CONVERSA</span><h2>Alinhamento de projeto</h2><p>Uma nova experiência para a Órbita</p><div class="waveform ${state.meetingRunning?'running':''}" id="meeting-wave">${Array.from({length:40},(_,i)=>`<i style="--h:${12+Math.sin(i*.7)**2*45}px;--delay:${i*-.09}s"></i>`).join('')}</div><p id="meeting-time">${formatTime(state.meetingSeconds)}</p><button class="button" data-action="meeting-toggle" id="meeting-toggle">${icon(state.meetingRunning?'stop':'play')}${state.meetingRunning?'Encerrar demonstração':'Simular uma reunião'}</button><p style="margin-top:15px;font-size:10px">Roteiro de exemplo. Sem gravação de microfone.</p></article><article class="panel"><div class="section-heading"><h2>Palavras que ficam</h2><span class="tag">TRANSCRIÇÃO DEMO</span></div><div class="transcript" id="meeting-transcript"></div></article></div><div id="meeting-summary-slot"></div><article class="panel" style="margin-top:22px"><h2>Uma conversa anterior</h2><div class="list-row"><span class="quick-icon lavender-bg">${icon('wave')}</span><div><strong>Explorando a nova identidade</strong><small>16 de setembro · 32 min · 2 participantes · Dados de exemplo</small></div><button class="text-button" data-action="meeting-summary">Ver resumo ${icon('arrow-right')}</button></div></article>`;
+    renderTranscript();if(state.meetingSummary)renderMeetingSummary();
+  }
+  function renderTranscript(){const target=$('#meeting-transcript');if(!target)return;const count=Math.min(4,Math.floor(state.meetingSeconds/3));target.innerHTML=count?meetingLines.slice(0,count).map(([speaker,text],i)=>`<div class="transcript-row"><strong>${speaker}<time>00:${String((i+1)*3).padStart(2,'0')}</time></strong>${text}</div>`).join(''):'<div class="empty-state">Inicie a demonstração para ver a conversa se transformar em contexto.</div>';target.scrollTop=target.scrollHeight;}
+  function toggleMeeting(){if(state.meetingRunning){clearInterval(state.meetingInterval);state.meetingRunning=false;state.meetingSummary=true;setOrb('success');renderMeetings();log('Reunião demonstrativa encerrada','Resumo e próximos passos preparados a partir do roteiro.','wave');return;}state.meetingSeconds=0;state.meetingSummary=false;state.meetingRunning=true;setOrb('listening');renderMeetings();state.meetingInterval=setInterval(()=>{state.meetingSeconds++;if($('#meeting-time'))$('#meeting-time').textContent=formatTime(state.meetingSeconds);renderTranscript();if(state.meetingSeconds>=15)toggleMeeting();},1000);}
+  function renderMeetingSummary(){const slot=$('#meeting-summary-slot');if(!slot)return;slot.innerHTML=`<article class="panel meeting-summary"><span class="tag green">RESUMO DO ROTEIRO DE EXEMPLO</span><h2 style="margin-top:14px">Uma interface que devolve atenção</h2><p class="description">A direção escolhida no roteiro combina navegação por contexto, núcleo expressivo e uma experiência mais silenciosa.</p><ul><li>Explorar uma identidade orgânica e uma paleta mineral.</li><li>Diferenciar escuta, pensamento, fala e aprovação por movimento.</li><li>Validar o protótipo em telas pequenas antes da integração.</li></ul>${button('Guardar decisões na memória','save-meeting','network','secondary')}</article>`;}
+
+  function renderFinance(){const total=state.expenses.reduce((sum,e)=>sum+e.value,0);const brl=v=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});$('#view-financas').innerHTML=viewHeading('CLAREZA PARA ESCOLHER','Seu dinheiro, em perspectiva','Um olhar simples para as finanças. Todos os valores abaixo são fictícios.',button('Registrar gasto','add-expense'))+`<div class="stat-grid"><article class="panel stat-card"><span>Saldo do cenário</span><div class="stat-value">${brl(5840-total)}</div><small>R$ 5.840,00 de entradas de exemplo</small></article><article class="panel stat-card"><span>Saídas registradas</span><div class="stat-value">${brl(total)}</div><small>${state.expenses.length} lançamentos demonstrativos</small></article><article class="panel stat-card"><span>Reserva de tranquilidade</span><div class="stat-value">R$ 8.500</div><small>Um objetivo do cenário de exemplo</small></article></div><div class="two-columns"><article class="panel"><div class="section-heading"><h2>Pequenas escolhas, ao longo do tempo</h2><span class="tag">ILUSTRATIVO</span></div><div class="finance-chart" role="img" aria-label="Gráfico ilustrativo de despesas de abril a setembro, sem dados bancários reais">${['Abr','Mai','Jun','Jul','Ago','Set'].map((m,i)=>`<div class="chart-column"><div class="chart-bar" style="--height:${[64,87,55,72,46,39][i]}%"></div><span>${m}</span></div>`).join('')}</div><p class="description" style="margin-bottom:0">O contexto importa mais que um número isolado. Aqui, a Órbita pode ajudar a perceber padrões.</p></article><article class="panel"><h2>Últimos movimentos</h2>${state.expenses.slice().reverse().map(e=>`<div class="list-row"><span class="quick-icon peach-bg">${icon(e.icon)}</span><div><strong>${escape(e.name)}</strong><small>${escape(e.category)}</small></div><span class="money-value">${brl(e.value)}</span></div>`).join('')}</article></div><div class="notice">Os lançamentos novos existem apenas nesta sessão do protótipo. Não há importação de extrato nem conexão bancária.</div>`;}
+  function expenseForm(){openDialog('Um gasto, sem complicar.',`<form id="expense-form"><label class="field">Descrição<input name="name" required maxlength="80" placeholder="Ex.: Café da tarde"></label><label class="field">Valor em reais<input name="value" type="number" min="0.01" max="1000000" step="0.01" required placeholder="0,00"></label><label class="field">Categoria<select name="category"><option>Alimentação</option><option>Casa</option><option>Trabalho</option><option>Lazer</option><option>Outros</option></select></label><div class="notice">O valor será adicionado somente aos dados demonstrativos desta sessão.</div><div class="form-actions"><button type="button" class="button secondary" data-action="close-dialog">Cancelar</button><button class="button primary" type="submit">Registrar no protótipo</button></div></form>`);$('#expense-form').addEventListener('submit',e=>{e.preventDefault();const f=new FormData(e.target),name=f.get('name').trim(),value=Number(f.get('value'));if(!name||!Number.isFinite(value)||value<=0)return;state.expenses.push({name,value,category:f.get('category'),icon:'wallet'});closeDialog();renderFinance();toast('Gasto adicionado ao cenário de exemplo.');});}
+
+  const connectors=[{id:'calendar',name:'Google Calendar',letter:'31',text:'Compromissos que ganham contexto no seu dia.',scope:'Leitura de agenda e propostas de eventos. Eventos novos pedem sua confirmação.'},{id:'mail',name:'Gmail',letter:'M',text:'Mensagens importantes, sem viver na caixa de entrada.',scope:'Leitura e rascunhos. Nenhuma mensagem é enviada sem uma aprovação.'},{id:'notion',name:'Notion',letter:'N',text:'Suas notas e projetos perto de cada conversa.',scope:'Leitura das páginas que você escolher compartilhar.'},{id:'home',name:'Home Assistant',letter:'⌂',text:'O ambiente da casa acompanhando o seu momento.',scope:'Luzes e cenas; ações sensíveis sempre exigem aprovação.'},{id:'slack',name:'Slack',letter:'#',text:'O contexto do trabalho, sem o ruído de todos os canais.',scope:'Canais selecionados. Envio de mensagens sujeito à sua aprovação.'},{id:'whatsapp',name:'WhatsApp',letter:'W',text:'Conversas que importam, com um próximo passo claro.',scope:'Mensagens e rascunhos de exemplo. Nenhum número real é usado.'}];
+  function renderConnections(){$('#view-conexoes').innerHTML=viewHeading('TUDO MAIS PERTO. VOCÊ NO CONTROLE','Seu universo conectado','Escolha o que entra na conversa. Cada conexão tem um limite claro.')+`<div class="three-columns">${connectors.map(c=>`<article class="panel connector-card"><div class="connector-top"><span class="connector-logo">${c.letter}</span><span class="tag ${state.connections[c.id]?'green':''}">${state.connections[c.id]?'Conectado na demo':'Não conectado'}</span></div><h3>${c.name}</h3><p>${c.text}</p><button class="button secondary" data-connector="${c.id}">${icon(state.connections[c.id]?'sliders':'plus')}${state.connections[c.id]?'Gerenciar conexão':'Explorar conexão'}</button></article>`).join('')}</div><div class="notice">Os estados de conexão são fictícios. Este protótipo não inicia OAuth, não acessa contas e não solicita credenciais.</div>`;}
+  function connectorDetail(id){const c=connectors.find(c=>c.id===id);openDialog(c.name,`<p class="dialog-description">${c.text}</p><div class="notice"><strong>O que a Órbita poderia acessar</strong><br>${c.scope}</div><p class="dialog-description">No produto integrado, você escolheria as permissões antes de autorizar o acesso. Aqui, o botão muda apenas o estado visual.</p><div class="form-actions"><button class="button secondary" data-action="close-dialog">Voltar</button><button class="button primary" data-toggle-connector="${id}">${state.connections[id]?'Desconectar na demo':'Simular conexão'}</button></div>`);}
+  function renderSettings(){$('#view-ajustes').innerHTML=viewHeading('NENHUMA PRESENÇA É IGUAL','Do seu jeito','A experiência se adapta ao seu ritmo, não o contrário.')+`<div class="two-columns"><article class="panel"><h2>A presença da Órbita</h2><div class="setting-row"><div><strong>Aparência</strong><p>Mineral durante o dia. Floresta para desacelerar.</p></div><select id="theme-select" aria-label="Tema"><option value="light" ${state.theme==='light'?'selected':''}>Mineral claro</option><option value="dark" ${state.theme==='dark'?'selected':''}>Floresta escuro</option></select></div><div class="setting-row"><div><strong>Movimento reduzido</strong><p>O núcleo permanece estático e os estados usam forma e texto.</p></div><button class="switch" role="switch" aria-label="Movimento reduzido nas preferências" aria-checked="${state.reduced}" data-action="reduce-motion"></button></div><div class="setting-row"><div><strong>Uma identidade que respira</strong><p>Explore os dez estados e a intensidade do núcleo.</p></div><button class="text-button" data-action="lab">Experimentar ${icon('arrow-right')}</button></div><div class="setting-row"><div><strong>Proatividade com delicadeza</strong><p>Exibir sugestões contextuais na visão geral.</p></div><button class="switch" role="switch" aria-checked="${state.proactivity}" aria-label="Sugestões proativas" data-action="proactivity"></button></div></article><article class="panel"><h2>Seu espaço, suas escolhas</h2><div class="setting-row"><div><strong>Modo local</strong><p>Preferência visual do protótipo. Nenhum serviço está conectado.</p></div><button class="switch" role="switch" aria-checked="${state.privacy}" aria-label="Modo local" data-action="toggle-privacy"></button></div><div class="setting-row"><div><strong>Memórias sob seu controle</strong><p>Veja a fonte, corrija ou esqueça o que precisar.</p></div><button class="text-button" data-goto="memoria">Revisar ${icon('arrow-right')}</button></div><div class="setting-row"><div><strong>Suas notas do protótipo</strong><p>Exportar as memórias visíveis em um arquivo JSON.</p></div><button class="text-button" data-action="export">Exportar ${icon('download')}</button></div><div class="notice">Tema, movimento, intensidade e memórias ficam salvos neste navegador. Conversas, rotinas, casa e finanças são reiniciadas ao recarregar.</div></article></div><article class="panel" style="margin-top:22px"><span class="eyebrow">A IDEIA POR TRÁS DA PROPOSTA</span><h2 style="margin-top:10px">Tecnologia presente. Vida em primeiro plano.</h2><p class="description">Órbita Presença troca o painel técnico por espaços de contexto: conversar, lembrar, criar rituais e cuidar da casa. Verde profundo traz estabilidade; menta sinaliza vida; névoa e argila ajudam a orientar sem disputar atenção.</p>${button('Conhecer a proposta','about','orbit','secondary')}</article>`;$('#theme-select').addEventListener('change',e=>{state.theme=e.target.value;updateTheme();});}
+
+  function renderActivity(){const target=$('#activity-content');target.innerHTML=`<p class="drawer-intro">Um lugar para entender os passos da Órbita e escolher o que pode acontecer depois.</p>${state.approved===null?`<article class="approval-card"><span class="eyebrow">ESPERANDO SUA DECISÃO</span><h3>Reservar um espaço para conversar?</h3><p>Um convite de exemplo foi preparado. Confira o destinatário, o horário e o conteúdo.</p><div class="approval-preview"><strong>Para:</strong> Marina · contato fictício<br><strong>Quando:</strong> 21/09, às 14:00 · 30 min<br><strong>Assunto:</strong> Próximos passos da Órbita<br><br>Vamos conversar sobre a nova identidade e alinhar o próximo experimento?</div><div class="form-actions"><button class="button primary" data-action="approve">${icon('check')}Aprovar na demo</button><button class="button secondary" data-action="reject">Agora não</button></div><p style="margin-top:12px;font-size:9px">Nenhum convite real será enviado.</p></article>`:`<div class="notice">${state.approved?'Proposta aprovada na demonstração. Nenhum convite foi enviado.':'Proposta recusada. Você pode continuar no seu ritmo.'}</div>`}<span class="eyebrow">TRILHA DE ATIVIDADE</span>${[...state.activities,{title:'Seu contexto está por aqui',detail:'12 memórias de exemplo preparadas para explorar.',icon:'network'},{title:'Um dia com mais espaço',detail:'Agenda demonstrativa pronta para seu briefing.',icon:'sun'}].slice(0,10).map(a=>`<div class="activity-item"><span>${icon(a.icon)}</span><div><strong>${escape(a.title)}</strong><p>${escape(a.detail)}</p><small>Nesta demonstração</small></div></div>`).join('')}`;}
+  function activity(){renderActivity();$('#activity-dialog').showModal();setOrb(state.approved===null?'attention':'idle');}
+  function briefing(){openDialog('Seu dia merece um pouco de espaço.',`<p class="dialog-description">Um resumo demonstrativo para começar com clareza.</p><div class="detail-list"><div><span>${icon('calendar')}</span><div><strong>Dois momentos na agenda</strong><p>14:00 · Alinhamento de projeto.<br>16:00 · Um espaço para criar, sem interrupções.</p></div></div><div><span>${icon('network')}</span><div><strong>Uma ideia esperando por você</strong><p>A anotação sobre interfaces calmas combina com a proposta de hoje.</p></div></div><div><span>${icon('leaf')}</span><div><strong>Você não precisa resolver tudo agora</strong><p>Escolha uma prioridade. O resto pode esperar sua vez.</p></div></div></div><div class="form-actions"><button class="button secondary" data-action="briefing-chat">Continuar na conversa</button><button class="button primary" data-action="focus">${icon('spark')}Reservar meu momento</button></div>`);setOrb('speaking');}
+  function about(){openDialog('Órbita. Uma presença para a vida.',`<p class="dialog-description">Conceito 01 · Presença<br>Uma nova direção de identidade e experiência para avaliar antes da implementação no produto.</p><div class="detail-list"><div><span>${icon('orbit')}</span><div><strong>Uma identidade viva</strong><p>Núcleo 3D com vidro, metal, malha neural e dez estados expressivos. Uma inteligência visível, com movimento que respeita sua atenção.</p></div></div><div><span>${icon('network')}</span><div><strong>Contexto no momento certo</strong><p>Memórias com fonte, sugestões explicáveis e espaços claros para casa, reuniões, finanças e rotinas.</p></div></div><div><span>${icon('shield')}</span><div><strong>Você no centro das decisões</strong><p>Aprovações legíveis, integrações com escopo e um modo foco que protege seu tempo.</p></div></div></div><div class="notice">HTML, CSS e JavaScript locais. Sem dependências, serviços externos, acesso ao microfone ou uso das suas contas. Respostas, agendas, reuniões e saldos são demonstrativos.</div><div class="form-actions"><button class="button primary" data-action="open-lab-from-about">Experimentar a identidade ${icon('arrow-right')}</button></div>`);}
+
+  function voiceDemo(){
+    if(state.busy)stopChat();stopDemo();closeDialog();setOrb('listening');toast('Demonstração de voz iniciada. O microfone continua desligado.');
+    $('#voice-label').textContent='Demonstração em andamento';
+    later(()=>{setOrb('thinking');$('#orb-description').textContent='Pedido de exemplo: “Órbita, como está meu dia?”';},2300);
+    later(()=>{setOrb('speaking');$('#orb-title').textContent='Um dia com espaço para você.';$('#orb-description').textContent='Dois compromissos, uma ideia para retomar e um momento de foco.';},4300);
+    later(()=>{setOrb('success');$('#voice-label').textContent='Conversar com a Órbita';},7400);
+    later(()=>setOrb('idle'),9400);
+  }
+  function demoSequence(){if(state.busy)stopChat();stopDemo();const seq=['idle','listening','thinking','searching','connecting','executing','speaking','attention','success','error','idle'];seq.forEach((s,i)=>later(()=>setOrb(s),i*2200));toast('Percorrendo dez operações do núcleo holográfico.');}
+  function openLab(){closeMenu();if(state.view!=='inicio')navigate('inicio');$('#lab-dialog').showModal();$('#lab-dialog').scrollTop=0;setOrb(orb.state);}
+  function formatTime(total){return`${String(Math.floor(total/60)).padStart(2,'0')}:${String(total%60).padStart(2,'0')}`;}
+  function openFocus(){
+    closeDialog();$$('dialog[open]').forEach(d=>d.close());state.focusTrigger=document.activeElement;
+    $('#focus-overlay').hidden=false;$('#focus-stage-slot').append($('#orb-stage'));
+    $('.app-shell').inert=true;$('#sidebar').inert=true;document.body.style.overflow='hidden';
+    $('#focus-overlay').focus();orb.resize();updateFocusTimer();
+  }
+  function closeFocus(){
+    $('#presence-card').insertBefore($('#orb-stage'),$('.presence-copy'));
+    $('#focus-overlay').hidden=true;$('.app-shell').inert=false;$('#sidebar').inert=false;document.body.style.overflow='';orb.resize();
+    if(state.focusTrigger?.isConnected)state.focusTrigger.focus();
+  }
+  function updateFocusTimer(){if(state.focusRunning)state.focusSeconds=Math.max(0,Math.ceil((state.focusDeadline-Date.now())/1000));$('#focus-timer').textContent=formatTime(state.focusSeconds);$('#focus-start').innerHTML=icon(state.focusRunning?'pause':'play')+(state.focusRunning?'Pausar meu momento':state.focusSeconds===1500?'Começar meu momento':state.focusSeconds===0?'Mais um momento':'Retomar meu momento');if(state.focusRunning&&state.focusSeconds===0){clearInterval(state.focusInterval);state.focusRunning=false;setOrb('success');toast('Seu momento de foco terminou. Que tal uma pausa?');updateFocusTimer();}}
+  function toggleFocusTimer(){if(state.focusRunning){updateFocusTimer();state.focusRunning=false;clearInterval(state.focusInterval);}else{if(state.focusSeconds===0)state.focusSeconds=1500;state.focusRunning=true;state.focusDeadline=Date.now()+state.focusSeconds*1000;state.focusInterval=setInterval(updateFocusTimer,250);}updateFocusTimer();}
+  function resetFocus(){clearInterval(state.focusInterval);state.focusRunning=false;state.focusSeconds=1500;updateFocusTimer();}
+
+  const searchItems=[...Object.entries(names).map(([id,title])=>({title,detail:'Espaço do seu universo',view:id,icon:id==='casa'?'home':id==='memoria'?'network':'orbit'})),{title:'Modo foco',detail:'Uma coisa de cada vez, com temporizador',action:'focus',icon:'spark'},{title:'Laboratório de animações',detail:'Explore dez estados da presença',action:'lab',icon:'sliders'},{title:'Aprovações e atividade',detail:'Você decide antes de agir',action:'activity',icon:'shield'}];
+  function renderSearch(){const query=$('#global-search').value.toLocaleLowerCase('pt-BR');const entries=[...searchItems,...state.memories.map(m=>({title:m.title,detail:`Memória · ${m.type}`,memory:m.id,icon:'network'}))].filter(i=>(i.title+' '+i.detail).toLocaleLowerCase('pt-BR').includes(query)).slice(0,12);$('#search-results').innerHTML=entries.length?entries.map(i=>`<button class="search-result" ${i.view?`data-search-view="${i.view}"`:i.memory?`data-search-memory="${i.memory}"`:`data-search-action="${i.action}"`}>${icon(i.icon)}<span><strong>${escape(i.title)}</strong><small>${escape(i.detail)}</small></span><span>↵</span></button>`).join(''):'<div class="empty-state">Nenhum resultado. Tente “foco”, “memória” ou “casa”.</div>';}
+  function openSearch(){$('#global-search').value='';renderSearch();$('#search-dialog').showModal();$('#global-search').focus();}
+
+  const actions={
+    menu:()=>{$('#sidebar').classList.add('open');$('#mobile-scrim').classList.add('open');},
+    search:openSearch,'close-search':()=>$('#search-dialog').close(),
+    theme:()=>{state.theme=state.theme==='light'?'dark':'light';updateTheme();if(state.view==='ajustes')renderSettings();},
+    lab:openLab,'close-lab':()=>$('#lab-dialog').close(),'open-lab-from-about':()=>{closeDialog();openLab();},
+    'close-dialog':closeDialog,'close-activity':()=>$('#activity-dialog').close(),
+    'demo-sequence':demoSequence,'reduce-motion':()=>{state.reduced=!state.reduced;updateReduced();if(state.view==='ajustes')renderSettings();},
+    'dismiss-toast':()=>$('#toast').classList.remove('show'),
+    focus:openFocus,'close-focus':closeFocus,'focus-timer':toggleFocusTimer,'focus-reset':resetFocus,
+    voice:voiceDemo,write:()=>{navigate('conversa');setTimeout(()=>$('#chat-input')?.focus(),80);},
+    briefing,'briefing-chat':()=>{closeDialog();navigate('conversa');setTimeout(()=>sendMessage('Como está meu dia?'),50);},
+    about,activity,profile:()=>navigate('ajustes'),personalize:()=>{openDialog('Deixe o seu espaço mais seu.',`<p class="dialog-description">Escolha os atalhos que aparecem na visão geral.</p><form id="personalize-form">${['Sua segunda memória','Uma casa que acompanha','O cotidiano, mais leve'].map((t,i)=>`<label class="checkbox-row"><input type="checkbox" name="card" value="${i}" ${$$('.quick-card')[i].hidden?'':'checked'}>${t}</label>`).join('')}<div class="form-actions"><button class="button primary" type="submit">Salvar nesta sessão</button></div></form>`);$('#personalize-form').addEventListener('submit',e=>{e.preventDefault();const chosen=new FormData(e.target).getAll('card');$$('.quick-card').forEach((card,i)=>card.hidden=!chosen.includes(String(i)));closeDialog();toast('Seus atalhos foram personalizados.');});},
+    'memory-recall':()=>openDialog('Talvez estas ideias se encontrem.',`<p class="dialog-description">Ontem, você anotou que uma boa ferramenta devolve atenção. Hoje, o projeto pede uma interface mais calma.</p><div class="detail-list"><div><span>${icon('file')}</span><div><strong>“Uma ideia para a Órbita”</strong><p>Uma presença que entende o seu ritmo. Memória demonstrativa.</p></div></div><div><span>${icon('link')}</span><div><strong>“Próximos passos do projeto”</strong><p>Uma identidade orgânica e menos interrupções. Fonte demonstrativa.</p></div></div></div><div class="notice">A proposta é tornar cada sugestão explicável: mostrar o que se conectou e permitir que você confirme ou descarte.</div><div class="form-actions"><button class="button secondary" data-action="close-dialog">Deixar para depois</button><button class="button primary" data-action="project-chat">Pensar sobre isso ${icon('arrow-right')}</button></div>`),
+    'add-memory':()=>memoryForm(),
+    'memory-view':()=>{state.memoryMode=state.memoryMode==='cards'?'graph':'cards';renderMemory();},
+    'new-chat':()=>{if(state.busy)stopChat();state.messages=[{role:'assistant',text:'Um novo espaço para pensar. O que você quer explorar agora?',card:'welcome'}];state.lastAnswer='';state.attachment='';renderChat();},
+    'current-chat':()=>$('#chat-input')?.focus(),
+    'project-chat':()=>{closeDialog();navigate('conversa');setTimeout(()=>sendMessage('Vamos retomar minha ideia para a Órbita'),50);},
+    'home-chat':()=>{navigate('conversa');setTimeout(()=>sendMessage('Como minha casa pode acompanhar meu ritmo?'),50);},
+    'save-answer':()=>{const text=state.lastAnswer||state.messages.filter(m=>m.role==='assistant'&&!m.typing).at(-1)?.text;if(!text)return;state.memories.unshift({id:crypto.randomUUID(),title:'Uma ideia da conversa',type:'Ideia',body:text,source:'Conversa demonstrativa',confidence:'Guardada por você'});persist();updateCounts();toast('Resposta demonstrativa guardada como memória.');},
+    'read-answer':()=>{if(!('speechSynthesis'in window)){toast('Este navegador não oferece leitura em voz.');return;}const text=state.lastAnswer;if(!text){toast('Envie uma mensagem primeiro para ouvir a resposta.');return;}speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.lang='pt-BR';utterance.rate=1;utterance.onstart=()=>setOrb('speaking');utterance.onend=()=>setOrb('idle');utterance.onerror=()=>{setOrb('idle');toast('A voz não está disponível neste navegador.');};speechSynthesis.speak(utterance);toast('Lendo com a voz do navegador. Pressione Esc para parar.');},
+    attach:()=>{const input=document.createElement('input');input.type='file';input.addEventListener('change',()=>{if(input.files?.[0]){state.attachment=input.files[0].name;renderAttachment();toast('Somente o nome será exibido. O arquivo não é lido nem enviado.');}});input.click();},
+    'remove-attachment':()=>{state.attachment='';renderAttachment();},
+    'add-routine':routineForm,'add-expense':expenseForm,
+    'meeting-toggle':toggleMeeting,'meeting-summary':()=>{state.meetingSummary=true;renderMeetingSummary();$('#meeting-summary-slot')?.scrollIntoView({behavior:state.reduced?'instant':'smooth',block:'center'});},
+    'meeting-detail':()=>openDialog('Alinhamento de projeto.',`<p class="dialog-description">Hoje, 14:00 · 45 minutos<br>Você e Marina · Participantes fictícios</p><div class="notice"><strong>O que vale levar para a conversa</strong><br>A proposta de identidade, os estados da Órbita e uma ideia de como simplificar a navegação.</div><div class="form-actions"><button class="button primary" data-action="goto-meetings">Explorar a reunião ${icon('arrow-right')}</button></div>`),
+    'goto-meetings':()=>{closeDialog();navigate('reunioes');},
+    'save-meeting':()=>{if(state.memories.some(m=>m.id==='meeting-decisions')){toast('Estas decisões já estão na memória.');return;}state.memories.unshift({id:'meeting-decisions',title:'Decisões: nova presença da Órbita',type:'Projeto',body:'Explorar identidade orgânica, diferenciar estados por movimento e validar o protótipo no celular.',source:'Reunião demonstrativa',confidence:'Resumo do roteiro de exemplo'});persist();updateCounts();toast('Decisões da demonstração guardadas na memória.');},
+    'find-object':()=>openDialog('Talvez esteja bem perto.',`<p class="dialog-description">Na cena de exemplo, a chave foi vista por último na mesa da sala às 10:42.</p><div class="notice"><strong>O que a interface deveria mostrar</strong><br>Último local observado, horário e grau de confiança. Uma observação anterior não é garantia de localização atual.<br><br>Não há câmeras nem imagens reais conectadas a este protótipo.</div><div class="form-actions"><button class="button primary" data-action="close-dialog">Entendi</button></div>`),
+    'door-approval':()=>openDialog('Abrir a porta de entrada?',`<p class="dialog-description">Uma ação sensível merece uma escolha explícita. Confira o dispositivo e quem pediu antes de continuar.</p><div class="notice"><strong>Dispositivo:</strong> Porta de entrada fictícia<br><strong>Solicitante:</strong> Wesley · cenário de demonstração<br><strong>Efeito:</strong> Liberar a fechadura<br><br>Nenhuma fechadura está conectada.</div><div class="form-actions"><button class="button secondary" data-action="close-dialog">Manter fechada</button><button class="button primary" data-action="door-confirm">Simular aprovação</button></div>`),
+    'door-confirm':()=>{closeDialog();setOrb('success');toast('Aprovação demonstrada. Nenhuma porta real foi aberta.');log('Ação sensível revisada','Simulação da aprovação de abertura da porta.','lock');},
+    approve:()=>{state.approved=true;$('#notification-dot').hidden=true;setOrb('success');log('Você aprovou a proposta','Aprovação local. Nenhum convite enviado.');renderActivity();toast('Aprovação registrada na demonstração.');},
+    reject:()=>{state.approved=false;$('#notification-dot').hidden=true;setOrb('idle');log('Você escolheu deixar para depois','A proposta foi recusada sem efeitos externos.','shield');renderActivity();},
+    privacy:()=>openDialog('Seu universo continua seu.',`<p class="dialog-description">Nesta proposta, a privacidade aparece no momento da escolha e no contexto de cada ação.</p><div class="detail-list"><div><span>${icon('shield')}</span><div><strong>Local por escolha</strong><p>Você escolhe quando uma conexão externa faz sentido.</p></div></div><div><span>${icon('network')}</span><div><strong>Uma memória que você pode revisar</strong><p>Veja fontes, corrija informações e esqueça o que não precisa ficar.</p></div></div><div><span>${icon('check')}</span><div><strong>Ações sensíveis passam por você</strong><p>A interface mostra destino, conteúdo e efeito antes de uma aprovação.</p></div></div></div><div class="notice">Este HTML é independente do produto. Nenhum serviço, conta ou microfone está conectado.</div>`),
+    'toggle-privacy':()=>{state.privacy=!state.privacy;$('#privacy-label').textContent=state.privacy?'Local por escolha':'Modo flexível · demo';renderSettings();},
+    proactivity:()=>{state.proactivity=!state.proactivity;$('.insight-card').hidden=!state.proactivity;renderSettings();},
+    export:()=>{const blob=new Blob([JSON.stringify({prototype:'Órbita Presença',note:'Memórias demonstrativas e notas criadas no protótipo',memories:state.memories},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='orbita-presenca-memorias.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Suas memórias do protótipo foram exportadas.');},
+  };
+
+  document.addEventListener('click',e=>{
+    const el=e.target.closest('button,a');if(!el)return;
+    if(el.dataset.action){
+      // Save/read the selected response, even when newer messages exist.
+      if(['save-answer','read-answer'].includes(el.dataset.action)&&el.closest('.message')){
+        const index=$$('.message',$('#chat-messages')).indexOf(el.closest('.message'));
+        state.lastAnswer=state.messages[index]?.text||'';
+      }
+      actions[el.dataset.action]?.();return;
+    }
+    if(el.dataset.goto){navigate(el.dataset.goto);return;}
+    if(el.dataset.state){stopDemo();if(state.busy)stopChat();setOrb(el.dataset.state);return;}
+    if(el.dataset.prompt){sendMessage(el.dataset.prompt);return;}
+    if(el.dataset.memoryFilter){state.memoryFilter=el.dataset.memoryFilter;renderMemory();return;}
+    if(el.dataset.memory){memoryForm(state.memories.find(m=>m.id===el.dataset.memory));return;}
+    if(el.dataset.deleteMemory){const id=el.dataset.deleteMemory;const memory=state.memories.find(m=>m.id===id);if(!memory)return;openDialog('Deixar essa memória ir?',`<p class="dialog-description">“${escape(memory.title)}” será removida das memórias deste protótipo.</p><div class="form-actions"><button class="button secondary" data-action="close-dialog">Manter memória</button><button class="button danger" data-confirm-delete="${id}">Esquecer memória</button></div>`);return;}
+    if(el.dataset.confirmDelete){state.memories=state.memories.filter(m=>m.id!==el.dataset.confirmDelete);persist();updateCounts();closeDialog();renderMemory();toast('Memória removida deste protótipo.');return;}
+    if(el.dataset.routineToggle){const r=state.routines.find(r=>r.id===el.dataset.routineToggle);r.active=!r.active;renderRoutines();updateCounts();return;}
+    if(el.dataset.runRoutine){runRoutine(el.dataset.runRoutine);return;}
+    if(el.dataset.roomLight){const r=state.rooms.find(r=>r.id===el.dataset.roomLight);r.light=!r.light;renderHome();return;}
+    if(el.dataset.scene){applyScene(el.dataset.scene);return;}
+    if(el.dataset.connector){connectorDetail(el.dataset.connector);return;}
+    if(el.dataset.toggleConnector){const id=el.dataset.toggleConnector;state.connections[id]=!state.connections[id];closeDialog();renderConnections();setOrb(state.connections[id]?'connecting':'idle');toast(state.connections[id]?'Conexão simulada. Nenhum acesso externo foi autorizado.':'Conexão desativada na demonstração.');return;}
+    if(el.dataset.searchView){$('#search-dialog').close();navigate(el.dataset.searchView);return;}
+    if(el.dataset.searchMemory){$('#search-dialog').close();navigate('memoria');memoryForm(state.memories.find(m=>m.id===el.dataset.searchMemory));return;}
+    if(el.dataset.searchAction){$('#search-dialog').close();actions[el.dataset.searchAction]?.();}
+  });
+  document.addEventListener('input',e=>{if(e.target.dataset.brightness){const r=state.rooms.find(r=>r.id===e.target.dataset.brightness);r.brightness=Number(e.target.value);$(`#output-${r.id}`).textContent=`${r.brightness}%`;}});
+  $('#intensity').addEventListener('input',e=>{state.intensity=Number(e.target.value);[orb,labOrb].forEach(o=>{o.intensity=state.intensity/100;o.dirty=true;o.schedule();});$('#intensity-value').textContent=`${state.intensity}%`;persist();});
+  $('#global-search').addEventListener('input',renderSearch);
+  $('#global-search').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('.search-result')?.click();}if(e.key==='ArrowDown'){e.preventDefault();$('.search-result')?.focus();}});
+  $('#mobile-scrim').addEventListener('click',closeMenu);
+  $$('dialog').forEach(dialog=>dialog.addEventListener('click',e=>{if(e.target!==dialog)return;const rect=dialog.getBoundingClientRect();if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)dialog.close();}));
+  $('#lab-dialog').addEventListener('close',()=>{stopDemo();if(!state.busy&&!state.meetingRunning)setOrb('idle');$('#voice-label').textContent='Conversar com a Órbita';});
+  $('#detail-dialog').addEventListener('close',()=>{if($('#routine-progress')){stopDemo();setOrb('idle');}});
+  document.addEventListener('keydown',e=>{
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();if($('#focus-overlay').hidden)openSearch();}
+    if(e.key==='Escape'){closeMenu();stopDemo();if('speechSynthesis'in window)speechSynthesis.cancel();if(!$('#focus-overlay').hidden){closeFocus();e.preventDefault();}if(!state.busy&&!state.meetingRunning)setOrb('idle');$('#voice-label').textContent='Conversar com a Órbita';}
+    if(e.key==='Tab'&&!$('#focus-overlay').hidden){const items=$$('button:not([disabled])', $('#focus-overlay'));const first=items[0],last=items.at(-1);if(e.shiftKey&&(document.activeElement===first||document.activeElement===$('#focus-overlay'))){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}
+  });
+  addEventListener('hashchange',()=>renderView(location.hash.slice(1)));
+  addEventListener('pagehide',()=>{stopDemo();clearInterval(state.meetingInterval);clearInterval(state.focusInterval);state.chatTimers.forEach(clearTimeout);state.chatTimers.forEach(clearInterval);if('speechSynthesis'in window)speechSynthesis.cancel();});
+  $('#state-controls').innerHTML=Object.entries(states).map(([id,cfg])=>`<button class="state-button" data-state="${id}" aria-pressed="${id==='idle'}">${icon(cfg.icon)}${cfg.label}</button>`).join('');
+  $('.drawer-intro',$('#lab-dialog')).textContent='Um núcleo de inteligência em operação. Teste os dez estados, mova o cursor ou toque na esfera para provocar um pulso de energia.';
+  $('.coordinate-left').textContent='MOVA / CLIQUE';$('.coordinate-right').textContent='NEURAL CORE';
+  $('#intensity').value=state.intensity;$('#intensity-value').textContent=`${state.intensity}%`;orb.intensity=labOrb.intensity=state.intensity/100;
+  hydrate();updateTheme();updateReduced();updateCounts();setOrb('idle');renderView(location.hash.slice(1)||'inicio');
+})();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f7f2">
+  <meta name="description" content="Órbita Presença: proposta interativa de identidade visual e experiência. Dados demonstrativos, sem conexão com serviços reais.">
+  <title>Órbita · Presença</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%2317302b'/%3E%3Cellipse cx='32' cy='32' rx='23' ry='12' transform='rotate(-35 32 32)' fill='none' stroke='%23c9f4b0' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%23c9f4b0'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="orb.js"></script>
+  <script defer src="orb-3d.js"></script>
+  <script defer src="research.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <a href="#main" class="skip-link">Pular para o conteúdo</a>
+  <div class="mobile-scrim" id="mobile-scrim"></div>
+  <aside class="sidebar" id="sidebar" aria-label="Navegação principal">
+    <a class="brand" href="#inicio" aria-label="Órbita, início"><span class="brand-symbol" aria-hidden="true"></span><span>órbita<span class="brand-period">.</span></span></a>
+    <div class="workspace"><span class="workspace-icon" data-icon="home"></span><div><strong>Seu universo pessoal</strong><span>Um espaço só seu</span></div><span class="tiny-dot"></span></div>
+    <button class="search-trigger" data-action="search"><span data-icon="search"></span><span>Encontre qualquer coisa</span><kbd>⌘ K</kbd></button>
+    <p class="nav-caption">SEU ESPAÇO</p>
+    <nav class="nav-main">
+      <a href="#inicio" class="nav-link active" data-view="inicio"><span data-icon="orbit"></span>Visão geral<span class="nav-active-dot"></span></a>
+      <a href="#conversa" class="nav-link" data-view="conversa"><span data-icon="chat"></span>Conversas</a>
+      <a href="#memoria" class="nav-link" data-view="memoria"><span data-icon="network"></span>Memória</a>
+      <a href="#rotinas" class="nav-link" data-view="rotinas"><span data-icon="flow"></span>Rotinas<span class="nav-count" id="routine-count">3</span></a>
+    </nav>
+    <p class="nav-caption">CONECTADO A VOCÊ</p>
+    <nav class="nav-main">
+      <a href="#casa" class="nav-link" data-view="casa"><span data-icon="home"></span>Minha casa</a>
+      <a href="#reunioes" class="nav-link" data-view="reunioes"><span data-icon="wave"></span>Reuniões</a>
+      <a href="#financas" class="nav-link" data-view="financas"><span data-icon="wallet"></span>Finanças</a>
+      <a href="#conexoes" class="nav-link" data-view="conexoes"><span data-icon="plug"></span>Conexões</a>
+    </nav>
+    <div class="sidebar-bottom">
+      <button class="focus-teaser" data-action="focus"><span class="focus-symbol" data-icon="spark"></span><strong>Menos ruído.<br>Mais presença.</strong><span>Entre no modo foco <span data-icon="arrow-up-right"></span></span></button>
+      <button class="nav-link lab-link" data-action="lab"><span data-icon="sliders"></span>Explorar o novo design<span class="new-dot"></span></button>
+      <a href="#ajustes" class="nav-link" data-view="ajustes"><span data-icon="settings"></span>Preferências</a>
+      <button class="profile" data-action="profile"><span class="avatar">W</span><span><strong>Wesley</strong><small>Em casa, no seu ritmo.</small></span><span data-icon="chevrons"></span></button>
+    </div>
+  </aside>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="breadcrumb"><button class="icon-button mobile-menu" data-action="menu" aria-label="Abrir navegação"><span data-icon="menu"></span></button><span class="breadcrumb-universe">Meu universo</span><span class="slash">/</span><strong id="breadcrumb">Visão geral</strong></div>
+      <div class="topbar-actions"><span class="prototype-badge">PROPOSTA INTERATIVA</span><button class="privacy-pill" data-action="privacy"><span data-icon="shield"></span><span id="privacy-label">Local por escolha</span></button><span class="topbar-divider"></span><button class="icon-button" data-action="theme" aria-label="Alternar tema" title="Alternar tema"><span data-icon="moon" id="theme-icon"></span></button><button class="icon-button notification-button" data-action="activity" aria-label="Abrir atividade e aprovações" title="Atividade e aprovações"><span data-icon="bell"></span><i id="notification-dot"></i></button></div>
+    </header>
+    <main id="main" tabindex="-1">
+      <section class="view" id="view-inicio" aria-label="Visão geral">
+        <div class="page-heading"><div><div class="eyebrow">SEU DIA, COM MAIS ESPAÇO.</div><h1>Bom ter você aqui, Wesley<span class="mint-period">.</span></h1><p>Um pouco de clareza. Um mundo de possibilidades.</p></div><div class="day-chip"><span data-icon="sun"></span><div><strong>Sábado, 19 de setembro</strong><span>Uma boa hora para respirar</span></div></div></div>
+        <div class="home-grid">
+          <article class="presence-card" id="presence-card">
+            <div class="presence-top"><span class="eyebrow"><span class="status-dot"></span> UMA PRESENÇA, NÃO SÓ UMA IA</span><button class="icon-button" data-action="focus" aria-label="Expandir para modo foco" title="Modo foco"><span data-icon="expand"></span></button></div>
+            <div class="orb-stage" id="orb-stage">
+              <div class="orb-cross cross-one">+</div><div class="orb-cross cross-two">+</div>
+              <canvas id="orb-canvas" role="img" aria-label="Núcleo orgânico animado da Órbita, em repouso"></canvas>
+              <div class="orb-tag orb-tag-left"><span class="tiny-dot"></span><span id="orb-tag-label">Tudo no seu ritmo</span></div>
+              <div class="orb-tag orb-tag-right"><span data-icon="spark"></span>Contexto conectado</div>
+              <span class="orb-coordinate coordinate-left">O / 01</span><span class="orb-coordinate coordinate-right">PRESENÇA</span>
+            </div>
+            <div class="presence-copy"><div class="state-indicator" id="state-indicator"><span class="status-dot"></span><span id="state-label">Estou por aqui</span></div><h2 id="orb-title">O que vamos fazer hoje?</h2><p id="orb-description">Uma ideia, um plano ou só uma conversa. Estou com você.</p></div>
+            <div class="voice-actions"><button class="button primary voice-button" data-action="voice"><span data-icon="mic"></span><span id="voice-label">Conversar com a Órbita</span></button><button class="button secondary" data-action="write"><span data-icon="keyboard"></span>Prefiro escrever</button></div>
+            <div class="presence-foot"><span><span data-icon="shield"></span>Você decide o que compartilhar</span><button class="text-button" data-action="lab">Experimentar estados <span data-icon="arrow-right"></span></button></div>
+          </article>
+          <aside class="day-panel">
+            <div class="section-heading"><h2>Seu dia em órbita</h2><span class="small-tag">DEMO</span></div>
+            <article class="briefing-card"><div class="briefing-icon" data-icon="sun"></div><span class="eyebrow">UM RESUMO, SEM PRESSA</span><h3>Já organizei o essencial<br>para você.</h3><p>2 compromissos, uma ideia para retomar e um tempo só seu.</p><button class="text-button" data-action="briefing">Me conte sobre meu dia <span data-icon="arrow-right"></span></button><div class="briefing-art" aria-hidden="true"><i></i><i></i><i></i></div></article>
+            <div class="timeline-header"><h3>A seguir</h3><span>Hoje</span></div>
+            <button class="agenda-row" data-action="meeting-detail"><span class="agenda-time">14:00</span><span class="agenda-line lavender"></span><span><strong>Alinhamento de projeto</strong><small>45 min · Reunião de exemplo</small></span><span data-icon="arrow-up-right"></span></button>
+            <button class="agenda-row" data-action="focus"><span class="agenda-time">16:00</span><span class="agenda-line mint"></span><span><strong>Espaço para criar</strong><small>60 min · Seu tempo protegido</small></span><span data-icon="arrow-up-right"></span></button>
+            <button class="insight-card" data-action="memory-recall"><span class="insight-icon" data-icon="spark"></span><div><span class="eyebrow">UMA CONEXÃO INTERESSANTE</span><p>A ideia que você anotou ontem combina com o projeto de hoje.</p><strong>Vamos retomar? <span data-icon="arrow-right"></span></strong></div></button>
+          </aside>
+        </div>
+        <div class="section-heading quick-heading"><div><h2>Menos esforço. Mais vida.</h2><p>Pequenos caminhos para o que importa.</p></div><button class="text-button" data-action="personalize">Personalizar <span data-icon="sliders"></span></button></div>
+        <div class="quick-grid">
+          <button class="quick-card" data-goto="memoria"><span class="quick-icon lavender-bg" data-icon="network"></span><span class="quick-arrow" data-icon="arrow-up-right"></span><h3>Sua segunda memória</h3><p>Ideias que se conectam.<br>Nada importante se perde.</p><div class="card-foot"><span class="tiny-dot purple"></span><span id="memory-total-label">12 memórias neste universo</span></div></button>
+          <button class="quick-card" data-goto="casa"><span class="quick-icon mint-bg" data-icon="home"></span><span class="quick-arrow" data-icon="arrow-up-right"></span><h3>Uma casa que acompanha</h3><p>O ambiente certo<br>para o seu momento.</p><div class="card-foot"><span class="tiny-dot"></span>3 ambientes em harmonia</div></button>
+          <button class="quick-card" data-goto="rotinas"><span class="quick-icon peach-bg" data-icon="flow"></span><span class="quick-arrow" data-icon="arrow-up-right"></span><h3>O cotidiano, mais leve</h3><p>Pequenas rotinas.<br>Grandes respiros no dia.</p><div class="card-foot"><span class="tiny-dot orange"></span><span id="routine-summary">3 rotinas cuidando do resto</span></div></button>
+        </div>
+        <footer class="page-footer"><span><span class="tiny-dot"></span>Feita para estar perto. Projetada para dar espaço.</span><span>ÓRBITA / PRESENÇA <span class="footer-version">CONCEITO 01</span></span></footer>
+      </section>
+      <section class="view" id="view-conversa" hidden></section>
+      <section class="view" id="view-memoria" hidden></section>
+      <section class="view" id="view-rotinas" hidden></section>
+      <section class="view" id="view-casa" hidden></section>
+      <section class="view" id="view-reunioes" hidden></section>
+      <section class="view" id="view-financas" hidden></section>
+      <section class="view" id="view-conexoes" hidden></section>
+      <section class="view" id="view-ajustes" hidden></section>
+    </main>
+  </div>
+  <dialog id="detail-dialog" class="detail-dialog" aria-labelledby="dialog-title"><div class="dialog-top"><span class="eyebrow">SEU UNIVERSO, EM DETALHE</span><button class="icon-button" data-action="close-dialog" aria-label="Fechar"><span data-icon="close"></span></button></div><div id="dialog-content"></div></dialog>
+  <dialog id="search-dialog" class="search-dialog" aria-label="Busca no protótipo"><div class="search-input-wrap"><span data-icon="search"></span><input id="global-search" type="search" placeholder="O que você quer encontrar?" aria-label="Buscar no seu universo"><button class="key-button" data-action="close-search">Esc</button></div><div id="search-results"></div><div class="search-footer"><span>Busque telas, memórias e ações de exemplo</span><kbd>↵ abrir</kbd></div></dialog>
+  <dialog id="lab-dialog" class="drawer lab-drawer" aria-labelledby="lab-title"><div class="drawer-head"><div><span class="eyebrow">LABORATÓRIO DE PRESENÇA</span><h2 id="lab-title">Uma identidade viva.</h2></div><button class="icon-button" data-action="close-lab" aria-label="Fechar laboratório"><span data-icon="close"></span></button></div><p class="drawer-intro">A forma, o ritmo e a luz contam o que a Órbita está fazendo. Experimente cada estado.</p><div id="state-controls" class="state-grid"></div><div class="lab-note" id="state-note"></div><button class="button primary full-width" data-action="demo-sequence"><span data-icon="play"></span>Percorrer uma conversa</button><div class="setting-row"><div><strong>Intensidade da presença</strong><p>Do sutil ao expressivo.</p></div><output id="intensity-value">65%</output></div><input type="range" id="intensity" aria-label="Intensidade da animação" min="15" max="100" value="65"><div class="setting-row"><div><strong>Movimento reduzido</strong><p>Uma presença mais tranquila.</p></div><button class="switch" id="reduced-toggle" role="switch" aria-checked="false" aria-label="Movimento reduzido" data-action="reduce-motion"></button></div><div class="palette-block"><span class="eyebrow">A PALETA DO SEU UNIVERSO</span><div class="palette"><span style="--swatch:#173d34">Floresta</span><span style="--swatch:#c9f4b0">Brotar</span><span style="--swatch:#e3dbf2">Névoa</span><span style="--swatch:#f3dfcf">Argila</span><span style="--swatch:#f6f7f2">Mineral</span></div></div><div class="lab-footer"><span data-icon="info"></span>Este é um front demonstrativo. Voz, integrações, finanças e ações exibem cenários de exemplo.</div></dialog>
+  <dialog id="activity-dialog" class="drawer" aria-labelledby="activity-title"><div class="drawer-head"><div><span class="eyebrow">TRANSPARÊNCIA, SEM RUÍDO</span><h2 id="activity-title">O que está acontecendo.</h2></div><button class="icon-button" data-action="close-activity" aria-label="Fechar atividade"><span data-icon="close"></span></button></div><div id="activity-content"></div></dialog>
+  <div class="focus-overlay" id="focus-overlay" hidden role="dialog" aria-modal="true" aria-label="Modo foco" tabindex="-1"><header><span class="brand"><span class="brand-symbol"></span>órbita.</span><span class="focus-eyebrow">SÓ VOCÊ. UMA COISA DE CADA VEZ.</span><button class="icon-button" data-action="close-focus" aria-label="Sair do modo foco"><span data-icon="close"></span></button></header><div id="focus-stage-slot"></div><div class="focus-copy"><span class="eyebrow" id="focus-state">ESTOU POR AQUI</span><h2>Espaço para estar presente.</h2><p id="focus-timer">25:00</p><div class="focus-buttons"><button class="button primary" id="focus-start" data-action="focus-timer"><span data-icon="play"></span>Começar meu momento</button><button class="button secondary" data-action="voice"><span data-icon="mic"></span>Conversar</button></div><button class="text-button" data-action="focus-reset">Recomeçar o tempo</button></div><footer>Sem notificações. Sem pressa. No seu ritmo.</footer></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"><span data-icon="check"></span><span id="toast-text"></span><button class="icon-button" data-action="dismiss-toast" aria-label="Fechar aviso"><span data-icon="close"></span></button></div>
+  <div class="demo-caption">CONCEITO 01 <span>·</span> Dados demonstrativos <button data-action="about" aria-label="Sobre esta proposta"><span data-icon="info"></span></button></div>
+</body>
+</html>
