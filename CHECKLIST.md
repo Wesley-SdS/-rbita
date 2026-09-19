@@ -3,6 +3,21 @@
 > Fonte da verdade do progresso. Atualizado a cada passo. Sem stubs — só código real e funcionando.
 > Legenda: `[ ]` a fazer · `[~]` em andamento · `[x]` feito e verificado
 
+## Proposta visual independente: Órbita Presença (19/09/2026)
+
+- [x] Front demonstrativo em `prototypes/orbita-presenca/`, sem substituir a UI
+  atual nem conectar APIs: nove telas, identidade mineral/verde, temas claro e
+  escuro, núcleo WebGL 3D ampliado com dez estados e fallback Canvas,
+  laboratório, responsividade, foco e cards progressivos de fontes (pesquisa simulada).
+- [x] Interações verificadas no Chrome: conversa/interrupção, memória com CRUD e
+  persistência, busca, rotinas, cenas, aprovações, gastos, conexões, reunião
+  demonstrativa e temporizador. Nenhum erro JS; desktop e celular revisados.
+- [x] Funciona offline; README explica dados fictícios, roteiro de avaliação,
+  persistência e limites. Preview: `node prototypes/orbita-presenca/serve.mjs`.
+- [x] Typecheck web/API sem erros. Suíte geral: 609/610; falha no teste de página
+  do RAG (`packages/core/src/rag/chunk.test.ts:24`), fora dos arquivos desta
+  proposta. Alterações em andamento no RAG preservadas.
+
 ---
 
 ## 🐞 BUGS ABERTOS (reportados pelo Wesley — 2026-07-19, PRIORIDADE)
@@ -442,6 +457,23 @@ verdade (migração `0029`), junto com o resto da validação da Fase 2.
   fila. Migração `0031`.
 - [x] **Segurança HTTP.** Anti-CSRF nas rotas que alteram dados, CSP, HSTS e Permissions-Policy.
 - [x] **Painéis sob demanda.** Atualização periódica pausa fora da tela ou com a aba escondida.
-- [ ] **Memória: perguntar quando não tiver certeza (B4.1).** Próxima sessão.
-- [ ] **RAG: busca híbrida, reordenação e citação com página (R2).** Próxima sessão, com pesquisa.
-- [ ] **OCR completo (R5).** Próxima sessão, com pesquisa.
+- [x] **RAG: busca híbrida, reordenação e citação com página (R2).** Busca por palavra
+  (configuração `portuguese_unaccent`, coluna `tsvector` gerada, índice GIN) fundida com a
+  vetorial por Reciprocal Rank Fusion; corte por TOKEN com página, posição e texto de origem
+  guardados; citação vira "documento X, página 4"; busca e abertura do trecho na tela;
+  reindexação como trabalho de fila, em dois modos (recortar de novo ou só refazer os vetores).
+  **Medido com 15 documentos reais e 30 perguntas com gabarito** (`bench/MEDICAO-RAG-OCR.md`):
+  acerto no top 5 de 50% para 86,7%. Dois achados que só apareceram medindo: a busca textual
+  "oficial" (exigindo todos os termos) acerta 6,7% em pergunta natural, e o embedding local
+  padrão era um modelo **só de inglês** num acervo em português.
+- [x] **OCR completo (R5).** Leitura por PÁGINA: texto nativo quando existe, OCR local com
+  confiança por palavra quando não, e modelo de visão quando o OCR sai ruim (três gatilhos
+  configuráveis, não mais "menos de 10 caracteres"). Tabela de PDF nativo vira tabela Markdown
+  pela posição dos itens. Dedup por SHA-256 do arquivo. Extrato e cupom passaram a usar o mesmo
+  pipeline, então PDF escaneado deixou de ser erro. O modelo de visão de nuvem passou a saber
+  falar com Gemini e com o gateway, não só com a OpenAI.
+- [x] **Memória: perguntar quando não tiver certeza (B4.1).** Depois de cada conversa, um
+  trabalho de fila extrai candidatos a memória com confiança e categoria. Confiança alta grava
+  sozinha (com desfazer); confiança média pergunta no painel "Memórias a confirmar"; assunto
+  sensível (saúde, dinheiro, terceiros, relacionamento) SEMPRE pergunta. Candidato parecido com
+  memória existente atualiza em vez de duplicar. Tudo auditável, editável e apagável pela tela.
