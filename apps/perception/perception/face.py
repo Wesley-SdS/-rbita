@@ -13,9 +13,21 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
+import cv2
 import numpy as np
 
 from .mathutil import l2_normalize
+
+# O servidor atende cada requisição numa THREAD do pool. Com o paralelismo
+# interno do OpenCV ligado, `cv2.resize` (e outras funções que usam o
+# parallel_for) estoura "Unknown C++ exception from OpenCV code" fora da thread
+# principal no Windows: o /face/embed devolvia 500 e o cadastro de rosto pela
+# tela nunca funcionava, embora o mesmo código rodasse bem em script.
+#
+# Desligar o paralelismo do OpenCV resolve e não custa desempenho aqui: a
+# Órbita já serializa a percepção (uma câmera por vez, uma requisição por vez),
+# e quem paraleliza de verdade é o onnxruntime, com os próprios threads.
+cv2.setNumThreads(0)
 
 FACE_MODELS: dict[str, dict[str, str]] = {
     "opencv": {"det": "face_detection_yunet_2023mar.onnx", "rec": "face_recognition_sface_2021dec.onnx"},
@@ -43,8 +55,6 @@ class Face:
 
 
 def decode_image(data: bytes) -> np.ndarray:
-    import cv2
-
     if not data:
         raise ValueError("imagem vazia")
     img = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -123,8 +133,6 @@ class FaceEncoder:
                 raise FileNotFoundError(f"modelo não baixado: {p} (rode scripts/download_models.py)")
         self._lock = threading.Lock()
         if name == "opencv":
-            import cv2
-
             self._det = cv2.FaceDetectorYN.create(str(files["det"]), "", (det_size, det_size), score_threshold, nms_threshold, 50)
             self._rec = cv2.FaceRecognizerSF.create(str(files["rec"]), "")
         else:
@@ -137,8 +145,6 @@ class FaceEncoder:
 
     # ── OpenCV ──
     def _opencv(self, img: np.ndarray) -> list[Face]:
-        import cv2
-
         # detecta numa cópia reduzida (o custo do YuNet cresce com a área: 720p
         # cheio levava 1,5 s aqui) e leva caixa e pontos de volta à escala real,
         # porque o alinhamento para o embedding usa a imagem original
@@ -159,8 +165,6 @@ class FaceEncoder:
 
     # ── SCRFD + ArcFace ──
     def _insight(self, img: np.ndarray) -> list[Face]:
-        import cv2
-
         size = self.det_size
         im_ratio = img.shape[0] / img.shape[1]
         if im_ratio > 1:

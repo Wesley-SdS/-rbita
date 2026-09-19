@@ -141,3 +141,36 @@ def test_modelo_desconhecido_400():
     c = TestClient(main.app)
     r = c.post("/voice/embed", files={"file": ("a.wav", wav(), "audio/wav")}, data={"model": "inexistente"})
     assert r.status_code == 400
+
+
+def test_rosto_de_verdade_pela_rota_nao_estoura_em_thread(client, monkeypatch):
+    """Regressão do bug que só aparecia rodando: o servidor atende cada
+    requisição numa thread do pool, e com o paralelismo interno do OpenCV
+    ligado o `cv2.resize` estourava "Unknown C++ exception" fora da thread
+    principal (Windows). O /face/embed devolvia 500 e o cadastro de rosto pela
+    tela nunca funcionava, embora o mesmo código rodasse bem num script.
+
+    Este teste usa o ENCODER DE VERDADE (sem mock), porque o mock não passa
+    pelo OpenCV. Pula quando os modelos não estão baixados.
+    """
+    import numpy as np
+    import cv2
+
+    from perception.face import FACE_MODELS
+
+    modelos = main.MODELS_DIR / "face"
+    faltando = [v for v in FACE_MODELS["insightface_s"].values() if not (modelos / v).exists()]
+    if faltando:
+        pytest.skip(f"modelos de rosto não baixados: {faltando}")
+
+    # a fixture troca `_face` pelo dublê; aqui queremos o de verdade, porque é
+    # ele que passa pelo OpenCV (onde estava o bug)
+    from perception.face import FaceEncoder
+
+    monkeypatch.setattr(main, "_face", lambda _n: FaceEncoder(main.MODELS_DIR, "insightface_s"))
+    ok, jpg = cv2.imencode(".jpg", np.full((720, 1280, 3), 200, dtype=np.uint8))
+    assert ok
+    r = client.post("/face/embed", files={"file": ("f.jpg", jpg.tobytes(), "image/jpeg")}, data={"backend": "insightface_s"})
+    # imagem lisa não tem rosto; o que importa é NÃO ter estourado no caminho
+    assert r.status_code == 200, r.text
+    assert r.json()["faces"] == []
