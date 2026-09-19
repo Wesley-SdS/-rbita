@@ -225,6 +225,20 @@
       "when": 1789735151777,
       "tag": "0031_conscious_eddie_brock",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1789838788139,
+      "tag": "0032_rag_hibrido_ocr_memoria",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1789842915667,
+      "tag": "0033_documento_texto_original",
+      "breakpoints": true
     }
   ]
 }
