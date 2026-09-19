@@ -25,6 +25,7 @@ function PanelSkeleton() {
 }
 
 const KnowledgePanel = dynamic(() => import("@/components/knowledge-panel").then((m) => m.KnowledgePanel), { ssr: false, loading: PanelSkeleton });
+const MemoryCandidatesPanel = dynamic(() => import("@/components/memory-candidates-panel").then((m) => m.MemoryCandidatesPanel), { ssr: false, loading: PanelSkeleton });
 const PrivacyPanel = dynamic(() => import("@/components/privacy-panel").then((m) => m.PrivacyPanel), { ssr: false, loading: PanelSkeleton });
 const RoutinesPanel = dynamic(() => import("@/components/routines-panel").then((m) => m.RoutinesPanel), { ssr: false, loading: PanelSkeleton });
 const ConnectorsPanel = dynamic(() => import("@/components/connectors-panel").then((m) => m.ConnectorsPanel), { ssr: false, loading: PanelSkeleton });
@@ -77,6 +78,7 @@ const BLOCKS = [
   { id: "provedor", label: "Provedor de IA" },
   { id: "persona", label: "Persona" },
   { id: "memoria", label: "Memória & Docs" },
+  { id: "memorias-confirmar", label: "Memórias a confirmar" },
   { id: "reuniao", label: "Reunião" },
   { id: "privacidade", label: "Privacidade (LGPD)" },
   { id: "sessao", label: "Sessão" },
@@ -343,6 +345,7 @@ export function Console({
         </Block>
 
         <Block id="memoria" hidden={hidden} toggle={toggle}><KnowledgePanel /></Block>
+        <Block id="memorias-confirmar" hidden={hidden} toggle={toggle}><MemoryCandidatesPanel visivel={!hidden.includes("memorias-confirmar")} /></Block>
         <Block id="reuniao" hidden={hidden} toggle={toggle}><MeetingPanel /></Block>
         <Block id="privacidade" hidden={hidden} toggle={toggle}><PrivacyPanel email={userEmail} /></Block>
 

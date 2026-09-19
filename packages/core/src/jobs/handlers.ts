@@ -12,6 +12,8 @@ import { createHash } from "node:crypto";
 import { importReceipt, importStatement, DocumentoIlegivelError } from "../finance/documents";
 import { indexFile } from "../rag/files";
 import { ingestDocument } from "../rag/ingest";
+import { reindexarTudo } from "../rag/reindex";
+import { extrairDaConversa } from "../memory/candidates";
 
 /**
  * Os trabalhos pesados da casa. Cada um é o mesmo código que antes rodava
@@ -137,6 +139,34 @@ export const indexarTexto: JobDef = {
     }),
 };
 
+/**
+ * Reindexar o acervo (R2). Vira trabalho de fila porque é uma chamada de
+ * embedding por lote para TODO o acervo: com modelo local, minutos.
+ */
+export const reindexarAcervo: JobDef = {
+  kind: "rag.reindexar",
+  title: () => "Reindexar documentos e memória",
+  // reindexação interrompida no meio deixa parte do acervo com vetor novo e
+  // parte com o antigo: tentar de novo é o certo
+  maxAttempts: 2,
+  run: async (ctx) => ({ ...(await reindexarTudo(ctx.userId, ctx.payload.modo === "recalcular" ? "recalcular" : "recortar", ctx.progresso)) }),
+};
+
+/**
+ * Lê a conversa e propõe o que vale a pena lembrar (B4.1). É trabalho de fila
+ * porque é uma chamada de LLM: no turno, o dono esperaria por ela sem motivo.
+ */
+export const extrairMemoria: JobDef = {
+  kind: "memoria.extrair",
+  title: () => "Procurar o que vale lembrar da conversa",
+  maxAttempts: 2,
+  run: async (ctx) => {
+    const conversationId = texto(ctx.payload, "conversationId");
+    if (!conversationId) throw new JobPermanentError("Conversa não informada.");
+    return { ...(await extrairDaConversa(ctx.userId, conversationId, ctx.progresso)) };
+  },
+};
+
 export const lerCupom: JobDef = {
   kind: "financas.cupom",
   title: () => "Ler o comprovante",
@@ -149,4 +179,4 @@ export const lerExtrato: JobDef = {
   run: async (ctx) => semRetentarErroConhecido(async () => ({ ...(await importStatement(ctx.userId, exigirInput(ctx), texto(ctx.payload, "nome") || "extrato", ctx.progresso)) })),
 };
 
-registerJobs([recalcularVoz, recalcularRosto, transcreverReuniao, resumirReuniao, resumirConversa, indexarArquivo, indexarTexto, lerCupom, lerExtrato]);
+registerJobs([recalcularVoz, recalcularRosto, transcreverReuniao, resumirReuniao, resumirConversa, indexarArquivo, indexarTexto, reindexarAcervo, extrairMemoria, lerCupom, lerExtrato]);

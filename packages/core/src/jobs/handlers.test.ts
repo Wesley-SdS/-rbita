@@ -37,8 +37,10 @@ vi.mock("../finance/documents", async () => {
 });
 vi.mock("../rag/files", () => ({ indexFile: async () => ({}) }));
 vi.mock("../rag/ingest", () => ({ ingestDocument: async () => ({ chunks: 0, documentId: null }) }));
+vi.mock("../rag/reindex", () => ({ reindexarTudo: async (_u: string, modo: string) => ({ documentos: 2, trechos: 7, memorias: 1, recortados: modo === "recortar" ? 2 : 0, semTextoOriginal: 0 }) }));
+vi.mock("../memory/candidates", () => ({ extrairDaConversa: async () => ({ propostos: 3, salvos: 1, pendentes: 1, descartados: 1, duplicados: 0 }) }));
 
-import { transcreverReuniao, lerCupom, resumirReuniao } from "./handlers";
+import { transcreverReuniao, lerCupom, resumirReuniao, reindexarAcervo, extrairMemoria } from "./handlers";
 import { JobPermanentError } from "./queue";
 
 const ctx = (over: Partial<Parameters<typeof transcreverReuniao.run>[0]> = {}) => ({
@@ -93,5 +95,26 @@ describe("reunião: transcrever e encadear o resumo", () => {
 describe("erro conhecido vira permanente", () => {
   it("cupom ilegível não volta para a fila", async () => {
     await expect(lerCupom.run(ctx({ input: "data:image/png;base64,AA" }))).rejects.toBeInstanceOf(JobPermanentError);
+  });
+});
+
+describe("reindexar e aprender com a conversa", () => {
+  it("reindexar recorta por padrão e devolve o que mudou", async () => {
+    const r = (await reindexarAcervo.run(ctx({ payload: {} }))) as Record<string, unknown>;
+    expect(r).toMatchObject({ documentos: 2, trechos: 7, recortados: 2 });
+  });
+
+  it("reindexar em modo recalcular não recorta nada", async () => {
+    const r = (await reindexarAcervo.run(ctx({ payload: { modo: "recalcular" } }))) as Record<string, unknown>;
+    expect(r.recortados).toBe(0);
+  });
+
+  it("extrair memória devolve o que propôs, salvou e deixou pendente", async () => {
+    const r = (await extrairMemoria.run(ctx({ payload: { conversationId: "c1" } }))) as Record<string, unknown>;
+    expect(r).toMatchObject({ propostos: 3, salvos: 1, pendentes: 1 });
+  });
+
+  it("extrair memória sem conversa é permanente: não adianta tentar de novo", async () => {
+    await expect(extrairMemoria.run(ctx({ payload: {} }))).rejects.toBeInstanceOf(JobPermanentError);
   });
 });
