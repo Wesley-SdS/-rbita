@@ -6,14 +6,15 @@ import { getHaConnection } from "@orbita/core/home/connection";
 import { syncEntities } from "@orbita/core/home/entities";
 import { HomeAssistantError } from "@orbita/core/home/client";
 import type { RouteCtx } from "../http/web";
+import { leituraCacheavel } from "../http/cacheable";
 import { sessionOf } from "../http/web-route";
 
 /** GET /api/home/entities — o índice local (não vai à rede; a sincronização é o scheduler ou POST abaixo). */
-export async function GET(_req: Request, ctx: RouteCtx) {
+export async function GET(req: Request, ctx: RouteCtx) {
   const session = sessionOf(ctx);
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const rows = await db.select().from(haEntity).where(eq(haEntity.userId, session.user.id));
-  return Response.json({
+  return leituraCacheavel(req, {
     entities: rows.map((r) => ({
       entityId: r.entityId, domain: r.domain, friendlyName: r.friendlyName, roomId: r.roomId,
       state: (r.lastState as { state?: string } | null)?.state ?? null, updatedAt: r.updatedAt,

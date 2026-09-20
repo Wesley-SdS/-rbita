@@ -1,5 +1,6 @@
 import type { Request as ExpressRequest, Response as ExpressResponse } from "express";
 import { Readable } from "node:stream";
+import { acrescentarVary, codificacaoAceita, comprimir, deveComprimir, minimoParaComprimir } from "./compress";
 
 /**
  * Ponte Express ⇄ Web API (Request/Response do padrão fetch).
@@ -45,8 +46,16 @@ export function toWebRequest(req: ExpressRequest, res?: ExpressResponse): Reques
   return new Request(url, init);
 }
 
-/** Despeja um `Response` Web no `res` do Express, fluindo o corpo. */
-export async function sendWebResponse(_req: ExpressRequest, res: ExpressResponse, web: Response): Promise<void> {
+/**
+ * Despeja um `Response` Web no `res` do Express, fluindo o corpo.
+ *
+ * Dois caminhos, e a separação é deliberada: JSON completo sai comprimido de
+ * uma vez, tudo o mais continua fluindo chunk a chunk exatamente como antes.
+ * Comprimir aqui, e não num middleware genérico, é o que garante que o NDJSON
+ * do chat não ganhe um buffer no meio do caminho: um compressor de propósito
+ * geral acumularia para comprimir melhor e seguraria o primeiro token.
+ */
+export async function sendWebResponse(req: ExpressRequest, res: ExpressResponse, web: Response): Promise<void> {
   res.status(web.status);
   web.headers.forEach((v, k) => {
     if (k.toLowerCase() === "content-length") return; // recalculado pelo Node
@@ -56,6 +65,38 @@ export async function sendWebResponse(_req: ExpressRequest, res: ExpressResponse
     res.end();
     return;
   }
+
+  const codificacao = codificacaoAceita(req.headers["accept-encoding"] as string | undefined);
+  const contentType = web.headers.get("content-type");
+  if (codificacao && contentType?.toLowerCase().startsWith("application/json")) {
+    // Já é um documento inteiro em memória (veio de `Response.json`), então
+    // lê-lo por completo não acrescenta custo nenhum.
+    const corpo = Buffer.from(await web.arrayBuffer());
+    const minimoBytes = await minimoParaComprimir();
+    const comprime =
+      minimoBytes > 0 &&
+      deveComprimir({
+        metodo: req.method,
+        status: web.status,
+        contentType,
+        contentEncoding: web.headers.get("content-encoding"),
+        tamanhoBytes: corpo.byteLength,
+        minimoBytes,
+      });
+
+    if (comprime) {
+      const pacote = await comprimir(corpo, codificacao);
+      res.setHeader("Content-Encoding", codificacao);
+      res.setHeader("Content-Length", pacote.byteLength);
+      acrescentarVary(res, "Accept-Encoding");
+      res.end(pacote);
+      return;
+    }
+    res.setHeader("Content-Length", corpo.byteLength);
+    res.end(corpo);
+    return;
+  }
+
   res.flushHeaders();
   const reader = web.body.getReader();
   // se o cliente (ou o proxy) fechar a conexão, não podemos ficar esperando um

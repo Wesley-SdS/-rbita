@@ -3,16 +3,17 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { room } from "@orbita/db/home-schema";
 import type { RouteCtx } from "../http/web";
+import { leituraCacheavel } from "../http/cacheable";
 import { sessionOf } from "../http/web-route";
 
 const Body = z.object({ name: z.string().min(1).max(60), icon: z.string().max(8).optional() });
 
 /** GET /api/home/rooms */
-export async function GET(_req: Request, ctx: RouteCtx) {
+export async function GET(req: Request, ctx: RouteCtx) {
   const session = sessionOf(ctx);
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const rows = await db.select().from(room).where(eq(room.userId, session.user.id));
-  return Response.json({ rooms: rows });
+  return leituraCacheavel(req, { rooms: rows });
 }
 
 /** POST /api/home/rooms — cômodo é dado do dono, sem lista fixa (B3.7). */

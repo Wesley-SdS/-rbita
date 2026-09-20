@@ -4,6 +4,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { widget } from "@orbita/db/widget-schema";
 import type { RouteCtx } from "../http/web";
+import { leituraCacheavel } from "../http/cacheable";
 import { sessionOf } from "../http/web-route";
 
 const Body = z.object({
@@ -12,11 +13,11 @@ const Body = z.object({
   config: z.record(z.string(), z.unknown()).default({}),
 });
 
-export async function GET(_req: Request, ctx: RouteCtx) {
+export async function GET(req: Request, ctx: RouteCtx) {
   const s = sessionOf(ctx);
   if (!s) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const rows = await db.select().from(widget).where(eq(widget.userId, s.user.id)).orderBy(asc(widget.position), asc(widget.createdAt));
-  return Response.json({ widgets: rows });
+  return leituraCacheavel(req, { widgets: rows });
 }
 
 export async function POST(req: Request, ctx: RouteCtx) {

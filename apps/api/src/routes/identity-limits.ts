@@ -1,5 +1,6 @@
 import { settings } from "@orbita/core/settings/index";
 import type { RouteCtx } from "../http/web";
+import { leituraCacheavel } from "../http/cacheable";
 import { sessionOf } from "../http/web-route";
 
 /**
@@ -7,7 +8,7 @@ import { sessionOf } from "../http/web-route";
  * como chave em `setting` (com tela): sem esta rota, o cliente teria os mesmos
  * números chumbados, e mudar a config na tela quebraria o cadastro em silêncio.
  */
-export async function GET(_req: Request, ctx: RouteCtx) {
+export async function GET(req: Request, ctx: RouteCtx) {
   const s = sessionOf(ctx);
   if (!s) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const cfg = await settings.getMany([
@@ -19,7 +20,7 @@ export async function GET(_req: Request, ctx: RouteCtx) {
     "identity.enrollMaxMb",
     "identity.faceEnrollMaxMb",
   ]);
-  return Response.json({
+  return leituraCacheavel(req, {
     clipMaxKB: cfg["identity.commandClipMaxKB"],
     clipSegundos: cfg["identity.commandClipSeconds"],
     // a tela grava por este tempo; o servidor recusa abaixo de `falaMinima`

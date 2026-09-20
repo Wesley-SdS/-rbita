@@ -2,16 +2,17 @@ import { z } from "zod";
 import { createPerson, listPeople, PersonInputSchema, PersonPatchSchema, updatePerson } from "@orbita/core/identity/people";
 import { removePerson } from "@orbita/core/identity/erase";
 import type { RouteCtx } from "../http/web";
+import { leituraCacheavel } from "../http/cacheable";
 import { domainError, ownerOf } from "../http/owner-route";
 
 /**
  * Pessoas da casa (B7.1, Onda 8). NÃO é multi-tenant: toda pessoa pertence à
  * casa do dono. A lógica mora em packages/core/src/identity; aqui só a borda.
  */
-export async function GET(_req: Request, ctx: RouteCtx) {
+export async function GET(req: Request, ctx: RouteCtx) {
   const o = await ownerOf(ctx);
   if (o instanceof Response) return o;
-  return Response.json({ people: await listPeople(o.userId) });
+  return leituraCacheavel(req, { people: await listPeople(o.userId) });
 }
 
 export async function POST(req: Request, ctx: RouteCtx) {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { DeviceInputSchema, listDevices, registerDevice, removeDevice, updateDevice } from "@orbita/core/identity/device";
 import type { RouteCtx } from "../http/web";
+import { leituraCacheavel } from "../http/cacheable";
 import { domainError, ownerOf } from "../http/owner-route";
 
 /**
@@ -8,10 +9,10 @@ import { domainError, ownerOf } from "../http/owner-route";
  * cadastra uma vez, guarda o id e o manda no chat: é assim que "apaga a luz
  * daqui" sabe onde é "aqui", e é por onde a notificação acha o cômodo da pessoa.
  */
-export async function GET(_req: Request, ctx: RouteCtx) {
+export async function GET(req: Request, ctx: RouteCtx) {
   const o = await ownerOf(ctx);
   if (o instanceof Response) return o;
-  return Response.json({ devices: await listDevices(o.userId) });
+  return leituraCacheavel(req, { devices: await listDevices(o.userId) });
 }
 
 export async function POST(req: Request, ctx: RouteCtx) {

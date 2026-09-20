@@ -5,6 +5,7 @@ import { embedText } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { skill } from "@orbita/db/extension-schema";
 import type { RouteCtx } from "../http/web";
+import { leituraCacheavel } from "../http/cacheable";
 import { sessionOf } from "../http/web-route";
 import { ownerOf } from "../http/owner-route";
 
@@ -19,11 +20,11 @@ async function skillEmbedding(name: string, keywords: string | undefined, instru
 
 const Body = z.object({ name: z.string().min(1).max(80), instructions: z.string().min(1).max(4000), keywords: z.string().max(300).optional() });
 
-export async function GET(_req: Request, ctx: RouteCtx) {
+export async function GET(req: Request, ctx: RouteCtx) {
   const s = sessionOf(ctx);
   if (!s) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const rows = await db.select().from(skill).where(eq(skill.userId, s.user.id)).orderBy(desc(skill.createdAt));
-  return Response.json({ skills: rows });
+  return leituraCacheavel(req, { skills: rows });
 }
 
 export async function POST(req: Request, ctx: RouteCtx) {

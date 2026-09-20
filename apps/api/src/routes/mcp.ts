@@ -4,6 +4,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { mcpServer } from "@orbita/db/extension-schema";
 import type { RouteCtx } from "../http/web";
+import { leituraCacheavel } from "../http/cacheable";
 import { sessionOf } from "../http/web-route";
 import { assertPublicUrl, SsrfError } from "@orbita/core/net/ssrf";
 import { ownerOf } from "../http/owner-route";
@@ -15,7 +16,7 @@ const Body = z.object({
   headers: z.record(z.string(), z.string()).optional(),
 });
 
-export async function GET(_req: Request, ctx: RouteCtx) {
+export async function GET(req: Request, ctx: RouteCtx) {
   const s = sessionOf(ctx);
   if (!s) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const rows = await db
@@ -34,7 +35,7 @@ export async function GET(_req: Request, ctx: RouteCtx) {
     .from(mcpServer)
     .where(eq(mcpServer.userId, s.user.id))
     .orderBy(desc(mcpServer.createdAt));
-  return Response.json({ servers: rows });
+  return leituraCacheavel(req, { servers: rows });
 }
 
 export async function POST(req: Request, ctx: RouteCtx) {

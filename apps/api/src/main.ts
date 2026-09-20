@@ -7,6 +7,7 @@ import { configureEventSource } from "@orbita/core/events/index";
 import { log } from "@orbita/core/observability/logger";
 import { AppModule } from "./app.module";
 import { ErrorFilter } from "./http/error.filter";
+import { compressaoDeControllers } from "./http/compress";
 import { motivoRecusaOrigem } from "@orbita/core/csrf";
 import { trustedOrigins } from "@orbita/core/auth-origins";
 
@@ -27,6 +28,10 @@ async function bootstrap() {
   // O chat aceita imagem em data URL dentro do JSON (até 8 MB, validado por
   // zod na rota): o limite padrão de 100 kB do body-parser cortaria isso.
   app.useBodyParser("json", { limit: process.env.API_JSON_LIMIT ?? "12mb" });
+  // Compressão do JSON dos controllers do Nest. As rotas migradas já são
+  // comprimidas na ponte (`sendWebResponse`); isto cobre as seis que respondem
+  // pelo Express direto, entre elas a listagem de Ajustes, com 60 kB.
+  app.use(compressaoDeControllers);
   // Anti-CSRF nas rotas que alteram dados, com a MESMA lista de origens do
   // login (ver core/csrf.ts). Atrás do proxy do Next, o host que o navegador
   // usou chega em x-forwarded-host.
