@@ -222,7 +222,7 @@ dono faz pelo assistente. Crescer o catálogo é o objetivo, não um efeito a co
 Antes de considerar qualquer tarefa concluída:
 
 1. **`tsc --noEmit` limpo nos dois apps (`apps/web` e `apps/api`)** e **`vitest run` verde** (§3; baseline
-   após a auditoria da Fase 2: 68 arquivos, 605 testes, mais 34 testes Python em `apps/perception`). Sem exceção.
+   após a onda de navegação e cache: 77 arquivos, 712 testes, mais 34 testes Python em `apps/perception`). Sem exceção.
 2. **Erro pré-existente conta.** Achou teste quebrado ou tipo vermelho que já estava assim?
    Corrija antes de fechar.
 3. **Código novo em `lib/` precisa de teste.** Caminho feliz + pelo menos um de erro. A suíte
@@ -261,6 +261,11 @@ Antes de considerar qualquer tarefa concluída:
 | Roteador de modelos (uma regex, a substituir) | `packages/llm/src/catalog.ts` → `routeModelKey` |
 | Failover + disjuntor | `packages/llm/src/failover.ts` |
 | Provedores (7, OpenAI-compatible) | `packages/llm/src/providers.ts` |
+| Cache de dados da tela (loja pura + hooks) | `apps/web/src/lib/dados/cache.ts` · `dados/recurso.tsx` |
+| Adiantar leituras pelo servidor (desligado por padrão) | `apps/web/src/lib/dados/servidor.ts` · `dados/semeadura.tsx` |
+| Esqueleto de rota (é ele que liga o prefetch) | `apps/web/src/app/app/loading.tsx` |
+| Leitura com `ETag` e 304 · compressão de JSON | `apps/api/src/http/cacheable.ts` · `http/compress.ts` |
+| Cache offline das leituras (PWA) | `apps/web/public/sw.js` ← chave `cache.offlineLeitura` |
 | TTS/wake/VAD no cliente | `apps/web/src/lib/voice/engine.ts` |
 | Web Speech (wake local + ditado) | `apps/web/src/lib/voice/speech.ts` |
 | Captura de reunião (contínua + áudio da tela) | `apps/web/src/lib/voice/capture.ts` |
@@ -308,7 +313,27 @@ Antes de considerar qualquer tarefa concluída:
   requisição — nunca diarize pedaços de uma mesma reunião separadamente.
 - **`assertPublicUrl` (`lib/net/ssrf.ts`) bloqueia a LAN** (192.168/10/172.16). Isso impede
   cadastrar o Home Assistant como servidor MCP. Precisa de exceção deliberada, não de remoção.
-- **`buildMcpTools` roda no caminho quente do chat**, conectando a cada mensagem. Latência.
+- **Rota dinâmica sem `loading.tsx` NÃO é prefetchada.** Toda tela sob `/app` lê a sessão, então
+  todas são dinâmicas, e o Next pula o prefetch delas quando não há limite de carregamento: o
+  clique no menu esperava a ida e volta inteira com a tela em branco. Medido pedindo o payload de
+  prefetch de `/app/casa`: 193 bytes vazios sem o arquivo, 11.438 bytes com o esqueleto dentro.
+  Apagar `app/loading.tsx` desliga a navegação instantânea do app inteiro, sem quebrar nada.
+- **`cacheComponents` não serve a um app 100% autenticado.** Testado: o build exige tirar
+  `runtime`/`dynamic` do callback OAuth e depois para em "Uncached data was accessed outside of
+  `<Suspense>`" em toda tela, porque o layout lê a sessão. Como nada pode ser pré-renderizado, o
+  ganho é zero. Quem cuida do cache de rota aqui é `experimental.staleTimes`.
+- **Adiantar leitura pelo servidor custou mais do que rendeu** nesta máquina: a ida extra
+  Next → apps/api somou de 50 a 80ms por rota ao payload da navegação, contra rotas que respondem
+  em 17 a 54ms. Por isso `cache.adiantarLeituras` nasce DESLIGADA e quem adianta é o cliente
+  (`useAdiantarRecursos`, no nível da página). Ligar só faz sentido acessando de fora de casa.
+- **Só o que o servidor marcou como cacheável é guardado.** O service worker decide pelo
+  `Cache-Control` da resposta, não por uma lista de rotas: rota de leitura nova entra sozinha ao
+  usar `leituraCacheavel`, e rota de escrita não entra por engano. Leitura com dado sensível novo
+  só é guardada se alguém a marcar, e sair da conta apaga tudo.
+- **Compressão só de JSON completo, nunca de stream.** O NDJSON do chat emite token a token: um
+  compressor genérico acumularia para comprimir melhor e seguraria o primeiro token. Por isso ela
+  mora no `sendWebResponse` e num `res.json` estreito, não num middleware. Há teste travando
+  isso (`stream-compress.test.ts`): três linhas NDJSON têm de sair em TRÊS escritas.
 - **Embeddings só vão para a nuvem se a config deixar.** A armadilha antiga (nuvem sempre que
   houvesse `GEMINI_API_KEY`) foi fechada na Onda 1: quem manda é `embeddings.provider`
   (auto · sempre local · sempre nuvem), aplicado por requisição em `packages/llm/src/embeddings.ts`.
