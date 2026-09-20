@@ -9,6 +9,7 @@ Um *Jarvis* pessoal que roda **na sua máquina**: diga **"Ei Órbita"**, convers
 <br/>
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=next.js&logoColor=white)
+![NestJS](https://img.shields.io/badge/NestJS-12-e0234e?logo=nestjs&logoColor=white)
 ![Expo](https://img.shields.io/badge/Expo-SDK%2054-000?logo=expo&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)
 ![Postgres](https://img.shields.io/badge/Postgres-pgvector-336791?logo=postgresql&logoColor=white)
@@ -17,7 +18,7 @@ Um *Jarvis* pessoal que roda **na sua máquina**: diga **"Ei Órbita"**, convers
 
 <br/>
 
-<img src="docs/login.png" alt="Tela de login da Órbita com o núcleo neural" width="820" />
+<img src="docs/login.png" alt="Tela de entrada da Órbita, com o núcleo em WebGL sobre fundo mineral" width="820" />
 
 </div>
 
@@ -27,40 +28,54 @@ Um *Jarvis* pessoal que roda **na sua máquina**: diga **"Ei Órbita"**, convers
 
 A **Órbita** é um assistente pessoal de IA construído sobre três princípios:
 
-- **🔒 Local‑first e privado.** Roda no seu hardware com **Ollama**. Um *modo privacidade* força tudo local, nada vai para a nuvem.
-- **🗣️ Voz‑primeiro.** Wake word **"Ei Órbita"**, ela fala e ouve. Interface pensada para conversa, não só para digitar.
-- **🤝 Agente que age.** Memória de longo prazo, RAG sobre os seus documentos, finanças, tarefas e conectores (Gmail, Agenda, Notion, Slack), sempre atrás de um **gate humano** contra prompt‑injection.
+- **🔒 Local‑first e privado.** Roda no seu hardware com **Ollama**. Um *modo local* força tudo na máquina, e biometria (voz e rosto) nunca sai de casa, por desenho.
+- **🗣️ Voz‑primeiro.** Wake word **"Ei Órbita"**, ela fala e ouve. A interface foi pensada para conversa, não só para digitar.
+- **🤝 Agente que age.** Memória de longo prazo, RAG sobre os seus documentos, finanças, casa, reuniões e conectores, sempre atrás de um **gate humano** contra prompt‑injection.
 
 E quando você quiser velocidade ou qualidade de nuvem, é **um clique**: troca o provedor no seletor (Claude, Gemini, GPT, Groq, Cohere) sem tocar em código.
 
+> **De um dono só.** A Órbita não é SaaS e não é multi‑tenant. Ela reconhece *pessoas da casa*, com permissão por pessoa e por cômodo (a criança não destranca a porta), mas não tem organizações, cobrança nem revenda.
+
 ---
 
-## 🎯 Destaques
+## 🎯 O que ela faz
 
 | | |
 |---|---|
-| 🧠 **Núcleo neural (Orb)** | Identidade visual estilo *Homem de Ferro*, animada em Canvas, idêntica no web e no mobile. |
-| 🔌 **Camada de provedores** | Local (Ollama) · Claude Max · Groq · Google Gemini · OpenAI · Cohere · Vercel Gateway. Troca no seletor, cada um atrás de uma env. |
-| 📚 **RAG + memória** | Busca semântica (pgvector) nos seus documentos e memórias, com citação de fonte e cortes anti‑alucinação. |
-| 🎙️ **Voz completa** | Wake word (Vosk), STT (faster‑whisper / AssemblyAI), TTS (Piper), conversa mãos‑livres e transcrição de reunião. |
-| 💸 **Finanças** | Gastos, contas a pagar e receber, foto de comprovante → OCR → lançamento, e extrato em PDF. |
-| ✅ **Proatividade** | Rotinas agendadas que geram avisos e **notificações push** sozinhas. |
-| 🛡️ **Ações com gate humano** | O LLM só *propõe* ações com efeito (e‑mail, evento); você aprova antes de executar. |
-| 🎛️ **Modo foco** | Tela cheia, voz‑primeiro, com o Orb no centro. No celular, abre direto nele. |
+| 🧠 **Núcleo (Orb)** | Identidade visual própria: geometria em **WebGL** com vidro, malha neural e giroscópios, em dez estados que contam o que ela está fazendo. Canvas 2D como plano B. |
+| 💬 **Conversa com ferramentas** | Chat em streaming com seleção de modelo, failover antes do primeiro token e ferramentas em pt‑BR (`registrar_gasto`, `contas_a_vencer`, …). |
+| 📚 **RAG + memória** | Busca híbrida (vetor + texto, pgvector) nos seus documentos, com **citação de página** e rerank. Ela aprende com a conversa e **pergunta** quando não tem certeza. |
+| 🎙️ **Voz completa** | Wake word (Vosk), STT (faster‑whisper / AssemblyAI), TTS (Piper), conversa em tempo real (WebRTC) e transcrição de reunião **com diarização**. |
+| 📝 **Reuniões** | Grava, separa quem falou o quê, resume em mapa‑redução e extrai compromissos que viram tarefa. |
+| 🏠 **Casa** | Home Assistant como *ferramenta*: cômodos, dispositivos, aparelhos e **risco por domínio** (luz direto, fechadura pelo gate). |
+| 👤 **Identidade e câmeras** | Reconhece voz e rosto num serviço **local** de percepção, com consentimento; presença por cômodo e gestos viram **evento**, nunca ação. |
+| 💸 **Finanças** | Contas a pagar e receber, foto de comprovante → OCR → lançamento, e extrato em PDF. |
+| ⏱️ **Proatividade** | Rotinas e regras que rodam no **processo vivo** (com o navegador fechado) e geram avisos que **levam à tela certa**. |
+| 🛡️ **Gate humano** | O LLM só *propõe* ações com efeito (e‑mail, evento); você aprova antes de executar. |
 | 🔐 **LGPD** | Exportar todos os dados e apagar a conta; tokens de conectores cifrados em repouso (AES‑256‑GCM). |
-| 📊 **Economia vs. nuvem** | Painel que mostra quanto você economizou rodando local, com estimativa transparente de energia. |
+| 📊 **Economia vs. nuvem** | Quanto você economizou rodando local, com estimativa transparente de energia. |
 
 ---
 
 ## 🖼️ Telas
 
 <div align="center">
-<img src="docs/dashboard.png" alt="Dashboard da Órbita" width="440" />
+<img src="docs/visao-geral.png" alt="Visão geral da Órbita, com o núcleo e os cartões do dia" width="440" />
 &nbsp;&nbsp;
-<img src="docs/focus.png" alt="Modo foco no celular" width="230" />
+<img src="docs/foco.png" alt="Modo foco, com o núcleo e o temporizador" width="440" />
 </div>
 
-<div align="center"><sub>Dashboard completo (desktop) · Modo foco voz‑primeiro (celular)</sub></div>
+<div align="center"><sub>Visão geral · Modo foco</sub></div>
+
+<br/>
+
+<div align="center">
+<img src="docs/conversa.png" alt="Tela de conversa da Órbita" width="440" />
+&nbsp;&nbsp;
+<img src="docs/celular.png" alt="A Órbita no celular" width="200" />
+</div>
+
+<div align="center"><sub>Conversa · No celular (PWA instalável)</sub></div>
 
 ---
 
@@ -71,125 +86,154 @@ Monorepo **Turborepo + pnpm**.
 ```
 orbita/
 ├─ apps/
-│  ├─ web/      Next.js 16 · UI + API (route handlers) + Orb        ← app principal
-│  ├─ mobile/   Expo SDK 54 (iOS/Android) · mesma identidade
-│  └─ voice/    Python (FastAPI) · STT/TTS/wake word locais
+│  ├─ web/          Next.js 16 · a interface. Só /api/auth e o callback OAuth
+│  │                 ficam aqui; o resto de /api é encaminhado
+│  ├─ api/          NestJS 12 · o PROCESSO VIVO: cron, event bus, regras,
+│  │                 refresh de token e todas as rotas /api          ← obrigatório
+│  ├─ mobile/       Expo SDK 54 (iOS/Android)
+│  ├─ voice/        Python FastAPI · STT/TTS/wake word locais
+│  └─ perception/   Python 3.12 · voz e rosto viram vetor, sem estado,
+│                    nunca sai de casa
 ├─ packages/
-│  └─ llm/      camada de provedores (catálogo · resolver · failover · embeddings)
+│  ├─ core/         domínio puro: chat, RAG, regras, identidade, jobs…
+│  ├─ db/           schema Drizzle + migrações
+│  └─ llm/          provedores (descoberta · resolver · failover · embeddings)
 └─ docker-compose.yml
 ```
 
-- **Front/API:** Next.js 16, React 19, Tailwind v4, Better Auth 1.6
-- **IA:** Vercel AI SDK 7, Ollama (Qwen 2.5) + provedores de nuvem via OpenAI‑compatible
-- **Dados:** Postgres + **pgvector**, Drizzle ORM
-- **Voz:** faster‑whisper · Piper · Vosk (wake word) · AssemblyAI (opcional)
-- **Mobile:** Expo Router, react‑native‑webview (Orb)
+**Origem única:** o navegador só fala com o Next (:3000), que encaminha `/api/*` para o `apps/api` (:3010). Os dois validam a sessão com a **mesma instância** do Better Auth, sem token entre serviços.
+
+- **Interface:** Next.js 16 (Turbopack), React 19, Tailwind v4, Better Auth 1.6
+- **Backend:** NestJS 12, rodando de TypeScript com `tsx`
+- **IA:** Vercel AI SDK 7, Ollama (Qwen 2.5) + provedores de nuvem OpenAI‑compatible
+- **Dados:** Postgres 16 + **pgvector**, Drizzle ORM, índices HNSW cosine
+- **Voz:** faster‑whisper · Piper · Vosk · AssemblyAI (opcional)
+- **Percepção:** sherpa‑onnx · onnxruntime · MediaPipe
 
 ---
 
 ## 🚀 Rodando localmente
 
-**Pré‑requisitos:** Node 20+, pnpm, Docker, e [Ollama](https://ollama.com) instalado.
+**Pré‑requisitos:** Node 22+, pnpm, Docker e [Ollama](https://ollama.com).
 
 ```bash
 # 1. dependências
 pnpm install
 
-# 2. banco (Postgres + pgvector via Docker)
+# 2. banco (Postgres + pgvector)
 docker compose up -d db
 
 # 3. modelos locais (no host)
-ollama pull qwen2.5:3b        # rápido, bom para CPU
+ollama pull qwen2.5:3b        # rápido, aguenta CPU
 ollama pull nomic-embed-text  # embeddings do RAG
 
 # 4. variáveis de ambiente
-cp .env.example apps/web/.env   # e preencha o que quiser (veja abaixo)
+cp .env.example apps/web/.env   # e preencha (veja abaixo)
 
-# 5. migração do banco
-pnpm --filter @orbita/web db:migrate
-
-# 6. subir o app
-pnpm --filter @orbita/web dev   # http://localhost:3000
+# 5. migrações
+cd packages/db && npx drizzle-kit migrate && cd ../..
 ```
 
-> 💡 **Sem GPU?** O modelo local fica lento. Configure Claude / Gemini / Groq (abaixo) e ele vira o padrão automaticamente. Para máxima fluidez, rode em produção: `pnpm --filter @orbita/web prod`.
+Depois, **dois processos**, cada um no seu terminal:
 
-Quer tudo num comando? `docker compose up --build` sobe banco + migrations + web + voz (o Ollama fica no host).
+```bash
+# o processo vivo (cron, regras, todas as rotas /api)
+cd apps/api && npx tsx watch src/main.ts      # :3010
+
+# a interface
+cd apps/web && npx next dev -p 3000           # http://localhost:3000
+```
+
+> ⚠️ **O `apps/api` não é opcional.** Sem ele, `/api/*` não responde e nada proativo acontece: rotinas e regras rodam ali, não no navegador.
+
+Confira com `curl localhost:3000/api/health` → `{"status":"ok","db":"up"}`.
+
+**Opcionais**, cada um com venv própria:
+
+```bash
+cd apps/voice      && ./.venv/Scripts/python.exe -m uvicorn main:app --port 8001
+cd apps/perception && ./.venv/Scripts/python.exe -m uvicorn main:app --port 8002
+```
+
+Sem a voz, o TTS cai para o navegador e o STT para a nuvem. Sem a percepção, o chat funciona, mas cadastrar e identificar voz ou rosto responde 503.
+
+> 💡 **Sem GPU?** O modelo local fica lento (de 30 s a minutos por resposta). Configure Gemini ou Groq, que têm camada grátis, e a Órbita passa a preferir a nuvem sozinha.
 
 ---
 
 ## 🔌 Provedores de IA
 
-Tudo é **OpenAI‑compatible** e mora na `packages/llm`. Adicionar ou trocar provedor é encaixe, não refatoração. Cada um liga sozinho quando a chave existe no `.env`:
+Tudo é **OpenAI‑compatible** e mora em `packages/llm`. Cada um liga sozinho quando a chave existe no `.env`:
 
 | Provedor | Env | Observação |
 |---|---|---|
 | ⚡ **Local (Ollama)** | `OLLAMA_BASE_URL` | grátis, privado, roda na máquina |
-| 🟠 **Claude Max** | `CLAUDE_CODE_OAUTH_TOKEN` | assinatura, uso pessoal |
-| 🚀 **Groq** | `GROQ_API_KEY` | tier grátis, ~500 tok/s |
-| 🔵 **Google Gemini** | `GEMINI_API_KEY` | tier grátis |
-| 🟢 **OpenAI** | `OPENAI_API_KEY` | também usada na visão e no realtime |
+| 🟠 **Claude Max** | `CLAUDE_CODE_OAUTH_TOKEN` | assinatura, uso pessoal (`claude setup-token`) |
+| 🚀 **Groq** | `GROQ_API_KEY` | camada grátis, muito rápido |
+| 🔵 **Google Gemini** | `GEMINI_API_KEY` | camada grátis |
+| 🟢 **OpenAI** | `OPENAI_API_KEY` | também usada na visão e no tempo real |
 | 🟣 **Cohere** | `COHERE_API_KEY` | modelos Command |
-| ☁️ **Vercel Gateway** | `AI_GATEWAY_API_KEY` | muitos modelos, 1 chave |
+| ☁️ **Vercel Gateway** | `AI_GATEWAY_API_KEY` | muitos modelos, uma chave |
 
-O seletor da UI mostra só os provedores configurados. Quando o Claude está presente, o **Sonnet 5** é o padrão (nuvem rápida, mesmo com o local disponível).
+O seletor mostra só os provedores configurados. A **ordem do failover** (assinatura → local → nuvem paga) e o modelo pré‑selecionado se ajustam em *Preferências → Modelos*, sem tocar em código.
 
 ---
 
-## 🗣️ Voz
+## ⚙️ Configuração sem código
 
-O serviço de voz (`apps/voice`, FastAPI) roda o wake word e o STT/TTS locais:
+A Órbita não tem constante escondida no código. Cômodos, dispositivos, pessoas, câmeras, modelos, limites, thresholds e regras são **dados**, com tela para editar.
 
-```bash
-cd apps/voice
-uv run uvicorn main:app --host 0.0.0.0 --port 8001
-```
+O teste é simples: *"se o dono quiser mudar isso amanhã, ele precisa de um dev?"* Se a resposta for sim, é bug. Tudo vive na tabela `setting`, com padrões sensatos em `packages/core/src/settings/defs.ts` — o app sobe e funciona **sem configurar nada**.
 
-- **Wake word:** "Ei Órbita" via Vosk (pt‑BR)
-- **STT:** faster‑whisper local, ou **AssemblyAI** se `ASSEMBLYAI_API_KEY` estiver setada
-- **TTS:** Piper (`pt_BR-faber-medium`), com fallback para a voz do navegador
+---
+
+## 🛡️ Privacidade e segurança
+
+- **Modo local** força todo o processamento na máquina.
+- **Gate de ações com efeito:** o LLM apenas enfileira propostas; nada sai sem a sua aprovação. É defesa **estrutural** contra prompt‑injection, não convenção de prompt.
+- **Conteúdo externo é dado, nunca instrução.** E‑mail, página e transcrição são analisados, não obedecidos.
+- **Biometria nunca sai de casa:** voz e rosto só trafegam até o serviço local de percepção, e um guard de saída recusa destino que não seja local.
+- **Identidade não afirma sem confiança:** presença velha sai como "visto por último", e identificação fraca sai como "provavelmente".
+- **Tokens de conectores** cifrados em repouso (AES‑256‑GCM).
+- **LGPD:** exportar tudo e apagar a conta pela própria interface.
+- Rate limiting, guard de SSRF e headers de segurança nas rotas.
 
 ---
 
 ## 📱 Mobile
 
-App **Expo** (mesma identidade visual do web). Para rodar:
+O web é **PWA instalável** e responsivo, então o celular já funciona pelo navegador. Há também um app **Expo**:
 
 ```bash
 cd apps/mobile
 npx expo start --lan
 ```
 
-Abra no **Expo Go** (iOS/Android). O app aponta para o backend em `http://<seu-ip>:3000` (configurável em *Ajustes → configurar servidor*).
+Abra no **Expo Go**. O app aponta para o backend em `http://<seu-ip>:3000` (configurável em *Ajustes → servidor*).
 
 ---
 
-## 🛡️ Privacidade e segurança
+## 🎨 A interface
 
-- **Modo privacidade** força todo o processamento local.
-- **Gate de ações destrutivas:** o LLM apenas enfileira propostas; nada é enviado sem a sua aprovação (defesa contra prompt‑injection).
-- **Tokens de conectores** cifrados em repouso (AES‑256‑GCM).
-- **LGPD:** exportar todos os dados e apagar a conta pela própria UI.
-- **Rate limiting, SSRF guard e headers de segurança** nas rotas.
+A identidade se chama **Presença**: superfícies minerais, verde floresta e um núcleo expressivo. Ela nasceu como protótipo independente em `prototypes/orbita-presenca` e o app é **gerado a partir dele**:
 
----
+```bash
+python scripts/portar-presenca.py            # traz folha de estilo, núcleo, ícones e textos
+python scripts/portar-presenca.py --conferir # sai com erro se o protótipo andou
+```
 
-## ☁️ Deploy
-
-- **Web** → Vercel (aponte a raiz para `apps/web`). Na nuvem, use os provedores de nuvem; os recursos *local‑first* (Ollama, voz local, wake word) são de self‑host.
-- **Mobile** → build com **EAS** (Expo) para App Store e Play Store.
-- **Voz** → um host de Python (Render / Fly / Railway) ou local.
-- **Self‑host completo** → `docker compose up` sobe web + Postgres, com o Ollama no host.
+Os arquivos gerados não se editam à mão. O que é extensão do app (e não existe no protótipo) vive em `apps/web/src/app/presenca-app.css`.
 
 ---
 
 ## 🗺️ Roadmap
 
-- [x] Chat + RAG + memória · voz local + wake word · finanças · conectores · proatividade · LGPD
-- [x] Provider layer (local + 6 provedores de nuvem) · design system · modo foco responsivo
-- [ ] Voz em streaming (STT parcial + TTS em chunks)
-- [ ] RAG turbo (embedding de nuvem + rerank) · CSP/HSTS
-- [ ] OAuth social nativo no mobile
+- [x] Chat + RAG híbrido com rerank · voz local + wake word · finanças · conectores · proatividade · LGPD
+- [x] Camada de provedores (local + 6 de nuvem) · fila de trabalhos pesados · regras proativas
+- [x] Identidade e percepção: voz, rosto, presença por cômodo, gestos e câmeras
+- [x] Interface Presença: nove telas, temas mineral e floresta, núcleo em WebGL
+- [ ] Voz em streaming (STT parcial + TTS em pedaços)
+- [ ] CSP/HSTS · OAuth social nativo no mobile
 
 ---
 
