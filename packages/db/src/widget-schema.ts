@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, integer, jsonb } from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uuid, integer, jsonb } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -17,6 +17,7 @@ export const widget = pgTable("widget", {
   config: jsonb("config").notNull().default({}),
   position: integer("position").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+},
+(t) => [index("widget_user_position_idx").on(t.userId, t.position, t.createdAt)]);
 
 export type Widget = typeof widget.$inferSelect;

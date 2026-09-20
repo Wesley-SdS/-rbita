@@ -57,6 +57,8 @@ export const document = pgTable("document", {
 (t) => [
   // dedup de arquivo: parcial, porque documento sem arquivo tem hash nulo
   uniqueIndex("document_user_file_hash_idx").on(t.userId, t.fileHash).where(sql`${t.fileHash} is not null`),
+  // o único acima é PARCIAL: não serve para listar os documentos do dono
+  index("document_user_created_idx").on(t.userId, t.createdAt),
 ]);
 
 export const chunk = pgTable(
@@ -86,6 +88,8 @@ export const chunk = pgTable(
     index("chunk_embedding_idx").using("hnsw", t.embedding.op("vector_cosine_ops")),
     index("chunk_fts_idx").using("gin", t.fts),
     index("chunk_document_idx").on(t.documentId),
+    // contagem do acervo e reindexação varrem por dono
+    index("chunk_user_idx").on(t.userId),
   ],
 );
 
@@ -109,6 +113,8 @@ export const memory = pgTable(
   (t) => [
     index("memory_embedding_idx").using("hnsw", t.embedding.op("vector_cosine_ops")),
     index("memory_fts_idx").using("gin", t.fts),
+    // o HNSW e o GIN acima servem à busca, não a "liste/conte as minhas"
+    index("memory_user_created_idx").on(t.userId, t.createdAt),
   ],
 );
 

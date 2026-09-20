@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, boolean, jsonb, vector } from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uuid, boolean, jsonb, vector } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -18,7 +18,8 @@ export const skill = pgTable("skill", {
   embedding: vector("embedding", { dimensions: 768 }),
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+},
+(t) => [index("skill_user_idx").on(t.userId, t.createdAt)]);
 
 /**
  * Servidores MCP (Model Context Protocol): fontes externas de ferramentas.
@@ -48,7 +49,8 @@ export const mcpServer = pgTable("mcp_server", {
   lastError: text("last_error"),
   lastErrorAt: timestamp("last_error_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+},
+(t) => [index("mcp_server_user_idx").on(t.userId, t.createdAt)]);
 
 export type Skill = typeof skill.$inferSelect;
 export type McpServer = typeof mcpServer.$inferSelect;

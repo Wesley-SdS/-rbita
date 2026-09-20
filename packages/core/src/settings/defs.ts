@@ -69,6 +69,7 @@ export const SETTING_GROUPS = {
   identity: { label: "Identidade e biometria", order: 66 },
   auth: { label: "Acesso", order: 90 },
   presenca: { label: "Presença (interface)", order: 5 },
+  cache: { label: "Cache e navegação", order: 6 },
 } as const;
 export type SettingGroupId = keyof typeof SETTING_GROUPS;
 
@@ -351,6 +352,16 @@ export const SETTING_DEFS = {
   "limits.summaryMaxChars": num("limits", "Limiar do resumo em blocos", "Até este tamanho a reunião é resumida em uma passada só. Acima disso, o resumo vira mapa-redução (por blocos, depois consolidado) em vez de cortar a transcrição.", 100000, 1000, 2000000, { unit: "chars" }),
 
   // ── grafo (api/knowledge/graph) ──
+  // ── cache e navegação ──
+  // Por que isto é config e não constante: quem decide o equilíbrio entre
+  // "instantâneo" e "sempre fresco" é o dono, e esse equilíbrio muda conforme
+  // ele usa o app de um aparelho só ou de vários ao mesmo tempo (§5.6).
+  "cache.leituraMaxAgeS": num("cache", "Cache das leituras (navegador)", "Por quantos segundos o navegador pode reusar a resposta de uma leitura estável (cômodos, aparelhos, ferramentas) sem perguntar ao servidor. Zero desliga. Mesmo com cache, o servidor responde 304 quando nada mudou.", 30, 0, 3600, { unit: "s" }),
+  "cache.recursoTtlMs": num("cache", "Validade do cache de tela", "Quanto tempo um dado já buscado continua valendo ao voltar para uma tela ou aba. Vencido, a tela mostra o guardado na hora e atualiza atrás (nunca fica em branco).", 20000, 0, 600000, { unit: "ms" }),
+  "cache.recursoTtlLentoMs": num("cache", "Validade do cache de dados estáveis", "O mesmo, para o que quase não muda: cômodos, aparelhos, pessoas da casa e ferramentas.", 300000, 0, 3600000, { unit: "ms" }),
+  "cache.adiantarLeituras": bool("cache", "Adiantar as leituras pelo servidor", "O servidor busca os dados da primeira aba antes de mandar a tela. DESLIGADO por padrão: medindo nesta máquina, a ida extra do servidor custou mais (50 a 80ms por rota) do que a busca que ela poupa, porque o navegador está ao lado do servidor. Vale ligar quando se acessa a Órbita de fora de casa, onde a ida do navegador é a cara. A tela já adianta a busca por conta própria de qualquer jeito.", false),
+  "cache.comprimirAcimaDeBytes": num("cache", "Comprimir respostas acima de", "Respostas JSON maiores que isto viajam comprimidas. Abaixo do limite, comprimir custa mais processador do que economiza banda. Zero desliga a compressão.", 1024, 0, 1048576, { unit: "bytes" }),
+  "cache.offlineLeitura": bool("cache", "Abrir offline com o último dado conhecido", "Guarda no aparelho a última resposta das leituras seguras para o app abrir mostrando algo quando a rede cair. Nada que altere dados é guardado.", true),
   "graph.nodeLimit": num("graph", "Nós no grafo", "Quantos trechos entram no grafo de conhecimento.", 60, 5, 500),
   "graph.edgeMinSim": num("graph", "Similaridade mínima de aresta", "Só pares acima disso viram ligação.", 0.55, 0, 1, { step: 0.01 }),
   "graph.edgeLimit": num("graph", "Arestas no grafo", "Teto de ligações desenhadas.", 150, 5, 2000),

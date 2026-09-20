@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, integer, boolean } from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uuid, integer, boolean } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -19,6 +19,11 @@ export const expense = pgTable("expense", {
   dueDate: timestamp("due_date"),
   paid: boolean("paid").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+},
+(t) => [
+  index("expense_user_created_idx").on(t.userId, t.createdAt),
+  // "contas a vencer" roda no cron a cada volta: filtra por dono e vencimento
+  index("expense_user_due_idx").on(t.userId, t.dueDate),
+]);
 
 export type Expense = typeof expense.$inferSelect;

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, integer, boolean } from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uuid, integer, boolean } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export const routine = pgTable("routine", {
@@ -12,7 +12,8 @@ export const routine = pgTable("routine", {
   enabled: boolean("enabled").notNull().default(true),
   lastRunAt: timestamp("last_run_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+},
+(t) => [index("routine_user_idx").on(t.userId)]);
 
 export const notification = pgTable("notification", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -32,7 +33,9 @@ export const notification = pgTable("notification", {
   destino: text("destino"),
   read: boolean("read").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+},
+// o sino pede "os meus, os mais novos primeiro" a cada 30s
+(t) => [index("notification_user_created_idx").on(t.userId, t.createdAt)]);
 
 export type Routine = typeof routine.$inferSelect;
 export type Notification = typeof notification.$inferSelect;

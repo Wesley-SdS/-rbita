@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, jsonb } from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uuid, jsonb } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -19,6 +19,8 @@ export const actionQueue = pgTable("action_queue", {
   status: text("status", { enum: ["pending", "done", "cancelled", "failed"] }).notNull().default("pending"),
   result: text("result"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+},
+// a fila de aprovação abre em "o que está pendente meu", nessa ordem
+(t) => [index("action_queue_user_status_idx").on(t.userId, t.status, t.createdAt)]);
 
 export type ActionQueue = typeof actionQueue.$inferSelect;
