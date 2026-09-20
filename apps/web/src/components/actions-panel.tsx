@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAtualizacaoPeriodica } from "@/lib/use-visible";
+import { invalidar, useRecurso } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 
 interface Action { id: string; kind: string; summary: string; createdAt: string }
@@ -12,24 +13,30 @@ interface Action { id: string; kind: string; summary: string; createdAt: string 
  * nunca dispara sozinho (gate contra prompt-injection).
  */
 export function ActionsPanel() {
-  const [actions, setActions] = useState<Action[]>([]);
+  const { dado, recarregar } = useRecurso<{ actions: Action[] }>("/api/actions");
+  const actions = dado?.actions ?? [];
   const [busy, setBusy] = useState<string | null>(null);
 
-  function load() {
-    fetch("/api/actions").then((r) => r.json()).then((d) => setActions(d.actions ?? [])).catch(() => {});
-  }
   // reflete propostas criadas no chat; pausa com a aba escondida e confere na
   // hora em que ela volta (proposta nova não pode esperar o próximo ciclo)
-  useAtualizacaoPeriodica(load, 15000);
+  useAtualizacaoPeriodica(recarregar, 15000);
 
+  // SEM atualização otimista aqui, e de propósito: esta é a fila do gate
+  // humano (§5.1). Aprovar uma ação com efeito externo tem de mostrar o que o
+  // servidor de fato executou, não o que a tela supôs que ia acontecer. Tirar
+  // o cartão antes da confirmação esconderia justamente a falha que importa.
   async function approve(id: string) {
     setBusy(id);
-    try { await fetch("/api/actions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); load(); }
-    finally { setBusy(null); }
+    try {
+      await fetch("/api/actions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+      invalidar("/api/actions");
+    } finally {
+      setBusy(null);
+    }
   }
   async function reject(id: string) {
     await fetch(`/api/actions?id=${id}`, { method: "DELETE" });
-    load();
+    invalidar("/api/actions");
   }
 
   if (actions.length === 0) return null; // só aparece quando há algo a confirmar

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { invalidar, mutarRecurso, useRecurso } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 import { enfileirar, isJobTerminal, type JobView } from "@/lib/jobs";
 import { JobProgress } from "@/components/job-progress";
@@ -31,8 +32,9 @@ const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", curren
  * progresso em vez de segurar a requisição.
  */
 export function FinancePanel() {
-  const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
-  const [totais, setTotais] = useState<Totais | null>(null);
+  const { dado } = useRecurso<{ entries: Lancamento[]; totals: Totais | null }>("/api/finance");
+  const lancamentos = dado?.entries ?? [];
+  const totais = dado?.totals ?? null;
   const [ocupado, setOcupado] = useState(false);
   const [recado, setRecado] = useState<string | null>(null);
   const [trabalhoExtrato, setTrabalhoExtrato] = useState<JobView | null>(null);
@@ -40,16 +42,7 @@ export function FinancePanel() {
   const imagemRef = useRef<HTMLInputElement>(null);
   const pdfRef = useRef<HTMLInputElement>(null);
 
-  function carregar() {
-    fetch("/api/finance")
-      .then((r) => r.json())
-      .then((d) => {
-        setLancamentos(d.entries ?? []);
-        setTotais(d.totals ?? null);
-      })
-      .catch(() => {});
-  }
-  useEffect(carregar, []);
+  const carregar = () => invalidar("/api/finance");
 
   function avisar(texto: string) {
     setRecado(texto);
@@ -103,17 +96,32 @@ export function FinancePanel() {
     }
   }
 
+  // Os totais são derivados dos lançamentos, então a versão otimista recalcula
+  // os dois juntos: mudar só a linha e deixar o total antigo por um instante
+  // seria pior do que esperar, porque mostraria uma conta que não fecha.
   async function alternarPago(e: Lancamento) {
-    await fetch("/api/finance", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: e.id, paid: !e.paid }),
+    const r = await mutarRecurso<{ entries: Lancamento[]; totals: Totais | null }>({
+      chave: "/api/finance",
+      otimista: (atual) => ({
+        entries: (atual?.entries ?? []).map((x) => (x.id === e.id ? { ...x, paid: !x.paid } : x)),
+        totals: atual?.totals ?? null,
+      }),
+      executar: () =>
+        fetch("/api/finance", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: e.id, paid: !e.paid }),
+        }),
     });
-    carregar();
+    if (!r.ok) avisar(r.erro);
   }
   async function apagar(id: string) {
-    await fetch(`/api/finance?id=${id}`, { method: "DELETE" });
-    carregar();
+    const r = await mutarRecurso<{ entries: Lancamento[]; totals: Totais | null }>({
+      chave: "/api/finance",
+      otimista: (atual) => ({ entries: (atual?.entries ?? []).filter((x) => x.id !== id), totals: atual?.totals ?? null }),
+      executar: () => fetch(`/api/finance?id=${id}`, { method: "DELETE" }),
+    });
+    if (!r.ok) avisar(r.erro);
   }
 
   const aPagar = lancamentos.filter((e) => e.kind === "payable");

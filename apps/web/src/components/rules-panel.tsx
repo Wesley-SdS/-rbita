@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { invalidar, mutarRecurso, useRecurso } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 import { Card, PanelTitle, Input, Textarea, Button, ErrorRetry } from "@/components/ui";
 
@@ -41,27 +42,30 @@ const EVENT_HINTS = [
 const dim = { color: "var(--color-ink-dim)" } as const;
 
 export function RulesPanel() {
-  const [rules, setRules] = useState<Rule[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
+  const { dado, erro: err, recarregar } = useRecurso<{ rules: Rule[] }>("/api/rules", { estavel: true });
+  const rules = dado?.rules ?? null;
   const [editing, setEditing] = useState<Partial<Rule> | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    setErr(null);
-    fetch("/api/rules").then((r) => (r.ok ? r.json() : Promise.reject())).then((d) => { if (alive) setRules(d.rules ?? []); }).catch(() => { if (alive) setErr("Não foi possível carregar as regras."); });
-    return () => { alive = false; };
-  }, [reload]);
-
+  // Ligar e desligar uma regra é o gesto mais repetido desta tela, e a chave
+  // muda na hora. Não é ação com efeito externo: a regra só passa a ser
+  // AVALIADA, e o que ela dispara continua passando pelo risco de cada tool.
   async function toggle(r: Rule) {
-    await fetch(`/api/rules/${r.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...strip(r), enabled: !r.enabled }) });
-    setReload((n) => n + 1);
+    const res = await mutarRecurso<{ rules: Rule[] }>({
+      chave: "/api/rules",
+      otimista: (atual) => ({ rules: (atual?.rules ?? []).map((x) => (x.id === r.id ? { ...x, enabled: !x.enabled } : x)) }),
+      executar: () => fetch(`/api/rules/${r.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...strip(r), enabled: !r.enabled }) }),
+    });
+    if (!res.ok) setMsg(res.erro);
   }
   async function remove(id: string) {
-    await fetch(`/api/rules/${id}`, { method: "DELETE" });
-    setReload((n) => n + 1);
+    const res = await mutarRecurso<{ rules: Rule[] }>({
+      chave: "/api/rules",
+      otimista: (atual) => ({ rules: (atual?.rules ?? []).filter((x) => x.id !== id) }),
+      executar: () => fetch(`/api/rules/${id}`, { method: "DELETE" }),
+    });
+    if (!res.ok) setMsg(res.erro);
   }
   async function test(id: string) {
     setMsg(null);
@@ -80,10 +84,10 @@ export function RulesPanel() {
     setBusy(false);
     if (!r.ok) { setMsg(d.error ?? "Dados inválidos"); return; }
     setEditing(null);
-    setReload((n) => n + 1);
+    invalidar("/api/rules");
   }
 
-  if (err) return <Card><PanelTitle className="mb-2">Regras proativas</PanelTitle><ErrorRetry message={err} onRetry={() => setReload((n) => n + 1)} /></Card>;
+  if (err && !rules) return <Card><PanelTitle className="mb-2">Regras proativas</PanelTitle><ErrorRetry message={err} onRetry={recarregar} /></Card>;
 
   return (
     <Card>
@@ -140,15 +144,9 @@ function RuleEditor({ value, onChange, onSave, onCancel, busy }: { value: Partia
   // "o mesmo gesto faz coisas diferentes para cada um" exigia digitar o uuid
   // da pessoa na condição; aqui ele vem de uma lista (fail-soft: sem a lista,
   // o campo de texto continua valendo)
-  const [pessoas, setPessoas] = useState<PessoaOpcao[]>([]);
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/home/persons")
-      .then((r) => (r.ok ? r.json() : { people: [] }))
-      .then((d) => { if (alive) setPessoas((d.people ?? []).map((p: PessoaOpcao) => ({ id: p.id, name: p.name }))); })
-      .catch(() => { if (alive) setPessoas([]); });
-    return () => { alive = false; };
-  }, []);
+  // A mesma lista que a tela Casa já carregou: pelo cache, não vai à rede.
+  const { dado: pessoasResp } = useRecurso<{ people: PessoaOpcao[] }>("/api/home/persons", { estavel: true });
+  const pessoas: PessoaOpcao[] = (pessoasResp?.people ?? []).map((p) => ({ id: p.id, name: p.name }));
   const t = value.trigger ?? { kind: "event", type: "" };
   const conds = value.conditions ?? [];
   const acts = value.actions ?? [];

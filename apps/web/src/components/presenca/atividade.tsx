@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useRecurso, definirDado, invalidar } from "@/lib/dados/recurso";
 import { useRouter } from "next/navigation";
 import { Icone } from "./icones";
 
@@ -26,31 +26,31 @@ interface Notificacao {
  */
 export function Atividade({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => void }) {
   const router = useRouter();
-  const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
-  const [carregando, setCarregando] = useState(true);
-
-  useEffect(() => {
-    if (!aberta) return;
-    setCarregando(true);
-    fetch("/api/notifications")
-      .then((r) => (r.ok ? r.json() : { notifications: [] }))
-      .then((d: { notifications?: Notificacao[] }) => setNotificacoes(d.notifications ?? []))
-      .catch(() => setNotificacoes([]))
-      .finally(() => setCarregando(false));
-  }, [aberta]);
+  // A MESMA chave que o painel de Rotinas lê. Abrir a gaveta com a tela de
+  // rotinas aberta não faz requisição nenhuma, e marcar um aviso como lido
+  // aqui risca o aviso lá também, sem que um precise saber do outro.
+  const CHAVE = "/api/notifications";
+  const { dado, carregando } = useRecurso<{ notifications: Notificacao[] }>(CHAVE, { ativo: aberta });
+  const notificacoes = dado?.notifications ?? [];
 
   async function marcarLida(id: string) {
-    setNotificacoes((lista) => lista.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    definirDado<{ notifications: Notificacao[] }>(CHAVE, (atual) => ({
+      notifications: (atual?.notifications ?? []).map((n) => (n.id === id ? { ...n, read: true } : n)),
+    }));
     await fetch("/api/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     }).catch(() => {});
+    invalidar(CHAVE);
   }
 
   async function marcarTodasLidas() {
-    setNotificacoes((lista) => lista.map((n) => ({ ...n, read: true })));
+    definirDado<{ notifications: Notificacao[] }>(CHAVE, (atual) => ({
+      notifications: (atual?.notifications ?? []).map((n) => ({ ...n, read: true })),
+    }));
     await fetch("/api/notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
+    invalidar(CHAVE);
   }
 
   /* Abrir um aviso faz as duas coisas de uma vez: marca como lido e leva ao

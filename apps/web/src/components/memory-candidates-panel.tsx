@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Card, Button, Input } from "@/components/ui";
+import { useAtualizacaoPeriodica, useVisivel } from "@/lib/use-visible";
+import { mutarRecurso, useRecurso } from "@/lib/dados/recurso";
 
 /**
  * MEMÓRIAS A CONFIRMAR (B4.1).
@@ -29,34 +31,34 @@ const MOTIVO: Record<string, string> = {
 };
 
 export function MemoryCandidatesPanel({ visivel = true }: { visivel?: boolean }) {
-  const [candidatos, setCandidatos] = useState<Candidato[]>([]);
+  // `visivel` é a prop da aba; `useVisivel` acrescenta "e a aba do navegador
+  // está à frente". Antes era um `setInterval` cru, que continuava consultando
+  // o servidor com o app esquecido aberto num monitor.
+  const naTela = useVisivel() && visivel;
+  const { dado, recarregar } = useRecurso<{ candidatos: Candidato[] }>("/api/memory/candidatos", { ativo: naTela });
+  const candidatos = dado?.candidatos ?? [];
   const [editando, setEditando] = useState<{ id: string; texto: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const carregar = useCallback(() => {
-    fetch("/api/memory/candidatos")
-      .then((r) => r.json())
-      .then((d) => setCandidatos(d.candidatos ?? []))
-      .catch(() => {});
-  }, []);
-
-  // painel só consulta o servidor enquanto está sendo visto
-  useEffect(() => {
-    if (!visivel) return;
-    carregar();
-    const t = setInterval(carregar, 30000);
-    return () => clearInterval(t);
-  }, [visivel, carregar]);
+  useAtualizacaoPeriodica(recarregar, 30_000, naTela);
 
   async function decidir(id: string, decisao: "confirmar" | "descartar", fato?: string) {
     setBusy(id);
     try {
-      await fetch("/api/memory/candidatos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, decisao, ...(fato ? { fato } : {}) }),
+      // O cartão sai da tela na hora: decidir sobre uma memória é um gesto
+      // rápido e em sequência, e esperar a volta a cada um trava o ritmo.
+      await mutarRecurso<{ candidatos: Candidato[] }>({
+        chave: "/api/memory/candidatos",
+        otimista: (atual) => ({ candidatos: (atual?.candidatos ?? []).filter((x) => x.id !== id) }),
+        executar: () =>
+          fetch("/api/memory/candidatos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, decisao, ...(fato ? { fato } : {}) }),
+          }),
+        // confirmar vira memória de verdade: a contagem do acervo mudou
+        invalida: decisao === "confirmar" ? ["/api/knowledge", "/api/memory"] : [],
       });
-      setCandidatos((c) => c.filter((x) => x.id !== id));
       setEditando(null);
     } finally {
       setBusy(null);

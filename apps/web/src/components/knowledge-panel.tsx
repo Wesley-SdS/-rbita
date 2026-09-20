@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { invalidar, useRecursos } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 import { enfileirar, isJobTerminal, type JobView } from "@/lib/jobs";
 import { JobProgress } from "@/components/job-progress";
@@ -29,9 +30,16 @@ interface Memoria {
  * trechos passa muito de dez segundos), então a tela enfileira e acompanha.
  */
 export function KnowledgePanel() {
-  const [contagens, setContagens] = useState<Contagens>({ documents: 0, chunks: 0, memories: 0 });
-  const [acervo, setAcervo] = useState<Acervo | null>(null);
-  const [memorias, setMemorias] = useState<Memoria[]>([]);
+  // As três leituras do acervo, pelo cache: a Visão geral já pede
+  // `/api/knowledge` para a contagem, e aqui ela chega pronta.
+  const { dados } = useRecursos<{ contagensResp: Contagens; memoriasResp: { memories: Memoria[] }; acervoResp: Acervo }>({
+    contagensResp: "/api/knowledge",
+    memoriasResp: "/api/memory",
+    acervoResp: "/api/account/reindex",
+  });
+  const contagens: Contagens = dados.contagensResp ?? { documents: 0, chunks: 0, memories: 0 };
+  const acervo = dados.acervoResp;
+  const memorias = dados.memoriasResp?.memories ?? [];
   const [titulo, setTitulo] = useState("");
   const [texto, setTexto] = useState("");
   const [fato, setFato] = useState("");
@@ -43,12 +51,8 @@ export function KnowledgePanel() {
   const [trabalhoReindex, setTrabalhoReindex] = useState<JobView | null>(null);
   const arquivoRef = useRef<HTMLInputElement>(null);
 
-  const atualizar = () => {
-    fetch("/api/knowledge").then((r) => r.json()).then(setContagens).catch(() => {});
-    fetch("/api/memory").then((r) => r.json()).then((d) => setMemorias(d.memories ?? [])).catch(() => {});
-    fetch("/api/account/reindex").then((r) => r.json()).then(setAcervo).catch(() => {});
-  };
-  useEffect(atualizar, []);
+  // Indexar, salvar um fato e reindexar mexem nos três: uma invalidação só.
+  const atualizar = () => invalidar("/api/knowledge", "/api/memory", "/api/account/reindex");
 
   function avisar(texto: string, erro = false) {
     setRecado({ texto, erro });

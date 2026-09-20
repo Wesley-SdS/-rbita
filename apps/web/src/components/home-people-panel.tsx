@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { invalidar, useRecurso, useRecursos } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 import { Card, PanelTitle, Input, Button, ErrorRetry } from "@/components/ui";
 import { identityLimits, LIMITES_PADRAO, type IdentityLimits } from "@/lib/identity-limits";
@@ -136,47 +137,47 @@ function quandoLabel(p: PresenceRow): string {
 }
 
 export function HomePeoplePanel() {
-  const [people, setPeople] = useState<PersonRow[] | null>(null);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [term, setTerm] = useState<Term | null>(null);
-  const [voiceInfo, setVoiceInfo] = useState<VoiceInfo | null>(null);
-  const [faceInfo, setFaceInfo] = useState<FaceInfo | null>(null);
-  const [presenca, setPresenca] = useState<PresenceRow[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
+  // A lista de pessoas é a única leitura que, falhando, esvazia o painel: sem
+  // ela não há o que desenhar. As outras cinco são complementos, e um
+  // complemento fora do ar não pode tirar as pessoas da tela.
+  //
+  // Nada disto é biometria (§5.4.1): são nomes, contagens de amostra e datas,
+  // exatamente o que já está desenhado. As amostras e os vetores nunca saem do
+  // serviço local. Ainda assim, sair da conta limpa o cache inteiro.
+  const { dado: pessoasResp, erro: err, recarregar: recarregarPessoas } = useRecurso<{ people: PersonRow[] }>("/api/home/persons", { estavel: true });
+  const { dados } = useRecursos<{
+    comodos: { rooms: Room[] };
+    consentimento: { termo: Term | null };
+    voz: VoiceInfo;
+    rosto: FaceInfo;
+    presencaResp: { presenca: PresenceRow[] };
+  }>(
+    {
+      comodos: "/api/home/rooms",
+      consentimento: "/api/identity/consent",
+      voz: "/api/identity/voice",
+      rosto: "/api/identity/face",
+      presencaResp: "/api/identity/presence",
+    },
+    { estavel: true },
+  );
+
+  const people = pessoasResp?.people ?? null;
+  const rooms = dados.comodos?.rooms ?? [];
+  const term = dados.consentimento?.termo ?? null;
+  const voiceInfo = dados.voz ?? null;
+  const faceInfo = dados.rosto ?? null;
+  const presenca = dados.presencaResp?.presenca ?? null;
+
   const [expanded, setExpanded] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-    setErr(null);
-    Promise.all([
-      fetch("/api/home/persons").then((r) => (r.ok ? r.json() : Promise.reject(r))),
-      fetch("/api/home/rooms").then((r) => (r.ok ? r.json() : { rooms: [] })).catch(() => ({ rooms: [] })),
-      fetch("/api/identity/consent").then((r) => (r.ok ? r.json() : { termo: null })).catch(() => ({ termo: null })),
-      fetch("/api/identity/voice").then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch("/api/identity/face").then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch("/api/identity/presence").then((r) => (r.ok ? r.json() : { presenca: [] })).catch(() => ({ presenca: [] })),
-    ])
-      .then(async ([p, r, t, v, f, pr]) => {
-        if (!alive) return;
-        setPeople(p.people ?? []);
-        setRooms(r.rooms ?? []);
-        setTerm(t.termo ?? null);
-        setVoiceInfo(v ?? null);
-        setFaceInfo(f ?? null);
-        setPresenca(pr.presenca ?? []);
-      })
-      .catch(async (r) => {
-        if (!alive) return;
-        const d = r instanceof Response ? await r.json().catch(() => ({})) : {};
-        setErr(d.error ?? "Não foi possível carregar pessoas da casa.");
-        setPeople([]);
-      });
-    return () => { alive = false; };
-  }, [reload]);
-
-  function refresh() { setReload((n) => n + 1); }
+  // Toda mutação daqui mexe em mais de uma das seis leituras (remover uma
+  // pessoa apaga biometria, consentimento, acesso e presença junto), então a
+  // invalidação é por prefixo e não chave a chave.
+  function refresh() {
+    invalidar("/api/home/persons", "/api/home/person-access", "/api/identity/");
+  }
 
   async function remove(p: PersonRow) {
     if (!window.confirm(`Remover ${p.name}? Isto apaga o cadastro, a biometria e o histórico dela, e revoga os consentimentos registrados. Não tem volta.`)) return;
@@ -207,7 +208,8 @@ export function HomePeoplePanel() {
     refresh();
   }
 
-  if (err) return <Card><PanelTitle className="mb-2">Pessoas da casa</PanelTitle><ErrorRetry message={err} onRetry={refresh} /></Card>;
+  // erro só toma o painel quando não há lista nenhuma guardada para mostrar
+  if (err && !people) return <Card><PanelTitle className="mb-2">Pessoas da casa</PanelTitle><ErrorRetry message={err} onRetry={recarregarPessoas} /></Card>;
 
   return (
     <Card>

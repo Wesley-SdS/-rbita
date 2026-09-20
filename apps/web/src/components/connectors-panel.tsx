@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { invalidar, useRecurso } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 
 interface Conector {
@@ -21,20 +22,11 @@ interface Conector {
  * a diferença entre "não quis conectar" e "não dá para conectar ainda".
  */
 export function ConnectorsPanel() {
-  const [conectores, setConectores] = useState<Conector[]>([]);
-  const [carregando, setCarregando] = useState(true);
+  const { dado, carregando } = useRecurso<{ connectors: Conector[] }>("/api/connectors", { estavel: true });
+  const conectores = dado?.connectors ?? [];
   const [recado, setRecado] = useState<string | null>(null);
 
-  function carregar() {
-    fetch("/api/connectors")
-      .then((r) => r.json())
-      .then((d) => setConectores(d.connectors ?? []))
-      .catch(() => {})
-      .finally(() => setCarregando(false));
-  }
-
   useEffect(() => {
-    carregar();
     // Volta do OAuth: `?connector=google&status=conectado`. A query sai da URL
     // para um F5 não repetir o recado de algo que já aconteceu.
     const p = new URLSearchParams(window.location.search);
@@ -49,7 +41,7 @@ export function ConnectorsPanel() {
 
   async function desconectar(id: string) {
     await fetch(`/api/connectors/${id}`, { method: "DELETE" });
-    carregar();
+    invalidar("/api/connectors");
   }
 
   return (
@@ -111,18 +103,10 @@ export function ConnectorsPanel() {
  * Meta que o dono já configurou.
  */
 function BlocoWhatsapp() {
-  const [estado, setEstado] = useState<{ configured: boolean; phoneId: string | null } | null>(null);
+  const { dado: estado } = useRecurso<{ configured: boolean; phoneId: string | null }>("/api/channels/whatsapp", { estavel: true });
   const [numero, setNumero] = useState("");
   const [token, setToken] = useState("");
   const [ocupado, setOcupado] = useState(false);
-  const [recarregar, setRecarregar] = useState(0);
-
-  useEffect(() => {
-    fetch("/api/channels/whatsapp")
-      .then((r) => r.json())
-      .then(setEstado)
-      .catch(() => setEstado(null));
-  }, [recarregar]);
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
@@ -134,14 +118,14 @@ function BlocoWhatsapp() {
     });
     setOcupado(false);
     setToken("");
-    setRecarregar((n) => n + 1);
+    invalidar("/api/channels/whatsapp");
   }
 
   async function remover() {
     setOcupado(true);
     await fetch("/api/channels/whatsapp", { method: "DELETE" });
     setOcupado(false);
-    setRecarregar((n) => n + 1);
+    invalidar("/api/channels/whatsapp");
   }
 
   return (

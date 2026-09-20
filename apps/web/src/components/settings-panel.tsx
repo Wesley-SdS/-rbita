@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { definirDado, useRecurso } from "@/lib/dados/recurso";
 import { Card, PanelTitle, Input, ErrorRetry } from "@/components/ui";
 
 /**
@@ -27,36 +28,39 @@ interface Group { id: string; label: string; settings: Item[] }
 const dim = { color: "var(--color-ink-dim)" } as const;
 
 export function SettingsPanel() {
-  const [groups, setGroups] = useState<Group[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  // A listagem inteira dos ajustes são 60 kB (a maior resposta do app), e esta
+  // aba é a que mais se entra e sai enquanto se configura alguma coisa. Sem
+  // `estavel`: quem está aqui está justamente mudando os valores.
+  const CHAVE = "/api/settings";
+  const { dado, erro: err, recarregar } = useRecurso<{ groups: Group[]; isOwner?: boolean }>(CHAVE);
+  const groups = dado?.groups ?? null;
   const [open, setOpen] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
   // Ajustes valem para a casa inteira: quem não é o dono só lê (RV.1)
-  const [isOwner, setIsOwner] = useState(true);
-
-  useEffect(() => {
-    let alive = true;
-    setErr(null);
-    fetch("/api/settings")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => { if (alive) { setGroups(d.groups ?? []); setIsOwner(d.isOwner !== false); } })
-      .catch(() => { if (alive) setErr("Não foi possível carregar os ajustes."); });
-    return () => { alive = false; };
-  }, [reload]);
+  const isOwner = dado?.isOwner !== false;
 
   async function save(key: string, value: unknown): Promise<string | null> {
     const r = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, value }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return d.error ?? "Valor inválido";
-    setGroups((gs) => gs?.map((g) => ({ ...g, settings: g.settings.map((s) => (s.key === key ? { ...s, value: d.value, overridden: true } : s)) })) ?? null);
+    // O servidor já devolveu o valor normalizado: escrevemos ele no cache em
+    // vez de buscar 60 kB de novo por causa de um campo.
+    definirDado<{ groups: Group[]; isOwner?: boolean }>(CHAVE, (atual) =>
+      atual
+        ? { ...atual, groups: atual.groups.map((g) => ({ ...g, settings: g.settings.map((s) => (s.key === key ? { ...s, value: d.value, overridden: true } : s)) })) }
+        : { groups: [] },
+    );
     return null;
   }
   async function reset(key: string) {
     await fetch(`/api/settings?key=${encodeURIComponent(key)}`, { method: "DELETE" });
-    setGroups((gs) => gs?.map((g) => ({ ...g, settings: g.settings.map((s) => (s.key === key ? { ...s, value: s.default, overridden: false } : s)) })) ?? null);
+    definirDado<{ groups: Group[]; isOwner?: boolean }>(CHAVE, (atual) =>
+      atual
+        ? { ...atual, groups: atual.groups.map((g) => ({ ...g, settings: g.settings.map((s) => (s.key === key ? { ...s, value: s.default, overridden: false } : s)) })) }
+        : { groups: [] },
+    );
   }
 
-  if (err) return <Card><PanelTitle className="mb-2">Ajustes</PanelTitle><ErrorRetry message={err} onRetry={() => setReload((n) => n + 1)} /></Card>;
+  if (err && !groups) return <Card><PanelTitle className="mb-2">Ajustes</PanelTitle><ErrorRetry message={err} onRetry={recarregar} /></Card>;
 
   const total = groups?.reduce((n, g) => n + g.settings.filter((s) => s.overridden).length, 0) ?? 0;
 
@@ -97,16 +101,10 @@ export function SettingsPanel() {
 
 /** Quem é o dono e, para o próprio dono, a transferência da posse. */
 function OwnerSection() {
-  const [info, setInfo] = useState<{ isOwner: boolean; orphaned: boolean; owner: { name: string; email?: string } | null } | null>(null);
+  const { dado: info } = useRecurso<{ isOwner: boolean; orphaned: boolean; owner: { name: string; email?: string } | null }>("/api/owner", { estavel: true });
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/owner").then((r) => (r.ok ? r.json() : null)).then((d) => { if (alive) setInfo(d); }).catch(() => undefined);
-    return () => { alive = false; };
-  }, []);
 
   async function transfer() {
     if (!email.trim()) return;

@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Icone } from "@/components/presenca/icones";
+import { useAtualizacaoPeriodica, useVisivel } from "@/lib/use-visible";
+import { invalidar, mutarRecurso, useRecursos } from "@/lib/dados/recurso";
 
 interface Aviso {
   id: string;
@@ -45,33 +47,24 @@ function iconeDa(minutos: number) {
  * rodando com o navegador fechado.
  */
 export function RoutinesPanel() {
-  const [avisos, setAvisos] = useState<Aviso[]>([]);
-  const [rotinas, setRotinas] = useState<Rotina[]>([]);
+  const naTela = useVisivel();
+  const { dados } = useRecursos<{ avisosResp: { notifications: Aviso[] }; rotinasResp: { routines: Rotina[] } }>({
+    avisosResp: "/api/notifications",
+    rotinasResp: "/api/routines",
+  });
+  const avisos = dados.avisosResp?.notifications ?? [];
+  const rotinas = dados.rotinasResp?.routines ?? [];
+
   const [criando, setCriando] = useState(false);
   const [titulo, setTitulo] = useState("");
   const [instrucao, setInstrucao] = useState("");
   const [intervalo, setIntervalo] = useState(1440);
   const [ocupado, setOcupado] = useState(false);
 
-  function carregarAvisos() {
-    fetch("/api/notifications")
-      .then((r) => r.json())
-      .then((d) => setAvisos(d.notifications ?? []))
-      .catch(() => {});
-  }
-  function carregarRotinas() {
-    fetch("/api/routines")
-      .then((r) => r.json())
-      .then((d) => setRotinas(d.routines ?? []))
-      .catch(() => {});
-  }
-
-  useEffect(() => {
-    carregarAvisos();
-    carregarRotinas();
-    const poll = setInterval(carregarAvisos, 30000);
-    return () => clearInterval(poll);
-  }, []);
+  // Só os AVISOS se atualizam sozinhos (é o que o processo persistente produz
+  // enquanto a pessoa faz outra coisa); a lista de rotinas só muda por ação
+  // dela. Antes era um `setInterval` cru, que rodava com a aba escondida.
+  useAtualizacaoPeriodica(() => invalidar("/api/notifications"), 30_000, naTela);
 
   async function criar(e: React.FormEvent) {
     e.preventDefault();
@@ -86,7 +79,7 @@ export function RoutinesPanel() {
       setTitulo("");
       setInstrucao("");
       setCriando(false);
-      carregarRotinas();
+      invalidar("/api/routines");
     } finally {
       setOcupado(false);
     }
@@ -100,24 +93,33 @@ export function RoutinesPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ force: true }),
       });
-      carregarAvisos();
+      invalidar("/api/notifications");
     } finally {
       setOcupado(false);
     }
   }
 
   async function apagar(id: string) {
-    await fetch(`/api/routines?id=${id}`, { method: "DELETE" });
-    carregarRotinas();
+    await mutarRecurso<{ routines: Rotina[] }>({
+      chave: "/api/routines",
+      otimista: (atual) => ({ routines: (atual?.routines ?? []).filter((r) => r.id !== id) }),
+      executar: () => fetch(`/api/routines?id=${id}`, { method: "DELETE" }),
+    });
   }
 
   async function marcarLida(id: string) {
-    await fetch("/api/notifications", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+    // A tarja de "não lidos" some na hora. Esperar a volta do servidor para
+    // riscar um aviso já lido é exatamente o tipo de espera que não se explica.
+    await mutarRecurso<{ notifications: Aviso[] }>({
+      chave: "/api/notifications",
+      otimista: (atual) => ({ notifications: (atual?.notifications ?? []).map((a) => (a.id === id ? { ...a, read: true } : a)) }),
+      executar: () =>
+        fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        }),
     });
-    carregarAvisos();
   }
 
   const naoLidos = avisos.filter((a) => !a.read);

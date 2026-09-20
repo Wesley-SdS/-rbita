@@ -1,29 +1,26 @@
-"use client";
+import { semearDaApi } from "@/lib/dados/servidor";
+import { CacheSemeado } from "@/lib/dados/semeadura";
+import { Conteudo } from "./conteudo";
 
-import dynamic from "next/dynamic";
-import { TituloDaVista, Abas } from "@/components/presenca/vista";
-
-function Esqueleto() {
-  return <div className="panel empty-state">Carregando…</div>;
-}
-
-const ConnectorsPanel = dynamic(() => import("@/components/connectors-panel").then((m) => m.ConnectorsPanel), { ssr: false, loading: Esqueleto });
-const ExtensionsPanel = dynamic(() => import("@/components/extensions-panel").then((m) => m.ExtensionsPanel), { ssr: false, loading: Esqueleto });
-
-export default function PaginaConexoes() {
+/**
+ * A tela em si é cliente (`conteudo.tsx`); esta camada de servidor existe só
+ * para ADIANTAR as leituras da primeira aba.
+ *
+ * Sem isto, a sequência era: payload da rota, depois o JavaScript do painel,
+ * depois a busca. Agora a busca acontece enquanto o JavaScript baixa, e o
+ * painel monta já preenchido. Falha aqui não quebra nada: o painel busca
+ * sozinho, como antes.
+ *
+ * Só a primeira aba é adiantada. Adiantar as outras seria pagar por dados que
+ * ninguém pediu, que é exatamente o problema que este trabalho veio resolver.
+ */
+export default async function PaginaConexoes() {
+  const dados = await semearDaApi([
+    "/api/connectors",
+  ]);
   return (
-    <section className="view">
-      <TituloDaVista
-        sobrancelha="TUDO MAIS PERTO. VOCÊ NO CONTROLE"
-        titulo="Seu universo conectado"
-        subtitulo="Escolha o que entra na conversa. Cada conexão tem um limite claro."
-      />
-      <Abas
-        abas={[
-          { id: "conectores", rotulo: "Conectores", conteudo: <ConnectorsPanel /> },
-          { id: "extensoes", rotulo: "Extensões", conteudo: <ExtensionsPanel /> },
-        ]}
-      />
-    </section>
+    <CacheSemeado dados={dados}>
+      <Conteudo />
+    </CacheSemeado>
   );
 }

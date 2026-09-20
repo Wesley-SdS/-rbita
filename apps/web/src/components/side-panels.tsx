@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { invalidar, useRecurso } from "@/lib/dados/recurso";
 import { Stat } from "@/components/stat";
 import { Card, PanelTitle, Input, Textarea, Button, ErrorRetry } from "@/components/ui";
 
@@ -46,19 +47,19 @@ type ProfileT = { assistantName: string; userName: string | null; persona: strin
 
 /** Persona configurável: nome da assistente, como te chamar e tom/estilo. */
 export function PersonaPanel() {
-  const [p, setP] = useState<ProfileT | null>(null);
+  const { dado, erro, recarregar } = useRecurso<{ profile: Partial<ProfileT> | null }>("/api/profile", { estavel: true });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [err, setErr] = useState(false);
-  const [reload, setReload] = useState(0);
-  useEffect(() => {
-    let alive = true;
-    setErr(false);
-    fetch("/api/profile").then((r) => (r.ok ? r.json() : Promise.reject())).then((d) => {
-      if (alive && d?.profile) setP({ assistantName: d.profile.assistantName ?? "Órbita", userName: d.profile.userName ?? "", persona: d.profile.persona ?? "" });
-    }).catch(() => { if (alive) setErr(true); });
-    return () => { alive = false; };
-  }, [reload]);
+  // Formulário alimentado por um recurso: o servidor dá o valor, o rascunho
+  // guarda o que está sendo digitado. Enquanto há rascunho, ele manda; ao
+  // salvar, o rascunho some e o valor do servidor volta a ser a verdade.
+  const [rascunho, setRascunho] = useState<ProfileT | null>(null);
+  const doServidor: ProfileT | null = dado?.profile
+    ? { assistantName: dado.profile.assistantName ?? "Órbita", userName: dado.profile.userName ?? "", persona: dado.profile.persona ?? "" }
+    : null;
+  const p = rascunho ?? doServidor;
+  const setP = setRascunho;
+  const err = !!erro;
   async function save() {
     if (!p) return;
     setSaving(true); setSaved(false);
@@ -67,14 +68,19 @@ export function PersonaPanel() {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assistantName: p.assistantName || "Órbita", userName: p.userName || null, persona: p.persona || null }),
       });
-      if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 2000); }
+      if (r.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+        setRascunho(null);
+        invalidar("/api/profile");
+      }
     } finally { setSaving(false); }
   }
   return (
     <Card>
       <PanelTitle className="mb-3">Persona</PanelTitle>
       {err && !p ? (
-        <ErrorRetry message="Falha ao carregar a persona." onRetry={() => setReload((x) => x + 1)} />
+        <ErrorRetry message="Falha ao carregar a persona." onRetry={recarregar} />
       ) : !p ? (
         <div className="py-2 text-[16px]" style={{ color: "var(--color-ink-dim)" }}>—</div>
       ) : (
@@ -106,22 +112,20 @@ type Usage = {
    painel. Fora do chat não existe esse sinal, e o painel já tem o próprio
    recarregar, então virou opcional em vez de obrigar um zero de fachada. */
 export function EconomyPanel({ refreshKey = 0 }: { refreshKey?: number }) {
-  const [u, setU] = useState<Usage | null>(null);
-  const [err, setErr] = useState(false);
-  const [reload, setReload] = useState(0);
+  const { dado: u, erro, recarregar } = useRecurso<Usage>("/api/usage");
+  const err = !!erro;
+  // `refreshKey` vem do chat: cada resposta muda o consumo, então o painel
+  // confere de novo. Só que agora sem refazer a busca se o dado ainda é novo.
   useEffect(() => {
-    let alive = true;
-    setErr(false);
-    fetch("/api/usage").then((r) => (r.ok ? r.json() : Promise.reject())).then((d) => { if (alive && d) setU(d); }).catch(() => { if (alive) setErr(true); });
-    return () => { alive = false; };
-  }, [refreshKey, reload]);
+    if (refreshKey) invalidar("/api/usage");
+  }, [refreshKey]);
   const money = (n: number) => "R$" + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const pctLocal = u && u.requests ? Math.round((u.localRequests / u.requests) * 100) : 0;
   return (
     <Card>
       <PanelTitle className="mb-3">Economia vs. nuvem</PanelTitle>
       {err && !u ? (
-        <ErrorRetry message="Falha ao carregar a economia." onRetry={() => setReload((x) => x + 1)} />
+        <ErrorRetry message="Falha ao carregar a economia." onRetry={recarregar} />
       ) : !u ? (
         <div className="py-2 text-[16px]" style={{ color: "var(--color-ink-dim)" }}>—</div>
       ) : (

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { invalidar, useRecurso } from "@/lib/dados/recurso";
 import { Card, PanelTitle, ErrorRetry } from "@/components/ui";
 
 /**
@@ -22,25 +23,19 @@ const RISK_ORDER: Record<Risk, number> = { leitura: 0, escrita: 1, efeito_extern
 const dim = { color: "var(--color-ink-dim)" } as const;
 
 export function ToolsPanel() {
-  const [tools, setTools] = useState<ToolItem[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
+  const { dado, erro: err, recarregar } = useRecurso<{ tools: ToolItem[]; isOwner?: boolean }>("/api/tools", { estavel: true });
+  const tools = dado?.tools ?? null;
   const [msg, setMsg] = useState<string | null>(null);
   // o catálogo vale para a casa inteira: só o dono muda (RV.1)
-  const [isOwner, setIsOwner] = useState(true);
-
-  useEffect(() => {
-    let alive = true;
-    setErr(null);
-    fetch("/api/tools").then((r) => (r.ok ? r.json() : Promise.reject())).then((d) => { if (alive) { setTools(d.tools ?? []); setIsOwner(d.isOwner !== false); } }).catch(() => { if (alive) setErr("Não foi possível carregar o catálogo."); });
-    return () => { alive = false; };
-  }, [reload]);
+  const isOwner = dado?.isOwner !== false;
 
   async function update(name: string, patch: { enabled?: boolean; risk?: Risk | null }) {
     setMsg(null);
     const r = await fetch(`/api/tools/${encodeURIComponent(name)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
     if (!r.ok) { const d = await r.json().catch(() => ({})); setMsg(d.error ?? "Falhou"); return; }
-    setReload((n) => n + 1);
+    // Sem otimismo: mudar o risco de uma tool muda QUEM precisa aprovar o quê
+    // (§5.1). A tela tem de mostrar o risco efetivo que o servidor calculou.
+    invalidar("/api/tools");
   }
   function changeRisk(t: ToolItem, value: string) {
     const risk = value === "" ? null : (value as Risk);
@@ -51,7 +46,7 @@ export function ToolsPanel() {
     void update(t.name, { risk });
   }
 
-  if (err) return <Card><PanelTitle className="mb-2">Ferramentas</PanelTitle><ErrorRetry message={err} onRetry={() => setReload((n) => n + 1)} /></Card>;
+  if (err && !tools) return <Card><PanelTitle className="mb-2">Ferramentas</PanelTitle><ErrorRetry message={err} onRetry={recarregar} /></Card>;
 
   const domains = tools ? [...new Set(tools.map((t) => t.domain))] : [];
   const ativas = tools?.filter((t) => t.enabled && t.available).length ?? 0;

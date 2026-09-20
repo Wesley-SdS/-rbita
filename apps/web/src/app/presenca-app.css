@@ -89,6 +89,23 @@ textarea.inline-input { resize: vertical; min-height: 84px; }
 .esqueleto { animation: pulsar 1.6s ease-in-out infinite; }
 @keyframes pulsar { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 
+/* Esqueleto do cabeçalho de tela (`app/loading.tsx`). As barras reproduzem a
+   sobrancelha, o título e a linha de contexto do `TituloDaVista` para que a
+   troca do esqueleto pela tela pronta não jogue o conteúdo de lugar. */
+.esqueleto-titulo { display: grid; gap: 10px; width: 100%; animation: pulsar 1.6s ease-in-out infinite; }
+.esqueleto-titulo i { display: block; border-radius: 6px; background: var(--color-surface-soft); }
+
+/* Rastro do link em transição (`useLinkStatus`). Começa invisível e só aparece
+   se a navegação passar de 120ms: numa troca rápida ninguém chega a ver, que é
+   justamente o ponto. */
+.nav-link .link-hint { position: absolute; right: 12px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; opacity: 0; }
+.nav-link .link-hint.is-pending { animation: link-hint-in .25s ease-out 120ms forwards, link-hint-girar .7s linear 120ms infinite; }
+@keyframes link-hint-in { to { opacity: .65; } }
+@keyframes link-hint-girar { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .nav-link .link-hint.is-pending { animation: link-hint-in .25s ease-out 120ms forwards; }
+}
+
 /* Painel sem respiro próprio (lista que sangra, vídeo, gráfico). */
 .panel.p-0 { padding: 0; }
 

@@ -21,6 +21,16 @@ const nextConfig: NextConfig = {
   // otimizador quebra e faz a rota /api/auth/[...all] sumir (404 no login).
   experimental: {
     optimizePackageImports: ["react-markdown", "remark-gfm"],
+    // CACHE DE ROTA NO CLIENTE (Router Cache). O padrão do Next desde a 15 é
+    // `dynamic: 0`, ou seja, não guarda nada: voltar para uma tela vista há
+    // três segundos refazia o servidor inteiro. Aqui toda tela é dinâmica (o
+    // layout lê a sessão), então esse padrão valia para o app todo.
+    //
+    // 30s é curto de propósito: é o bastante para ir e voltar no menu sem
+    // esperar, e curto demais para alguém ver dado de ontem. O que precisa ser
+    // mais fresco que isso não vem do payload da rota, vem das rotas /api pelo
+    // `useRecurso`, que tem TTL próprio e invalidação por tag.
+    staleTimes: { dynamic: 30, static: 180 },
   },
   // ORIGEM ÚNICA (Onda 1): TODO /api/* vai para o apps/api (NestJS), exceto o
   // que fica no Next de propósito: /api/auth/* (Better Auth) e o callback OAuth

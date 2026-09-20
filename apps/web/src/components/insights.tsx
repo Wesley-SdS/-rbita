@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useRecursos } from "@/lib/dados/recurso";
 
 interface Totais {
   conversations: number; messages: number; tokens: number; localTokens: number;
@@ -15,17 +16,19 @@ interface GraphEdge { source: string; target: string; sim: number }
 const brl = (n: number) => "R$" + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function Insights() {
-  const [totais, setTotais] = useState<Totais | null>(null);
-  const [porModelo, setPorModelo] = useState<LinhaModelo[]>([]);
-  const [diario, setDiario] = useState<LinhaDia[]>([]);
-  const [grafo, setGrafo] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
+  // As duas leituras mais pesadas do app: `/api/analytics` agrega a tabela de
+  // mensagens inteira (já tem cache de 30s no servidor) e o grafo calcula
+  // similaridade entre trechos. Estáveis, então voltar para esta aba não
+  // refaz nenhuma das duas.
+  const { dados } = useRecursos<{
+    analytics: { totais: Totais | null; porModelo: LinhaModelo[]; diario: LinhaDia[] };
+    grafoResp: { nodes: GraphNode[]; edges: GraphEdge[] };
+  }>({ analytics: "/api/analytics", grafoResp: "/api/knowledge/grafo" }, { estavel: true });
 
-  useEffect(() => {
-    fetch("/api/analytics").then((r) => r.json()).then((d) => {
-      setTotais(d.totais); setPorModelo(d.porModelo ?? []); setDiario(d.diario ?? []);
-    }).catch(() => {});
-    fetch("/api/knowledge/grafo").then((r) => r.json()).then((d) => setGrafo({ nodes: d.nodes ?? [], edges: d.edges ?? [] })).catch(() => {});
-  }, []);
+  const totais = dados.analytics?.totais ?? null;
+  const porModelo = dados.analytics?.porModelo ?? [];
+  const diario = dados.analytics?.diario ?? [];
+  const grafo = dados.grafoResp ?? { nodes: [], edges: [] };
 
   const maxDiario = Math.max(1, ...diario.map((d) => d.n));
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BlocoObservado } from "@/lib/use-visible";
 
 /**
  * Cabeçalho de tela do Presença: sobrancelha, título com o ponto menta e uma
@@ -69,7 +70,10 @@ export function Abas({ abas, inicial }: { abas: Aba[]; inicial?: string }) {
           </button>
         ))}
       </div>
-      <div role="tabpanel">{atual?.conteudo}</div>
+      {/* `BlocoObservado` e não uma `div` simples: o painel ativo é quem
+          fornece o "está na tela" para os que se atualizam sozinhos. Rolar
+          para longe das abas pausa a atualização periódica. */}
+      <BlocoObservado role="tabpanel">{atual?.conteudo}</BlocoObservado>
     </>
   );
 }

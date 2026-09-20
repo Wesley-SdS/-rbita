@@ -21,9 +21,27 @@ export default async function LayoutDoApp({ children }: { children: React.ReactN
 
   // Falha em silêncio de propósito: banco fora do ar não pode impedir o app de
   // abrir, e os padrões das chaves já são sensatos.
+  //
+  // As validades do cache de dados descem por aqui, junto com o resto: é o que
+  // permite ao front não ter número de TTL chumbado (§5.6) sem pagar uma
+  // requisição a mais só para descobri-los.
   const prefs = await settings
-    .getMany(["presenca.focoMinutos", "presenca.intensidade", "presenca.movimentoReduzido"])
-    .catch(() => ({ "presenca.focoMinutos": 25, "presenca.intensidade": 85, "presenca.movimentoReduzido": false }));
+    .getMany([
+      "presenca.focoMinutos",
+      "presenca.intensidade",
+      "presenca.movimentoReduzido",
+      "cache.recursoTtlMs",
+      "cache.recursoTtlLentoMs",
+      "cache.offlineLeitura",
+    ])
+    .catch(() => ({
+      "presenca.focoMinutos": 25,
+      "presenca.intensidade": 85,
+      "presenca.movimentoReduzido": false,
+      "cache.recursoTtlMs": 20_000,
+      "cache.recursoTtlLentoMs": 300_000,
+      "cache.offlineLeitura": true,
+    }));
 
   return (
     <Casca
@@ -31,6 +49,9 @@ export default async function LayoutDoApp({ children }: { children: React.ReactN
       focoMinutos={prefs["presenca.focoMinutos"]}
       intensidade={prefs["presenca.intensidade"]}
       reduzido={prefs["presenca.movimentoReduzido"]}
+      cacheTtlMs={prefs["cache.recursoTtlMs"]}
+      cacheTtlLentoMs={prefs["cache.recursoTtlLentoMs"]}
+      offlineLeitura={prefs["cache.offlineLeitura"]}
     >
       {children}
     </Casca>

@@ -5,6 +5,8 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Icone } from "./icones";
 import { useCasca } from "./contexto";
+import { BlocoObservado } from "@/lib/use-visible";
+import { useRecursos } from "@/lib/dados/recurso";
 import { Nucleo } from "./nucleo";
 import { ESTADOS_NUCLEO, type EstadoNucleo } from "./estados";
 
@@ -28,26 +30,24 @@ function saudacaoDaHora(hora: number) {
 export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
   const casca = useCasca();
   const [estado] = useState<EstadoNucleo>("idle");
-  const [contagens, setContagens] = useState({ memorias: 0, rotinas: 0, comodos: 0 });
+  // Os mesmos três recursos que as telas Memória, Rotinas e Casa já pedem:
+  // com o cache, entrar em Casa logo depois da Visão geral não busca de novo.
+  const { dados } = useRecursos<{
+    conhecimento: { memories: number };
+    rotinas: { routines: unknown[] };
+    comodos: { rooms: unknown[] };
+  }>({ conhecimento: "/api/knowledge", rotinas: "/api/routines", comodos: "/api/home/rooms" });
+  const contagens = {
+    memorias: dados.conhecimento?.memories ?? 0,
+    rotinas: dados.rotinas?.routines?.length ?? 0,
+    comodos: dados.comodos?.rooms?.length ?? 0,
+  };
   // A data só é calculada no cliente: renderizar no servidor daria o dia do
   // fuso do servidor, e a hidratação reclamaria da diferença.
   const [agora, setAgora] = useState<Date | null>(null);
 
   useEffect(() => {
     setAgora(new Date());
-    // Números reais, não os do roteiro do protótipo. Cada um falha em silêncio:
-    // a tela inicial não pode quebrar porque um painel está fora do ar.
-    void Promise.allSettled([
-      fetch("/api/knowledge").then((r) => r.json()),
-      fetch("/api/routines").then((r) => r.json()),
-      fetch("/api/home/rooms").then((r) => r.json()),
-    ]).then(([conhecimento, rotinas, comodos]) => {
-      setContagens({
-        memorias: conhecimento.status === "fulfilled" ? Number(conhecimento.value?.memories ?? 0) : 0,
-        rotinas: rotinas.status === "fulfilled" ? (rotinas.value?.routines ?? []).length : 0,
-        comodos: comodos.status === "fulfilled" ? (comodos.value?.rooms ?? []).length : 0,
-      });
-    });
   }, []);
 
   const fala = ESTADOS_NUCLEO[estado];
@@ -215,7 +215,11 @@ export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
           <p>O que você quis ter sempre à mão.</p>
         </div>
       </div>
-      <Widgets />
+      {/* Observado: os cards se atualizam sozinhos a cada 2min, e a Visão
+          geral é longa. Fora da vista, a atualização pausa. */}
+      <BlocoObservado>
+        <Widgets />
+      </BlocoObservado>
 
       <div className="section-heading quick-heading">
         <div>

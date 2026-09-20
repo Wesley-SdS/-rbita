@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { invalidar, useRecursos } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 import { Card, Input, Textarea, Button } from "@/components/ui";
 
@@ -10,19 +11,20 @@ interface Mcp { id: string; name: string; url: string; enabled: boolean; risk: s
 /** Extensões: skills (comportamentos) + servidores MCP (ferramentas externas). */
 export function ExtensionsPanel() {
   const [tab, setTab] = useState<"skills" | "mcp">("skills");
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [mcps, setMcps] = useState<Mcp[]>([]);
+  // As duas listas mudam pouco e a tela Conexões volta a elas o tempo todo.
+  const { dados } = useRecursos<{ skillsResp: { skills: Skill[] }; mcpResp: { servers: Mcp[] } }>(
+    { skillsResp: "/api/skills", mcpResp: "/api/mcp" },
+    { estavel: true },
+  );
+  const skills = dados.skillsResp?.skills ?? [];
+  const mcps = dados.mcpResp?.servers ?? [];
   const [sName, setSName] = useState(""); const [sInstr, setSInstr] = useState(""); const [sKw, setSKw] = useState("");
   const [mName, setMName] = useState(""); const [mUrl, setMUrl] = useState("");
 
   // template estruturado (padrão Adalink) — ajuda a escrever skills melhores
   const SKILL_TEMPLATE = "## Quando usar\n(situações em que esta skill deve agir)\n\n## Quando NÃO usar\n(delegue a outra skill ou responda normal)\n\n## Princípios\n- \n\n## Como responder\n- ";
 
-  function load() {
-    fetch("/api/skills").then((r) => r.json()).then((d) => setSkills(d.skills ?? [])).catch(() => {});
-    fetch("/api/mcp").then((r) => r.json()).then((d) => setMcps(d.servers ?? [])).catch(() => {});
-  }
-  useEffect(load, []);
+  const load = () => invalidar("/api/skills", "/api/mcp");
 
   async function addSkill() {
     if (!sName.trim() || !sInstr.trim()) return;

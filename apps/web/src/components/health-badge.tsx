@@ -1,19 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRecurso } from "@/lib/dados/recurso";
 
 type Health = { status: string; db?: string };
 
 export function HealthBadge() {
-  const [h, setH] = useState<Health | null>(null);
-  const [err, setErr] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/health")
-      .then((r) => r.json())
-      .then(setH)
-      .catch(() => setErr(true));
-  }, []);
+  // Validade curta (a padrão), não a de dado estável: um selo de saúde que
+  // insiste por cinco minutos que o banco está de pé é pior do que não ter selo.
+  // O cache aqui serve para o selo não repetir a chamada a cada tela.
+  const { dado: h, erro } = useRecurso<Health>("/api/health");
+  const err = !!erro;
 
   const ok = h?.status === "ok";
   const color = err || h?.status === "error" ? "var(--color-danger)" : ok ? "var(--color-good)" : "var(--color-ink-dim)";

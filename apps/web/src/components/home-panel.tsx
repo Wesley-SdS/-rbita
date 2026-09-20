@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Input, Button, ErrorRetry } from "@/components/ui";
 import { DEVICE_ID_STORAGE_KEY, getOwnDeviceId } from "@/lib/device-id";
 import { Icone } from "@/components/presenca/icones";
+import { invalidar, mutarRecurso, useRecurso, useRecursos } from "@/lib/dados/recurso";
 
 /**
  * A casa (Onda 3): conectar o Home Assistant, cadastrar cômodos, associar
@@ -29,20 +30,11 @@ interface OrbitaDevice { id: string; name: string; kind: DeviceKind; roomId: str
 export { ConnectionTab as CasaConexao, RoomsTab as CasaComodos, EntitiesTab as CasaDispositivos, OrbitaDevicesTab as CasaAparelhos, DomainRiskTab as CasaRiscoPorTipo };
 
 function ConnectionTab() {
-  const [status, setStatus] = useState<{ connected: boolean; baseUrl: string | null } | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const { dado: status, erro: err, recarregar } = useRecurso<{ connected: boolean; baseUrl: string | null }>("/api/home/connection", { estavel: true });
   const [baseUrl, setBaseUrl] = useState("");
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
-
-  useEffect(() => {
-    let alive = true;
-    setErr(null);
-    fetch("/api/home/connection").then((r) => (r.ok ? r.json() : Promise.reject())).then((d) => { if (alive) setStatus(d); }).catch(() => { if (alive) setErr("Não foi possível carregar."); });
-    return () => { alive = false; };
-  }, [reload]);
 
   async function connect() {
     setBusy(true);
@@ -53,13 +45,14 @@ function ConnectionTab() {
     if (!r.ok) { setMsg(d.error ?? "Falha ao conectar"); return; }
     setToken("");
     setMsg(`Conectado: ${d.label}`);
-    setReload((n) => n + 1);
+    // conectar muda a conexão E traz dispositivos: as duas leituras envelhecem
+    invalidar("/api/home/");
   }
   async function disconnect() {
     setBusy(true);
     await fetch("/api/home/connection", { method: "DELETE" });
     setBusy(false);
-    setReload((n) => n + 1);
+    invalidar("/api/home/");
   }
   async function syncNow() {
     setBusy(true);
@@ -68,9 +61,12 @@ function ConnectionTab() {
     const d = await r.json().catch(() => ({}));
     setBusy(false);
     setMsg(r.ok ? `Sincronizado: ${d.total} dispositivos` : (d.error ?? "Falha ao sincronizar"));
+    if (r.ok) invalidar("/api/home/entities");
   }
 
-  if (err) return <ErrorRetry message={err} onRetry={() => setReload((n) => n + 1)} />;
+  // Erro só toma a tela quando não há NADA para mostrar: com dado guardado, o
+  // certo é mostrá-lo enquanto a atualização é tentada de novo.
+  if (err && !status) return <ErrorRetry message={err} onRetry={recarregar} />;
   if (!status) return <p className="text-[15px]" style={dim}>Carregando…</p>;
 
   return (
@@ -97,28 +93,25 @@ function ConnectionTab() {
 }
 
 function RoomsTab() {
-  const [comodos, setComodos] = useState<Room[] | null>(null);
-  const [dispositivos, setDispositivos] = useState<Entity[]>([]);
-  const [aparelhos, setAparelhos] = useState<OrbitaDevice[]>([]);
-  const [nome, setNome] = useState("");
-  const [recarregar, setRecarregar] = useState(0);
-  const [erro, setErro] = useState<string | null>(null);
+  // Os três juntos porque o cartão do cômodo só faz sentido dizendo o que há
+  // dentro dele: um cômodo vazio na tela não explica por que existe.
+  //
+  // As mesmas três chaves são pedidas pelas outras abas desta tela. Com o
+  // cache, só a primeira aba a montar vai à rede; as demais leem o guardado.
+  const { dados } = useRecursos<{
+    comodos: { rooms: Room[] };
+    dispositivos: { entities: Entity[] };
+    aparelhos: { devices: OrbitaDevice[] };
+  }>(
+    { comodos: "/api/home/rooms", dispositivos: "/api/home/entities", aparelhos: "/api/devices" },
+    { estavel: true },
+  );
+  const comodos = dados.comodos?.rooms ?? null;
+  const dispositivos = dados.dispositivos?.entities ?? [];
+  const aparelhos = dados.aparelhos?.devices ?? [];
 
-  useEffect(() => {
-    // Os três juntos porque o cartão do cômodo só faz sentido dizendo o que há
-    // dentro dele: um cômodo vazio na tela não explica por que existe.
-    Promise.all([
-      fetch("/api/home/rooms").then((r) => r.json()).then((d) => d.rooms ?? []),
-      fetch("/api/home/entities").then((r) => r.json()).then((d) => d.entities ?? []).catch(() => []),
-      fetch("/api/devices").then((r) => r.json()).then((d) => d.devices ?? []).catch(() => []),
-    ])
-      .then(([c, e, a]) => {
-        setComodos(c);
-        setDispositivos(e);
-        setAparelhos(a);
-      })
-      .catch(() => setComodos([]));
-  }, [recarregar]);
+  const [nome, setNome] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
 
   async function criar(e: React.FormEvent) {
     e.preventDefault();
@@ -134,18 +127,23 @@ function RoomsTab() {
       return;
     }
     setNome("");
-    setRecarregar((n) => n + 1);
+    // Sem otimismo aqui: o id do cômodo é do servidor, e inventar um na tela
+    // faria o cartão mudar de identidade quando a resposta chegasse.
+    invalidar("/api/home/rooms");
   }
 
   async function apagar(id: string, nomeDoComodo: string) {
     if (!window.confirm(`Apagar ${nomeDoComodo}? Os dispositivos e aparelhos ligados a ele ficam sem cômodo.`)) return;
     setErro(null);
-    const r = await fetch(`/api/home/rooms?id=${id}`, { method: "DELETE" }).catch(() => null);
-    if (!r?.ok) {
-      setErro(((await r?.json().catch(() => ({}))) as { error?: string })?.error ?? "Não foi possível apagar o cômodo.");
-      return;
-    }
-    setRecarregar((n) => n + 1);
+    // O cartão some na hora; se o servidor recusar, ele volta com o aviso.
+    const r = await mutarRecurso<{ rooms: Room[] }>({
+      chave: "/api/home/rooms",
+      otimista: (atual) => ({ rooms: (atual?.rooms ?? []).filter((c) => c.id !== id) }),
+      executar: () => fetch(`/api/home/rooms?id=${id}`, { method: "DELETE" }),
+      // quem estava nele ficou sem cômodo: as duas listas mudaram também
+      invalida: ["/api/home/entities", "/api/devices"],
+    });
+    if (!r.ok) setErro(r.erro);
   }
 
   if (!comodos) return <div className="panel empty-state">Carregando os ambientes…</div>;
@@ -234,21 +232,22 @@ function RoomsTab() {
 }
 
 function EntitiesTab() {
-  const [entities, setEntities] = useState<Entity[] | null>(null);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [reload, setReload] = useState(0);
-
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/home/entities").then((r) => r.json()).then((d) => d.entities ?? []),
-      fetch("/api/home/rooms").then((r) => r.json()).then((d) => d.rooms ?? []),
-    ]).then(([e, r]) => { setEntities(e); setRooms(r); }).catch(() => setEntities([]));
-  }, [reload]);
+  const { dados } = useRecursos<{ lista: { entities: Entity[] }; comodos: { rooms: Room[] } }>(
+    { lista: "/api/home/entities", comodos: "/api/home/rooms" },
+    { estavel: true },
+  );
+  const entities = dados.lista?.entities ?? null;
+  const rooms = dados.comodos?.rooms ?? [];
 
   async function setRoom(entityId: string, roomId: string | null) {
-    const r = await fetch("/api/home/entities", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entityId, roomId }) }).catch(() => null);
-    if (!r?.ok) { window.alert(((await r?.json().catch(() => ({}))) as { error?: string })?.error ?? "Não foi possível mudar o cômodo do dispositivo."); return; }
-    setReload((n) => n + 1);
+    // O seletor fica no valor novo imediatamente: esperar a volta do servidor
+    // para mostrar a escolha da pessoa é o que fazia a lista "pular".
+    const r = await mutarRecurso<{ entities: Entity[] }>({
+      chave: "/api/home/entities",
+      otimista: (atual) => ({ entities: (atual?.entities ?? []).map((e) => (e.entityId === entityId ? { ...e, roomId } : e)) }),
+      executar: () => fetch("/api/home/entities", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entityId, roomId }) }),
+    });
+    if (!r.ok) window.alert(r.erro);
   }
 
   if (!entities) return <p className="text-[15px]" style={dim}>Carregando…</p>;
@@ -295,11 +294,17 @@ function fmtLastSeen(iso: string | null): string {
  * Órbita avisa no cômodo em que a pessoa está.
  */
 function OrbitaDevicesTab() {
-  const [devices, setDevices] = useState<OrbitaDevice[] | null>(null);
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const { dados, erro: err, recarregar } = useRecursos<{ aparelhos: { devices: OrbitaDevice[] }; comodos: { rooms: Room[] } }>(
+    { aparelhos: "/api/devices", comodos: "/api/home/rooms" },
+    { estavel: true },
+  );
+  const devices = dados.aparelhos?.devices ?? null;
+  const rooms = dados.comodos?.rooms ?? [];
+
   const [ownId, setOwnId] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
+  // Só para reler o localStorage depois de registrar este navegador: o id dele
+  // não vem do servidor, então o cache de dados não tem como saber que mudou.
+  const [versaoLocal, setVersaoLocal] = useState(0);
   const [busy, setBusy] = useState(false);
   const [newRoomId, setNewRoomId] = useState("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -309,19 +314,7 @@ function OrbitaDevicesTab() {
   const [outroTipo, setOutroTipo] = useState<DeviceKind>("satelite");
   const [outroComodo, setOutroComodo] = useState("");
 
-  useEffect(() => { setOwnId(getOwnDeviceId()); }, [reload]);
-
-  useEffect(() => {
-    let alive = true;
-    setErr(null);
-    Promise.all([
-      fetch("/api/devices").then((r) => (r.ok ? r.json() : Promise.reject())).then((d) => d.devices ?? []),
-      fetch("/api/home/rooms").then((r) => r.json()).then((d) => d.rooms ?? []),
-    ])
-      .then(([dv, rm]) => { if (alive) { setDevices(dv); setRooms(rm); } })
-      .catch(() => { if (alive) setErr("Não foi possível carregar os aparelhos."); });
-    return () => { alive = false; };
-  }, [reload]);
+  useEffect(() => { setOwnId(getOwnDeviceId()); }, [versaoLocal]);
 
   const own = devices?.find((d) => d.id === ownId) ?? null;
 
@@ -336,7 +329,7 @@ function OrbitaDevicesTab() {
         window.alert(d.error ?? falha);
         return false;
       }
-      setReload((n) => n + 1);
+      invalidar("/api/devices");
       return true;
     } catch {
       window.alert(falha);
@@ -357,7 +350,8 @@ function OrbitaDevicesTab() {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) { window.alert(d.error ?? "Não foi possível registrar este aparelho."); return; }
       try { localStorage.setItem(DEVICE_ID_STORAGE_KEY, d.id); } catch { /* localStorage indisponível: segue sem lembrar entre sessões */ }
-      setReload((n) => n + 1);
+      invalidar("/api/devices");
+      setVersaoLocal((n) => n + 1);
     } finally {
       setBusy(false);
     }
@@ -405,6 +399,7 @@ function OrbitaDevicesTab() {
     const ok = await mutar(() => fetch(`/api/devices?id=${d.id}`, { method: "DELETE" }), "Não foi possível esquecer o aparelho.");
     if (ok && proprio) {
       try { localStorage.removeItem(DEVICE_ID_STORAGE_KEY); } catch { /* segue mesmo sem limpar */ }
+      setVersaoLocal((n) => n + 1);
     }
   }
 
@@ -426,7 +421,8 @@ function OrbitaDevicesTab() {
     );
   }
 
-  if (err) return <ErrorRetry message={err} onRetry={() => setReload((n) => n + 1)} />;
+  // idem às outras abas: o erro só toma a tela quando não há nada guardado
+  if (err && !devices) return <ErrorRetry message={err} onRetry={recarregar} />;
   if (!devices) return <p className="text-[15px]" style={dim}>Carregando…</p>;
 
   const outros = devices.filter((d) => d.id !== ownId);
@@ -528,16 +524,22 @@ function OrbitaDevicesTab() {
 }
 
 function DomainRiskTab() {
-  const [rows, setRows] = useState<DomainRiskRow[] | null>(null);
-  const [reload, setReload] = useState(0);
-
-  useEffect(() => {
-    fetch("/api/home/domain-risk").then((r) => r.json()).then((d) => setRows(d.domains ?? [])).catch(() => setRows([]));
-  }, [reload]);
+  const { dado } = useRecurso<{ domains: DomainRiskRow[] }>("/api/home/domain-risk", { estavel: true });
+  const rows = dado?.domains ?? null;
 
   async function setRisk(domain: string, risk: Risk | "") {
-    await fetch("/api/home/domain-risk", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain, risk: risk || null }) });
-    setReload((n) => n + 1);
+    // Otimista, mas o que vale de verdade continua sendo a resposta: se o
+    // servidor recusar, o seletor volta sozinho ao que estava.
+    const r = await mutarRecurso<{ domains: DomainRiskRow[] }>({
+      chave: "/api/home/domain-risk",
+      otimista: (atual) => ({
+        domains: (atual?.domains ?? []).map((d) =>
+          d.domain === domain ? { ...d, override: risk || null, effective: (risk || d.default) as Risk } : d,
+        ),
+      }),
+      executar: () => fetch("/api/home/domain-risk", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain, risk: risk || null }) }),
+    });
+    if (!r.ok) window.alert(r.erro);
   }
 
   if (!rows) return <p className="text-[15px]" style={dim}>Carregando…</p>;

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { invalidar, useRecurso, useRecursos } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 import { Card, PanelTitle, Input, Button, ErrorRetry } from "@/components/ui";
 
@@ -52,25 +53,17 @@ export function CameraPanel() {
 }
 
 function CamerasTab() {
-  const [cams, setCams] = useState<CameraRow[] | null>(null);
-  const [rooms, setRooms] = useState<Room[]>([]);
+  // `/api/home/rooms` é a mesma lista das abas Ambientes, Dispositivos e
+  // Aparelhos: dentro da tela Casa, chegar aqui não busca cômodo nenhum.
+  const { dados, erro: err, recarregar } = useRecursos<{ camerasResp: { cameras: CameraRow[] }; comodos: { rooms: Room[] } }>(
+    { camerasResp: "/api/cameras", comodos: "/api/home/rooms" },
+    { estavel: true },
+  );
+  const cams = dados.camerasResp?.cameras ?? null;
+  const rooms = dados.comodos?.rooms ?? [];
   const [name, setName] = useState("");
   const [roomId, setRoomId] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
   const [novoToken, setNovoToken] = useState<{ nome: string; token: string } | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    setErr(null);
-    Promise.all([
-      fetch("/api/cameras").then((r) => (r.ok ? r.json() : Promise.reject())).then((d) => d.cameras ?? []),
-      fetch("/api/home/rooms").then((r) => r.json()).then((d) => d.rooms ?? []),
-    ])
-      .then(([c, r]) => { if (alive) { setCams(c); setRooms(r); } })
-      .catch(() => { if (alive) setErr("Não foi possível carregar."); });
-    return () => { alive = false; };
-  }, [reload]);
 
   // erro de API vira mensagem, nunca um recarregamento mudo que desfaz o
   // clique sem explicar (sessão expirada parecia defeito da câmera)
@@ -79,10 +72,10 @@ function CamerasTab() {
     if (!r?.ok) {
       const d = (await r?.json().catch(() => ({}))) as { error?: string } | undefined;
       window.alert(d?.error ?? falha);
-      setReload((n) => n + 1);
+      invalidar("/api/cameras");
       return false;
     }
-    setReload((n) => n + 1);
+    invalidar("/api/cameras");
     return true;
   }
 
@@ -94,7 +87,7 @@ function CamerasTab() {
     if (d?.webhookToken) setNovoToken({ nome: name, token: d.webhookToken });
     setName("");
     setRoomId("");
-    setReload((n) => n + 1);
+    invalidar("/api/cameras");
   }
   async function toggle(c: CameraRow) {
     await patch(c, { enabled: !c.enabled }, "Não foi possível ligar ou desligar a câmera.");
@@ -121,10 +114,10 @@ Precisão: contraluz, rosto de lado e gente longe da câmera costumam sair como 
       window.alert(d?.error ?? "Não foi possível apagar a câmera.");
       return;
     }
-    setReload((n) => n + 1);
+    invalidar("/api/cameras");
   }
 
-  if (err) return <ErrorRetry message={err} onRetry={() => setReload((n) => n + 1)} />;
+  if (err && !cams) return <ErrorRetry message={err} onRetry={recarregar} />;
   if (!cams) return <p className="text-[15px]" style={dim}>Carregando…</p>;
 
   return (
@@ -188,21 +181,10 @@ Precisão: contraluz, rosto de lado e gente longe da câmera costumam sair como 
 }
 
 function EventsTab() {
-  const [events, setEvents] = useState<CameraEventRow[] | null>(null);
+  // falhar calado aqui faria erro de rede parecer "nenhum evento ainda"
+  const { dado, erro: err, recarregar } = useRecurso<{ events: CameraEventRow[] }>("/api/cameras/events");
+  const events = dado?.events ?? null;
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
-
-  useEffect(() => {
-    let alive = true;
-    setErr(null);
-    // falhar calado aqui faria erro de rede parecer "nenhum evento ainda"
-    fetch("/api/cameras/events")
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d) => { if (alive) setEvents(d.events ?? []); })
-      .catch(() => { if (alive) setErr("Não foi possível carregar os eventos."); });
-    return () => { alive = false; };
-  }, [reload]);
 
   async function narrate(id: string) {
     setBusyId(id);
@@ -213,10 +195,10 @@ function EventsTab() {
       window.alert(d?.error ?? "Não foi possível descrever a cena.");
       return;
     }
-    setReload((n) => n + 1);
+    invalidar("/api/cameras/events");
   }
 
-  if (err) return <ErrorRetry message={err} onRetry={() => setReload((n) => n + 1)} />;
+  if (err && !events) return <ErrorRetry message={err} onRetry={recarregar} />;
   if (!events) return <p className="text-[15px]" style={dim}>Carregando…</p>;
   if (!events.length) return <p className="text-[15px]" style={dim}>Nenhum evento recebido ainda.</p>;
 

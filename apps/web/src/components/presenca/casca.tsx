@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { Icone } from "./icones";
 import { TELAS, telaDoCaminho } from "./navegacao";
@@ -10,6 +10,7 @@ import { Atividade } from "./atividade";
 import { ModoFoco } from "./modo-foco";
 import { ProvedorCasca } from "./contexto";
 import { signOut } from "@/lib/auth-client";
+import { limparCache, ProvedorCacheDados } from "@/lib/dados/recurso";
 
 /** Marca: o símbolo é desenhado em CSS (dois anéis e um núcleo), sem imagem. */
 function Marca() {
@@ -21,6 +22,44 @@ function Marca() {
       </span>
     </Link>
   );
+}
+
+/**
+ * Rastro de navegação: só aparece se a troca de tela demorar.
+ *
+ * Com o esqueleto de rota (`app/loading.tsx`) a navegação já é imediata na
+ * maioria dos casos. Isto cobre o resto: rede ruim, prefetch que não terminou
+ * antes do clique. O atraso de 120ms vive no CSS (`.link-hint`), então numa
+ * troca rápida o indicador nunca chega a ser desenhado, em vez de piscar.
+ *
+ * Precisa ser um componente próprio: `useLinkStatus` só lê o estado do `Link`
+ * que o contém.
+ */
+function RastroDoLink() {
+  const { pending } = useLinkStatus();
+  return <span aria-hidden className={`link-hint ${pending ? "is-pending" : ""}`} />;
+}
+
+/**
+ * Sair de verdade: além da sessão, o que ficou guardado no aparelho.
+ *
+ * O cache em memória some sozinho ao recarregar, mas o que o service worker
+ * gravou sobrevive. Deixar a última lista de pessoas da casa acessível depois
+ * de sair seria um vazamento silencioso num aparelho compartilhado.
+ */
+async function sair() {
+  limparCache();
+  try {
+    // Por PREFIXO e não pelo nome exato: o nome do cache tem versão dentro
+    // (`orbita-api-v1`), mora no service worker, e repetir a versão aqui seria
+    // exatamente o tipo de acoplamento que envelhece calado. Subiu a versão
+    // lá? Continua limpando.
+    const nomes = await caches.keys();
+    await Promise.all(nomes.filter((n) => n.startsWith("orbita-api")).map((n) => caches.delete(n)));
+  } catch {
+    /* sem Cache Storage (navegação privada, http sem TLS): nada a limpar */
+  }
+  location.assign("/login");
 }
 
 function Tema() {
@@ -62,6 +101,9 @@ export function Casca({
   focoMinutos = 25,
   intensidade = 85,
   reduzido = false,
+  cacheTtlMs = 20_000,
+  cacheTtlLentoMs = 300_000,
+  offlineLeitura = true,
 }: {
   nomeUsuario: string;
   children: React.ReactNode;
@@ -69,6 +111,11 @@ export function Casca({
   focoMinutos?: number;
   intensidade?: number;
   reduzido?: boolean;
+  /** validade do cache de dados, resolvida no servidor (`cache.recursoTtl*`) */
+  cacheTtlMs?: number;
+  cacheTtlLentoMs?: number;
+  /** guardar no aparelho a última leitura conhecida (`cache.offlineLeitura`) */
+  offlineLeitura?: boolean;
 }) {
   const caminho = usePathname() ?? "/app";
   const atual = telaDoCaminho(caminho);
@@ -108,6 +155,18 @@ export function Casca({
     }
   }
 
+  // O service worker não lê a tabela de config: quem sabe da escolha é esta
+  // tela, então ela conta. A cada carga, porque a chave pode ter mudado em
+  // Ajustes desde a última vez.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.ready
+      .then((reg) => reg.active?.postMessage({ tipo: "orbita:config", offlineLeitura }))
+      .catch(() => {
+        /* sem service worker (http sem TLS, navegação privada): segue sem offline */
+      });
+  }, [offlineLeitura]);
+
   const fecharMenu = useCallback(() => setMenuAberto(false), []);
   // Navegar no celular tem de fechar a gaveta; sem isso ela cobre a tela nova.
   useEffect(() => fecharMenu(), [caminho, fecharMenu]);
@@ -145,137 +204,143 @@ export function Casca({
             e seletor CSS não alcança nó de texto solto. */}
         <span className="nav-rotulo">{t.titulo}</span>
         {t.slug === "rotinas" && totalRotinas ? <span className="nav-count">{totalRotinas}</span> : null}
+        <RastroDoLink />
         <span className="nav-active-dot" />
       </Link>
     ));
 
   return (
-    <ProvedorCasca
-      value={{
-        abrirFoco: () => setFocoAberto(true),
-        abrirBusca: () => setBuscaAberta(true),
-        abrirAtividade: () => setAtividadeAberta(true),
-        intensidade,
-        reduzido: movimentoReduzido,
-      }}
-    >
-      <a href="#conteudo" className="skip-link">
-        Pular para o conteúdo
-      </a>
-      <div className={`mobile-scrim ${menuAberto ? "open" : ""}`} onClick={fecharMenu} />
+    // O cache de dados envolve a casca inteira: a busca do ⌘K, os painéis de
+    // cada tela e a gaveta de atividade compartilham as mesmas leituras.
+    <ProvedorCacheDados ttlMs={cacheTtlMs} ttlLentoMs={cacheTtlLentoMs}>
+      <ProvedorCasca
+        value={{
+          abrirFoco: () => setFocoAberto(true),
+          abrirBusca: () => setBuscaAberta(true),
+          abrirAtividade: () => setAtividadeAberta(true),
+          intensidade,
+          reduzido: movimentoReduzido,
+        }}
+      >
+        <a href="#conteudo" className="skip-link">
+          Pular para o conteúdo
+        </a>
+        <div className={`mobile-scrim ${menuAberto ? "open" : ""}`} onClick={fecharMenu} />
 
-      <aside className={`sidebar ${menuAberto ? "open" : ""}`} aria-label="Navegação principal">
-        <Marca />
-        <div className="workspace">
-          <span className="workspace-icon">
-            <Icone nome="home" />
-          </span>
-          <div>
-            <strong>Seu universo pessoal</strong>
-            <span>Um espaço só seu</span>
+        <aside className={`sidebar ${menuAberto ? "open" : ""}`} aria-label="Navegação principal">
+          <Marca />
+          <div className="workspace">
+            <span className="workspace-icon">
+              <Icone nome="home" />
+            </span>
+            <div>
+              <strong>Seu universo pessoal</strong>
+              <span>Um espaço só seu</span>
+            </div>
+            <span className="tiny-dot" />
           </div>
-          <span className="tiny-dot" />
-        </div>
 
-        <button className="search-trigger" onClick={() => setBuscaAberta(true)} title="Encontre qualquer coisa (⌘K)">
-          <Icone nome="search" />
-          <span>Encontre qualquer coisa</span>
-          <kbd>⌘ K</kbd>
-        </button>
-
-        <p className="nav-caption">SEU ESPAÇO</p>
-        <nav className="nav-main">{grupo("espaco")}</nav>
-
-        <p className="nav-caption">CONECTADO A VOCÊ</p>
-        <nav className="nav-main">{grupo("conectado")}</nav>
-
-        <div className="sidebar-bottom">
-          <button type="button" onClick={() => setFocoAberto(true)} className="focus-teaser" title="Entrar no modo foco">
-            <span className="focus-symbol">
-              <Icone nome="spark" />
-            </span>
-            <strong>
-              Menos ruído.
-              <br />
-              Mais presença.
-            </strong>
-            <span>
-              Entre no modo foco <Icone nome="arrow-up-right" />
-            </span>
+          <button className="search-trigger" onClick={() => setBuscaAberta(true)} title="Encontre qualquer coisa (⌘K)">
+            <Icone nome="search" />
+            <span>Encontre qualquer coisa</span>
+            <kbd>⌘ K</kbd>
           </button>
 
-          <Link
-            href="/app/ajustes"
-            className={`nav-link ${atual.slug === "ajustes" ? "active" : ""}`}
-            aria-current={atual.slug === "ajustes" ? "page" : undefined}
-            title="Preferências"
-          >
-            <Icone nome="settings" />
-            <span className="nav-rotulo">Preferências</span>
-          </Link>
+          <p className="nav-caption">SEU ESPAÇO</p>
+          <nav className="nav-main">{grupo("espaco")}</nav>
 
-          <button className="profile" onClick={() => signOut().then(() => location.assign("/login"))} title="Sair da sua conta">
-            <span className="avatar">{nomeUsuario.slice(0, 1).toUpperCase()}</span>
-            <span>
-              <strong>{nomeUsuario}</strong>
-              <small>Sair da sua conta</small>
-            </span>
-            <Icone nome="chevrons" />
-          </button>
+          <p className="nav-caption">CONECTADO A VOCÊ</p>
+          <nav className="nav-main">{grupo("conectado")}</nav>
+
+          <div className="sidebar-bottom">
+            <button type="button" onClick={() => setFocoAberto(true)} className="focus-teaser" title="Entrar no modo foco">
+              <span className="focus-symbol">
+                <Icone nome="spark" />
+              </span>
+              <strong>
+                Menos ruído.
+                <br />
+                Mais presença.
+              </strong>
+              <span>
+                Entre no modo foco <Icone nome="arrow-up-right" />
+              </span>
+            </button>
+
+            <Link
+              href="/app/ajustes"
+              className={`nav-link ${atual.slug === "ajustes" ? "active" : ""}`}
+              aria-current={atual.slug === "ajustes" ? "page" : undefined}
+              title="Preferências"
+            >
+              <Icone nome="settings" />
+              <span className="nav-rotulo">Preferências</span>
+              <RastroDoLink />
+            </Link>
+
+            <button className="profile" onClick={() => signOut().then(sair)} title="Sair da sua conta">
+              <span className="avatar">{nomeUsuario.slice(0, 1).toUpperCase()}</span>
+              <span>
+                <strong>{nomeUsuario}</strong>
+                <small>Sair da sua conta</small>
+              </span>
+              <Icone nome="chevrons" />
+            </button>
+          </div>
+        </aside>
+
+        <div className="app-shell">
+          <header className="topbar">
+            <div className="breadcrumb">
+              <button
+                className="icon-button mobile-menu"
+                onClick={() => setMenuAberto((v) => !v)}
+                aria-label="Abrir navegação"
+                aria-expanded={menuAberto}
+              >
+                <Icone nome="menu" />
+              </button>
+              <button
+                className="icon-button recolher-lateral"
+                onClick={alternarLateral}
+                aria-label={recolhida ? "Expandir a navegação" : "Recolher a navegação"}
+                aria-pressed={recolhida}
+                title={recolhida ? "Expandir a navegação" : "Recolher a navegação"}
+              >
+                <Icone nome={recolhida ? "arrow-right" : "menu"} />
+              </button>
+              <span className="breadcrumb-universe">Meu universo</span>
+              <span className="slash">/</span>
+              <strong>{atual.titulo}</strong>
+            </div>
+            <div className="topbar-actions">
+              <span className="topbar-divider" />
+              <Tema />
+              <button
+                className="icon-button notification-button"
+                onClick={() => setAtividadeAberta(true)}
+                aria-label="Abrir atividade e aprovações"
+                title="Atividade e aprovações"
+              >
+                <Icone nome="bell" />
+              </button>
+            </div>
+          </header>
+          <main id="conteudo" tabIndex={-1}>
+            {children}
+          </main>
         </div>
-      </aside>
 
-      <div className="app-shell">
-        <header className="topbar">
-          <div className="breadcrumb">
-            <button
-              className="icon-button mobile-menu"
-              onClick={() => setMenuAberto((v) => !v)}
-              aria-label="Abrir navegação"
-              aria-expanded={menuAberto}
-            >
-              <Icone nome="menu" />
-            </button>
-            <button
-              className="icon-button recolher-lateral"
-              onClick={alternarLateral}
-              aria-label={recolhida ? "Expandir a navegação" : "Recolher a navegação"}
-              aria-pressed={recolhida}
-              title={recolhida ? "Expandir a navegação" : "Recolher a navegação"}
-            >
-              <Icone nome={recolhida ? "arrow-right" : "menu"} />
-            </button>
-            <span className="breadcrumb-universe">Meu universo</span>
-            <span className="slash">/</span>
-            <strong>{atual.titulo}</strong>
-          </div>
-          <div className="topbar-actions">
-            <span className="topbar-divider" />
-            <Tema />
-            <button
-              className="icon-button notification-button"
-              onClick={() => setAtividadeAberta(true)}
-              aria-label="Abrir atividade e aprovações"
-              title="Atividade e aprovações"
-            >
-              <Icone nome="bell" />
-            </button>
-          </div>
-        </header>
-        <main id="conteudo" tabIndex={-1}>
-          {children}
-        </main>
-      </div>
-
-      <Busca aberta={buscaAberta} aoFechar={() => setBuscaAberta(false)} />
-      <Atividade aberta={atividadeAberta} aoFechar={() => setAtividadeAberta(false)} />
-      <ModoFoco
-        aberto={focoAberto}
-        aoFechar={() => setFocoAberto(false)}
-        minutos={focoMinutos}
-        intensidade={intensidade}
-        reduzido={movimentoReduzido}
-      />
-    </ProvedorCasca>
+        <Busca aberta={buscaAberta} aoFechar={() => setBuscaAberta(false)} />
+        <Atividade aberta={atividadeAberta} aoFechar={() => setAtividadeAberta(false)} />
+        <ModoFoco
+          aberto={focoAberto}
+          aoFechar={() => setFocoAberto(false)}
+          minutos={focoMinutos}
+          intensidade={intensidade}
+          reduzido={movimentoReduzido}
+        />
+      </ProvedorCasca>
+    </ProvedorCacheDados>
   );
 }

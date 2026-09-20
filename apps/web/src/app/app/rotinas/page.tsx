@@ -1,29 +1,27 @@
-"use client";
+import { semearDaApi } from "@/lib/dados/servidor";
+import { CacheSemeado } from "@/lib/dados/semeadura";
+import { Conteudo } from "./conteudo";
 
-import dynamic from "next/dynamic";
-import { TituloDaVista, Abas } from "@/components/presenca/vista";
-
-function Esqueleto() {
-  return <div className="panel empty-state">Carregando…</div>;
-}
-
-const RoutinesPanel = dynamic(() => import("@/components/routines-panel").then((m) => m.RoutinesPanel), { ssr: false, loading: Esqueleto });
-const RulesPanel = dynamic(() => import("@/components/rules-panel").then((m) => m.RulesPanel), { ssr: false, loading: Esqueleto });
-
-export default function PaginaRotinas() {
+/**
+ * A tela em si é cliente (`conteudo.tsx`); esta camada de servidor existe só
+ * para ADIANTAR as leituras da primeira aba.
+ *
+ * Sem isto, a sequência era: payload da rota, depois o JavaScript do painel,
+ * depois a busca. Agora a busca acontece enquanto o JavaScript baixa, e o
+ * painel monta já preenchido. Falha aqui não quebra nada: o painel busca
+ * sozinho, como antes.
+ *
+ * Só a primeira aba é adiantada. Adiantar as outras seria pagar por dados que
+ * ninguém pediu, que é exatamente o problema que este trabalho veio resolver.
+ */
+export default async function PaginaRotinas() {
+  const dados = await semearDaApi([
+    "/api/routines",
+    "/api/notifications",
+  ]);
   return (
-    <section className="view">
-      <TituloDaVista
-        sobrancelha="O COTIDIANO PODE SER MAIS LEVE"
-        titulo="Pequenos rituais, grandes respiros"
-        subtitulo="Você escolhe a intenção. A Órbita cuida da sequência."
-      />
-      <Abas
-        abas={[
-          { id: "rotinas", rotulo: "Rotinas", conteudo: <RoutinesPanel /> },
-          { id: "regras", rotulo: "Regras proativas", conteudo: <RulesPanel /> },
-        ]}
-      />
-    </section>
+    <CacheSemeado dados={dados}>
+      <Conteudo />
+    </CacheSemeado>
   );
 }

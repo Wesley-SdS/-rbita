@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { invalidar, mutarRecurso, useRecurso } from "@/lib/dados/recurso";
 import { ErrorRetry } from "@/components/ui";
 import { Icone } from "@/components/presenca/icones";
 
@@ -10,16 +11,19 @@ export function TodoPanel() {
   // Aberto por padrão: com uma tela por assunto, o painel É a página. O
   // recolhido era do tempo em que 24 blocos dividiam o mesmo scroll.
   const [open, setOpen] = useState(true);
-  const [todos, setTodos] = useState<Todo[]>([]);
+  // As tarefas aparecem em quatro lugares do app (aqui, na Visão geral, na
+  // busca e no resumo do dia). Pelo cache, é uma leitura só.
+  const { dado, erro: erroCarga, recarregar } = useRecurso<{ todos: Todo[] }>("/api/todos");
+  const todos = dado?.todos ?? [];
   const [text, setText] = useState("");
   const [image, setImage] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [erroAcao, setErroAcao] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function load() {
-    fetch("/api/todos").then((r) => r.json()).then((d) => setTodos(d.todos ?? [])).catch(() => setErr("Falha ao carregar tarefas."));
-  }
-  useEffect(load, []);
+  // Falha de leitura e falha de ação são coisas diferentes: a primeira tem um
+  // botão de tentar de novo, a segunda é só um aviso sobre o que não salvou.
+  const err = erroAcao ?? (todos.length === 0 ? erroCarga : null);
+  const setErr = setErroAcao;
 
   const pendentes = todos.filter((t) => !t.done).length;
 
@@ -32,32 +36,29 @@ export function TodoPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text.trim() || "(imagem)", imageUrl: image ?? undefined }),
       });
-      setText(""); setImage(null); load();
+      setText(""); setImage(null); invalidar("/api/todos");
     } catch { setErr("Não consegui adicionar."); }
   }
-  // otimista: reflete o toggle na hora e reverte se a API falhar (sem piscar a lista).
+  // Otimista, como já era: reflete na hora e volta atrás se a API falhar. O
+  // que muda é que o desfazer agora vale para TODA tela que mostra tarefas,
+  // não só para a cópia local deste painel.
   async function toggle(t: Todo) {
     setErr(null);
-    setTodos((prev) => prev.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)));
-    try {
-      const r = await fetch("/api/todos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id, done: !t.done }) });
-      if (!r.ok) throw new Error();
-    } catch {
-      setTodos((prev) => prev.map((x) => (x.id === t.id ? { ...x, done: t.done } : x))); // rollback
-      setErr("Não consegui atualizar a tarefa.");
-    }
+    const r = await mutarRecurso<{ todos: Todo[] }>({
+      chave: "/api/todos",
+      otimista: (atual) => ({ todos: (atual?.todos ?? []).map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)) }),
+      executar: () => fetch("/api/todos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id, done: !t.done }) }),
+    });
+    if (!r.ok) setErr("Não consegui atualizar a tarefa.");
   }
   async function remove(id: string) {
     setErr(null);
-    const snapshot = todos;
-    setTodos((prev) => prev.filter((x) => x.id !== id)); // otimista
-    try {
-      const r = await fetch(`/api/todos?id=${id}`, { method: "DELETE" });
-      if (!r.ok) throw new Error();
-    } catch {
-      setTodos(snapshot); // rollback
-      setErr("Não consegui remover.");
-    }
+    const r = await mutarRecurso<{ todos: Todo[] }>({
+      chave: "/api/todos",
+      otimista: (atual) => ({ todos: (atual?.todos ?? []).filter((x) => x.id !== id) }),
+      executar: () => fetch(`/api/todos?id=${id}`, { method: "DELETE" }),
+    });
+    if (!r.ok) setErr("Não consegui remover.");
   }
   function pickImage(f: File) {
     const reader = new FileReader();
@@ -106,7 +107,7 @@ export function TodoPanel() {
           </button>
         </div>
 
-        {err && <ErrorRetry message={err} onRetry={() => { setErr(null); load(); }} />}
+        {err && <ErrorRetry message={err} onRetry={() => { setErr(null); recarregar(); }} />}
 
         {todos.length === 0 ? (
           <div className="empty-state">Nenhuma tarefa por aqui.</div>

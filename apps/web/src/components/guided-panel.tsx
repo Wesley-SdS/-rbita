@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { invalidar, useRecursos } from "@/lib/dados/recurso";
 import { Card, PanelTitle, Input, Textarea, Button, ErrorRetry } from "@/components/ui";
 import { useVisivel } from "@/lib/use-visible";
 
@@ -36,49 +37,37 @@ function fmtHora(iso: string): string {
 }
 
 export function GuidedPanel() {
-  const [tarefas, setTarefas] = useState<GuidedView[] | null>(null);
-  const [cameras, setCameras] = useState<CameraOption[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [err, setErr] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
   const [starting, setStarting] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const visivel = useVisivel();
+  // fora da tela ou com a aba escondida não consulta; ao voltar, atualiza na hora.
+  // Câmeras e cômodos são os MESMOS da aba Câmeras e das abas da casa.
+  const { dados, erro: err, recarregar } = useRecursos<{
+    guiadas: { tarefas: GuidedView[] };
+    camerasResp: { cameras: CameraOption[] };
+    comodos: { rooms: Room[] };
+  }>({ guiadas: "/api/guided", camerasResp: "/api/cameras", comodos: "/api/home/rooms" }, { ativo: visivel });
+
+  const tarefas = dados.guiadas?.tarefas ?? null;
+  const cameras = dados.camerasResp?.cameras ?? [];
+  const rooms = dados.comodos?.rooms ?? [];
+
+  // Só continua perguntando enquanto houver tarefa ativa, e a PRÓPRIA tarefa
+  // diz de quanto em quanto tempo a câmera é olhada (§5.6: o ritmo não é
+  // escolhido aqui). O laço se realimenta pela identidade da lista.
   useEffect(() => {
-    // fora da tela ou com a aba escondida não consulta; ao voltar, atualiza na hora
-    if (!visivel) return;
+    if (!visivel || !tarefas) return;
+    const ativa = tarefas.find((t) => t.status === "ativa");
+    if (!ativa) return;
     let alive = true;
-    setErr(null);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    Promise.all([
-      fetch("/api/guided").then((r) => (r.ok ? r.json() : Promise.reject(r))),
-      fetch("/api/cameras").then((r) => (r.ok ? r.json() : { cameras: [] })).catch(() => ({ cameras: [] })),
-      fetch("/api/home/rooms").then((r) => (r.ok ? r.json() : { rooms: [] })).catch(() => ({ rooms: [] })),
-    ])
-      .then(([g, c, r]) => {
-        if (!alive) return;
-        const lista: GuidedView[] = g.tarefas ?? [];
-        setTarefas(lista);
-        setCameras(c.cameras ?? []);
-        setRooms(r.rooms ?? []);
-        // só continua perguntando enquanto houver tarefa ativa: a própria
-        // tarefa diz de quanto em quanto tempo a câmera é olhada
-        const ativa = lista.find((t) => t.status === "ativa");
-        if (ativa) timerRef.current = setTimeout(() => { if (alive) setReload((n) => n + 1); }, Math.max(1, ativa.intervaloSegundos) * 1000);
-      })
-      .catch(async (r) => {
-        if (!alive) return;
-        const d = r instanceof Response ? await r.json().catch(() => ({})) : {};
-        setErr((d as { error?: string }).error ?? "Não foi possível carregar o acompanhamento.");
-        setTarefas([]);
-      });
+    timerRef.current = setTimeout(() => { if (alive) invalidar("/api/guided"); }, Math.max(1, ativa.intervaloSegundos) * 1000);
     return () => { alive = false; if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [reload, visivel]);
+  }, [tarefas, visivel]);
 
-  function refresh() { setReload((n) => n + 1); }
+  const refresh = () => invalidar("/api/guided");
 
-  if (err) return <Card><PanelTitle className="mb-2">Acompanhar tarefa</PanelTitle><ErrorRetry message={err} onRetry={refresh} /></Card>;
+  if (err && !tarefas) return <Card><PanelTitle className="mb-2">Acompanhar tarefa</PanelTitle><ErrorRetry message={err} onRetry={recarregar} /></Card>;
 
   const ativa = tarefas?.find((t) => t.status === "ativa") ?? null;
   const historico = (tarefas ?? []).filter((t) => t.status !== "ativa").slice(0, 5);

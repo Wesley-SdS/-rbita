@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRecurso } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 import { ContinuousRecorder, startMeetingCapture, type MeetingCapture } from "@/lib/voice/capture";
 import { ContinuousDictation, getRecognitionCtor } from "@/lib/voice/speech";
@@ -92,7 +93,6 @@ export function MeetingPanel() {
   const [savingNames, setSavingNames] = useState(false);
   const [namesSaved, setNamesSaved] = useState(false);
   const [speakerIdentities, setSpeakerIdentities] = useState<SpeakerIdentity[]>([]);
-  const [persons, setPersons] = useState<PersonOption[]>([]);
   const [linkPerson, setLinkPerson] = useState<Record<string, string>>({}); // tag -> personId escolhido ("" = nenhum)
   const [useSample, setUseSample] = useState<Record<string, boolean>>({}); // tag -> "usar esta fala como amostra"
   const [amostras, setAmostras] = useState<Record<string, string>>({}); // tag -> resultado do cadastro de amostra
@@ -102,15 +102,11 @@ export function MeetingPanel() {
   const dictationRef = useRef<ContinuousDictation | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // pessoas cadastradas, para o seletor "vincular a pessoa" ao nomear locutor (fail-soft: sem elas, só falta o vínculo)
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/home/persons")
-      .then((r) => (r.ok ? r.json() : { people: [] }))
-      .then((d) => { if (alive) setPersons((d.people ?? []).map((p: { id: string; name: string }) => ({ id: p.id, name: p.name }))); })
-      .catch(() => { if (alive) setPersons([]); });
-    return () => { alive = false; };
-  }, []);
+  // Pessoas cadastradas, para o seletor "vincular a pessoa" ao nomear locutor
+  // (fail-soft: sem elas, só falta o vínculo). É a MESMA lista da tela Casa,
+  // então pelo cache isto quase nunca vai à rede.
+  const { dado: pessoasResp } = useRecurso<{ people: { id: string; name: string }[] }>("/api/home/persons", { estavel: true });
+  const persons = (pessoasResp?.people ?? []).map((p) => ({ id: p.id, name: p.name }));
 
   // libera microfone/captura se o componente sair com a reunião rodando
   useEffect(() => {

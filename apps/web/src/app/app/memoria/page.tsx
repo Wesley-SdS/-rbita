@@ -1,33 +1,28 @@
-"use client";
+import { semearDaApi } from "@/lib/dados/servidor";
+import { CacheSemeado } from "@/lib/dados/semeadura";
+import { Conteudo } from "./conteudo";
 
-import dynamic from "next/dynamic";
-import { TituloDaVista, Abas } from "@/components/presenca/vista";
-
-function Esqueleto() {
-  return <div className="panel empty-state">Carregando…</div>;
-}
-
-const KnowledgePanel = dynamic(() => import("@/components/knowledge-panel").then((m) => m.KnowledgePanel), { ssr: false, loading: Esqueleto });
-const MemoryCandidatesPanel = dynamic(() => import("@/components/memory-candidates-panel").then((m) => m.MemoryCandidatesPanel), { ssr: false, loading: Esqueleto });
-const FolderPanel = dynamic(() => import("@/components/folder-panel").then((m) => m.FolderPanel), { ssr: false, loading: Esqueleto });
-const Insights = dynamic(() => import("@/components/insights").then((m) => m.Insights), { ssr: false, loading: Esqueleto });
-
-export default function PaginaMemoria() {
+/**
+ * A tela em si é cliente (`conteudo.tsx`); esta camada de servidor existe só
+ * para ADIANTAR as leituras da primeira aba.
+ *
+ * Sem isto, a sequência era: payload da rota, depois o JavaScript do painel,
+ * depois a busca. Agora a busca acontece enquanto o JavaScript baixa, e o
+ * painel monta já preenchido. Falha aqui não quebra nada: o painel busca
+ * sozinho, como antes.
+ *
+ * Só a primeira aba é adiantada. Adiantar as outras seria pagar por dados que
+ * ninguém pediu, que é exatamente o problema que este trabalho veio resolver.
+ */
+export default async function PaginaMemoria() {
+  const dados = await semearDaApi([
+    "/api/knowledge",
+    "/api/memory",
+    "/api/account/reindex",
+  ]);
   return (
-    <section className="view">
-      <TituloDaVista
-        sobrancelha="IDEIAS QUE SE ENCONTRAM"
-        titulo="Sua segunda memória"
-        subtitulo="Mais do que guardar. Conectar o que você sabe ao que está vivendo."
-      />
-      <Abas
-        abas={[
-          { id: "acervo", rotulo: "Memória e docs", conteudo: <KnowledgePanel /> },
-          { id: "confirmar", rotulo: "A confirmar", conteudo: <MemoryCandidatesPanel visivel /> },
-          { id: "arquivos", rotulo: "Arquivos", conteudo: <FolderPanel /> },
-          { id: "conexoes", rotulo: "Ver conexões", conteudo: <Insights /> },
-        ]}
-      />
-    </section>
+    <CacheSemeado dados={dados}>
+      <Conteudo />
+    </CacheSemeado>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import { useRecurso } from "@/lib/dados/recurso";
 import { Card, PanelTitle, ErrorRetry } from "@/components/ui";
 import { JobProgress } from "@/components/job-progress";
 import type { JobView } from "@/lib/jobs";
@@ -20,39 +21,26 @@ const FALLBACK_POLL_MS = 3000;
  * individualmente via `JobProgress`), só enquanto algo estiver vivo.
  */
 export function JobsPanel() {
-  const [jobs, setJobs] = useState<JobView[] | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
+  const visivel = useVisivel();
+  // fora da tela ou com a aba escondida não consulta; ao voltar, atualiza na hora
+  const { dado, erro: err, recarregar } = useRecurso<{ trabalhos: JobView[] }>("/api/jobs?limite=30", { ativo: visivel });
+  const jobs = dado?.trabalhos ?? null;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const visivel = useVisivel();
+  // Enquanto houver trabalho vivo, pergunta de novo. O RITMO continua vindo do
+  // `Retry-After` do próprio recurso de status (§5.6: nada de intervalo fixo
+  // escolhido no front); 3s é só o piso se esse pedido falhar.
+  //
+  // O laço se realimenta pela identidade de `jobs`: cada leitura nova dispara
+  // este efeito outra vez, e ele agenda a seguinte. Sem trabalho vivo, ele
+  // simplesmente não agenda nada e o painel para de perguntar.
   useEffect(() => {
-    // fora da tela ou com a aba escondida não consulta; ao voltar, atualiza na hora
-    if (!visivel) return;
+    if (!visivel || !jobs) return;
+    const vivo = jobs.find((j) => j.status === "pendente" || j.status === "rodando");
+    if (!vivo) return;
+
     let alive = true;
-    setErr(null);
-    if (timerRef.current) clearTimeout(timerRef.current);
-
-    (async () => {
-      const r = await fetch("/api/jobs?limite=30").catch(() => null);
-      if (!alive) return;
-      if (!r || !r.ok) {
-        const d = r ? await r.json().catch(() => ({})) : {};
-        setErr((d as { error?: string }).error ?? "Não foi possível carregar os trabalhos.");
-        setJobs([]);
-        return;
-      }
-      const d = await r.json();
-      if (!alive) return;
-      const trabalhos: JobView[] = d.trabalhos ?? [];
-      setJobs(trabalhos);
-
-      const vivo = trabalhos.find((j) => j.status === "pendente" || j.status === "rodando");
-      if (!vivo) return; // nada rodando: sem sentido continuar perguntando
-
-      // o ritmo vem do Retry-After do recurso de status de um dos trabalhos
-      // vivos (CLAUDE.md §5.6: nada de intervalo fixo escolhido no front);
-      // 3s é só o piso se esse pedido falhar
+    void (async () => {
       let esperaMs = FALLBACK_POLL_MS;
       const statusResp = await fetch(`/api/jobs/${vivo.id}`).catch(() => null);
       if (statusResp?.ok) {
@@ -60,15 +48,13 @@ export function JobsPanel() {
         if (Number.isFinite(retryAfter) && retryAfter > 0) esperaMs = retryAfter * 1000;
       }
       if (!alive) return;
-      timerRef.current = setTimeout(() => { if (alive) setReload((n) => n + 1); }, esperaMs);
+      timerRef.current = setTimeout(() => { if (alive) recarregar(); }, esperaMs);
     })();
 
     return () => { alive = false; if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [reload, visivel]);
+  }, [jobs, visivel, recarregar]);
 
-  function refresh() { setReload((n) => n + 1); }
-
-  if (err) return <Card><PanelTitle className="mb-2">Trabalhos em segundo plano</PanelTitle><ErrorRetry message={err} onRetry={refresh} /></Card>;
+  if (err && !jobs) return <Card><PanelTitle className="mb-2">Trabalhos em segundo plano</PanelTitle><ErrorRetry message={err} onRetry={recarregar} /></Card>;
 
   return (
     <Card>
@@ -84,7 +70,7 @@ export function JobsPanel() {
         <div className="flex flex-col gap-2 text-[15px]">
           {jobs.map((j) => (
             <div key={j.id} className="rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
-              <JobProgress job={j} onChange={refresh} live={false} />
+              <JobProgress job={j} onChange={recarregar} live={false} />
             </div>
           ))}
         </div>

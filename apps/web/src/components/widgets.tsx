@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Icone } from "@/components/presenca/icones";
-import { useVisivel } from "@/lib/use-visible";
+import { useAtualizacaoPeriodica, useVisivel } from "@/lib/use-visible";
+import { invalidar, mutarRecurso, useRecurso } from "@/lib/dados/recurso";
 
 interface W { id: string; type: string; title: string; config: Record<string, unknown> }
 
@@ -10,22 +11,33 @@ const brl = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2,
 
 /** Cards do dashboard: cotação, clima, nota, checklist. */
 export function Widgets() {
-  const [widgets, setWidgets] = useState<W[]>([]);
+  const { dado } = useRecurso<{ widgets: W[] }>("/api/widgets", { estavel: true });
+  const widgets = dado?.widgets ?? [];
   const [adding, setAdding] = useState(false);
 
-  function load() {
-    fetch("/api/widgets").then((r) => r.json()).then((d) => setWidgets(d.widgets ?? [])).catch(() => {});
-  }
-  useEffect(load, []);
-
   async function add(type: string, title: string, config: Record<string, unknown>) {
+    // O id do card vem do servidor, então aqui só invalidamos.
     await fetch("/api/widgets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type, title, config }) });
-    setAdding(false); load();
+    setAdding(false);
+    invalidar("/api/widgets");
   }
-  async function remove(id: string) { await fetch(`/api/widgets?id=${id}`, { method: "DELETE" }); load(); }
+
+  async function remove(id: string) {
+    await mutarRecurso<{ widgets: W[] }>({
+      chave: "/api/widgets",
+      otimista: (atual) => ({ widgets: (atual?.widgets ?? []).filter((w) => w.id !== id) }),
+      executar: () => fetch(`/api/widgets?id=${id}`, { method: "DELETE" }),
+    });
+  }
+
   async function patch(id: string, config: Record<string, unknown>) {
-    await fetch("/api/widgets", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, config }) });
-    load();
+    // É aqui que o otimismo mais se nota: marcar um item da lista ou sair de
+    // uma nota recarregava TODOS os cards e a tela piscava.
+    await mutarRecurso<{ widgets: W[] }>({
+      chave: "/api/widgets",
+      otimista: (atual) => ({ widgets: (atual?.widgets ?? []).map((w) => (w.id === id ? { ...w, config } : w)) }),
+      executar: () => fetch("/api/widgets", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, config }) }),
+    });
   }
 
   return (
@@ -153,19 +165,22 @@ function WidgetCard({ w, onRemove, onPatch }: { w: W; onRemove: () => void; onPa
   );
 }
 
-function LiveCard({ url, render }: { url: string; render: (d: any) => React.ReactNode }) { // eslint-disable-line @typescript-eslint/no-explicit-any
-  const [data, setData] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+/**
+ * Valor ao vivo de um card (cotação, clima).
+ *
+ * Passa pelo cache de dados como todo o resto, e é por isso que dois cards da
+ * mesma moeda fazem UMA requisição em vez de duas. Fora da tela ou com a aba
+ * escondida não atualiza; ao voltar, busca na hora.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function LiveCard({ url, render }: { url: string; render: (d: any) => React.ReactNode }) {
   const visivel = useVisivel();
-  useEffect(() => {
-    // fora da tela ou com a aba escondida não atualiza; ao voltar, busca na hora
-    if (!visivel) return;
-    let alive = true;
-    const fetchData = () => fetch(url).then((r) => r.json()).then((d) => { if (alive) setData(d); }).catch(() => {});
-    fetchData();
-    const t = setInterval(fetchData, 120000); // atualiza a cada 2 min
-    return () => { alive = false; clearInterval(t); };
-  }, [url, visivel]);
-  return <div className="mt-1">{data && !data.error ? render(data) : <span className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>…</span>}</div>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { dado, recarregar } = useRecurso<any>(url, { ativo: visivel });
+  // Dado externo envelhece sozinho: o TTL do cache evita a repetição, e este
+  // intervalo é quem de fato mantém a cotação viva enquanto se olha para ela.
+  useAtualizacaoPeriodica(recarregar, 120_000, visivel);
+  return <div className="mt-1">{dado && !dado.error ? render(dado) : <span className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>…</span>}</div>;
 }
 
 function NoteCard({ text, onSave }: { text: string; onSave: (t: string) => void }) {
