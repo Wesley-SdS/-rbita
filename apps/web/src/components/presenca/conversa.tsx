@@ -391,6 +391,7 @@ export function Conversa({
           <label className="field">
             <select
               aria-label="Modelo de IA"
+              title="Qual modelo responde. Os grupos são os provedores configurados."
               value={modoLocal ? (grupos.porProvedor.get("local")?.[0]?.key ?? chaveModelo) : chaveModelo}
               disabled={modoLocal}
               onChange={(e) => setChaveModelo(e.target.value)}

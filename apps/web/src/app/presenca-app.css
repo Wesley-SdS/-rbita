@@ -431,3 +431,22 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
   border: 1px solid var(--color-line);
   box-shadow: 0 25px 100px #162b2826;
 }
+
+/* ── Coluna de conversas ────────────────────────────────────────────────────
+   No protótipo esta coluna só guarda títulos de conversa, que são curtos, e
+   210px bastavam. Aqui ela também guarda o seletor de modelo, cujo rótulo mais
+   longo é "Auto · escolhe o melhor modelo disponível": em 210px o campo corta
+   no meio e parece que a lista está vazia. */
+.chat-layout { grid-template-columns: 248px minmax(0, 1fr); }
+@media (max-width: 1190px) { .chat-layout { grid-template-columns: 216px minmax(0, 1fr); } }
+@media (max-width: 950px) { .chat-layout { grid-template-columns: 1fr; } }
+
+/* Nada na coluna pode empurrar a largura: sem isto o select cria barra de
+   rolagem horizontal dentro do painel. */
+.chat-history { min-width: 0; overflow-x: hidden; }
+.chat-history select, .chat-history .inline-input { max-width: 100%; }
+
+/* O rótulo do interruptor quebra linha: "Modo local: nada sai da máquina" não
+   cabe em uma linha na coluna de conversas e encostava na borda do painel. */
+.switch-row span { flex-wrap: wrap; }
+.switch-row { line-height: 1.6; }
