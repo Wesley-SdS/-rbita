@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parent
 with sync_playwright() as p:
     browser = p.chromium.launch(channel="chrome", headless=True, args=['--enable-unsafe-swiftshader'])
     page = browser.new_page(viewport={"width": 1440, "height": 1080}, device_scale_factor=1)
+    page.set_default_navigation_timeout(60000)
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     if '--portable-only' in sys.argv:
@@ -31,11 +32,12 @@ with sync_playwright() as p:
     page.wait_for_selector("#orb-canvas")
     page.wait_for_function("document.querySelector('#orb-canvas').width > 0")
     expect(page.locator('#orb-canvas')).to_have_attribute('data-renderer','webgl')
+    expect(page.locator('#orb-canvas')).to_have_attribute('data-identity','neural-organic')
     page.wait_for_timeout(300)
     page.screenshot(path=str(ROOT / "preview-desktop.png"), full_page=True)
     print({"title": page.title(), "errors": errors, "desktopOverflow": page.evaluate("document.documentElement.scrollWidth > innerWidth")}, flush=True)
     page.get_by_role("button", name="Alternar tema").click()
-    page.wait_for_timeout(200)
+    page.wait_for_timeout(900)
     page.screenshot(path=str(ROOT / "preview-dark.png"), full_page=True)
     page.get_by_role("button", name="Alternar tema").click()
     page.locator('[data-action="lab"]').first.click()
@@ -46,7 +48,9 @@ with sync_playwright() as p:
         if '--orb-only' in sys.argv:
             page.wait_for_timeout(350)
             frame = page.locator('#orb-canvas').evaluate('(c) => c.toDataURL()')
-            page.wait_for_timeout(1200)
+            page.wait_for_timeout(1800)
+            if frame == page.locator('#orb-canvas').evaluate('(c) => c.toDataURL()'):
+                print(page.locator('#orb-canvas').evaluate('(c) => {const o=c.orbitaPresence; return {visible:o.visible,hidden:document.hidden,reduced:o.reduced,lost:o.gl.isContextLost(),frames:o.frameCount,time:o.time,glError:o.gl.getError()};}'), flush=True)
             assert frame != page.locator('#orb-canvas').evaluate('(c) => c.toDataURL()'), f'No motion in {mode}'
             page.locator('#orb-canvas').screenshot(path=str(ROOT / f'preview-orb-{mode}.png'))
     page.locator('[data-action="reduce-motion"]').click()
@@ -92,7 +96,7 @@ with sync_playwright() as p:
         assert box['y'] >= 0 and box['y'] + box['height'] <= 844
         page.screenshot(path=str(ROOT / 'preview-mobile-lab.png'), full_page=True)
         assert not errors, errors
-        print('PASS: expressive holographic core, desktop, mobile, focus, zero browser errors', flush=True)
+        print('PASS: organic neural presence, desktop, mobile, focus, zero browser errors', flush=True)
         browser.close()
         sys.exit(0)
 

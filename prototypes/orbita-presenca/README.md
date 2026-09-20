@@ -54,8 +54,11 @@ Interface mineral com um núcleo de inteligência expressivo, inspirado na
 presença operacional do Jarvis: mineral `#F6F7F2`, floresta `#214E3E`,
 menta `#C9F4B0`, névoa `#ECE7F4` e argila `#F6E8DA`.
 Tipografia de sistema, ícones próprios e geometria tridimensional em WebGL nativo.
-Esfera ampliada com vidro, reflexos procedurais, iluminação especular, núcleo
-emissivo, malha neural e giroscópios metálicos em planos independentes.
+Esfera ampliada com membrana translúcida, reflexos suaves e interior perolado.
+Veios curvos se ramificam em dois volumes, com conexões entre eles e pontos de
+ativação. Impulsos percorrem os caminhos; as órbitas são fios ópticos finos.
+A inspiração em sinapses é artística, não uma representação científica do cérebro.
+O gesto do cursor orienta a presença; clique e Enter produzem uma reação expansiva.
 Sem fontes remotas, imagens externas, CDN ou bibliotecas. Canvas 2D como fallback.
 Os reflexos são uma aproximação procedural, não ray tracing nem uma imagem pré-renderizada.
 
@@ -63,16 +66,16 @@ Os reflexos são uma aproximação procedural, não ray tracing nem uma imagem p
 
 | Estado | Comportamento |
 | --- | --- |
-| Presença | Respiração lenta e órbitas suaves |
-| Escutando | Ondas concêntricas e luz menta |
-| Pensando | Filamentos em violeta, rotação concentrada |
-| Falando | Pulso irregular e onda sobre a superfície |
-| Pesquisando | Varredura azul e partícula orbital rápida |
-| Conectando | Anéis que se aproximam e afastam |
-| Executando | Giroscópios acelerados, satélites e pulsos de comando |
-| Concluído | Expansão luminosa e partículas abertas |
-| Sua decisão | Halo âmbar e desaceleração |
-| Imprevisto | Órbita interrompida em argila, texto de recuperação |
+| Presença | Respiração, flutuação, impulsos espaçados e atenção ao cursor |
+| Escutando | Alongamento delicado e ondas que convergem para dentro |
+| Pensando | Ativação de grupos de veios e ondulações localizadas |
+| Falando | Expansões irregulares, sinais sincronizados e ondas para fora |
+| Pesquisando | Lâmina de luz, ativação interna e descoberta progressiva de fontes |
+| Conectando | Sinais entre regiões e arcos leves de aproximação |
+| Executando | Impulsos mais rápidos e sequências coordenadas de ativação |
+| Concluído | Expansão, pequena elevação e liberação de uma onda luminosa |
+| Sua decisão | Volume recolhido, pulsação lenta e contorno âmbar |
+| Imprevisto | Retração breve, tom quente e desaceleração sem flashes |
 
 O desenho pausa quando sai da tela ou a aba fica oculta, limita a densidade de
 pixels a 1,4 no WebGL (1,6 no fallback) e visa 24/30 quadros por segundo. `prefers-reduced-motion` e o
@@ -116,6 +119,12 @@ os componentes do aplicativo aos eventos e dados reais existentes.
 
 ## Verificação desta entrega
 
+- Revisão neural: dez estados animados em WebGL, claro/escuro, foco, celular,
+  clique/Enter, movimento reduzido e chegada progressiva das três fontes
+  passaram no percurso `--orb-only`, sem erros JavaScript.
+- Pesquisa no chat: fontes persistidas na resposta e interrupção verificadas.
+  A repetição do percurso geral desta revisão parou em um timeout de navegação
+  ao recarregar Memória; os fluxos gerais abaixo haviam passado na revisão anterior.
 - Chrome headless: dez estados, movimento reduzido, conversa e interrupção,
   CRUD e persistência de memória, rotinas, cenas, aprovação, gastos, conexões,
   transcrição demonstrativa, resumo, temporizador, busca e navegação por teclado.
@@ -133,5 +142,6 @@ Para repetir o QA, com Playwright Python e Chrome instalados e o preview no ar:
 
 ```powershell
 python prototypes/orbita-presenca/qa.py
+python prototypes/orbita-presenca/qa.py --orb-only
 python prototypes/orbita-presenca/qa.py --portable-only
 ```
