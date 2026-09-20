@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icone } from "@/components/presenca/icones";
 import { Card, PanelTitle, Input, Textarea, Button, ErrorRetry } from "@/components/ui";
 
 /**
@@ -88,29 +89,29 @@ export function RulesPanel() {
     <Card>
       <div className="mb-2 flex items-baseline justify-between">
         <PanelTitle>Regras proativas</PanelTitle>
-        {!editing && <button type="button" className="text-[11px] underline" style={dim} onClick={() => setEditing(novaRegra())}>nova regra</button>}
+        {!editing && <button type="button" className="text-[14px] underline" style={dim} onClick={() => setEditing(novaRegra())}>nova regra</button>}
       </div>
-      <p className="mb-3 text-[12px]" style={dim}>Evento ou horário, condições e ações. Rodam no processo da casa, com o navegador fechado.</p>
+      <p className="mb-3 text-[15px]" style={dim}>Evento ou horário, condições e ações. Rodam no processo da casa, com o navegador fechado.</p>
 
       {editing ? (
         <RuleEditor value={editing} onChange={setEditing} onSave={save} onCancel={() => { setEditing(null); setMsg(null); }} busy={busy} />
       ) : !rules ? (
-        <p className="text-[12px]" style={dim}>Carregando…</p>
+        <p className="text-[15px]" style={dim}>Carregando…</p>
       ) : rules.length === 0 ? (
-        <p className="text-[12px]" style={dim}>Nenhuma regra ainda. As regras padrão aparecem quando o processo da casa sobe.</p>
+        <p className="text-[15px]" style={dim}>Nenhuma regra ainda. As regras padrão aparecem quando o processo da casa sobe.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {rules.map((r) => (
             <li key={r.id} className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--color-line)", opacity: r.enabled ? 1 : 0.6 }}>
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="truncate text-[13px] font-medium">{r.name} {r.builtinKey && <span className="text-[10px]" style={dim}>padrão</span>}</div>
-                  <div className="text-[11px]" style={dim}>
+                  <div className="truncate text-[16px] font-medium">{r.name} {r.builtinKey && <span className="text-[13px]" style={dim}>padrão</span>}</div>
+                  <div className="text-[14px]" style={dim}>
                     {r.trigger.kind === "event" ? `evento ${r.trigger.type}` : `cron ${r.trigger.expr}`} · {r.actions.length} ação{r.actions.length > 1 ? "ões" : ""}
                     {r.lastFiredAt ? ` · último disparo ${new Date(r.lastFiredAt).toLocaleString("pt-BR")}` : ""}
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2 text-[11px]">
+                <div className="flex shrink-0 items-center gap-2 text-[14px]">
                   <button type="button" className="underline" style={dim} onClick={() => toggle(r)}>{r.enabled ? "desligar" : "ligar"}</button>
                   <button type="button" className="underline" style={dim} onClick={() => setEditing(r)}>editar</button>
                   <button type="button" className="underline" style={dim} onClick={() => test(r.id)}>testar</button>
@@ -121,7 +122,7 @@ export function RulesPanel() {
           ))}
         </ul>
       )}
-      {msg && <p className="mt-2 text-[11px]" style={{ color: "var(--color-gold)" }}>{msg}</p>}
+      {msg && <p className="mt-2 text-[14px]" style={{ color: "var(--color-gold)" }}>{msg}</p>}
     </Card>
   );
 }
@@ -153,7 +154,7 @@ function RuleEditor({ value, onChange, onSave, onCancel, busy }: { value: Partia
   const acts = value.actions ?? [];
   const set = (patch: Partial<Rule>) => onChange({ ...value, ...patch });
   return (
-    <div className="flex flex-col gap-2 text-[12px]">
+    <div className="flex flex-col gap-2 text-[15px]">
       <Input placeholder="Nome da regra" value={value.name ?? ""} onChange={(e) => set({ name: e.target.value })} />
       <div className="flex gap-2">
         <select value={t.kind} className="rounded-lg border px-2 py-1" style={{ borderColor: "var(--color-line)", background: "transparent" }}
@@ -189,7 +190,7 @@ function RuleEditor({ value, onChange, onSave, onCancel, busy }: { value: Partia
           ) : (
             <Input placeholder="valor" value={c.value === undefined ? "" : String(c.value)} onChange={(e) => set({ conditions: conds.map((x, j) => (j === i ? { ...x, value: coerce(e.target.value) } : x)) })} />
           )}
-          <button type="button" style={dim} onClick={() => set({ conditions: conds.filter((_, j) => j !== i) })}>×</button>
+          <button type="button" className="icon-button" aria-label="Remover condição" onClick={() => set({ conditions: conds.filter((_, j) => j !== i) })}><Icone nome="close" /></button>
         </div>
       ))}
 
@@ -205,7 +206,7 @@ function RuleEditor({ value, onChange, onSave, onCancel, busy }: { value: Partia
         return (
           <div key={i} className="flex flex-col gap-1 rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
             <div className="flex items-center justify-between"><span style={dim}>{ACTION_LABEL[a.kind]}</span>
-              <button type="button" style={dim} onClick={() => set({ actions: acts.filter((_, j) => j !== i) })}>×</button></div>
+              <button type="button" className="icon-button" aria-label="Remover ação" onClick={() => set({ actions: acts.filter((_, j) => j !== i) })}><Icone nome="close" /></button></div>
             {a.kind === "notify" && (
               <>
                 <Input placeholder="Título" value={a.title} onChange={(e) => upd({ title: e.target.value })} />

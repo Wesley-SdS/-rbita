@@ -1,52 +1,180 @@
 @import "tailwindcss";
+/* A folha do protótipo vem logo depois do preflight do Tailwind e antes das
+   regras de base daqui: assim o reset do Tailwind não apaga os componentes do
+   Presença, e o que é base do app continua tendo a última palavra. */
+@import "./presenca.css";
+@import "./presenca-app.css";
 
-@theme {
-  --color-ground: #0b0805;
-  --color-surface: #15100a;
-  --color-line: #33281a;
-  --color-ink: #f3ecdd;
-  --color-ink-dim: #b8a98d;
-  --color-gold: #f5b544;
-  --color-amber: #e89a3c;
-  --color-danger: #e0705a;
-}
+/* ── Identidade Presença ────────────────────────────────────────────────────
+   Paleta mineral vinda de `prototypes/orbita-presenca`. A base agora é CLARA
+   (Mineral) e o escuro (Floresta) virou opção, invertendo o padrão anterior.
+   O motivo é o núcleo: o Orb foi redesenhado para palco claro, então deixar o
+   escuro como default entregaria a identidade nova pela metade.
 
-/* Garante o token de erro no :root (usado só em style inline — o Tailwind v4
-   poderia tree-shakear a var do @theme por não detectá-la nas utilities). */
-:root { --color-danger: #e0705a; }
+   `@theme static` (e não `@theme`) porque o app inteiro consome os tokens por
+   `style={{ color: "var(--color-x)" }}`, nunca por utilitário do Tailwind. Sem
+   `static`, o compilador não vê esses usos e poda a variável — foi exatamente
+   o que já tinha acontecido com `--color-danger`.
 
-/* ── Tema claro ─────────────────────────────────────────────────────────────
-   Só SUPERFÍCIES e TEXTO mudam. Os palcos do Orb continuam escuros de
-   propósito: ele é um núcleo luminoso desenhado em canvas com rastro escuro,
-   sobre fundo claro viraria um borrão. Fica como um "herói" escuro na página
-   clara. O dourado é aprofundado para ter contraste legível sobre o branco,
-   sem quebrar os botões que usam texto escuro sobre o gradiente. */
-[data-theme="light"] {
-  --color-ground: #f6f2ea;
+   `gold` e `amber` continuam existindo porque 112 usos no app apontam para
+   eles. Em vez de varrer trinta arquivos agora, eles passam a APONTAR para o
+   verde floresta: a identidade troca num lugar só, e a renomeação acompanha
+   cada tela quando ela for migrada. */
+@theme static {
+  /* superfícies */
+  --color-ground: #f6f7f2;
   --color-surface: #ffffff;
-  --color-line: #e3dacb;
-  --color-ink: #221a10;
-  --color-ink-dim: #6d6051;
-  --color-gold: #b57e0f;
-  --color-amber: #c8912a;
-  --color-danger: #bf4a33;
+  --color-surface-soft: #f1f3ee;
+  --color-sidebar: #fcfcf9;
+  --color-line: #e4e8df;
+
+  /* texto */
+  --color-ink: #243b33;
+  /* ÚNICO desvio do protótipo: lá o apagado é #788278, que dá 3,99:1 sobre o
+     branco e 3,71:1 sobre o mineral, abaixo do mínimo de 4,5:1. Este token é o
+     segundo mais usado do app (113 ocorrências) e quase sempre em texto de 10
+     a 12px, justamente onde o contraste mais pesa. #687168 é o mesmo matiz 13%
+     mais escuro: 5,06:1 e 4,70:1, e a olho nu continua o mesmo cinza-verde. */
+  --color-ink-dim: #687168;
+
+  /* acento: floresta é a cor de ação (botão primário, link, ênfase) */
+  --color-forest: #214e3e;
+  --color-forest-soft: #31614b;
+  --color-green: #527b55;
+  --color-gold: #214e3e;
+  --color-amber: #31614b;
+  /* texto POR CIMA do acento. Existe porque o gradiente antigo fixava o texto
+     em #241403 no código; no escuro o acento clareia e o texto tem de escurecer. */
+  --color-accent-ink: #f1f9ea;
+  /* O ponto menta que fecha os títulos. É acento decorativo, mas o do protótipo
+     (#86aa70) dá 2,4:1 sobre o mineral e some para quem enxerga pouco. Este
+     mantém o mesmo verde, um degrau mais fundo, e passa o mínimo de texto
+     grande. Token, e não hex na folha, porque no Floresta ele precisa clarear. */
+  --color-acento-suave: #6b885a;
+
+  /* apoio: uma cor por domínio, sem disputar atenção com o acento */
+  --color-mint: #d5efbe;
+  --color-mint-bright: #c9f4b0;
+  --color-lavender: #ece7f4;
+  /* Texto sobre o lilás. O roxo claro do protótipo (#9b8cab) dá 2,6:1 sobre o
+     próprio fundo: o cartão de conexão ficava decorativo em vez de legível. */
+  --color-lavender-ink: #574a68;
+  --color-peach: #f6e8da;
+  /* Texto e ícone sobre o argila, pelo mesmo motivo do lilás. */
+  --color-peach-ink: #7a5a3c;
+  --color-orb-bg: #edf2e8;
+
+  /* estado */
+  --color-danger: #a05343;
+  --color-danger-soft: #f8e9e2;
+  /* texto POR CIMA do vermelho, pelo mesmo motivo de `accent-ink`: no escuro o
+     vermelho clareia e o texto branco sumiria. */
+  --color-danger-ink: #fdf3ef;
+  /* `--color-good` era usado em login/page.tsx sem nunca ter sido definido:
+     a mensagem de sucesso herdava a cor do texto. Fica definido aqui. */
+  --color-good: #527b55;
+
+  --radius-panel: 22px;
+  --radius-card: 14px;
+  /* Multiplicador de movimento do protótipo: o laboratório e o
+     `prefers-reduced-motion` zeram isso para acalmar a interface. */
+  --motion: 1;
+  --shadow-panel: 0 16px 60px #183a2910;
 }
 
-[data-theme="light"] body {
-  background: radial-gradient(circle at 50% 30%, #fffdf8 0%, #f6f2ea 55%, #efe8dc 100%);
-  color: var(--color-ink);
+:root {
+  color-scheme: light;
+  /* Tipografia do sistema, como no protótipo: nenhuma fonte remota no caminho
+     do primeiro paint. `font-synthesis:none` evita o negrito falso do Windows
+     quando o peso 550 não existe no arquivo da fonte. */
+  --font-presenca: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  font-synthesis: none;
 }
 
-/* Foco visível por teclado (acessibilidade) — antes não havia nenhum. */
+/* ── Floresta (escuro) ──────────────────────────────────────────────────────
+   Não é o mineral invertido: as superfícies ganham verde, o acento CLAREIA
+   (floresta escuro sobre painel escuro seria ilegível) e o texto sobre o
+   acento escurece junto. */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-ground: #17231f;
+  --color-surface: #1e2d26;
+  --color-surface-soft: #27362d;
+  --color-sidebar: #192820;
+  --color-line: #334336;
+
+  --color-ink: #e2eadc;
+  --color-ink-dim: #95a68e;
+
+  --color-forest: #bddaa6;
+  --color-forest-soft: #d2e9bc;
+  --color-green: #a8c692;
+  --color-gold: #bddaa6;
+  --color-amber: #d2e9bc;
+  --color-accent-ink: #243b24;
+  --color-acento-suave: #9ec888;
+
+  --color-mint: #42533b;
+  --color-mint-bright: #c9f4b0;
+  --color-lavender: #35343e;
+  --color-lavender-ink: #cfc5dd;
+  --color-peach: #3c372b;
+  --color-peach-ink: #e0c9ac;
+  --color-orb-bg: #253b2c;
+
+  --color-danger: #e0a091;
+  --color-danger-soft: #3a2a26;
+  --color-danger-ink: #3a2118;
+  --color-good: #a8c692;
+
+  --shadow-panel: 0 16px 60px #0002;
+}
+
+/* Foco visível por teclado. */
 :focus-visible {
-  outline: 2px solid var(--color-gold);
-  outline-offset: 2px;
+  outline: 2px solid var(--color-green);
+  outline-offset: 4px;
 }
 
-html, body { margin: 0; padding: 0; }
+html,
 body {
-  background: radial-gradient(circle at 50% 30%, #1a1206 0%, #0d0904 55%, #0a0703 100%);
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  /* Fundo chapado, como no protótipo. O gradiente radial antigo existia para
+     dar profundidade ao palco escuro do Orb; no mineral ele suja a superfície. */
+  background: var(--color-ground);
   color: var(--color-ink);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-presenca);
+  /* Um degrau acima do protótipo (14px), pelo mesmo motivo da escala aplicada
+     em `presenca.css`: aquilo é peça de apresentação, isto é uso diário. */
+  font-size: 16px;
+  line-height: 1.55;
   min-height: 100vh;
 }
+
+h1,
+h2,
+h3 {
+  font-weight: 550;
+  letter-spacing: -0.04em;
+}
+
+::selection {
+  background: var(--color-mint);
+  color: #193b29;
+}
+
+
+
+
+
+
+

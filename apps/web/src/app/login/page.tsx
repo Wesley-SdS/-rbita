@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn, signUp } from "@/lib/auth-client";
-import { Orb } from "@/components/orb";
+import { Nucleo } from "@/components/presenca/nucleo";
 
 type Social = "google" | "github";
 
@@ -79,74 +79,91 @@ export default function LoginPage() {
     }
   }
 
-  const field = { borderColor: "var(--color-line)", background: "var(--color-surface)", color: "var(--color-ink)" };
-  const socialBtn = "flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium disabled:opacity-60";
-  const socialStyle = { borderColor: "var(--color-line)", background: "var(--color-surface)", color: "var(--color-ink)" };
-
   return (
-    <main className="flex min-h-screen flex-col items-center justify-start overflow-y-auto px-6 py-8" style={{ background: "#080502" }}>
-      {/* Núcleo neural GRANDE e sem caixa — o canvas preenche em #0a0703 (= fundo da
-          página), então não há retângulo destacado. Mesma vibe do modo foco. */}
-      <div className="h-[40vh] max-h-[380px] min-h-[260px] w-[40vh] max-w-[380px]">
-        <Orb mode="standby" fill bare />
+    <main className="entrada">
+      {/* O núcleo abre a porta: é a primeira coisa que a pessoa vê da Órbita, e
+          é o mesmo do resto do app, não uma ilustração à parte. */}
+      <div className="entrada-nucleo">
+        <Nucleo estado="idle" />
       </div>
 
-      <h1
-        className="-mt-2 text-4xl"
-        style={{ fontFamily: "var(--font-orbitron), sans-serif", fontWeight: 700, letterSpacing: "0.42em", color: "#ffd79a", textShadow: "0 0 24px rgba(255,170,60,0.55)", paddingLeft: "0.42em" }}
-      >
-        ÓRBITA
-      </h1>
-      <p className="mt-2 text-sm" style={{ color: "var(--color-ink-dim)" }}>Seu assistente pessoal de IA</p>
+      <span className="brand entrada-marca">
+        <span className="brand-symbol" aria-hidden="true" />
+        <span>
+          órbita<span className="brand-period">.</span>
+        </span>
+      </span>
+      <p className="entrada-linha">Seu assistente pessoal de IA, na sua máquina.</p>
 
-      <form onSubmit={submit} className="mt-6 flex w-full max-w-sm flex-col gap-3">
+      <form onSubmit={submit} className="panel entrada-forma">
         {mode === "signup" && (
-          <input placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name"
-            className="rounded-lg border px-4 py-3 text-sm outline-none" style={field} />
+          <label className="field">
+            Como quer ser chamado
+            <input value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" placeholder="Seu nome" />
+          </label>
         )}
-        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email"
-          className="rounded-lg border px-4 py-3 text-sm outline-none" style={field} />
-        <input type="password" placeholder="Senha (mín. 8)" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8}
-          autoComplete={mode === "signup" ? "new-password" : "current-password"}
-          className="rounded-lg border px-4 py-3 text-sm outline-none" style={field} />
+        <label className="field">
+          E-mail
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="voce@exemplo.com" />
+        </label>
+        <label className="field">
+          Senha
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+            autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            placeholder="Ao menos 8 caracteres"
+          />
+        </label>
 
-        {error && <p className="text-sm" style={{ color: "var(--color-danger)" }}>{error}</p>}
-        {info && <p className="text-sm" style={{ color: "var(--color-good)" }}>{info}</p>}
+        {error && (
+          <p role="alert" className="aviso-erro">
+            <span>{error}</span>
+          </p>
+        )}
+        {info && <p className="notice">{info}</p>}
 
-        <button type="submit" disabled={busy}
-          className="rounded-lg px-4 py-3 text-sm font-semibold disabled:opacity-60"
-          style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>
-          {busy ? "…" : mode === "login" ? "Entrar" : "Criar conta"}
+        <button type="submit" disabled={busy} className="button primary full-width">
+          {busy ? "Um instante…" : mode === "login" ? "Entrar" : "Criar minha conta"}
+        </button>
+
+        <div className="entrada-ou">
+          <span />
+          ou
+          <span />
+        </div>
+
+        <div className="entrada-sociais">
+          <button type="button" onClick={() => social("google")} disabled={busy} className="button secondary">
+            <GoogleLogo />
+            Google
+          </button>
+          <button type="button" onClick={() => social("github")} disabled={busy} className="button secondary">
+            <GitHubLogo />
+            GitHub
+          </button>
+        </div>
+        <button type="button" onClick={magicLink} disabled={busy} className="button subtle full-width">
+          Receber um link por e-mail
+        </button>
+
+        <button
+          type="button"
+          className="text-button entrada-troca"
+          onClick={() => {
+            setMode(mode === "login" ? "signup" : "login");
+            setError(null);
+            setInfo(null);
+          }}
+        >
+          {mode === "login" ? "Não tem conta? Criar uma" : "Já tenho conta. Entrar"}
         </button>
       </form>
 
-      {/* divisor */}
-      <div className="my-4 flex w-full max-w-sm items-center gap-3" style={{ color: "var(--color-ink-dim)" }}>
-        <span className="h-px flex-1" style={{ background: "var(--color-line)" }} />
-        <span className="text-xs">ou</span>
-        <span className="h-px flex-1" style={{ background: "var(--color-line)" }} />
-      </div>
-
-      {/* login social + link mágico */}
-      <div className="flex w-full max-w-sm flex-col gap-2">
-        <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={() => social("google")} disabled={busy} className={socialBtn} style={socialStyle}>
-            <GoogleLogo /> Google
-          </button>
-          <button type="button" onClick={() => social("github")} disabled={busy} className={socialBtn} style={socialStyle}>
-            <GitHubLogo /> GitHub
-          </button>
-        </div>
-        <button type="button" onClick={magicLink} disabled={busy} className={socialBtn} style={socialStyle}>
-          <span aria-hidden>✉️</span> Enviar link mágico por email
-        </button>
-      </div>
-
-      <button
-        onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(null); setInfo(null); }}
-        className="mt-5 text-center text-sm underline" style={{ color: "var(--color-ink-dim)" }}>
-        {mode === "login" ? "Não tem conta? Criar" : "Já tem conta? Entrar"}
-      </button>
+      <footer className="entrada-rodape">Local-first. Seus dados ficam com você.</footer>
     </main>
   );
 }

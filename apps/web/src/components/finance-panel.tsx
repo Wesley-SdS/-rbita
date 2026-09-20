@@ -1,175 +1,255 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Card, PanelTitle } from "@/components/ui";
+import { Icone } from "@/components/presenca/icones";
 import { enfileirar, isJobTerminal, type JobView } from "@/lib/jobs";
 import { JobProgress } from "@/components/job-progress";
 
-interface Entry { id: string; description: string; category: string | null; amount: number; kind: string; dueDate: string | null; paid: boolean }
-interface Totals { gastos: number; aPagar: number; aReceber: number; saldoProjetado: number }
+interface Lancamento {
+  id: string;
+  description: string;
+  category: string | null;
+  amount: number;
+  kind: string;
+  dueDate: string | null;
+  paid: boolean;
+}
+interface Totais {
+  gastos: number;
+  aPagar: number;
+  aReceber: number;
+  saldoProjetado: number;
+}
 
-const brl = (n: number) => "R$" + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+/**
+ * Finanças: clareza para escolher, não um extrato.
+ *
+ * Ler comprovante e extrato é trabalho de fila (OCR mais um modelo estruturando
+ * os campos passa fácil de dez segundos), então a tela enfileira e acompanha o
+ * progresso em vez de segurar a requisição.
+ */
 export function FinancePanel() {
-  const [open, setOpen] = useState(false);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [totals, setTotals] = useState<Totals | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [flash, setFlash] = useState<string | null>(null);
-  const [statementJob, setStatementJob] = useState<JobView | null>(null);
-  const [receiptJob, setReceiptJob] = useState<JobView | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
+  const [totais, setTotais] = useState<Totais | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+  const [recado, setRecado] = useState<string | null>(null);
+  const [trabalhoExtrato, setTrabalhoExtrato] = useState<JobView | null>(null);
+  const [trabalhoComprovante, setTrabalhoComprovante] = useState<JobView | null>(null);
+  const imagemRef = useRef<HTMLInputElement>(null);
   const pdfRef = useRef<HTMLInputElement>(null);
 
-  function load() {
-    fetch("/api/finance").then((r) => r.json()).then((d) => { setEntries(d.entries ?? []); setTotals(d.totals ?? null); }).catch(() => {});
+  function carregar() {
+    fetch("/api/finance")
+      .then((r) => r.json())
+      .then((d) => {
+        setLancamentos(d.entries ?? []);
+        setTotais(d.totals ?? null);
+      })
+      .catch(() => {});
   }
-  useEffect(load, []);
+  useEffect(carregar, []);
 
-  // ler extrato/comprovante (OCR + modelo estruturando campos) virou trabalho
-  // de fila: enfileira e o JobProgress acompanha até "feito"
-  async function importStatement(file: File) {
-    setBusy(true); setFlash(null); setStatementJob(null);
+  function avisar(texto: string) {
+    setRecado(texto);
+    setTimeout(() => setRecado(null), 6000);
+  }
+
+  async function enviar(arquivo: File, rota: string, guardar: (j: JobView | null) => void) {
+    setOcupado(true);
+    setRecado(null);
+    // limpa o trabalho anterior: sem isto a barra do envio passado reaparece
+    // por um instante antes de o novo chegar
+    guardar(null);
     try {
       const fd = new FormData();
-      fd.append("file", file);
-      const r = await fetch("/api/finance/statement", { method: "POST", body: fd });
-      setStatementJob(await enfileirar(r));
+      fd.append("file", arquivo);
+      const r = await fetch(rota, { method: "POST", body: fd });
+      guardar(await enfileirar(r));
     } catch (e) {
-      setBusy(false);
-      setFlash("⚠ " + (e instanceof Error ? e.message : "falha"));
-      setTimeout(() => setFlash(null), 6000);
+      setOcupado(false);
+      avisar(e instanceof Error ? e.message : "Não foi possível enviar o arquivo.");
     }
   }
 
-  function onStatementChange(j: JobView) {
-    setStatementJob(j);
+  function aoMudarExtrato(j: JobView) {
+    setTrabalhoExtrato(j);
     if (!isJobTerminal(j.status)) return;
-    setBusy(false);
+    setOcupado(false);
     if (j.status === "feito") {
       const d = j.resultado as { importados: number } | null;
-      setFlash(`✓ ${d?.importados ?? 0} lançamento(s) importado(s)`);
-      load();
+      avisar(`${d?.importados ?? 0} lançamento(s) importado(s) do extrato.`);
+      carregar();
     } else if (j.status === "falhou") {
-      setFlash("⚠ " + (j.erro?.mensagem ?? "falha"));
+      avisar(j.erro?.mensagem ?? "Não consegui ler esse extrato.");
     } else {
-      setFlash("Importação cancelada.");
-    }
-    setTimeout(() => setFlash(null), 6000);
-  }
-
-  async function uploadReceipt(file: File) {
-    setBusy(true); setFlash(null); setReceiptJob(null);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const r = await fetch("/api/finance/receipt", { method: "POST", body: fd });
-      setReceiptJob(await enfileirar(r));
-    } catch (e) {
-      setBusy(false);
-      setFlash("⚠ " + (e instanceof Error ? e.message : "falha"));
-      setTimeout(() => setFlash(null), 6000);
+      avisar("Importação cancelada.");
     }
   }
 
-  function onReceiptChange(j: JobView) {
-    setReceiptJob(j);
+  function aoMudarComprovante(j: JobView) {
+    setTrabalhoComprovante(j);
     if (!isJobTerminal(j.status)) return;
-    setBusy(false);
+    setOcupado(false);
     if (j.status === "feito") {
-      const d = j.resultado as { lancamento: { descricao: string; valor: number; tipo: string } } | null;
-      setFlash(d ? `✓ ${d.lancamento.descricao} · ${brl(d.lancamento.valor)} (${d.lancamento.tipo})` : "✓ comprovante lido");
-      load();
+      const d = j.resultado as { lancamento: { descricao: string; valor: number } } | null;
+      avisar(d ? `${d.lancamento.descricao} · ${brl(d.lancamento.valor)}` : "Comprovante lido.");
+      carregar();
     } else if (j.status === "falhou") {
-      setFlash("⚠ " + (j.erro?.mensagem ?? "falha"));
+      avisar(j.erro?.mensagem ?? "Não consegui ler esse comprovante.");
     } else {
-      setFlash("Leitura cancelada.");
+      avisar("Leitura cancelada.");
     }
-    setTimeout(() => setFlash(null), 6000);
   }
 
-  async function togglePaid(e: Entry) {
-    await fetch("/api/finance", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: e.id, paid: !e.paid }) });
-    load();
+  async function alternarPago(e: Lancamento) {
+    await fetch("/api/finance", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: e.id, paid: !e.paid }),
+    });
+    carregar();
   }
-  async function remove(id: string) {
+  async function apagar(id: string) {
     await fetch(`/api/finance?id=${id}`, { method: "DELETE" });
-    load();
+    carregar();
   }
 
-  const aPagar = entries.filter((e) => e.kind === "payable");
-  const aReceber = entries.filter((e) => e.kind === "receivable");
+  const aPagar = lancamentos.filter((e) => e.kind === "payable");
+  const aReceber = lancamentos.filter((e) => e.kind === "receivable");
 
   return (
-    <Card>
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <PanelTitle>Finanças</PanelTitle>
-        <span className="ml-auto text-xs" style={{ color: "var(--color-ink-dim)" }}>{open ? "▾" : "▸"}</span>
-      </button>
+    <>
+      <input
+        ref={imagemRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void enviar(f, "/api/finance/receipt", setTrabalhoComprovante);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={pdfRef}
+        type="file"
+        accept=".pdf,application/pdf"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void enviar(f, "/api/finance/statement", setTrabalhoExtrato);
+          e.target.value = "";
+        }}
+      />
 
-      {totals && (
-        <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px]">
-          <Mini label="Gastos" value={brl(totals.gastos)} />
-          <Mini label="A pagar" value={brl(totals.aPagar)} warn />
-          <Mini label="A receber" value={brl(totals.aReceber)} good />
-          <Mini label="Saldo proj." value={brl(totals.saldoProjetado)} good={totals.saldoProjetado >= 0} warn={totals.saldoProjetado < 0} />
+      {totais && (
+        <div className="stat-grid quatro">
+          <article className="panel stat-card">
+            <span>Saldo projetado</span>
+            <div className="stat-value" style={{ color: totais.saldoProjetado >= 0 ? "var(--color-forest)" : "var(--color-danger)" }}>
+              {brl(totais.saldoProjetado)}
+            </div>
+            <small>O que sobra depois do que está em aberto</small>
+          </article>
+          <article className="panel stat-card">
+            <span>A pagar</span>
+            <div className="stat-value">{brl(totais.aPagar)}</div>
+            <small>{aPagar.filter((e) => !e.paid).length} em aberto</small>
+          </article>
+          <article className="panel stat-card">
+            <span>A receber</span>
+            <div className="stat-value">{brl(totais.aReceber)}</div>
+            <small>{aReceber.filter((e) => !e.paid).length} em aberto</small>
+          </article>
+          <article className="panel stat-card">
+            <span>Gastos registrados</span>
+            <div className="stat-value">{brl(totais.gastos)}</div>
+            <small>Somando o que já saiu</small>
+          </article>
         </div>
       )}
 
-      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadReceipt(f); e.target.value = ""; }} />
-      <input ref={pdfRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void importStatement(f); e.target.value = ""; }} />
-      <div className="mt-2 flex gap-1.5">
-        <button onClick={() => fileRef.current?.click()} disabled={busy} className="flex-1 rounded-lg border px-2 py-1.5 text-[11px] disabled:opacity-50"
-          style={{ borderColor: "color-mix(in oklab, var(--color-gold) 40%, var(--color-line))", color: "var(--color-gold)" }}>
-          📷 comprovante
-        </button>
-        <button onClick={() => pdfRef.current?.click()} disabled={busy} className="flex-1 rounded-lg border px-2 py-1.5 text-[11px] disabled:opacity-50"
-          style={{ borderColor: "color-mix(in oklab, var(--color-gold) 40%, var(--color-line))", color: "var(--color-gold)" }}>
-          📄 extrato PDF
-        </button>
+      <article className="panel" style={{ marginTop: 22 }}>
+        <span className="eyebrow">TRAGA O PAPEL, EU ORGANIZO</span>
+        <h2 style={{ marginTop: 10 }}>Uma foto ou um PDF já bastam.</h2>
+        <p className="description">
+          A Órbita lê o comprovante ou o extrato, identifica os campos e traz para cá. Leitura de
+          documento leva alguns segundos, então ela roda em segundo plano: pode continuar usando o app.
+        </p>
+        <div className="acoes-secao">
+          <button className="button secondary" onClick={() => imagemRef.current?.click()} disabled={ocupado}>
+            <Icone nome="file" />
+            Ler um comprovante
+          </button>
+          <button className="button secondary" onClick={() => pdfRef.current?.click()} disabled={ocupado}>
+            <Icone nome="download" />
+            Importar extrato em PDF
+          </button>
+        </div>
+        {recado && <div className="notice">{recado}</div>}
+        {trabalhoExtrato && !isJobTerminal(trabalhoExtrato.status) && <JobProgress job={trabalhoExtrato} onChange={aoMudarExtrato} />}
+        {trabalhoComprovante && !isJobTerminal(trabalhoComprovante.status) && (
+          <JobProgress job={trabalhoComprovante} onChange={aoMudarComprovante} />
+        )}
+      </article>
+
+      <div className="two-columns" style={{ marginTop: 22 }}>
+        <Secao titulo="A pagar" vazio="Nenhuma conta em aberto." lancamentos={aPagar} aoAlternar={alternarPago} aoApagar={apagar} />
+        <Secao titulo="A receber" vazio="Nada previsto para entrar." lancamentos={aReceber} aoAlternar={alternarPago} aoApagar={apagar} />
       </div>
-      {flash && <div className="mt-1 text-[10px]" style={{ color: "var(--color-ink-dim)" }}>{flash}</div>}
-      {statementJob && !isJobTerminal(statementJob.status) && <JobProgress job={statementJob} onChange={onStatementChange} compact />}
-      {receiptJob && !isJobTerminal(receiptJob.status) && <JobProgress job={receiptJob} onChange={onReceiptChange} compact />}
+    </>
+  );
+}
 
-      {open && (
-        <div className="mt-3 flex flex-col gap-2">
-          {aPagar.length > 0 && <Section title="A pagar" entries={aPagar} onToggle={togglePaid} onRemove={remove} />}
-          {aReceber.length > 0 && <Section title="A receber" entries={aReceber} onToggle={togglePaid} onRemove={remove} />}
-          {aPagar.length === 0 && aReceber.length === 0 && <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>sem contas em aberto</span>}
-        </div>
+function Secao({
+  titulo,
+  vazio,
+  lancamentos,
+  aoAlternar,
+  aoApagar,
+}: {
+  titulo: string;
+  vazio: string;
+  lancamentos: Lancamento[];
+  aoAlternar: (e: Lancamento) => void;
+  aoApagar: (id: string) => void;
+}) {
+  const hoje = new Date();
+  return (
+    <article className="panel">
+      <h2>{titulo}</h2>
+      {lancamentos.length === 0 ? (
+        <div className="empty-state">{vazio}</div>
+      ) : (
+        lancamentos.map((e) => {
+          const vencida = !e.paid && e.dueDate && new Date(e.dueDate) < hoje;
+          return (
+            <div key={e.id} className={`list-row lancamento ${e.paid ? "quitado" : ""}`}>
+              <button
+                className="icon-button"
+                onClick={() => aoAlternar(e)}
+                aria-label={e.paid ? `Reabrir ${e.description}` : `Marcar ${e.description} como quitada`}
+                title={e.paid ? "Reabrir" : "Marcar como quitada"}
+              >
+                <Icone nome={e.paid ? "check" : "clock"} />
+              </button>
+              <div>
+                <strong>{e.description}</strong>
+                <small>
+                  {e.category ? `${e.category} · ` : ""}
+                  {e.dueDate ? (vencida ? `venceu em ${e.dueDate.slice(8, 10)}/${e.dueDate.slice(5, 7)}` : `vence em ${e.dueDate.slice(8, 10)}/${e.dueDate.slice(5, 7)}`) : "sem data"}
+                </small>
+              </div>
+              <span className={`money-value ${vencida ? "vencida" : ""}`}>{brl(e.amount)}</span>
+              <button className="icon-button" onClick={() => aoApagar(e.id)} aria-label={`Apagar ${e.description}`} title="Apagar">
+                <Icone nome="trash" />
+              </button>
+            </div>
+          );
+        })
       )}
-    </Card>
-  );
-}
-
-function Mini({ label, value, good, warn }: { label: string; value: string; good?: boolean; warn?: boolean }) {
-  return (
-    <div className="rounded-lg border p-1.5" style={{ borderColor: "var(--color-line)" }}>
-      <div className="font-mono text-[8px] uppercase" style={{ color: "var(--color-ink-dim)" }}>{label}</div>
-      <div className="font-bold" style={{ color: good ? "var(--color-gold)" : warn ? "var(--color-danger)" : "var(--color-ink)" }}>{value}</div>
-    </div>
-  );
-}
-
-function Section({ title, entries, onToggle, onRemove }: { title: string; entries: Entry[]; onToggle: (e: Entry) => void; onRemove: (id: string) => void }) {
-  return (
-    <div>
-      <div className="font-mono text-[9px] uppercase" style={{ color: "var(--color-ink-dim)" }}>{title}</div>
-      {entries.map((e) => (
-        <div key={e.id} className="flex items-center gap-1.5 py-0.5 text-[11px]" style={{ opacity: e.paid ? 0.5 : 1 }}>
-          <button onClick={() => onToggle(e)} title={e.paid ? "reabrir" : "marcar quitada"}>{e.paid ? "☑" : "☐"}</button>
-          <span className="flex-1 truncate" style={{ color: "var(--color-ink)", textDecoration: e.paid ? "line-through" : "none" }}>{e.description}</span>
-          {e.dueDate && (
-            <span style={{ color: !e.paid && new Date(e.dueDate) < new Date() ? "var(--color-danger)" : "var(--color-ink-dim)" }}
-              title={!e.paid && new Date(e.dueDate) < new Date() ? "vencida" : "vencimento"}>
-              {e.dueDate.slice(5, 10)}
-            </span>
-          )}
-          <span className="font-semibold" style={{ color: "var(--color-ink)" }}>R${e.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-          <button onClick={() => onRemove(e.id)} style={{ color: "var(--color-danger)" }}>×</button>
-        </div>
-      ))}
-    </div>
+    </article>
   );
 }

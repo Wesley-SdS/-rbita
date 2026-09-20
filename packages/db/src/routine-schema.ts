@@ -22,6 +22,14 @@ export const notification = pgTable("notification", {
   routineId: uuid("routine_id").references(() => routine.id, { onDelete: "set null" }),
   title: text("title").notNull(),
   content: text("content").notNull(),
+  /**
+   * Para onde o aviso leva, quando leva a algum lugar.
+   *
+   * Sem isto o sino é um mural: avisa que há contas a vencer e deixa a pessoa
+   * procurar onde ver. É caminho interno do app (`/app/financas`), definido por
+   * quem CRIA o aviso, nunca adivinhado pelo texto do título.
+   */
+  destino: text("destino"),
   read: boolean("read").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

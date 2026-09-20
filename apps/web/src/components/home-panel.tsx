@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, PanelTitle, Input, Button, ErrorRetry } from "@/components/ui";
+import { Input, Button, ErrorRetry } from "@/components/ui";
 import { DEVICE_ID_STORAGE_KEY, getOwnDeviceId } from "@/lib/device-id";
+import { Icone } from "@/components/presenca/icones";
 
 /**
  * A casa (Onda 3): conectar o Home Assistant, cadastrar cômodos, associar
@@ -19,27 +20,13 @@ interface DomainRiskRow { domain: string; default: Risk; override: Risk | null; 
 type DeviceKind = "navegador" | "satelite" | "celular";
 interface OrbitaDevice { id: string; name: string; kind: DeviceKind; roomId: string | null; roomName: string | null; lastSeenAt: string | null }
 
-export function HomePanel() {
-  const [tab, setTab] = useState<"conexao" | "comodos" | "dispositivos" | "aparelhos" | "risco">("conexao");
-  return (
-    <Card>
-      <PanelTitle className="mb-2">Casa</PanelTitle>
-      <div className="mb-3 flex gap-1 text-[11px]">
-        {([["conexao", "Conexão"], ["comodos", "Cômodos"], ["dispositivos", "Dispositivos"], ["aparelhos", "Aparelhos"], ["risco", "Risco por tipo"]] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} className="rounded-full border px-2 py-1"
-            style={{ borderColor: tab === id ? "var(--color-gold)" : "var(--color-line)", color: tab === id ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
-            {label}
-          </button>
-        ))}
-      </div>
-      {tab === "conexao" && <ConnectionTab />}
-      {tab === "comodos" && <RoomsTab />}
-      {tab === "dispositivos" && <EntitiesTab />}
-      {tab === "aparelhos" && <OrbitaDevicesTab />}
-      {tab === "risco" && <DomainRiskTab />}
-    </Card>
-  );
-}
+/**
+ * As abas da casa são exportadas UMA A UMA, e não embrulhadas num painel com
+ * abas próprias. O motivo: a tela "Minha casa" já tem abas, e aninhar dois
+ * níveis (aba dentro de aba) obriga a pessoa a procurar em dois lugares para
+ * achar uma coisa só.
+ */
+export { ConnectionTab as CasaConexao, RoomsTab as CasaComodos, EntitiesTab as CasaDispositivos, OrbitaDevicesTab as CasaAparelhos, DomainRiskTab as CasaRiscoPorTipo };
 
 function ConnectionTab() {
   const [status, setStatus] = useState<{ connected: boolean; baseUrl: string | null } | null>(null);
@@ -84,10 +71,10 @@ function ConnectionTab() {
   }
 
   if (err) return <ErrorRetry message={err} onRetry={() => setReload((n) => n + 1)} />;
-  if (!status) return <p className="text-[12px]" style={dim}>Carregando…</p>;
+  if (!status) return <p className="text-[15px]" style={dim}>Carregando…</p>;
 
   return (
-    <div className="flex flex-col gap-2 text-[12px]">
+    <div className="panel flex flex-col gap-2 text-[15px]">
       {status.connected ? (
         <>
           <p>Conectado em <code>{status.baseUrl}</code>.</p>
@@ -110,42 +97,139 @@ function ConnectionTab() {
 }
 
 function RoomsTab() {
-  const [rooms, setRooms] = useState<Room[] | null>(null);
-  const [name, setName] = useState("");
-  const [reload, setReload] = useState(0);
+  const [comodos, setComodos] = useState<Room[] | null>(null);
+  const [dispositivos, setDispositivos] = useState<Entity[]>([]);
+  const [aparelhos, setAparelhos] = useState<OrbitaDevice[]>([]);
+  const [nome, setNome] = useState("");
+  const [recarregar, setRecarregar] = useState(0);
+  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/home/rooms").then((r) => r.json()).then((d) => setRooms(d.rooms ?? [])).catch(() => setRooms([]));
-  }, [reload]);
+    // Os três juntos porque o cartão do cômodo só faz sentido dizendo o que há
+    // dentro dele: um cômodo vazio na tela não explica por que existe.
+    Promise.all([
+      fetch("/api/home/rooms").then((r) => r.json()).then((d) => d.rooms ?? []),
+      fetch("/api/home/entities").then((r) => r.json()).then((d) => d.entities ?? []).catch(() => []),
+      fetch("/api/devices").then((r) => r.json()).then((d) => d.devices ?? []).catch(() => []),
+    ])
+      .then(([c, e, a]) => {
+        setComodos(c);
+        setDispositivos(e);
+        setAparelhos(a);
+      })
+      .catch(() => setComodos([]));
+  }, [recarregar]);
 
-  async function add() {
-    if (!name.trim()) return;
-    const r = await fetch("/api/home/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }).catch(() => null);
-    if (!r?.ok) { window.alert(((await r?.json().catch(() => ({}))) as { error?: string })?.error ?? "Não foi possível criar o cômodo."); return; }
-    setName("");
-    setReload((n) => n + 1);
+  async function criar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!nome.trim()) return;
+    setErro(null);
+    const r = await fetch("/api/home/rooms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nome }),
+    }).catch(() => null);
+    if (!r?.ok) {
+      setErro(((await r?.json().catch(() => ({}))) as { error?: string })?.error ?? "Não foi possível criar o cômodo.");
+      return;
+    }
+    setNome("");
+    setRecarregar((n) => n + 1);
   }
-  async function remove(id: string) {
-    if (!window.confirm("Apagar este cômodo? Os dispositivos e aparelhos ligados a ele ficam sem cômodo.")) return;
+
+  async function apagar(id: string, nomeDoComodo: string) {
+    if (!window.confirm(`Apagar ${nomeDoComodo}? Os dispositivos e aparelhos ligados a ele ficam sem cômodo.`)) return;
+    setErro(null);
     const r = await fetch(`/api/home/rooms?id=${id}`, { method: "DELETE" }).catch(() => null);
-    if (!r?.ok) { window.alert(((await r?.json().catch(() => ({}))) as { error?: string })?.error ?? "Não foi possível apagar o cômodo."); return; }
-    setReload((n) => n + 1);
+    if (!r?.ok) {
+      setErro(((await r?.json().catch(() => ({}))) as { error?: string })?.error ?? "Não foi possível apagar o cômodo.");
+      return;
+    }
+    setRecarregar((n) => n + 1);
   }
+
+  if (!comodos) return <div className="panel empty-state">Carregando os ambientes…</div>;
 
   return (
-    <div className="flex flex-col gap-2 text-[12px]">
-      <p style={dim}>Sem lista fixa: crie os cômodos que existirem na sua casa.</p>
-      {rooms?.map((r) => (
-        <div key={r.id} className="flex items-center justify-between rounded-lg border px-2 py-1" style={{ borderColor: "var(--color-line)" }}>
-          <span>{r.name}</span>
-          <button onClick={() => remove(r.id)} style={{ color: "var(--color-danger)" }}>×</button>
+    <>
+      <div className="section-heading quick-heading" style={{ marginTop: 0 }}>
+        <div>
+          <h2>Seus ambientes</h2>
+          <p className="descricao-secao">
+            Sem lista fixa: a casa é a que você cadastrar. É o cômodo que diz à Órbita onde é “aqui”.
+          </p>
         </div>
-      ))}
-      <div className="flex gap-2">
-        <Input placeholder="nome do cômodo" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
-        <Button onClick={add} size="sm">+ cômodo</Button>
       </div>
-    </div>
+
+      {erro && (
+        <div className="aviso-erro">
+          <span>{erro}</span>
+        </div>
+      )}
+
+      <div className="three-columns">
+        {comodos.map((c) => {
+          const daCasa = dispositivos.filter((d) => d.roomId === c.id);
+          const daOrbita = aparelhos.filter((a) => a.roomId === c.id);
+          return (
+            <article key={c.id} className="panel room-card">
+              <div className="room-visual">
+                <div className="room-illustration" aria-hidden="true" />
+              </div>
+              <div className="room-body">
+                <div className="room-label">
+                  <h3>{c.name}</h3>
+                  <button className="icon-button" onClick={() => apagar(c.id, c.name)} aria-label={`Apagar ${c.name}`} title="Apagar cômodo">
+                    <Icone nome="trash" />
+                  </button>
+                </div>
+                <p>
+                  {daCasa.length === 0 && daOrbita.length === 0
+                    ? "Nenhum dispositivo aqui ainda."
+                    : [
+                        daCasa.length ? `${daCasa.length} ${daCasa.length === 1 ? "dispositivo" : "dispositivos"}` : null,
+                        daOrbita.length ? `${daOrbita.length} ${daOrbita.length === 1 ? "aparelho da Órbita" : "aparelhos da Órbita"}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                </p>
+                {daCasa.length > 0 && (
+                  <div className="room-tags">
+                    {daCasa.slice(0, 5).map((d) => (
+                      <span key={d.entityId} className="tag">
+                        {d.friendlyName}
+                      </span>
+                    ))}
+                    {daCasa.length > 5 && <span className="tag">+{daCasa.length - 5}</span>}
+                  </div>
+                )}
+              </div>
+            </article>
+          );
+        })}
+
+        <form className="panel room-card room-novo" onSubmit={criar}>
+          <span className="quick-icon mint-bg">
+            <Icone nome="plus" />
+          </span>
+          <h3>Um cômodo novo</h3>
+          <p>Sala, escritório, quarto das crianças. O nome é o que você usa em voz alta.</p>
+          <label className="field">
+            Nome do cômodo
+            <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex.: Escritório" maxLength={60} required />
+          </label>
+          <button type="submit" className="button primary full-width">
+            <Icone nome="check" />
+            Criar cômodo
+          </button>
+        </form>
+      </div>
+
+      <div className="notice">
+        “Aqui” vem do aparelho, não de adivinhação: sem um aparelho cadastrado num cômodo, a Órbita
+        pergunta qual é em vez de agir no lugar errado.
+      </div>
+    </>
   );
 }
 
@@ -167,11 +251,11 @@ function EntitiesTab() {
     setReload((n) => n + 1);
   }
 
-  if (!entities) return <p className="text-[12px]" style={dim}>Carregando…</p>;
-  if (!entities.length) return <p className="text-[12px]" style={dim}>Nenhum dispositivo ainda. Conecte o Home Assistant e sincronize na aba Conexão.</p>;
+  if (!entities) return <p className="text-[15px]" style={dim}>Carregando…</p>;
+  if (!entities.length) return <p className="text-[15px]" style={dim}>Nenhum dispositivo ainda. Conecte o Home Assistant e sincronize na aba Conexão.</p>;
 
   return (
-    <div className="flex max-h-72 flex-col gap-1 overflow-y-auto text-[12px]">
+    <div className="panel flex max-h-[60vh] flex-col gap-1 overflow-y-auto text-[15px]">
       {entities.map((e) => (
         <div key={e.entityId} className="flex items-center gap-2 rounded-lg border px-2 py-1" style={{ borderColor: "var(--color-line)" }}>
           <div className="min-w-0 flex-1">
@@ -332,10 +416,10 @@ function OrbitaDevicesTab() {
           <option value="">sem cômodo</option>
           {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
-        <button onClick={() => { setNameDraft(d.name); setRenamingId(d.id); }} className="text-[11px] underline" style={dim} disabled={busy}>
+        <button onClick={() => { setNameDraft(d.name); setRenamingId(d.id); }} className="text-[14px] underline" style={dim} disabled={busy}>
           renomear
         </button>
-        <button onClick={() => esquecer(d)} className="text-[11px]" style={{ color: "var(--color-danger)" }} disabled={busy}>
+        <button onClick={() => esquecer(d)} className="text-[14px]" style={{ color: "var(--color-danger)" }} disabled={busy}>
           esquecer
         </button>
       </div>
@@ -343,12 +427,12 @@ function OrbitaDevicesTab() {
   }
 
   if (err) return <ErrorRetry message={err} onRetry={() => setReload((n) => n + 1)} />;
-  if (!devices) return <p className="text-[12px]" style={dim}>Carregando…</p>;
+  if (!devices) return <p className="text-[15px]" style={dim}>Carregando…</p>;
 
   const outros = devices.filter((d) => d.id !== ownId);
 
   return (
-    <div className="flex flex-col gap-2 text-[12px]">
+    <div className="panel flex flex-col gap-2 text-[15px]">
       <p style={dim}>
         Aparelhos que falam com a Órbita, como este navegador ou um satélite de voz, diferente dos
         dispositivos do Home Assistant. É assim que a Órbita sabe onde é aqui quando você diz
@@ -389,9 +473,9 @@ function OrbitaDevicesTab() {
       )}
 
       <div className="flex flex-col gap-1">
-        <p className="text-[11px] font-medium" style={dim}>Outros aparelhos</p>
+        <p className="text-[14px] font-medium" style={dim}>Outros aparelhos</p>
         {outros.length === 0 ? (
-          <p className="text-[11px]" style={dim}>Nenhum outro aparelho registrado ainda.</p>
+          <p className="text-[14px]" style={dim}>Nenhum outro aparelho registrado ainda.</p>
         ) : (
           outros.map((d) => (
             <div key={d.id} className="flex flex-col gap-1 rounded-lg border px-2 py-1" style={{ borderColor: "var(--color-line)" }}>
@@ -408,7 +492,7 @@ function OrbitaDevicesTab() {
                 </div>
               )}
               {d.kind !== "navegador" && (
-                <p className="text-[10px]" style={dim}>
+                <p className="text-[13px]" style={dim}>
                   id para configurar no aparelho: <code>{d.id}</code>
                 </p>
               )}
@@ -434,7 +518,7 @@ function OrbitaDevicesTab() {
             <Button size="sm" variant="outline" disabled={busy} onClick={() => setAbrirOutro(false)}>cancelar</Button>
           </div>
         ) : (
-          <button onClick={() => setAbrirOutro(true)} className="mt-1 self-start text-[11px] underline" style={dim} disabled={busy}>
+          <button onClick={() => setAbrirOutro(true)} className="mt-1 self-start text-[14px] underline" style={dim} disabled={busy}>
             + cadastrar outro aparelho (satélite, celular)
           </button>
         )}
@@ -456,11 +540,11 @@ function DomainRiskTab() {
     setReload((n) => n + 1);
   }
 
-  if (!rows) return <p className="text-[12px]" style={dim}>Carregando…</p>;
-  if (!rows.length) return <p className="text-[12px]" style={dim}>Sincronize os dispositivos para ver os tipos existentes na sua casa.</p>;
+  if (!rows) return <p className="text-[15px]" style={dim}>Carregando…</p>;
+  if (!rows.length) return <p className="text-[15px]" style={dim}>Sincronize os dispositivos para ver os tipos existentes na sua casa.</p>;
 
   return (
-    <div className="flex flex-col gap-1 text-[12px]">
+    <div className="panel flex flex-col gap-1 text-[15px]">
       <p style={dim}>Fechadura, alarme, portão e registro pedem aprovação por padrão; luz, tomada, mídia e clima executam direto. Ajuste como preferir.</p>
       {rows.map((r) => (
         <div key={r.domain} className="flex items-center justify-between rounded-lg border px-2 py-1" style={{ borderColor: "var(--color-line)" }}>

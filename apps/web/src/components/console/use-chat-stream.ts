@@ -1,7 +1,7 @@
 "use client";
 
 import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, useRef, useState } from "react";
-import type { OrbMode } from "@/components/orb";
+import type { OrbMode } from "@/components/console/types";
 import type { Msg, ToolStep, VoiceBridge } from "@/components/console/types";
 import { getOwnDeviceId } from "@/lib/device-id";
 

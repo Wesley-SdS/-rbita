@@ -1,115 +1,268 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, PanelTitle, Input, Textarea, Button } from "@/components/ui";
+import { Icone } from "@/components/presenca/icones";
 
-interface Notif { id: string; title: string; content: string; read: boolean }
-interface Routine { id: string; title: string; intervalMinutes: number }
+interface Aviso {
+  id: string;
+  title: string;
+  content: string;
+  read: boolean;
+}
+interface Rotina {
+  id: string;
+  title: string;
+  intervalMinutes: number;
+  prompt?: string;
+}
 
+const CADENCIAS = [
+  { minutos: 60, rotulo: "A cada hora" },
+  { minutos: 360, rotulo: "A cada 6 horas" },
+  { minutos: 720, rotulo: "Duas vezes por dia" },
+  { minutos: 1440, rotulo: "Todos os dias" },
+  { minutos: 10080, rotulo: "Toda semana" },
+];
+
+function cadencia(minutos: number) {
+  return CADENCIAS.find((c) => c.minutos === minutos)?.rotulo ?? `A cada ${minutos} min`;
+}
+
+/* Um ícone por rotina, escolhido pelo intervalo: o de hora em hora é o mais
+   frequente e ganha a faísca, o diário ganha o sol, o semanal a lua. É só
+   linguagem visual, o comportamento não muda. */
+function iconeDa(minutos: number) {
+  if (minutos <= 60) return { nome: "spark", fundo: "mint-bg" };
+  if (minutos >= 10080) return { nome: "moon", fundo: "lavender-bg" };
+  return { nome: "sun", fundo: "peach-bg" };
+}
+
+/**
+ * Rotinas: pequenos rituais que a Órbita cuida sozinha.
+ *
+ * Quem executa é o processo persistente (`apps/api`), não esta tela: o
+ * agendador que vivia aqui morreu na Onda 1, e por isso as rotinas continuam
+ * rodando com o navegador fechado.
+ */
 export function RoutinesPanel() {
-  const [notifs, setNotifs] = useState<Notif[]>([]);
-  const [unread, setUnread] = useState(0);
-  const [routines, setRoutines] = useState<Routine[]>([]);
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [interval, setIntervalMin] = useState(1440);
-  const [busy, setBusy] = useState(false);
+  const [avisos, setAvisos] = useState<Aviso[]>([]);
+  const [rotinas, setRotinas] = useState<Rotina[]>([]);
+  const [criando, setCriando] = useState(false);
+  const [titulo, setTitulo] = useState("");
+  const [instrucao, setInstrucao] = useState("");
+  const [intervalo, setIntervalo] = useState(1440);
+  const [ocupado, setOcupado] = useState(false);
 
-  function loadNotifs() {
-    fetch("/api/notifications").then((r) => r.json()).then((d) => { setNotifs(d.notifications ?? []); setUnread(d.unread ?? 0); }).catch(() => {});
+  function carregarAvisos() {
+    fetch("/api/notifications")
+      .then((r) => r.json())
+      .then((d) => setAvisos(d.notifications ?? []))
+      .catch(() => {});
   }
-  function loadRoutines() {
-    fetch("/api/routines").then((r) => r.json()).then((d) => setRoutines(d.routines ?? [])).catch(() => {});
+  function carregarRotinas() {
+    fetch("/api/routines")
+      .then((r) => r.json())
+      .then((d) => setRotinas(d.routines ?? []))
+      .catch(() => {});
   }
 
   useEffect(() => {
-    loadNotifs();
-    loadRoutines();
-    // Só o polling de notificações fica aqui. O agendador que vivia neste
-    // componente (setInterval de 5 min) morreu na Onda 1: quem roda rotinas
-    // e regras é o processo persistente (apps/api), com o navegador fechado.
-    const poll = setInterval(loadNotifs, 30000);
-    return () => { clearInterval(poll); };
+    carregarAvisos();
+    carregarRotinas();
+    const poll = setInterval(carregarAvisos, 30000);
+    return () => clearInterval(poll);
   }, []);
 
-  async function createRoutine() {
-    if (!title.trim() || !prompt.trim() || busy) return;
-    setBusy(true);
+  async function criar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!titulo.trim() || !instrucao.trim() || ocupado) return;
+    setOcupado(true);
     try {
-      await fetch("/api/routines", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, prompt, intervalMinutes: interval }) });
-      setTitle(""); setPrompt(""); loadRoutines();
-    } finally { setBusy(false); }
-  }
-  async function runNow() {
-    setBusy(true);
-    try {
-      await fetch("/api/routines/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ force: true }) });
-      loadNotifs();
-    } finally { setBusy(false); }
-  }
-  async function markRead(id: string) {
-    await fetch("/api/notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    loadNotifs();
-  }
-  async function deleteRoutine(id: string) {
-    await fetch(`/api/routines?id=${id}`, { method: "DELETE" });
-    loadRoutines();
+      await fetch("/api/routines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: titulo, prompt: instrucao, intervalMinutes: intervalo }),
+      });
+      setTitulo("");
+      setInstrucao("");
+      setCriando(false);
+      carregarRotinas();
+    } finally {
+      setOcupado(false);
+    }
   }
 
-  const fieldStyle = { borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" };
+  async function rodarAgora() {
+    setOcupado(true);
+    try {
+      await fetch("/api/routines/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: true }),
+      });
+      carregarAvisos();
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function apagar(id: string) {
+    await fetch(`/api/routines?id=${id}`, { method: "DELETE" });
+    carregarRotinas();
+  }
+
+  async function marcarLida(id: string) {
+    await fetch("/api/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    carregarAvisos();
+  }
+
+  const naoLidos = avisos.filter((a) => !a.read);
 
   return (
-    <Card>
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <PanelTitle>Proatividade</PanelTitle>
-        {unread > 0 && (
-          <span className="ml-2 rounded-full px-1.5 text-[10px] font-bold" style={{ background: "var(--color-gold)", color: "#241403" }}>{unread}</span>
-        )}
-        <span className="ml-auto text-xs" style={{ color: "var(--color-ink-dim)" }}>{open ? "▾" : "▸"}</span>
-      </button>
-
-      {/* avisos recentes */}
-      <div className="mt-2 flex flex-col gap-1">
-        {notifs.slice(0, open ? 6 : 2).map((n) => (
-          <button key={n.id} onClick={() => markRead(n.id)} className="rounded-lg border p-2 text-left text-[11px]"
-            style={{ borderColor: n.read ? "var(--color-line)" : "color-mix(in oklab, var(--color-gold) 40%, var(--color-line))", color: "var(--color-ink-dim)", opacity: n.read ? 0.6 : 1 }}>
-            <div className="font-semibold" style={{ color: n.read ? "var(--color-ink-dim)" : "var(--color-gold)" }}>{n.title}</div>
-            <div className="line-clamp-2">{n.content}</div>
-          </button>
-        ))}
-        {notifs.length === 0 && <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>sem avisos ainda</span>}
-      </div>
-
-      {open && (
-        <div className="mt-3 flex flex-col gap-2">
-          <div className="font-mono text-[9px] uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>Nova rotina</div>
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título (ex: Briefing matinal)" />
-          <Textarea size="sm" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="O que a Órbita deve fazer? (ex: pesquise 3 notícias de IA)" rows={2} />
-          <div className="flex items-center gap-2">
-            <select value={interval} onChange={(e) => setIntervalMin(Number(e.target.value))} className="rounded-lg border px-2 py-1.5 text-xs" style={fieldStyle}>
-              <option value={60}>a cada hora</option>
-              <option value={720}>2x/dia</option>
-              <option value={1440}>diário</option>
-            </select>
-            <Button variant="primary" size="md" onClick={createRoutine} disabled={busy} className="flex-1">Criar</Button>
+    <>
+      {naoLidos.length > 0 && (
+        <div className="memory-banner">
+          <Icone nome="spark" />
+          <div>
+            <h3>
+              {naoLidos.length === 1 ? "Uma rotina trouxe algo" : `${naoLidos.length} rotinas trouxeram algo`}
+            </h3>
+            <p>Enquanto você estava em outra coisa, a Órbita reuniu isto para você.</p>
           </div>
-
-          {routines.length > 0 && (
-            <div className="mt-1 flex flex-col gap-1">
-              {routines.map((r) => (
-                <div key={r.id} className="flex items-center gap-1 text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
-                  <span className="flex-1 truncate">• {r.title}</span>
-                  <button onClick={() => deleteRoutine(r.id)} style={{ color: "var(--color-danger)" }}>×</button>
-                </div>
-              ))}
-              <Button variant="outline" size="md" onClick={runNow} disabled={busy} className="mt-1">
-                {busy ? "…" : "▶ rodar agora"}
-              </Button>
-            </div>
-          )}
         </div>
       )}
-    </Card>
+
+      {avisos.length > 0 && (
+        <div className="panel" style={{ marginBottom: 22 }}>
+          <div className="panel-label">O QUE CHEGOU ENQUANTO ISSO</div>
+          {avisos.slice(0, 6).map((a) => (
+            <button key={a.id} className={`aviso-rotina ${a.read ? "lido" : ""}`} onClick={() => marcarLida(a.id)}>
+              <span className="tiny-dot" />
+              <span>
+                <strong>{a.title}</strong>
+                <small>{a.content}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="section-heading" style={{ marginBottom: 18 }}>
+        <div>
+          <h2>Seus rituais</h2>
+          <p className="descricao-secao">
+            {rotinas.length === 0
+              ? "Nenhum ainda. Uma rotina é um pedido que se repete sozinho."
+              : `${rotinas.length} ${rotinas.length === 1 ? "rotina cuidando" : "rotinas cuidando"} do resto.`}
+          </p>
+        </div>
+        <div className="acoes-secao">
+          {rotinas.length > 0 && (
+            <button className="button secondary compacto" onClick={rodarAgora} disabled={ocupado}>
+              <Icone nome="play" />
+              {ocupado ? "Rodando…" : "Rodar agora"}
+            </button>
+          )}
+          <button className="button primary compacto" onClick={() => setCriando((v) => !v)}>
+            <Icone nome={criando ? "close" : "plus"} />
+            {criando ? "Cancelar" : "Criar rotina"}
+          </button>
+        </div>
+      </div>
+
+      {criando && (
+        <form className="panel" onSubmit={criar} style={{ marginBottom: 20 }}>
+          <span className="eyebrow">UM RITUAL QUE COMBINA COM VOCÊ</span>
+          <label className="field">
+            Nome da rotina
+            <input value={titulo} onChange={(e) => setTitulo(e.target.value)} required maxLength={80} placeholder="Ex.: Meu começo de dia" />
+          </label>
+          <label className="field">
+            Qual é a intenção?
+            <textarea
+              value={instrucao}
+              onChange={(e) => setInstrucao(e.target.value)}
+              required
+              maxLength={2000}
+              placeholder="O que a Órbita deve fazer? Ex.: reunir minha agenda e o que ficou de ontem."
+            />
+          </label>
+          <label className="field">
+            Com que frequência?
+            <select value={intervalo} onChange={(e) => setIntervalo(Number(e.target.value))}>
+              {CADENCIAS.map((c) => (
+                <option key={c.minutos} value={c.minutos}>
+                  {c.rotulo}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="form-actions">
+            <button type="button" className="button secondary" onClick={() => setCriando(false)}>
+              Agora não
+            </button>
+            <button type="submit" className="button primary" disabled={ocupado}>
+              <Icone nome="check" />
+              Criar rotina
+            </button>
+          </div>
+        </form>
+      )}
+
+      {rotinas.length === 0 ? (
+        <div className="panel empty-state">
+          Nada por aqui ainda. Crie um ritual e a Órbita cuida da sequência, mesmo com o navegador fechado.
+        </div>
+      ) : (
+        <div className="three-columns">
+          {rotinas.map((r) => {
+            const ico = iconeDa(r.intervalMinutes);
+            return (
+              <article key={r.id} className="panel routine-card">
+                <div className="routine-top">
+                  <span className={`quick-icon ${ico.fundo}`}>
+                    <Icone nome={ico.nome} />
+                  </span>
+                  <button className="icon-button" onClick={() => apagar(r.id)} aria-label={`Apagar ${r.title}`} title="Apagar rotina">
+                    <Icone nome="trash" />
+                  </button>
+                </div>
+                <h3>{r.title}</h3>
+                <p>{r.prompt || "Sem descrição."}</p>
+                <div className="routine-flow">
+                  <div className="flow-step">
+                    <span>
+                      <Icone nome="clock" />
+                    </span>
+                    {cadencia(r.intervalMinutes)}
+                  </div>
+                  <div className="flow-connector" />
+                  <div className="flow-step">
+                    <span>
+                      <Icone nome="network" />
+                    </span>
+                    Considerar seu contexto
+                  </div>
+                  <div className="flow-connector" />
+                  <div className="flow-step">
+                    <span>
+                      <Icone nome="check" />
+                    </span>
+                    Avisar você aqui
+                  </div>
+                </div>
+                <div className="routine-bottom">
+                  <span>Roda no servidor, sem você abrir nada</span>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </>
   );
 }

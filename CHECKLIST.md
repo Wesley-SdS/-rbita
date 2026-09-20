@@ -8,6 +8,7 @@
 - [x] Front demonstrativo em `prototypes/orbita-presenca/`, sem substituir a UI
   atual nem conectar APIs: nove telas, identidade mineral/verde, temas claro e
   escuro, núcleo WebGL 3D ampliado com dez estados e fallback Canvas,
+  membrana translúcida, veios orgânicos com impulsos, órbitas finas,
   laboratório, responsividade, foco e cards progressivos de fontes (pesquisa simulada).
 - [x] Interações verificadas no Chrome: conversa/interrupção, memória com CRUD e
   persistência, busca, rotinas, cenas, aprovações, gastos, conexões, reunião
@@ -17,6 +18,33 @@
 - [x] Typecheck web/API sem erros. Suíte geral: 609/610; falha no teste de página
   do RAG (`packages/core/src/rag/chunk.test.ts:24`), fora dos arquivos desta
   proposta. Alterações em andamento no RAG preservadas.
+
+## Migração do front para o Presença (20/09/2026)
+
+A proposta acima deixou de ser proposta: o app inteiro passou a ser ela.
+
+- [x] **Porte por script**, não à mão: `python scripts/portar-presenca.py` gera
+  folha de estilo, os dois motores do núcleo, os ícones, as falas dos estados e
+  os ícones do PWA a partir de `prototypes/orbita-presenca`. `--conferir` sai
+  com erro se o protótipo andou. Arquivo gerado nunca se edita; extensão do app
+  vive em `apps/web/src/app/presenca-app.css`.
+- [x] **Nove rotas** no lugar da página única com 24 blocos empilhados. Casa e
+  Preferências viraram seções com abas; nenhum painel se perdeu. `/insights`
+  virou a aba "Ver conexões" de Memória e redireciona.
+- [x] **Núcleo WebGL do protótipo** em `components/presenca/nucleo.tsx`, com
+  `destruir()` (o protótipo nunca desmonta; aqui cada rota monta e desmonta).
+- [x] **Barra lateral com recolher**, estado no `<html>` aplicado antes do
+  primeiro paint, como o tema.
+- [x] **Modo foco é o do protótipo**: temporizador, não chat. Duração,
+  intensidade e movimento reduzido viraram config (`presenca.*`).
+- [x] **O sino leva a algum lugar**: `notification.destino` (migração 0034), a
+  ação `notify` das regras aceita o caminho, e as regras de fábrica apontam para
+  Finanças, Casa, Conexões e Reuniões. Só caminho interno, com teste.
+- [x] **Tipografia um degrau acima do protótipo** (piso de 11px) e todas as
+  cores de texto fixas em hex trocadas por token: 30 pares de contraste nos dois
+  temas, todos AA ou AAA.
+- [x] Auditado em 9 telas × 2 temas × 3 larguras: sem estouro, sem erro de
+  console, sem texto abaixo do piso.
 
 ---
 

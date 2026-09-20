@@ -1,18 +1,22 @@
-import type { InputHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 type Size = "sm" | "md";
-const BASE = "rounded-lg border outline-none";
-const PAD: Record<Size, string> = { sm: "px-2 py-1.5 text-xs", md: "px-3 py-2 text-sm" };
-const FIELD_STYLE = { borderColor: "var(--color-line)", background: "var(--color-ground)", color: "var(--color-ink)" } as const;
 
-// `size` é omitido dos atributos nativos (no <input> ele é `number`) p/ usarmos
-// nosso union sm/md sem colisão de tipos.
-/** Campo de texto de uma linha, no tom "ground" com borda discreta. */
-export function Input({ size = "sm", className = "", style, ...rest }: Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & { size?: Size }) {
-  return <input {...rest} className={`${BASE} ${PAD[size]} ${className}`} style={{ ...FIELD_STYLE, ...style }} />;
+/**
+ * Campos do Presença. `.inline-input` é a versão sem rótulo acoplado (a com
+ * rótulo é `.field`, usada diretamente nas telas novas).
+ *
+ * `size` é omitido dos atributos nativos porque no `<input>` ele é numérico e
+ * colidiria com o nosso par sm/md.
+ */
+export function Input({ size = "sm", className = "", ...rest }: Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & { size?: Size }) {
+  return <input {...rest} className={`inline-input ${size === "sm" ? "compacto" : ""} ${className}`.trim()} />;
 }
 
-/** Área de texto multi-linha (mesmo tom do Input). */
-export function Textarea({ size = "md", className = "", style, ...rest }: Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "size"> & { size?: Size }) {
-  return <textarea {...rest} className={`${BASE} ${PAD[size]} ${className}`} style={{ ...FIELD_STYLE, ...style }} />;
+export function Textarea({ size = "md", className = "", ...rest }: Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "size"> & { size?: Size }) {
+  return <textarea {...rest} className={`inline-input ${size === "sm" ? "compacto" : ""} ${className}`.trim()} />;
+}
+
+export function Select({ size = "sm", className = "", ...rest }: Omit<SelectHTMLAttributes<HTMLSelectElement>, "size"> & { size?: Size }) {
+  return <select {...rest} className={`inline-input ${size === "sm" ? "compacto" : ""} ${className}`.trim()} />;
 }

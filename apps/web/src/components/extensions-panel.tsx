@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, PanelTitle, Input, Textarea, Button } from "@/components/ui";
+import { Icone } from "@/components/presenca/icones";
+import { Card, Input, Textarea, Button } from "@/components/ui";
 
 interface Skill { id: string; name: string; instructions: string; enabled: boolean }
 interface Mcp { id: string; name: string; url: string; enabled: boolean; risk: string }
 
 /** Extensões: skills (comportamentos) + servidores MCP (ferramentas externas). */
 export function ExtensionsPanel() {
-  const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"skills" | "mcp">("skills");
   const [skills, setSkills] = useState<Skill[]>([]);
   const [mcps, setMcps] = useState<Mcp[]>([]);
@@ -42,70 +42,67 @@ export function ExtensionsPanel() {
 
   return (
     <Card>
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <PanelTitle>Extensões</PanelTitle>
+      <div className="section-heading">
+        <h2>Extensões</h2>
         {(skills.filter((s) => s.enabled).length + mcps.filter((m) => m.enabled).length) > 0 && (
-          <span className="ml-2 rounded-full px-1.5 text-[10px] font-bold" style={{ background: "var(--color-gold)", color: "#241403" }}>
-            {skills.filter((s) => s.enabled).length + mcps.filter((m) => m.enabled).length}
+          <span className="tag green">
+            {skills.filter((s) => s.enabled).length + mcps.filter((m) => m.enabled).length} ativa(s)
           </span>
         )}
-        <span className="ml-auto text-xs" style={{ color: "var(--color-ink-dim)" }}>{open ? "▾" : "▸"}</span>
-      </button>
+      </div>
 
-      {open && (
-        <div className="mt-2 flex flex-col gap-2">
-          <div className="flex gap-1 text-[10px]">
-            {(["skills", "mcp"] as const).map((t) => (
-              <button key={t} onClick={() => setTab(t)} className="rounded px-2 py-0.5 font-mono uppercase"
-                style={{ background: tab === t ? "var(--color-gold)" : "transparent", color: tab === t ? "#241403" : "var(--color-ink-dim)", border: "1px solid var(--color-line)" }}>
-                {t === "skills" ? "Skills" : "MCP"}
-              </button>
-            ))}
-          </div>
-
-          {tab === "skills" ? (
-            <>
-              {skills.map((s) => (
-                <div key={s.id} className="flex items-center gap-1.5 text-[11px]">
-                  <button onClick={() => toggle("skills", s.id, !s.enabled)}>{s.enabled ? "🟢" : "⚪"}</button>
-                  <span className="flex-1 truncate" style={{ color: "var(--color-ink)" }} title={s.instructions}>{s.name}</span>
-                  <button onClick={() => remove("skills", s.id)} style={{ color: "var(--color-danger)" }}>×</button>
-                </div>
-              ))}
-              <Input value={sName} onChange={(e) => setSName(e.target.value)} placeholder="Nome da skill (ex: Modo dev)" />
-              <Input value={sKw} onChange={(e) => setSKw(e.target.value)} placeholder="Palavras-chave p/ ativar (ex: código, bug, deploy)" />
-              <div className="flex items-center gap-1">
-                <span className="text-[9px]" style={{ color: "var(--color-ink-dim)" }}>Instruções</span>
-                <button onClick={() => setSInstr(SKILL_TEMPLATE)} className="text-[9px]" style={{ color: "var(--color-gold)" }}>usar template</button>
-              </div>
-              <Textarea size="sm" value={sInstr} onChange={(e) => setSInstr(e.target.value)} placeholder="Como a Órbita deve agir. Dica: use o template (Quando usar / Quando NÃO usar / Princípios)." rows={3} />
-              <Button variant="primary" size="md" onClick={addSkill}>+ skill</Button>
-            </>
-          ) : (
-            <>
-              {mcps.map((m) => (
-                <div key={m.id} className="flex items-center gap-1.5 text-[11px]">
-                  <button onClick={() => toggle("mcp", m.id, !m.enabled)}>{m.enabled ? "🟢" : "⚪"}</button>
-                  <span className="flex-1 truncate" style={{ color: "var(--color-ink)" }} title={m.url}>{m.name}</span>
-                  {/* risco das tools do servidor: "leitura" executa direto; o resto passa pela aprovação */}
-                  <select value={m.risk ?? "efeito_externo"} title="Risco das ferramentas deste servidor"
-                    onChange={async (e) => { await fetch("/api/mcp", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: m.id, risk: e.target.value }) }); load(); }}
-                    className="rounded-md border px-1 py-0.5 text-[10px]" style={{ borderColor: "var(--color-line)", background: "transparent", color: m.risk === "leitura" ? "inherit" : "var(--color-gold)" }}>
-                    <option value="leitura">somente leitura</option>
-                    <option value="efeito_externo">com efeito (aprova)</option>
-                    <option value="perigoso">perigoso (aprova)</option>
-                  </select>
-                  <button onClick={() => remove("mcp", m.id)} style={{ color: "var(--color-danger)" }}>×</button>
-                </div>
-              ))}
-              <Input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="Nome (ex: GitHub)" />
-              <Input value={mUrl} onChange={(e) => setMUrl(e.target.value)} placeholder="URL do servidor MCP (HTTP streamable)" />
-              <Button variant="primary" size="md" onClick={addMcp}>+ servidor MCP</Button>
-              <p className="text-[9px]" style={{ color: "var(--color-ink-dim)" }}>As ferramentas do MCP entram no chat automaticamente. Por padrão passam pela aprovação; marque "somente leitura" para executarem direto.</p>
-            </>
-          )}
+      <div className="mt-2 flex flex-col gap-2">
+        <div className="flex gap-1 text-[13px]">
+          {(["skills", "mcp"] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)} className="filter-chip"
+              style={{ background: tab === t ? "var(--color-gold)" : "transparent", color: tab === t ? "var(--color-accent-ink)" : "var(--color-ink-dim)", border: "1px solid var(--color-line)" }}>
+              {t === "skills" ? "Skills" : "MCP"}
+            </button>
+          ))}
         </div>
-      )}
+
+        {tab === "skills" ? (
+          <>
+            {skills.map((s) => (
+              <div key={s.id} className="flex items-center gap-1.5 text-[14px]">
+                <button className="switch" role="switch" aria-checked={s.enabled} aria-label={`Ativar ${s.id}`} onClick={() => toggle("skills", s.id, !s.enabled)} />
+                <span className="flex-1 truncate" style={{ color: "var(--color-ink)" }} title={s.instructions}>{s.name}</span>
+                <button className="icon-button" onClick={() => remove("skills", s.id)} aria-label="Remover habilidade" title="Remover"><Icone nome="trash" /></button>
+              </div>
+            ))}
+            <Input value={sName} onChange={(e) => setSName(e.target.value)} placeholder="Nome da skill (ex: Modo dev)" />
+            <Input value={sKw} onChange={(e) => setSKw(e.target.value)} placeholder="Palavras-chave p/ ativar (ex: código, bug, deploy)" />
+            <div className="flex items-center gap-1">
+              <span className="text-[12px]" style={{ color: "var(--color-ink-dim)" }}>Instruções</span>
+              <button onClick={() => setSInstr(SKILL_TEMPLATE)} className="text-[12px]" style={{ color: "var(--color-gold)" }}>usar template</button>
+            </div>
+            <Textarea size="sm" value={sInstr} onChange={(e) => setSInstr(e.target.value)} placeholder="Como a Órbita deve agir. Dica: use o template (Quando usar / Quando NÃO usar / Princípios)." rows={3} />
+            <Button variant="primary" size="md" onClick={addSkill}>+ skill</Button>
+          </>
+        ) : (
+          <>
+            {mcps.map((m) => (
+              <div key={m.id} className="flex items-center gap-1.5 text-[14px]">
+                <button className="switch" role="switch" aria-checked={m.enabled} aria-label={`Ativar ${m.id}`} onClick={() => toggle("mcp", m.id, !m.enabled)} />
+                <span className="flex-1 truncate" style={{ color: "var(--color-ink)" }} title={m.url}>{m.name}</span>
+                {/* risco das tools do servidor: "leitura" executa direto; o resto passa pela aprovação */}
+                <select value={m.risk ?? "efeito_externo"} title="Risco das ferramentas deste servidor"
+                  onChange={async (e) => { await fetch("/api/mcp", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: m.id, risk: e.target.value }) }); load(); }}
+                  className="rounded-md border px-1 py-0.5 text-[13px]" style={{ borderColor: "var(--color-line)", background: "transparent", color: m.risk === "leitura" ? "inherit" : "var(--color-gold)" }}>
+                  <option value="leitura">somente leitura</option>
+                  <option value="efeito_externo">com efeito (aprova)</option>
+                  <option value="perigoso">perigoso (aprova)</option>
+                </select>
+                <button className="icon-button" onClick={() => remove("mcp", m.id)} aria-label="Remover servidor" title="Remover"><Icone nome="trash" /></button>
+              </div>
+            ))}
+            <Input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="Nome (ex: GitHub)" />
+            <Input value={mUrl} onChange={(e) => setMUrl(e.target.value)} placeholder="URL do servidor MCP (HTTP streamable)" />
+            <Button variant="primary" size="md" onClick={addMcp}>+ servidor MCP</Button>
+            <p className="text-[12px]" style={{ color: "var(--color-ink-dim)" }}>As ferramentas do MCP entram no chat automaticamente. Por padrão passam pela aprovação; marque "somente leitura" para executarem direto.</p>
+          </>
+        )}
+      </div>
     </Card>
   );
 }

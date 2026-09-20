@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Card, PanelTitle, Button, Input } from "@/components/ui";
+import { Icone } from "@/components/presenca/icones";
 import { ContinuousRecorder, startMeetingCapture, type MeetingCapture } from "@/lib/voice/capture";
 import { ContinuousDictation, getRecognitionCtor } from "@/lib/voice/speech";
 import type { SttUtterance } from "@orbita/core/stt/types";
@@ -74,7 +74,6 @@ function autoSpeakerNames(identities: SpeakerIdentity[]): Record<string, string>
  * atribuídos por requisição, então o "A" de uma janela não é o "A" da seguinte).
  */
 export function MeetingPanel() {
-  const [open, setOpen] = useState(false);
   const [active, setActive] = useState(false);
   const [systemAudio, setSystemAudio] = useState(true);
   const [elapsed, setElapsed] = useState(0);
@@ -260,7 +259,7 @@ export function MeetingPanel() {
       if (!r.ok) throw new Error((v as { error?: string }).error ?? "Não consegui acompanhar o resumo.");
       setSummarizeJob(v as JobView);
     } catch (e) {
-      setSummary("⚠ " + (e instanceof Error ? e.message : "falha ao resumir"));
+      setSummary("Não consegui resumir: " + (e instanceof Error ? e.message : "falha desconhecida"));
       setPhase("idle");
     }
   }
@@ -271,16 +270,16 @@ export function MeetingPanel() {
     if (j.status === "feito") {
       const d = j.resultado as { summary: string; compromissos?: Compromisso[]; documentId?: string | null; archived?: boolean } | null;
       if (d) {
-        setSummary(d.summary + (d.archived ? "\n\n📎 salvo na sua memória." : ""));
+        setSummary(d.summary + (d.archived ? "\n\nGuardado na sua memória." : ""));
         setCompromissos(d.compromissos ?? []);
         setDocumentId(d.documentId ?? null);
       }
       setPhase("idle");
     } else if (j.status === "falhou") {
-      setSummary("⚠ " + (j.erro?.mensagem ?? "falha ao resumir"));
+      setSummary("Não consegui resumir: " + (j.erro?.mensagem ?? "falha desconhecida"));
       setPhase("idle");
     } else if (j.status === "cancelado") {
-      setSummary("⚠ resumo cancelado.");
+      setSummary("Resumo cancelado.");
       setPhase("idle");
     }
   }
@@ -340,176 +339,231 @@ export function MeetingPanel() {
   // nome efetivo por etiqueta: o que o dono digitou manualmente, senão a sugestão do reconhecimento de voz
   const effectiveNames = { ...autoSpeakerNames(speakerIdentities), ...speakerNames };
 
-  return (
-    <Card>
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <PanelTitle>Reunião</PanelTitle>
-        {active && <span className="ml-2 h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--color-danger)" }} />}
-        <span className="ml-auto text-xs" style={dim}>{open ? "▾" : "▸"}</span>
-      </button>
+  const locutores = [...new Set(utterances.map((u) => u.speaker))];
 
-      {open && (
-        <div className="mt-2 flex flex-col gap-2">
-          {!active && !busy && (
-            <label className="flex items-center gap-2 text-[11px]" style={dim}>
-              <input type="checkbox" checked={systemAudio} onChange={(e) => setSystemAudio(e.target.checked)} />
-              capturar áudio da tela (Teams, Meet, Slack)
-            </label>
-          )}
+  return (
+    <>
+      <div className="two-columns">
+        <article className="panel meeting-live">
+          <span className={`tag ${active ? "green" : ""}`}>{active ? "GRAVANDO" : "PRONTA PARA OUVIR"}</span>
+          <span className="eyebrow">O QUE FOR DITO VIRA PRÓXIMO PASSO</span>
+          <h2>{active ? "Estou com você nessa conversa." : "Uma escuta atenta."}</h2>
+          <p>
+            {active
+              ? "Pode falar normalmente. No fim eu separo as vozes, resumo e tiro os compromissos."
+              : "A Órbita ouve, transcreve, separa quem falou o quê e devolve decisões e próximos passos."}
+          </p>
+
+          {/* A onda é ilustrativa e assume o ritmo quando está gravando: ela
+              existe para dizer "estou ouvindo", não para medir o áudio. */}
+          <div className={`waveform ${active ? "running" : ""}`} aria-hidden="true">
+            {Array.from({ length: 40 }, (_, i) => (
+              <i
+                key={i}
+                style={{ "--h": `${12 + Math.sin(i * 0.7) ** 2 * 45}px`, "--delay": `${i * -0.09}s` } as React.CSSProperties}
+              />
+            ))}
+          </div>
+
+          <p className="meeting-tempo">{active ? mmss : "00:00"}</p>
 
           {!active ? (
-            <Button variant="primary" size="md" onClick={start} disabled={busy}>
-              {phase === "transcrevendo" ? "transcrevendo e separando vozes…" : phase === "resumindo" ? "resumindo…" : "● iniciar transcrição"}
-            </Button>
+            <>
+              <button className="button primary" onClick={start} disabled={busy}>
+                <Icone nome="mic" />
+                {phase === "transcrevendo"
+                  ? "Transcrevendo e separando vozes…"
+                  : phase === "resumindo"
+                    ? "Resumindo…"
+                    : "Começar a ouvir"}
+              </button>
+              {!busy && (
+                <label className="switch-row">
+                  <input type="checkbox" checked={systemAudio} onChange={(e) => setSystemAudio(e.target.checked)} />
+                  <span>
+                    <Icone nome="volume" />
+                    Capturar também o áudio da tela (Teams, Meet, Slack)
+                  </span>
+                </label>
+              )}
+            </>
           ) : (
-            <button onClick={stop} className="rounded-lg border px-3 py-1.5 text-xs" style={{ borderColor: "var(--color-danger)", color: "var(--color-danger)" }}>
-              ⏹ encerrar e resumir · {mmss}
+            <button className="button danger" onClick={stop}>
+              <Icone nome="stop" />
+              Encerrar e resumir
             </button>
           )}
 
           {note && (
-            <div className="rounded-lg border p-2 text-[11px]" style={{ borderColor: "color-mix(in oklab, var(--color-danger) 40%, var(--color-line))", color: "var(--color-ink-dim)" }}>
-              {note}
+            <div className="aviso-erro" style={{ marginTop: 14 }}>
+              <span>{note}</span>
             </div>
           )}
 
           {phase === "transcrevendo" && transcribeJob && (
-            <div className="rounded-lg border p-2" style={boxed}>
-              <JobProgress job={transcribeJob} onChange={(j) => void onTranscribeChange(j)} compact />
-              <p className="mt-1 text-[10px]" style={dim}>Pode fechar esta aba: a reunião continua sendo processada e aparece em Trabalhos em segundo plano.</p>
-            </div>
+            <>
+              <JobProgress job={transcribeJob} onChange={(j) => void onTranscribeChange(j)} />
+              <p className="nota-fila">
+                Pode fechar esta aba: a reunião continua sendo processada e aparece em Preferências, na
+                aba Trabalhos.
+              </p>
+            </>
           )}
+          {phase === "resumindo" && summarizeJob && <JobProgress job={summarizeJob} onChange={onSummarizeChange} />}
+        </article>
 
-          {phase === "resumindo" && summarizeJob && (
-            <div className="rounded-lg border p-2" style={boxed}>
-              <JobProgress job={summarizeJob} onChange={onSummarizeChange} compact />
-            </div>
-          )}
+        <article className="panel">
+          <div className="section-heading">
+            <h2>Palavras que ficam</h2>
+            {locutores.length > 0 && (
+              <span className="tag">
+                {locutores.length} {locutores.length === 1 ? "voz" : "vozes"}
+              </span>
+            )}
+          </div>
 
-          {active && (
-            <div className="max-h-24 overflow-y-auto rounded-lg border p-2 text-[11px]" style={boxed}>
-              <div className="mb-1 text-[10px] uppercase tracking-wide" style={dim}>prévia (só o seu microfone)</div>
-              {preview || "ouvindo…"}
-            </div>
-          )}
-
-          {utterances.length > 0 && (
-            <div className="max-h-40 overflow-y-auto rounded-lg border p-2 text-[11px]" style={boxed}>
-              <div className="mb-1 text-[10px] uppercase tracking-wide" style={dim}>
-                {new Set(utterances.map((u) => u.speaker)).size} locutores
+          <div className="transcript">
+            {active && (
+              <div className="transcript-row">
+                <strong>Prévia · só o seu microfone</strong>
+                {preview || "ouvindo…"}
               </div>
-              {utterances.map((u, i) => {
-                const lbl = speakerLabel(u.speaker, speakerIdentities, speakerNames);
-                return (
-                  <p key={i} className="mb-1">
-                    <span className="font-semibold" style={{ color: "var(--color-gold)" }} title={lbl.title}>
-                      {lbl.text}:
-                    </span> {u.text}
-                  </p>
-                );
-              })}
-            </div>
-          )}
+            )}
+            {utterances.map((u, i) => {
+              const lbl = speakerLabel(u.speaker, speakerIdentities, speakerNames);
+              return (
+                <div key={i} className="transcript-row">
+                  <strong title={lbl.title}>{lbl.text}</strong>
+                  {u.text}
+                </div>
+              );
+            })}
+            {!utterances.length && !active && transcript && <div className="transcript-row">{transcript}</div>}
+            {!utterances.length && !active && !transcript && (
+              <div className="empty-state">Comece a ouvir para ver a conversa virar contexto.</div>
+            )}
+          </div>
+        </article>
+      </div>
 
-          {!utterances.length && transcript && (
-            <div className="max-h-24 overflow-y-auto rounded-lg border p-2 text-[11px]" style={boxed}>{transcript}</div>
-          )}
+      {phase === "idle" && locutores.length > 0 && (
+        <article className="panel" style={{ marginTop: 22 }}>
+          <div className="section-heading">
+            <h2>Quem é quem</h2>
+            <span className="tag">só nesta reunião</span>
+          </div>
+          <p className="description">
+            Dar nome a cada voz melhora o resumo e deixa os compromissos com responsável. Vincular a uma
+            pessoa cadastrada faz a Órbita reconhecer essa voz nas próximas conversas.
+          </p>
 
-          {phase === "idle" && utterances.length > 0 && (
-            <div className="rounded-lg border p-2 text-[11px]" style={boxed}>
-              <div className="mb-1 text-[10px] uppercase tracking-wide" style={dim}>quem é quem (só nesta reunião)</div>
-              <div className="flex flex-col gap-1.5">
-                {[...new Set(utterances.map((u) => u.speaker))].map((tag) => {
-                  const suggestion = speakerSuggestion(tag, speakerIdentities);
-                  const si = speakerIdentities.find((s) => s.label === tag);
-                  return (
-                    <div key={tag} className="flex flex-col gap-1 border-b pb-1.5 last:border-0 last:pb-0" style={{ borderColor: "var(--color-line)" }}>
-                      <div className="flex items-center gap-2">
-                        <span style={dim} title={suggestion.title}>{suggestion.text}</span>
-                        <Input
-                          size="sm"
-                          placeholder="nome"
-                          value={speakerNames[tag] ?? ""}
-                          onChange={(e) => { setSpeakerNames((s) => ({ ...s, [tag]: e.target.value })); setNamesSaved(false); }}
-                        />
-                      </div>
-                      {persons.length > 0 && (
-                        <div className="flex items-center gap-2 pl-1">
-                          <select
-                            value={linkPerson[tag] ?? ""}
-                            onChange={(e) => { setLinkPerson((s) => ({ ...s, [tag]: e.target.value })); setNamesSaved(false); }}
-                            className="rounded border px-1.5 py-0.5 text-[11px]"
-                            style={{ borderColor: "var(--color-line)", background: "transparent", color: "var(--color-ink)" }}
-                          >
-                            <option value="">vincular a pessoa cadastrada…</option>
-                            {persons.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
-                          {linkPerson[tag] && si?.ref && (
-                            <label className="flex items-center gap-1" style={dim}>
-                              <input
-                                type="checkbox"
-                                checked={!!useSample[tag]}
-                                onChange={(e) => { setUseSample((s) => ({ ...s, [tag]: e.target.checked })); setNamesSaved(false); }}
-                              />
-                              usar esta fala como amostra de voz
-                            </label>
-                          )}
-                        </div>
-                      )}
-                      {amostras[tag] && (
-                        <span className="pl-1 text-[11px]" style={amostras[tag] === "cadastrada" ? { color: "var(--color-gold)" } : { color: "var(--color-danger)" }}>
-                          amostra: {amostras[tag]}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <button
-                onClick={saveSpeakerNames}
-                disabled={savingNames || !documentId}
-                className="mt-2 rounded-lg border px-2 py-1 text-[11px] disabled:opacity-50"
-                style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}
-              >
-                {savingNames ? "salvando…" : namesSaved ? "✓ nomes salvos" : "salvar nomes"}
-              </button>
-            </div>
-          )}
-
-          {compromissos.length > 0 && (
-            <div className="rounded-lg border p-2 text-[11px]" style={boxed}>
-              <div className="mb-1 text-[10px] uppercase tracking-wide" style={dim}>compromissos identificados</div>
-              <ul className="flex flex-col gap-1">
-                {compromissos.map((c, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <button
-                      onClick={() => addTodo(c, i)}
-                      disabled={addedTodos.has(i)}
-                      title="adicionar como tarefa"
-                      className="mt-0.5 shrink-0 rounded border px-1.5 text-[11px] disabled:opacity-40"
-                      style={{ borderColor: "var(--color-line)", color: addedTodos.has(i) ? "var(--color-gold)" : "var(--color-ink-dim)" }}
+          {locutores.map((tag) => {
+            const sugestao = speakerSuggestion(tag, speakerIdentities);
+            const si = speakerIdentities.find((x) => x.label === tag);
+            return (
+              <div key={tag} className="locutor">
+                <div className="locutor-linha">
+                  <span className="tag" title={sugestao.title}>
+                    {sugestao.text}
+                  </span>
+                  <input
+                    className="inline-input compacto"
+                    placeholder="Como se chama?"
+                    value={speakerNames[tag] ?? ""}
+                    onChange={(e) => {
+                      setSpeakerNames((x) => ({ ...x, [tag]: e.target.value }));
+                      setNamesSaved(false);
+                    }}
+                  />
+                </div>
+                {persons.length > 0 && (
+                  <div className="locutor-linha">
+                    <select
+                      className="inline-input compacto"
+                      value={linkPerson[tag] ?? ""}
+                      onChange={(e) => {
+                        setLinkPerson((x) => ({ ...x, [tag]: e.target.value }));
+                        setNamesSaved(false);
+                      }}
                     >
-                      {addedTodos.has(i) ? "✓" : "+"}
-                    </button>
-                    <span>
-                      {applySpeakerNames(c.descricao, effectiveNames)}
-                      {c.responsavel && <span style={dim}> · {applySpeakerNames(c.responsavel, effectiveNames)}</span>}
-                      {c.prazo && <span style={dim}> · prazo {c.prazo}</span>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+                      <option value="">Vincular a uma pessoa cadastrada…</option>
+                      {persons.map((pessoa) => (
+                        <option key={pessoa.id} value={pessoa.id}>
+                          {pessoa.name}
+                        </option>
+                      ))}
+                    </select>
+                    {linkPerson[tag] && si?.ref && (
+                      <label className="switch-row" style={{ margin: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={!!useSample[tag]}
+                          onChange={(e) => {
+                            setUseSample((x) => ({ ...x, [tag]: e.target.checked }));
+                            setNamesSaved(false);
+                          }}
+                        />
+                        <span>Usar esta fala como amostra de voz</span>
+                      </label>
+                    )}
+                  </div>
+                )}
+                {amostras[tag] && (
+                  <span className={`tag ${amostras[tag] === "cadastrada" ? "green" : ""}`}>amostra: {amostras[tag]}</span>
+                )}
+              </div>
+            );
+          })}
 
-          {summary && (
-            <div className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg border p-2 text-[11px]"
-              style={{ borderColor: "color-mix(in oklab, var(--color-gold) 40%, var(--color-line))", color: "var(--color-ink)" }}>
-              {applySpeakerNames(summary, effectiveNames)}
-            </div>
-          )}
-        </div>
+          <button
+            className="button secondary"
+            onClick={saveSpeakerNames}
+            disabled={savingNames || !documentId}
+            style={{ marginTop: 16 }}
+          >
+            <Icone nome="check" />
+            {savingNames ? "Guardando…" : namesSaved ? "Nomes guardados" : "Guardar os nomes"}
+          </button>
+        </article>
       )}
-    </Card>
+
+      {compromissos.length > 0 && (
+        <article className="panel" style={{ marginTop: 22 }}>
+          <div className="section-heading">
+            <h2>O que ficou combinado</h2>
+            <span className="tag green">{compromissos.length}</span>
+          </div>
+          <p className="description">Cada um pode virar tarefa com um toque, para não se perder depois.</p>
+          {compromissos.map((c, i) => (
+            <div key={i} className="list-row">
+              <button
+                className="icon-button"
+                onClick={() => addTodo(c, i)}
+                disabled={addedTodos.has(i)}
+                aria-label="Adicionar como tarefa"
+                title={addedTodos.has(i) ? "Já virou tarefa" : "Adicionar como tarefa"}
+              >
+                <Icone nome={addedTodos.has(i) ? "check" : "plus"} />
+              </button>
+              <div>
+                <strong>{applySpeakerNames(c.descricao, effectiveNames)}</strong>
+                <small>
+                  {c.responsavel ? applySpeakerNames(c.responsavel, effectiveNames) : "sem responsável"}
+                  {c.prazo ? ` · prazo ${c.prazo}` : ""}
+                </small>
+              </div>
+            </div>
+          ))}
+        </article>
+      )}
+
+      {summary && (
+        <article className="panel meeting-summary" style={{ marginTop: 22 }}>
+          <span className="tag green">RESUMO</span>
+          <h2 style={{ marginTop: 14 }}>O que essa conversa deixou</h2>
+          <p className="resumo-texto">{applySpeakerNames(summary, effectiveNames)}</p>
+        </article>
+      )}
+    </>
   );
 }

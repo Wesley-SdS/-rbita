@@ -71,7 +71,7 @@ export function JobProgress({ job: jobProp, onChange, compact, live = true }: {
   const pct = job.progresso.total ? Math.min(100, Math.round((job.progresso.feito / job.progresso.total) * 100)) : null;
 
   return (
-    <div className="flex flex-col gap-1 text-[11px]">
+    <div className="flex flex-col gap-1 text-[14px]">
       {!compact && <p className="font-medium">{job.titulo}</p>}
 
       {vivo && (

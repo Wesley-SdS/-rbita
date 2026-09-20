@@ -95,23 +95,23 @@ export function KnowledgeSearch() {
         </Button>
       </div>
 
-      {erro && <div className="text-[10px]" style={{ color: "var(--color-danger)" }}>✗ {erro}</div>}
+      {erro && <div className="text-[13px]" style={{ color: "var(--color-danger)" }}>✗ {erro}</div>}
 
       {resultados?.length === 0 && (
-        <div className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
+        <div className="text-[14px]" style={{ color: "var(--color-ink-dim)" }}>
           Nada encontrado no acervo para isso.
         </div>
       )}
 
       {resultados?.map((r, i) => (
-        <div key={r.trechoId ?? i} className="rounded border p-2 text-[11px]" style={{ borderColor: "var(--color-line)" }}>
+        <div key={r.trechoId ?? i} className="rounded border p-2 text-[14px]" style={{ borderColor: "var(--color-line)" }}>
           <div className="flex items-baseline gap-2">
             <span style={{ color: "var(--color-gold)" }}>{r.fonte}</span>
             {r.paginaInicio != null && (
               <span style={{ color: "var(--color-ink-dim)" }}>{paginaLabel(r.paginaInicio, r.paginaFim)}</span>
             )}
             {r.via && (
-              <span className="ml-auto font-mono text-[9px]" style={{ color: "var(--color-ink-dim)" }}>
+              <span className="ml-auto text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
                 achado por {VIA_LABEL[r.via] ?? r.via}
               </span>
             )}
@@ -130,7 +130,7 @@ export function KnowledgeSearch() {
             )}
           </div>
           {r.trechoId && (
-            <button className="mt-1 text-[10px] underline" style={{ color: "var(--color-ink-dim)" }} onClick={() => abrir(r.trechoId)}>
+            <button className="mt-1 text-[13px] underline" style={{ color: "var(--color-ink-dim)" }} onClick={() => abrir(r.trechoId)}>
               {aberto?.id === r.trechoId ? "fechar" : "abrir no documento"}
             </button>
           )}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { OrbMode } from "@/components/orb";
+import type { OrbMode } from "@/components/console/types";
 
 /**
  * Estado do Orb compartilhado entre chat e voz. Mantém um `modeRef` espelhado

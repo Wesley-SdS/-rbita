@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Card, PanelTitle, Input, Button, ErrorRetry } from "@/components/ui";
+import { ErrorRetry } from "@/components/ui";
+import { Icone } from "@/components/presenca/icones";
 
 interface Todo { id: string; text: string; done: boolean; dueDate: string | null; imageUrl: string | null }
 
 export function TodoPanel() {
-  const [open, setOpen] = useState(false);
+  // Aberto por padrão: com uma tela por assunto, o painel É a página. O
+  // recolhido era do tempo em que 24 blocos dividiam o mesmo scroll.
+  const [open, setOpen] = useState(true);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [text, setText] = useState("");
   const [image, setImage] = useState<string | null>(null);
@@ -18,7 +21,7 @@ export function TodoPanel() {
   }
   useEffect(load, []);
 
-  const pending = todos.filter((t) => !t.done).length;
+  const pendentes = todos.filter((t) => !t.done).length;
 
   async function add() {
     if (!text.trim() && !image) return;
@@ -63,35 +66,74 @@ export function TodoPanel() {
   }
 
   return (
-    <Card>
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <PanelTitle>Tarefas</PanelTitle>
-        {pending > 0 && <span className="ml-2 rounded-full px-1.5 text-[10px] font-bold" style={{ background: "var(--color-gold)", color: "#241403" }}>{pending}</span>}
-        <span className="ml-auto text-xs" style={{ color: "var(--color-ink-dim)" }}>{open ? "▾" : "▸"}</span>
-      </button>
-
-      <div className="mt-2 flex flex-col gap-1">
-        {todos.slice(0, open ? 20 : 4).map((t) => (
-          <div key={t.id} className="flex items-center gap-1.5 text-[11px]" style={{ opacity: t.done ? 0.5 : 1 }}>
-            <button onClick={() => toggle(t)} aria-label={t.done ? "marcar como pendente" : "concluir tarefa"}>{t.done ? "☑" : "☐"}</button>
-            {t.imageUrl && <img src={t.imageUrl} alt="" className="h-5 w-5 rounded object-cover" />}
-            <span className="flex-1 truncate" style={{ color: "var(--color-ink)", textDecoration: t.done ? "line-through" : "none" }}>{t.text}</span>
-            {t.dueDate && <span style={{ color: "var(--color-ink-dim)" }}>{t.dueDate.slice(5, 10)}</span>}
-            <button onClick={() => remove(t.id)} aria-label="remover tarefa" style={{ color: "var(--color-danger)" }}>×</button>
-          </div>
-        ))}
-        {todos.length === 0 && <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>nenhuma tarefa</span>}
-        {err && <ErrorRetry message={err} onRetry={() => { setErr(null); load(); }} />}
+    <>
+      <div className="section-heading quick-heading" style={{ marginTop: 0 }}>
+        <div>
+          <h2>O que ainda precisa de você</h2>
+          <p className="descricao-secao">
+            {pendentes === 0 ? "Nada em aberto. Aproveite." : `${pendentes} ${pendentes === 1 ? "tarefa em aberto" : "tarefas em aberto"}.`}
+          </p>
+        </div>
       </div>
 
-      {open && (
-        <div className="mt-2 flex items-center gap-1">
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) pickImage(f); e.target.value = ""; }} />
-          <button onClick={() => fileRef.current?.click()} title="anexar imagem" className="rounded border px-1.5 py-1 text-xs" style={{ borderColor: image ? "var(--color-gold)" : "var(--color-line)", color: image ? "var(--color-gold)" : "var(--color-ink-dim)" }}>📎</button>
-          <Input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="Nova tarefa…" className="flex-1" />
-          <Button variant="primary" size="sm" onClick={add}>+</Button>
+      <article className="panel">
+        <div className="linha-fato">
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) pickImage(f); e.target.value = ""; }} />
+          <button
+            className={`icon-button ${image ? "com-anexo" : ""}`}
+            onClick={() => fileRef.current?.click()}
+            aria-label="Anexar imagem à tarefa"
+            title={image ? "Imagem anexada" : "Anexar uma imagem"}
+          >
+            <Icone nome={image ? "check" : "file"} />
+          </button>
+          <input
+            className="inline-input"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void add();
+              }
+            }}
+            placeholder="O que precisa ser feito?"
+            maxLength={300}
+          />
+          <button className="button primary compacto" onClick={add} disabled={!text.trim()}>
+            <Icone nome="plus" />
+            Adicionar
+          </button>
         </div>
-      )}
-    </Card>
+
+        {err && <ErrorRetry message={err} onRetry={() => { setErr(null); load(); }} />}
+
+        {todos.length === 0 ? (
+          <div className="empty-state">Nenhuma tarefa por aqui.</div>
+        ) : (
+          todos.map((t) => (
+            <div key={t.id} className={`list-row tarefa ${t.done ? "feita" : ""}`}>
+              <button
+                className="icon-button"
+                onClick={() => toggle(t)}
+                aria-label={t.done ? `Reabrir ${t.text}` : `Concluir ${t.text}`}
+                title={t.done ? "Reabrir" : "Concluir"}
+              >
+                <Icone nome={t.done ? "check" : "clock"} />
+              </button>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {t.imageUrl && <img src={t.imageUrl} alt="" className="tarefa-imagem" />}
+              <div>
+                <strong>{t.text}</strong>
+                {t.dueDate && <small>para {t.dueDate.slice(8, 10)}/{t.dueDate.slice(5, 7)}</small>}
+              </div>
+              <button className="icon-button" onClick={() => remove(t.id)} aria-label={`Remover ${t.text}`} title="Remover">
+                <Icone nome="trash" />
+              </button>
+            </div>
+          ))
+        )}
+      </article>
+    </>
   );
 }

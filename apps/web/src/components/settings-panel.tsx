@@ -64,21 +64,21 @@ export function SettingsPanel() {
     <Card>
       <div className="mb-2 flex items-baseline justify-between">
         <PanelTitle>Ajustes</PanelTitle>
-        <span className="text-[11px]" style={dim}>{total ? `${total} alterado${total > 1 ? "s" : ""}` : "tudo no padrão"}</span>
+        <span className="text-[14px]" style={dim}>{total ? `${total} alterado${total > 1 ? "s" : ""}` : "tudo no padrão"}</span>
       </div>
-      <p className="mb-3 text-[12px]" style={dim}>
+      <p className="mb-3 text-[15px]" style={dim}>
         {isOwner ? "Nada aqui é obrigatório. Mudou, valeu em segundos, sem reiniciar." : "Somente leitura: só o dono desta instância altera os ajustes da casa."}
       </p>
       <OwnerSection />
       {!groups ? (
-        <p className="text-[12px]" style={dim}>Carregando…</p>
+        <p className="text-[15px]" style={dim}>Carregando…</p>
       ) : (
         <div className="flex flex-col gap-1">
           {groups.map((g) => (
             <div key={g.id} className="rounded-lg border" style={{ borderColor: "var(--color-line)" }}>
-              <button type="button" onClick={() => setOpen(open === g.id ? null : g.id)} className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px]">
+              <button type="button" onClick={() => setOpen(open === g.id ? null : g.id)} className="flex w-full items-center justify-between px-3 py-2 text-left text-[16px]">
                 <span>{g.label}</span>
-                <span className="text-[11px]" style={dim}>
+                <span className="text-[14px]" style={dim}>
                   {g.settings.filter((s) => s.overridden).length ? `${g.settings.filter((s) => s.overridden).length} alterado` : ""} {open === g.id ? "▾" : "▸"}
                 </span>
               </button>
@@ -123,7 +123,7 @@ function OwnerSection() {
 
   if (!info) return null;
   return (
-    <div className="mb-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--color-line)" }}>
+    <div className="mb-3 rounded-lg border px-3 py-2 text-[15px]" style={{ borderColor: "var(--color-line)" }}>
       {info.orphaned ? (
         <p style={dim}>Esta instância está sem dono (a conta do dono foi apagada). A posse só volta por <code>ORBITA_OWNER_EMAIL</code> no servidor; esse e-mail consegue criar conta mesmo com o cadastro fechado.</p>
       ) : info.isOwner ? (
@@ -131,11 +131,11 @@ function OwnerSection() {
           <p className="mb-1">Você é o dono desta instância{info.owner?.email ? ` (${info.owner.email})` : ""}.</p>
           <div className="flex gap-2">
             <Input type="email" placeholder="e-mail de outra conta da casa" value={email} disabled={busy} onChange={(e) => setEmail(e.target.value)} />
-            <button type="button" onClick={() => void transfer()} disabled={busy || !email.trim()} className="shrink-0 rounded-lg border px-2 text-[11px]" style={{ borderColor: "var(--color-line)" }}>
+            <button type="button" onClick={() => void transfer()} disabled={busy || !email.trim()} className="shrink-0 rounded-lg border px-2 text-[14px]" style={{ borderColor: "var(--color-line)" }}>
               transferir posse
             </button>
           </div>
-          {msg && <p className="mt-1 text-[11px]" style={{ color: "var(--color-danger, var(--color-gold))" }}>{msg}</p>}
+          {msg && <p className="mt-1 text-[14px]" style={{ color: "var(--color-danger, var(--color-gold))" }}>{msg}</p>}
         </>
       ) : (
         <p style={dim}>Dono desta instância: {info.owner?.name ?? "desconhecido"}.</p>
@@ -169,30 +169,30 @@ function SettingField({ item, readOnly, onSave, onReset }: { item: Item; readOnl
   if (item.hidden) {
     return (
       <div>
-        <label className="text-[12px] font-medium">{item.label}</label>
-        <p className="text-[11px]" style={dim}>{item.description}</p>
-        <p className="text-[11px] italic" style={dim}>Visível só para o dono desta instância.</p>
+        <label className="text-[15px] font-medium">{item.label}</label>
+        <p className="text-[14px]" style={dim}>{item.description}</p>
+        <p className="text-[14px] italic" style={dim}>Visível só para o dono desta instância.</p>
       </div>
     );
   }
   return (
     <fieldset disabled={readOnly} className="min-w-0">
       <div className="flex items-baseline justify-between gap-2">
-        <label className="text-[12px] font-medium">{item.label}{item.unit ? <span style={dim}> ({item.unit})</span> : null}</label>
+        <label className="text-[15px] font-medium">{item.label}{item.unit ? <span style={dim}> ({item.unit})</span> : null}</label>
         {item.overridden && !readOnly && (
-          <button type="button" onClick={() => onReset(item.key)} className="text-[11px] underline" style={dim} title={`Padrão: ${String(item.default)}`}>
+          <button type="button" onClick={() => onReset(item.key)} className="text-[14px] underline" style={dim} title={`Padrão: ${String(item.default)}`}>
             restaurar padrão
           </button>
         )}
       </div>
-      <p className="mb-1 text-[11px]" style={dim}>{item.description}</p>
+      <p className="mb-1 text-[14px]" style={dim}>{item.description}</p>
       {t.kind === "number" && (
         <Input type="number" value={draft} min={t.min} max={t.max} step={t.step ?? (t.integer ? 1 : "any")} disabled={busy}
           onChange={(e) => setDraft(e.target.value)} onBlur={commitDraft} onKeyDown={(e) => { if (e.key === "Enter") commitDraft(); }} />
       )}
       {t.kind === "text" && t.multiline && (
         <textarea value={draft} maxLength={t.maxLength} minLength={t.minLength} rows={8} disabled={busy}
-          className="w-full rounded-lg border px-2 py-1 text-[12px]" style={{ borderColor: "var(--color-line)", background: "transparent" }}
+          className="w-full rounded-lg border px-2 py-1 text-[15px]" style={{ borderColor: "var(--color-line)", background: "transparent" }}
           onChange={(e) => setDraft(e.target.value)} onBlur={commitDraft} />
       )}
       {t.kind === "text" && !t.multiline && (
@@ -200,27 +200,27 @@ function SettingField({ item, readOnly, onSave, onReset }: { item: Item; readOnl
           onChange={(e) => setDraft(e.target.value)} onBlur={commitDraft} onKeyDown={(e) => { if (e.key === "Enter") commitDraft(); }} />
       )}
       {t.kind === "text" && t.minLength !== undefined && String(draft).trim().length < t.minLength && (
-        <p className="mt-1 text-[11px]" style={{ color: "var(--color-danger)" }}>
+        <p className="mt-1 text-[14px]" style={{ color: "var(--color-danger)" }}>
           Precisa de pelo menos {t.minLength} caracteres, o servidor recusa abaixo disso.
         </p>
       )}
       {t.kind === "list" && (
         <textarea value={draft} disabled={busy} rows={2} placeholder="um por linha"
-          className="w-full rounded-lg border px-2 py-1 text-[12px]" style={{ borderColor: "var(--color-line)", background: "transparent" }}
+          className="w-full rounded-lg border px-2 py-1 text-[15px]" style={{ borderColor: "var(--color-line)", background: "transparent" }}
           onChange={(e) => setDraft(e.target.value)} onBlur={commitDraft} />
       )}
       {t.kind === "select" && (
         <select value={String(item.value)} disabled={busy} onChange={(e) => void commit(e.target.value)}
-          className="w-full rounded-lg border px-2 py-1 text-[12px]" style={{ borderColor: "var(--color-line)", background: "transparent" }}>
+          className="w-full rounded-lg border px-2 py-1 text-[15px]" style={{ borderColor: "var(--color-line)", background: "transparent" }}>
           {t.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       )}
       {t.kind === "boolean" && (
-        <label className="flex items-center gap-2 text-[12px]">
+        <label className="flex items-center gap-2 text-[15px]">
           <input type="checkbox" checked={Boolean(item.value)} disabled={busy} onChange={(e) => void commit(e.target.checked)} /> ativo
         </label>
       )}
-      {msg && <p className="mt-1 text-[11px]" style={{ color: msg === "Salvo" ? "var(--color-gold)" : "var(--color-danger, var(--color-gold))" }}>{msg}</p>}
+      {msg && <p className="mt-1 text-[14px]" style={{ color: msg === "Salvo" ? "var(--color-gold)" : "var(--color-danger, var(--color-gold))" }}>{msg}</p>}
     </fieldset>
   );
 }

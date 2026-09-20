@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Icone } from "@/components/presenca/icones";
 import { Card, PanelTitle, Input, Button, ErrorRetry } from "@/components/ui";
 import { identityLimits, LIMITES_PADRAO, type IdentityLimits } from "@/lib/identity-limits";
 import { enfileirar, isJobTerminal, type JobView } from "@/lib/jobs";
@@ -211,15 +212,15 @@ export function HomePeoplePanel() {
   return (
     <Card>
       <PanelTitle className="mb-2">Pessoas da casa</PanelTitle>
-      <p className="mb-3 text-[12px]" style={dim}>
+      <p className="mb-3 text-[15px]" style={dim}>
         Quem mora ou visita, em quais cômodos poderá agir e se consentiu com biometria de voz e
         rosto. Biometria fica só nos computadores desta casa.
       </p>
       <PresenceBlock presenca={presenca} onRefresh={refresh} />
       {!people ? (
-        <p className="text-[12px]" style={dim}>Carregando…</p>
+        <p className="text-[15px]" style={dim}>Carregando…</p>
       ) : (
-        <div className="flex flex-col gap-2 text-[12px]">
+        <div className="flex flex-col gap-2 text-[15px]">
           {people.map((p) => (
             <PersonCard
               key={p.id}
@@ -277,17 +278,17 @@ function PresenceBlock({ presenca, onRefresh }: { presenca: PresenceRow[] | null
   return (
     <div className="mb-3 rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
       <div className="mb-1 flex items-center justify-between">
-        <p className="text-[11px] font-medium">Quem está em casa</p>
-        <button onClick={onRefresh} className="text-[11px] underline" style={dim}>atualizar</button>
+        <p className="text-[14px] font-medium">Quem está em casa</p>
+        <button onClick={onRefresh} className="text-[14px] underline" style={dim}>atualizar</button>
       </div>
       {!presenca ? (
-        <p className="text-[11px]" style={dim}>Carregando…</p>
+        <p className="text-[14px]" style={dim}>Carregando…</p>
       ) : presenca.length === 0 ? (
-        <p className="text-[11px]" style={dim}>
+        <p className="text-[14px]" style={dim}>
           A presença aparece aqui quando uma câmera com identificação ligada reconhecer alguém.
         </p>
       ) : (
-        <div className="flex flex-col gap-0.5 text-[11px]">
+        <div className="flex flex-col gap-0.5 text-[14px]">
           {presenca.map((p) => (
             <div key={p.personId} className="flex items-center justify-between gap-2">
               <span>
@@ -321,11 +322,11 @@ function PersonCard({ person, people, rooms, term, voiceInfo, faceInfo, expanded
         <button onClick={onToggle} className="min-w-0 flex-1 text-left">
           <strong>{p.name}</strong> <span style={dim}>· {ROLE_LABEL[p.role]} · {RELATION_LABEL[p.relation]}</span>
           {p.isMinor && <span className="ml-1 rounded border px-1" style={{ borderColor: "var(--color-gold)", color: "var(--color-gold)", fontSize: "10px" }}>menor</span>}
-          <div className="text-[11px]" style={dim}>
+          <div className="text-[14px]" style={dim}>
             voz: {p.consentimento.voz ? <span style={gold}>consentido</span> : "sem consentimento"} · rosto: {p.consentimento.rosto ? <span style={gold}>consentido</span> : "sem consentimento"}
           </div>
         </button>
-        <button onClick={onRemove} title="Remover pessoa" style={danger}>×</button>
+        <button className="icon-button" onClick={onRemove} aria-label="Remover pessoa" title="Remover pessoa"><Icone nome="trash" /></button>
       </div>
 
       {expanded && (
@@ -345,12 +346,12 @@ function PersonCard({ person, people, rooms, term, voiceInfo, faceInfo, expanded
               }}
             />
           ) : (
-            <button onClick={() => setEditing(true)} className="self-start text-[11px] underline" style={dim}>editar cadastro</button>
+            <button onClick={() => setEditing(true)} className="self-start text-[14px] underline" style={dim}>editar cadastro</button>
           )}
 
           {p.role !== "dono" && (
             <div>
-              <p className="mb-1 text-[11px] font-medium">Acesso por cômodo</p>
+              <p className="mb-1 text-[14px] font-medium">Acesso por cômodo</p>
               <div className="flex flex-col gap-1">
                 {rooms.map((r) => {
                   const a = p.access.find((x) => x.roomId === r.id);
@@ -372,8 +373,8 @@ function PersonCard({ person, people, rooms, term, voiceInfo, faceInfo, expanded
 
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <p className="text-[11px] font-medium">Consentimento biométrico</p>
-              {!consenting && <button onClick={() => setConsenting(true)} className="text-[11px] underline" style={gold}>registrar consentimento</button>}
+              <p className="text-[14px] font-medium">Consentimento biométrico</p>
+              {!consenting && <button onClick={() => setConsenting(true)} className="text-[14px] underline" style={gold}>registrar consentimento</button>}
             </div>
             {consenting && (
               <ConsentForm
@@ -394,7 +395,7 @@ function PersonCard({ person, people, rooms, term, voiceInfo, faceInfo, expanded
             {p.consentimentos.length > 0 ? (
               <div className="mt-1 flex flex-col gap-1">
                 {p.consentimentos.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between text-[11px]" style={c.revokedAt ? dim : undefined}>
+                  <div key={c.id} className="flex items-center justify-between text-[14px]" style={c.revokedAt ? dim : undefined}>
                     <span>
                       {c.kinds.map((k) => KIND_LABEL[k as BiometricKind] ?? k).join(", ")} · {c.grantedBy === "responsavel" ? `responsável${c.guardianName ? ` (${c.guardianName})` : ""}` : "própria pessoa"} · {fmtDate(c.grantedAt)}
                       {c.revokedAt ? ` · revogado em ${fmtDate(c.revokedAt)}` : ""}
@@ -417,7 +418,7 @@ function PersonCard({ person, people, rooms, term, voiceInfo, faceInfo, expanded
                 ))}
               </div>
             ) : (
-              !consenting && <p className="text-[11px]" style={dim}>Nenhum consentimento registrado ainda.</p>
+              !consenting && <p className="text-[14px]" style={dim}>Nenhum consentimento registrado ainda.</p>
             )}
           </div>
 
@@ -426,14 +427,14 @@ function PersonCard({ person, people, rooms, term, voiceInfo, faceInfo, expanded
           <FaceSection person={p} faceInfo={faceInfo} onEnrolled={onSaved} />
 
           <div>
-            <p className="mb-1 text-[11px] font-medium">Quem pode perguntar sobre {p.name}</p>
-            <p className="mb-1 text-[11px]" style={dim}>O dono sempre pode. Cada um pode perguntar sobre si mesmo. O responsável pode sobre quem ele cuida.</p>
+            <p className="mb-1 text-[14px] font-medium">Quem pode perguntar sobre {p.name}</p>
+            <p className="mb-1 text-[14px]" style={dim}>O dono sempre pode. Cada um pode perguntar sobre si mesmo. O responsável pode sobre quem ele cuida.</p>
             <div className="flex flex-col gap-1">
               {people.filter((v) => v.id !== p.id).map((viewer) => {
                 const grant = viewer.podeVer.find((g) => g.subjectPersonId === p.id);
                 const current = grant ? grant.allowed : null;
                 return (
-                  <div key={viewer.id} className="flex items-center justify-between text-[11px]">
+                  <div key={viewer.id} className="flex items-center justify-between text-[14px]">
                     <span>{viewer.name}</span>
                     <select
                       value={current === null ? "padrao" : current ? "pode" : "nao_pode"}
@@ -456,7 +457,7 @@ function PersonCard({ person, people, rooms, term, voiceInfo, faceInfo, expanded
           </div>
 
           <div>
-            <button onClick={() => setAuditOpen((v) => !v)} className="text-[11px] underline" style={dim}>
+            <button onClick={() => setAuditOpen((v) => !v)} className="text-[14px] underline" style={dim}>
               {auditOpen ? "▾" : "▸"} trilha de identidade
             </button>
             {auditOpen && <AuditTrail personId={p.id} />}
@@ -521,17 +522,17 @@ function VoiceSection({ person, voiceInfo, onEnrolled }: { person: PersonRow; vo
 
   return (
     <div>
-      <p className="mb-1 text-[11px] font-medium">Voz</p>
-      <p className="mb-1 text-[11px]" style={dim}>
+      <p className="mb-1 text-[14px] font-medium">Voz</p>
+      <p className="mb-1 text-[14px]" style={dim}>
         {modelo ? `${amostras} amostra${amostras === 1 ? "" : "s"} do modelo atual` : "Sem informação do modelo"}
         {" · "}serviço local {percepcaoOk ? <span style={gold}>no ar</span> : <span style={danger}>fora do ar</span>}
       </p>
       {!consentiu ? (
-        <p className="text-[11px]" style={dim}>Registre o consentimento de voz de {person.name} para poder gravar amostras.</p>
+        <p className="text-[14px]" style={dim}>Registre o consentimento de voz de {person.name} para poder gravar amostras.</p>
       ) : recording ? (
         <div className="flex flex-col gap-1">
-          <p className="text-[11px]" style={gold}>gravando… {remaining}s restantes</p>
-          <p className="max-h-16 overflow-y-auto text-[11px]" style={dim}>Leia em voz alta: “{LEITURA_SUGERIDA}”</p>
+          <p className="text-[14px]" style={gold}>gravando… {remaining}s restantes</p>
+          <p className="max-h-16 overflow-y-auto text-[14px]" style={dim}>Leia em voz alta: “{LEITURA_SUGERIDA}”</p>
           <Button size="sm" variant="outline" onClick={stop}>parar agora</Button>
         </div>
       ) : (
@@ -539,11 +540,11 @@ function VoiceSection({ person, voiceInfo, onEnrolled }: { person: PersonRow; vo
           <Button size="sm" variant="outline" disabled={busy || !percepcaoOk} onClick={() => void record()}>
             {busy ? "enviando…" : `Gravar amostra de voz (${limites.cadastroVozSegundos} s)`}
           </Button>
-          <p className="text-[10px]" style={dim}>{DICAS_VOZ}</p>
+          <p className="text-[13px]" style={dim}>{DICAS_VOZ}</p>
         </div>
       )}
-      {msg && <p className="mt-1 text-[11px]" style={danger}>{msg}</p>}
-      {ok && <p className="mt-1 text-[11px]" style={gold}>{ok}</p>}
+      {msg && <p className="mt-1 text-[14px]" style={danger}>{msg}</p>}
+      {ok && <p className="mt-1 text-[14px]" style={gold}>{ok}</p>}
     </div>
   );
 }
@@ -607,9 +608,9 @@ function VoiceTools({ voiceInfo, onRecalculated }: { voiceInfo: VoiceInfo | null
 
   return (
     <div className="flex flex-col gap-1 rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
-      <p className="text-[11px] font-medium">Reconhecimento por voz</p>
+      <p className="text-[14px] font-medium">Reconhecimento por voz</p>
       {recording ? (
-        <div className="flex items-center gap-2 text-[11px]" style={gold}>
+        <div className="flex items-center gap-2 text-[14px]" style={gold}>
           <span>gravando… {remaining}s</span>
           <button onClick={stop} className="underline" style={dim}>parar agora</button>
         </div>
@@ -618,17 +619,17 @@ function VoiceTools({ voiceInfo, onRecalculated }: { voiceInfo: VoiceInfo | null
           {busy ? "identificando…" : `Testar reconhecimento (${limites.testeVozSegundos} s)`}
         </Button>
       )}
-      {result && <p className="text-[11px]" style={dim}>{result}</p>}
+      {result && <p className="text-[14px]" style={dim}>{result}</p>}
       <button
         onClick={() => void recalcular()}
         disabled={recalcJob !== null && !isJobTerminal(recalcJob.status)}
-        className="mt-1 self-start text-[11px] underline disabled:opacity-50"
+        className="mt-1 self-start text-[14px] underline disabled:opacity-50"
         style={dim}
       >
         Recalcular assinaturas
       </button>
       {recalcJob && <JobProgress job={recalcJob} onChange={onRecalcChange} compact />}
-      {recalcMsg && <p className="text-[11px]" style={dim}>{recalcMsg}</p>}
+      {recalcMsg && <p className="text-[14px]" style={dim}>{recalcMsg}</p>}
     </div>
   );
 }
@@ -704,7 +705,7 @@ function FacePhotoCapture({ onCaptured, onCancel }: { onCaptured: (blob: Blob) =
 
   return (
     <div className="flex flex-col gap-1 rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
-      {err && <p className="text-[11px]" style={danger}>{err}</p>}
+      {err && <p className="text-[14px]" style={danger}>{err}</p>}
       {preview ? (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -762,13 +763,13 @@ function FaceSection({ person, faceInfo, onEnrolled }: { person: PersonRow; face
 
   return (
     <div>
-      <p className="mb-1 text-[11px] font-medium">Rosto</p>
-      <p className="mb-1 text-[11px]" style={dim}>
+      <p className="mb-1 text-[14px] font-medium">Rosto</p>
+      <p className="mb-1 text-[14px]" style={dim}>
         {backend ? `${fotos} foto${fotos === 1 ? "" : "s"} do modelo atual` : "Sem informação do modelo"}
         {" · "}serviço local {percepcaoOk ? <span style={gold}>no ar</span> : <span style={danger}>fora do ar</span>}
       </p>
       {!consentiu ? (
-        <p className="text-[11px]" style={dim}>Registre o consentimento de rosto de {person.name} para poder cadastrar fotos.</p>
+        <p className="text-[14px]" style={dim}>Registre o consentimento de rosto de {person.name} para poder cadastrar fotos.</p>
       ) : showCamera ? (
         <FacePhotoCapture
           onCaptured={(blob) => { setShowCamera(false); void enviar(blob, "foto.jpg"); }}
@@ -793,11 +794,11 @@ function FaceSection({ person, faceInfo, onEnrolled }: { person: PersonRow; face
           <Button size="sm" variant="outline" disabled={busy || !percepcaoOk} onClick={() => setShowCamera(true)}>
             Tirar foto pela webcam
           </Button>
-          <p className="w-full text-[10px]" style={dim}>{DICAS_ROSTO}</p>
+          <p className="w-full text-[13px]" style={dim}>{DICAS_ROSTO}</p>
         </div>
       )}
-      {msg && <p className="mt-1 text-[11px]" style={danger}>{msg}</p>}
-      {ok && <p className="mt-1 text-[11px]" style={gold}>{ok}</p>}
+      {msg && <p className="mt-1 text-[14px]" style={danger}>{msg}</p>}
+      {ok && <p className="mt-1 text-[14px]" style={gold}>{ok}</p>}
     </div>
   );
 }
@@ -855,7 +856,7 @@ function FaceTools({ faceInfo, onRecalculated }: { faceInfo: FaceInfo | null; on
 
   return (
     <div className="flex flex-col gap-1 rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
-      <p className="text-[11px] font-medium">Reconhecimento por rosto</p>
+      <p className="text-[14px] font-medium">Reconhecimento por rosto</p>
       {showCamera ? (
         <FacePhotoCapture
           onCaptured={(blob) => { setShowCamera(false); void identificar(blob, "teste.jpg"); }}
@@ -882,17 +883,17 @@ function FaceTools({ faceInfo, onRecalculated }: { faceInfo: FaceInfo | null; on
           </Button>
         </div>
       )}
-      {result && <p className="text-[11px]" style={dim}>{result}</p>}
+      {result && <p className="text-[14px]" style={dim}>{result}</p>}
       <button
         onClick={() => void recalcular()}
         disabled={recalcJob !== null && !isJobTerminal(recalcJob.status)}
-        className="mt-1 self-start text-[11px] underline disabled:opacity-50"
+        className="mt-1 self-start text-[14px] underline disabled:opacity-50"
         style={dim}
       >
         Recalcular assinaturas de rosto
       </button>
       {recalcJob && <JobProgress job={recalcJob} onChange={onRecalcChange} compact />}
-      {recalcMsg && <p className="text-[11px]" style={dim}>{recalcMsg}</p>}
+      {recalcMsg && <p className="text-[14px]" style={dim}>{recalcMsg}</p>}
     </div>
   );
 }
@@ -910,11 +911,11 @@ function AuditTrail({ personId }: { personId: string }) {
     return () => { alive = false; };
   }, [personId]);
 
-  if (err) return <p className="mt-1 text-[11px]" style={danger}>{err}</p>;
-  if (!rows) return <p className="mt-1 text-[11px]" style={dim}>Carregando…</p>;
-  if (!rows.length) return <p className="mt-1 text-[11px]" style={dim}>Sem eventos ainda.</p>;
+  if (err) return <p className="mt-1 text-[14px]" style={danger}>{err}</p>;
+  if (!rows) return <p className="mt-1 text-[14px]" style={dim}>Carregando…</p>;
+  if (!rows.length) return <p className="mt-1 text-[14px]" style={dim}>Sem eventos ainda.</p>;
   return (
-    <div className="mt-1 flex flex-col gap-0.5 text-[11px]" style={dim}>
+    <div className="mt-1 flex flex-col gap-0.5 text-[14px]" style={dim}>
       {rows.map((a) => (
         <div key={a.id}>
           {fmtDate(a.createdAt)} · {a.action}{a.kind ? ` (${a.kind})` : ""}{a.outcome ? ` · ${a.outcome}` : ""}{a.source ? ` · ${a.source}` : ""}
@@ -962,7 +963,7 @@ function PersonForm({ people, initial, onSubmit, onCancel }: {
   }
 
   return (
-    <div className="flex flex-col gap-2 text-[12px]">
+    <div className="flex flex-col gap-2 text-[15px]">
       <Input placeholder="nome" value={name} disabled={busy} onChange={(e) => setName(e.target.value)} />
       <Input placeholder="apelidos, separados por vírgula" value={aliases} disabled={busy} onChange={(e) => setAliases(e.target.value)} />
       <div className="flex gap-2">
@@ -983,7 +984,7 @@ function PersonForm({ people, initial, onSubmit, onCancel }: {
         </select>
       )}
       <Input type="email" placeholder="e-mail da conta de login (opcional)" value={accountEmail} disabled={busy} onChange={(e) => setAccountEmail(e.target.value)} />
-      {msg && <p className="text-[11px]" style={danger}>{msg}</p>}
+      {msg && <p className="text-[14px]" style={danger}>{msg}</p>}
       <div className="flex gap-2">
         <Button size="sm" disabled={busy} onClick={() => void submit()}>salvar</Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={onCancel}>cancelar</Button>
@@ -1025,27 +1026,27 @@ function ConsentForm({ person, people, term, onSubmit, onCancel }: {
   }
 
   return (
-    <div className="mb-2 flex flex-col gap-2 rounded-lg border p-2 text-[12px]" style={{ borderColor: "var(--color-line)" }}>
+    <div className="mb-2 flex flex-col gap-2 rounded-lg border p-2 text-[15px]" style={{ borderColor: "var(--color-line)" }}>
       {!term ? (
         <p style={dim}>Termo de consentimento indisponível no momento.</p>
       ) : (
         <>
-          <p className="text-[11px] font-medium">Termo de consentimento (versão {term.version})</p>
-          <div className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded border p-2 text-[11px]" style={{ borderColor: "var(--color-line)", ...dim }}>{term.text}</div>
+          <p className="text-[14px] font-medium">Termo de consentimento (versão {term.version})</p>
+          <div className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded border p-2 text-[14px]" style={{ borderColor: "var(--color-line)", ...dim }}>{term.text}</div>
           <label className="flex items-center gap-2"><input type="checkbox" checked={voz} disabled={busy} onChange={(e) => setVoz(e.target.checked)} /> voz</label>
           <label className="flex items-center gap-2"><input type="checkbox" checked={rosto} disabled={busy} onChange={(e) => setRosto(e.target.checked)} /> rosto</label>
           {person.isMinor ? (
             <>
-              <p className="text-[11px]" style={dim}>{person.name} é menor: o consentimento só vale se vier do responsável.</p>
+              <p className="text-[14px]" style={dim}>{person.name} é menor: o consentimento só vale se vier do responsável.</p>
               <select value={guardianPersonId} disabled={busy} onChange={(e) => setGuardianPersonId(e.target.value)} className="rounded-lg border px-2 py-1" style={{ borderColor: "var(--color-line)", background: "transparent" }}>
                 <option value="">responsável (escolha)</option>
                 {guardians.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
             </>
           ) : (
-            <p className="text-[11px]" style={dim}>{person.name} consente por si mesma.</p>
+            <p className="text-[14px]" style={dim}>{person.name} consente por si mesma.</p>
           )}
-          {msg && <p className="text-[11px]" style={danger}>{msg}</p>}
+          {msg && <p className="text-[14px]" style={danger}>{msg}</p>}
           <div className="flex gap-2">
             <Button size="sm" disabled={busy} onClick={() => void submit()}>aceitar e registrar</Button>
             <Button size="sm" variant="outline" disabled={busy} onClick={onCancel}>cancelar</Button>

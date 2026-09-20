@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAtualizacaoPeriodica } from "@/lib/use-visible";
-import { Card } from "@/components/ui";
+import { Icone } from "@/components/presenca/icones";
 
 interface Action { id: string; kind: string; summary: string; createdAt: string }
 
@@ -35,24 +35,28 @@ export function ActionsPanel() {
   if (actions.length === 0) return null; // só aparece quando há algo a confirmar
 
   return (
-    <Card style={{ borderColor: "color-mix(in oklab, var(--color-gold) 50%, var(--color-line))" }}>
-      <h3 className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-gold)" }}>Ações a confirmar</h3>
-      <div className="mt-2 flex flex-col gap-2">
-        {actions.map((a) => (
-          <div key={a.id} className="rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
-            <div className="text-[11px]" style={{ color: "var(--color-ink)" }}>{a.summary}</div>
-            <div className="mt-1.5 flex gap-2">
-              <button onClick={() => approve(a.id)} disabled={busy === a.id} className="rounded px-2 py-0.5 text-[11px] font-semibold disabled:opacity-50"
-                style={{ background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" }}>
-                {busy === a.id ? "…" : "✓ confirmar"}
-              </button>
-              <button onClick={() => reject(a.id)} className="rounded border px-2 py-0.5 text-[11px]" style={{ borderColor: "var(--color-line)", color: "var(--color-danger)" }}>
-                ✕ cancelar
-              </button>
-            </div>
+    <article className="panel aprovacoes">
+      <span className="eyebrow">ESPERANDO SUA DECISÃO</span>
+      <h3>
+        {actions.length === 1 ? "Uma ação quer sua autorização." : `${actions.length} ações querem sua autorização.`}
+      </h3>
+      <p>Nada acontece antes de você dizer sim. Confira o que está escrito antes de aprovar.</p>
+
+      {actions.map((a) => (
+        <div key={a.id} className="aprovacao">
+          <div className="approval-preview">{a.summary}</div>
+          <div className="form-actions">
+            <button className="button secondary compacto" onClick={() => reject(a.id)}>
+              <Icone nome="close" />
+              Agora não
+            </button>
+            <button className="button primary compacto" onClick={() => approve(a.id)} disabled={busy === a.id}>
+              <Icone nome="check" />
+              {busy === a.id ? "Executando…" : "Aprovar"}
+            </button>
           </div>
-        ))}
-      </div>
-    </Card>
+        </div>
+      ))}
+    </article>
   );
 }

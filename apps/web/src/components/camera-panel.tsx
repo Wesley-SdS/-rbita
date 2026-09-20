@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icone } from "@/components/presenca/icones";
 import { Card, PanelTitle, Input, Button, ErrorRetry } from "@/components/ui";
 
 /**
@@ -36,7 +37,7 @@ export function CameraPanel() {
   return (
     <Card>
       <PanelTitle className="mb-2">Câmeras</PanelTitle>
-      <div className="mb-3 flex gap-1 text-[11px]">
+      <div className="mb-3 flex gap-1 text-[14px]">
         {([["cameras", "Câmeras"], ["eventos", "Eventos"]] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className="rounded-full border px-2 py-1"
             style={{ borderColor: tab === id ? "var(--color-gold)" : "var(--color-line)", color: tab === id ? "var(--color-gold)" : "var(--color-ink-dim)" }}>
@@ -124,17 +125,17 @@ Precisão: contraluz, rosto de lado e gente longe da câmera costumam sair como 
   }
 
   if (err) return <ErrorRetry message={err} onRetry={() => setReload((n) => n + 1)} />;
-  if (!cams) return <p className="text-[12px]" style={dim}>Carregando…</p>;
+  if (!cams) return <p className="text-[15px]" style={dim}>Carregando…</p>;
 
   return (
-    <div className="flex flex-col gap-2 text-[12px]">
+    <div className="flex flex-col gap-2 text-[15px]">
       <p style={dim}>Sem lista fixa: cadastre cada câmera e aponte o Frigate (ou script equivalente) para o webhook com o token gerado.</p>
       {novoToken && (
         <div className="rounded-lg border p-2" style={{ borderColor: "var(--color-gold)" }}>
           <p>Token de <b>{novoToken.nome}</b> (copie agora, não aparece de novo):</p>
-          <code className="block break-all text-[10px]" style={dim}>{novoToken.token}</code>
-          <p className="mt-1 text-[10px]" style={dim}>POST /api/cameras/ingest com {"{ token, label, zone?, score?, snapshot? }"}</p>
-          <button onClick={() => setNovoToken(null)} className="mt-1 text-[10px]" style={{ color: "var(--color-gold)" }}>fechar</button>
+          <code className="block break-all text-[13px]" style={dim}>{novoToken.token}</code>
+          <p className="mt-1 text-[13px]" style={dim}>POST /api/cameras/ingest com {"{ token, label, zone?, score?, snapshot? }"}</p>
+          <button onClick={() => setNovoToken(null)} className="mt-1 text-[13px]" style={{ color: "var(--color-gold)" }}>fechar</button>
         </div>
       )}
       {cams.map((c) => (
@@ -147,24 +148,24 @@ Precisão: contraluz, rosto de lado e gente longe da câmera costumam sair como 
             </div>
             <div className="flex gap-2">
               <button onClick={() => toggle(c)} style={{ color: "var(--color-gold)" }}>{c.enabled ? "desligar" : "ligar"}</button>
-              <button onClick={() => remove(c)} style={{ color: "var(--color-danger)" }}>×</button>
+              <button className="icon-button" onClick={() => remove(c)} aria-label="Remover câmera" title="Remover"><Icone nome="trash" /></button>
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <label className="flex items-center gap-2 text-[11px]" style={dim}>
+            <label className="flex items-center gap-2 text-[14px]" style={dim}>
               <input type="checkbox" checked={c.identifyFaces} onChange={() => void toggleIdentify(c)} />
               Identificar quem aparece
             </label>
-            <label className="flex items-center gap-2 text-[11px]" style={dim}>
+            <label className="flex items-center gap-2 text-[14px]" style={dim}>
               <input type="checkbox" checked={c.detectGestures} onChange={() => void toggleGestures(c)} />
               Reconhecer gestos
             </label>
           </div>
-          <p className="text-[10px]" style={dim}>
+          <p className="text-[13px]" style={dim}>
             Liga o reconhecimento de rosto nesta câmera e atualiza quem está em qual cômodo. Com
             isso ligado, a narração da cena usa só modelo local, nunca a nuvem.
           </p>
-          <p className="text-[10px]" style={dim}>
+          <p className="text-[13px]" style={dim}>
             Reconhece gestos como mão levantada nesta câmera. O que cada gesto faz é você que
             decide, criando uma regra sobre o evento identity.gesture.
           </p>
@@ -178,7 +179,7 @@ Precisão: contraluz, rosto de lado e gente longe da câmera costumam sair como 
         </select>
         <Button onClick={add} size="sm">+ câmera</Button>
       </div>
-      <p className="text-[10px]" style={dim}>
+      <p className="text-[13px]" style={dim}>
         Os objetos que a Órbita lembra onde ficaram (tipo "onde deixei a chave") se configuram em
         Ajustes, no grupo Visão: objetos e gestos.
       </p>
@@ -216,11 +217,11 @@ function EventsTab() {
   }
 
   if (err) return <ErrorRetry message={err} onRetry={() => setReload((n) => n + 1)} />;
-  if (!events) return <p className="text-[12px]" style={dim}>Carregando…</p>;
-  if (!events.length) return <p className="text-[12px]" style={dim}>Nenhum evento recebido ainda.</p>;
+  if (!events) return <p className="text-[15px]" style={dim}>Carregando…</p>;
+  if (!events.length) return <p className="text-[15px]" style={dim}>Nenhum evento recebido ainda.</p>;
 
   return (
-    <div className="flex max-h-80 flex-col gap-1 overflow-y-auto text-[12px]">
+    <div className="flex max-h-80 flex-col gap-1 overflow-y-auto text-[15px]">
       {events.map((e) => (
         <div key={e.id} className="rounded-lg border px-2 py-1" style={{ borderColor: "var(--color-line)" }}>
           <div className="flex items-center justify-between">

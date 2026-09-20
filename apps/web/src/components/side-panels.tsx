@@ -23,7 +23,7 @@ export function PushToggle() {
     <Card>
       <PanelTitle className="mb-2">Notificações push</PanelTitle>
       {status === "denied" ? (
-        <p className="text-[12px]" style={{ color: "var(--color-ink-dim)" }}>Permissão bloqueada no navegador. Libere nas configurações do site para receber avisos.</p>
+        <p className="text-[15px]" style={{ color: "var(--color-ink-dim)" }}>Permissão bloqueada no navegador. Libere nas configurações do site para receber avisos.</p>
       ) : (
         <div className="flex items-center gap-2">
           <button onClick={toggle} disabled={busy || status === "loading"}
@@ -76,14 +76,14 @@ export function PersonaPanel() {
       {err && !p ? (
         <ErrorRetry message="Falha ao carregar a persona." onRetry={() => setReload((x) => x + 1)} />
       ) : !p ? (
-        <div className="py-2 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>—</div>
+        <div className="py-2 text-[16px]" style={{ color: "var(--color-ink-dim)" }}>—</div>
       ) : (
         <div className="flex flex-col gap-2">
-          <label className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>Nome da assistente</label>
+          <label className="text-[14px]" style={{ color: "var(--color-ink-dim)" }}>Nome da assistente</label>
           <Input size="md" value={p.assistantName} onChange={(e) => setP({ ...p, assistantName: e.target.value })} maxLength={40} placeholder="Órbita" />
-          <label className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>Como te chamar</label>
+          <label className="text-[14px]" style={{ color: "var(--color-ink-dim)" }}>Como te chamar</label>
           <Input size="md" value={p.userName ?? ""} onChange={(e) => setP({ ...p, userName: e.target.value })} maxLength={40} placeholder="opcional" />
-          <label className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>Tom & preferências</label>
+          <label className="text-[14px]" style={{ color: "var(--color-ink-dim)" }}>Tom & preferências</label>
           <Textarea value={p.persona ?? ""} onChange={(e) => setP({ ...p, persona: e.target.value })} maxLength={2000} rows={3} className="resize-y"
             placeholder="Ex.: seja direto e objetivo; me trate por você; evite jargão." />
           <Button variant="primary" size="lg" onClick={save} disabled={saving} className="mt-1">
@@ -102,7 +102,10 @@ type Usage = {
 };
 
 /** Economia acumulada vs. nuvem — dados reais persistidos (/api/usage). */
-export function EconomyPanel({ refreshKey }: { refreshKey: number }) {
+/* `refreshKey` era o contador de requisições do chat, que ficava ao lado deste
+   painel. Fora do chat não existe esse sinal, e o painel já tem o próprio
+   recarregar, então virou opcional em vez de obrigar um zero de fachada. */
+export function EconomyPanel({ refreshKey = 0 }: { refreshKey?: number }) {
   const [u, setU] = useState<Usage | null>(null);
   const [err, setErr] = useState(false);
   const [reload, setReload] = useState(0);
@@ -120,7 +123,7 @@ export function EconomyPanel({ refreshKey }: { refreshKey: number }) {
       {err && !u ? (
         <ErrorRetry message="Falha ao carregar a economia." onRetry={() => setReload((x) => x + 1)} />
       ) : !u ? (
-        <div className="py-2 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>—</div>
+        <div className="py-2 text-[16px]" style={{ color: "var(--color-ink-dim)" }}>—</div>
       ) : (
         <>
           <Stat label="Respostas locais" value={`${u.localRequests}/${u.requests} (${pctLocal}%)`} />
@@ -129,11 +132,11 @@ export function EconomyPanel({ refreshKey }: { refreshKey: number }) {
           <Stat label="Custo da energia (est.)" value={money(u.energyCostBRL)} />
           {u.cloudSpentBRL > 0 && <Stat label="Gasto em nuvem paga" value={money(u.cloudSpentBRL)} accent />}
           <div className="mt-3 rounded-xl border p-3" style={{ borderColor: "color-mix(in oklab, var(--color-gold) 30%, transparent)", background: "color-mix(in oklab, var(--color-gold) 12%, transparent)" }}>
-            <div className="font-mono text-[10px] uppercase" style={{ color: "var(--color-gold)" }}>você economizou</div>
+            <div className="eyebrow">VOCÊ ECONOMIZOU</div>
             <div className="mt-1 text-xl font-bold">{money(u.economiaBRL)} <span className="text-xs" style={{ color: "var(--color-ink-dim)" }}>vs. pagar por uso</span></div>
-            <div className="mt-1 text-[11px]" style={{ color: "var(--color-ink-dim)" }}>líquido de energia: <b>{money(u.liquidoBRL)}</b></div>
+            <div className="mt-1 text-[14px]" style={{ color: "var(--color-ink-dim)" }}>líquido de energia: <b>{money(u.liquidoBRL)}</b></div>
           </div>
-          <p className="mt-2 text-[10px] leading-snug" style={{ color: "var(--color-ink-dim)" }}>
+          <p className="mt-2 text-[13px] leading-snug" style={{ color: "var(--color-ink-dim)" }}>
             Estimativa: energia a {u.assumptions.LOCAL_WATTS}W · {money(u.assumptions.KWH_PRICE_BRL)}/kWh (sem GPU dedicada, valor configurável). Economia = preço de referência da nuvem para respostas locais/Max.
           </p>
         </>

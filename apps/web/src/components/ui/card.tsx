@@ -1,26 +1,24 @@
 import type { CSSProperties, ReactNode } from "react";
 
 /**
- * Cartão padrão dos painéis: `rounded-2xl border` sobre a superfície. Substitui
- * o `<div className="rounded-2xl border p-4" style={{borderColor,background}}>`
- * repetido em ~14 painéis. `style` é mesclado (permite gradientes/overrides).
+ * Cartão dos painéis, na linguagem do Presença: `.panel` traz superfície,
+ * contorno, raio e respiro de uma vez.
+ *
+ * `padding` continua existindo porque alguns painéis pedem colagem nas bordas
+ * (lista que sangra, vídeo, gráfico). Quando vem vazio, vale o respiro do
+ * `.panel`; quando vem preenchido, a utilitária do Tailwind vence por vir depois.
  */
-export function Card({ children, className = "", padding = "p-4", style }: {
+export function Card({ children, className = "", padding = "", style }: {
   children: ReactNode; className?: string; padding?: string; style?: CSSProperties;
 }) {
   return (
-    <div className={`rounded-2xl border ${padding} ${className}`}
-      style={{ borderColor: "var(--color-line)", background: "var(--color-surface)", ...style }}>
+    <div className={`panel ${padding} ${className}`.trim()} style={style}>
       {children}
     </div>
   );
 }
 
-/** Título de painel (font-mono, caixa alta, tracking largo, tom apagado). */
+/** Rótulo de painel: caixa alta, miúdo e espaçado, como no protótipo. */
 export function PanelTitle({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <h3 className={`font-mono text-[10px] uppercase tracking-widest ${className}`} style={{ color: "var(--color-ink-dim)" }}>
-      {children}
-    </h3>
-  );
+  return <div className={`panel-label ${className}`.trim()}>{children}</div>;
 }

@@ -1,9 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@orbita/db", () => ({ db: {} }));
 
+// `lerPdf` carrega o unpdf por import dinâmico; aqui ele é trocado por um duplo
+// que devolve a MESMA forma da biblioteca real ({ totalPages, items }).
+const extractTextItems = vi.fn();
+vi.mock("unpdf", () => ({
+  getDocumentProxy: vi.fn(async () => ({ mock: true })),
+  extractText: vi.fn(async () => ({ text: ["página um", "página dois"], totalPages: 2 })),
+  extractTextItems: (...args: unknown[]) => extractTextItems(...args),
+}));
+
 import { confiancaDaPagina } from "./tesseract";
-import { temCamadaDeTexto } from "./pdf";
+import { lerPdf, temCamadaDeTexto } from "./pdf";
 import { precisaDeVisao } from "./index";
 import { ondeLer } from "./visao";
 import { agruparEmLinhas, detectarTabelas, paraMarkdown, textoComTabelas } from "./tabela";
@@ -131,5 +140,65 @@ describe("tabela em PDF nativo", () => {
 
   it("sem posições, devolve o texto original sem inventar tabela", () => {
     expect(textoComTabelas([], "texto qualquer", { minLinhas: 3, minColunas: 3 })).toEqual({ texto: "texto qualquer", tabelas: 0 });
+  });
+});
+
+describe("lerPdf: itens posicionados", () => {
+  const item = (str: string, x: number, y: number) => ({
+    str,
+    transform: [1, 0, 0, 1, x, y],
+    width: 40,
+    height: 10,
+    hasEOL: false,
+  });
+
+  // Corpo em BLOCO de propósito: `mockReset()` devolve o próprio mock, e uma
+  // arrow sem chaves retornaria essa função. O vitest trata retorno de função
+  // no `beforeEach` como teardown, então ele chamaria o spy depois de cada
+  // teste — e o spy que lança derrubaria o teste que justamente espera o erro.
+  beforeEach(() => {
+    extractTextItems.mockReset();
+  });
+
+  // Regressão: o código lia `extractTextItems(pdf)` como se fosse o array de
+  // páginas, mas a biblioteca devolve { totalPages, items }. O `forEach` no
+  // objeto estourava DENTRO do try, o catch engolia, e todo PDF nativo saía com
+  // `itens: []` — a detecção de tabela nunca rodava e ninguém via o erro.
+  it("preenche os itens de cada página a partir de items, não do objeto", async () => {
+    extractTextItems.mockResolvedValue({
+      totalPages: 2,
+      items: [[item("Produto", 50, 700)], [item("Total", 60, 690)]],
+    });
+
+    const paginas = await lerPdf(new Uint8Array([1]));
+
+    expect(paginas).toHaveLength(2);
+    expect(paginas[0]!.itens).toHaveLength(1);
+    expect(paginas[0]!.itens[0]).toMatchObject({ texto: "Produto", x: 50, y: 700, largura: 40, altura: 10 });
+    expect(paginas[1]!.itens[0]).toMatchObject({ texto: "Total", x: 60, y: 690 });
+  });
+
+  it("descarta item sem texto útil e mantém o texto da página", async () => {
+    extractTextItems.mockResolvedValue({
+      totalPages: 1,
+      items: [[item("   ", 10, 10), item("Nota", 20, 20)]],
+    });
+
+    const paginas = await lerPdf(new Uint8Array([1]));
+
+    expect(paginas[0]!.itens.map((i) => i.texto)).toEqual(["Nota"]);
+    expect(paginas[0]!.texto).toBe("página um");
+  });
+
+  // Fail-soft: sem posições ainda dá para indexar, só perdemos a tabela.
+  it("devolve as páginas com texto mesmo quando a extração de itens falha", async () => {
+    extractTextItems.mockImplementation(() => {
+      throw new Error("pdf corrompido");
+    });
+
+    const paginas = await lerPdf(new Uint8Array([1]));
+
+    expect(paginas.map((p) => p.texto)).toEqual(["página um", "página dois"]);
+    expect(paginas.every((p) => p.itens.length === 0)).toBe(true);
   });
 });

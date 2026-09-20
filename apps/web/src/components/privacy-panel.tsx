@@ -46,14 +46,14 @@ export function PrivacyPanel({ email }: { email: string }) {
           </button>
         ) : (
           <div className="flex flex-col gap-1">
-            <p className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
+            <p className="text-[14px]" style={{ color: "var(--color-ink-dim)" }}>
               Apaga sua conta e <b>todos</b> os dados. Irreversível. Digite <b>{email}</b> para confirmar.
             </p>
             <Input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder="seu e-mail" />
-            {err && <span className="text-[10px]" style={{ color: "var(--color-danger)" }}>{err}</span>}
+            {err && <span className="text-[13px]" style={{ color: "var(--color-danger)" }}>{err}</span>}
             <div className="mt-1 flex gap-2">
               <button onClick={del} disabled={busy || confirmText.trim().toLowerCase() !== email.toLowerCase()} className="flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
-                style={{ background: "var(--color-danger)", color: "#1a0a06" }}>
+                style={{ background: "var(--color-danger)", color: "var(--color-danger-ink)" }}>
                 {busy ? "…" : "Apagar tudo"}
               </button>
               <button onClick={() => { setConfirming(false); setConfirmText(""); setErr(null); }} className="rounded-lg border px-3 py-1.5 text-xs"

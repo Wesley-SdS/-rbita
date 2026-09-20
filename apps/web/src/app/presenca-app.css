@@ -1,0 +1,416 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   Acréscimos ao Presença.
+
+   O protótipo é uma demonstração: a conversa dele tem respostas de roteiro, sem
+   ferramentas, sem anexo real e sem menu de voz. O app tem tudo isso, então
+   estas peças não existiam lá e foram desenhadas aqui, na mesma linguagem
+   (mesmos tokens, mesmos raios, mesma escala tipográfica).
+
+   Fica separado de `presenca.css` de propósito: lá é porte fiel, aqui é
+   extensão. Misturar os dois tira a possibilidade de comparar com o original.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Lista de conversas: o apagar só aparece no hover da linha. */
+.history-row { display: flex; align-items: center; gap: 4px; }
+.history-row .history-item { flex: 1; min-width: 0; }
+.history-row .history-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-row > .icon-button { width: 26px; height: 26px; opacity: 0; flex-shrink: 0; }
+.history-row > .icon-button .icon { width: 13px; height: 13px; }
+.history-row:hover > .icon-button, .history-row > .icon-button:focus-visible { opacity: 1; }
+
+/* Passos de ferramenta: o que a Órbita fez para responder, acima da resposta. */
+.message-steps { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
+.message-steps .tag { font-size: 12px; padding: 3px 7px; }
+.message-steps .icon { width: 11px; height: 11px; }
+
+.message-status { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--color-ink-dim); margin-top: 6px; }
+.message-image { max-height: 170px; border-radius: 10px; margin-bottom: 9px; display: block; object-fit: contain; }
+
+.chat-erro { padding: 0 25px 10px; font-size: 14px; color: var(--color-danger); }
+
+/* Menu "+" do compositor: voz, escuta, anexo, tela e tempo real num lugar só. */
+.composer-mais { position: relative; flex-shrink: 0; }
+.composer-fora { position: fixed; inset: 0; z-index: 10; }
+.composer-menu {
+  position: absolute; bottom: 44px; left: 0; z-index: 20; width: 232px;
+  display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  border: 1px solid var(--color-line); border-radius: 12px;
+  background: var(--color-surface); box-shadow: var(--shadow-panel);
+}
+.composer-menu button {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  padding: 9px 10px; border-radius: 8px; font-size: 14px; color: var(--color-ink);
+}
+.composer-menu button:hover { background: var(--color-surface-soft); }
+.composer-menu button.ativo { color: var(--color-forest); background: var(--color-mint); }
+.composer-menu .icon { width: 15px; height: 15px; }
+
+/* Interruptor com rótulo, usado onde a escolha precisa de uma frase junto. */
+.switch-row { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; color: var(--color-ink-dim); margin: 12px 2px 0; cursor: pointer; }
+.switch-row span { display: flex; align-items: center; gap: 6px; }
+.switch-row .icon { width: 13px; height: 13px; }
+
+/* No modo foco o compositor flutua sobre o palco, sem a moldura do painel. */
+.focus-overlay .composer { border: 0; width: min(680px, 92vw); margin: 0 auto; padding: 0; }
+.focus-overlay .composer-inner { background: color-mix(in oklab, var(--color-surface) 88%, transparent); backdrop-filter: blur(12px); }
+.focus-overlay .composer-menu { bottom: auto; top: 44px; }
+
+/* Os painéis herdados ainda desenham a própria moldura; dentro de uma aba eles
+   não devem ganhar uma segunda. Sai quando cada painel for migrado. */
+.view [role="tabpanel"] > * { min-width: 0; }
+
+/* No protótipo estes cartões são <button>; aqui navegam, então viraram link.
+   O CSS deles conta com `width:100%` e `overflow:hidden`, que um elemento
+   inline ignora: sem isto o texto escapa e o ornamento vaza para fora. */
+a.focus-teaser, a.quick-card { display: block; }
+
+/* ── Variantes dos primitivos ───────────────────────────────────────────────
+   O `.button` do protótipo tem 42px de altura, desenhado para o dedo em ações
+   principais. Os painéis herdados põem três ou quatro botões por linha, e ali
+   essa altura empurra tudo para baixo: daí as versões compactas. */
+.button.compacto { min-height: 34px; padding: 8px 13px; font-size: 13px; gap: 7px; }
+.button.compacto .icon { width: 14px; height: 14px; }
+.button.mini { min-height: 27px; padding: 5px 10px; font-size: 12px; gap: 5px; border-radius: 7px; }
+.button.mini .icon { width: 12px; height: 12px; }
+
+.inline-input.compacto { padding: 8px 10px; font-size: 14px; }
+select.inline-input { cursor: pointer; }
+textarea.inline-input { resize: vertical; min-height: 84px; }
+
+/* Linha rótulo → valor dos painéis de sessão e economia. */
+.stat-row { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 7px 0; font-size: 14px; color: var(--color-ink-dim); }
+.stat-row b { font-weight: 500; font-size: 15px; color: var(--color-ink); font-variant-numeric: tabular-nums; }
+.stat-row b.acento { color: var(--color-forest); }
+.stat-row b.bom { color: var(--color-good); }
+
+.aviso-erro { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 9px; font-size: 14px; background: var(--color-danger-soft); color: var(--color-danger); }
+.aviso-erro > span { flex: 1; }
+
+.esqueleto { animation: pulsar 1.6s ease-in-out infinite; }
+@keyframes pulsar { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+/* Painel sem respiro próprio (lista que sangra, vídeo, gráfico). */
+.panel.p-0 { padding: 0; }
+
+/* ── Entrada (login) ────────────────────────────────────────────────────────
+   Não existe no protótipo, que abre já autenticado. Segue a mesma linguagem:
+   o núcleo primeiro, a marca embaixo, e o formulário num painel. */
+.entrada { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 34px 20px 24px; }
+.entrada-nucleo { width: min(340px, 62vw); height: min(340px, 62vw); position: relative; }
+.entrada-nucleo canvas { width: 100%; height: 100%; display: block; }
+.entrada-marca { font-size: 37px; letter-spacing: -2.4px; padding: 0; margin-top: -14px; }
+.entrada-marca .brand-symbol { width: 25px; height: 29px; }
+.entrada-linha { font-size: 14px; color: var(--color-ink-dim); margin-top: 8px; }
+.entrada-forma { width: min(384px, 100%); margin-top: 26px; }
+.entrada-forma .field:first-of-type { margin-top: 0; }
+.entrada-forma .button.full-width { margin-top: 6px; }
+.entrada-ou { display: flex; align-items: center; gap: 12px; margin: 18px 0; font-size: 13px; color: var(--color-ink-dim); }
+.entrada-ou span { flex: 1; height: 1px; background: var(--color-line); }
+.entrada-sociais { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.entrada-troca { margin: 18px auto 0; display: flex; }
+.entrada-rodape { font-size: 12px; color: var(--color-ink-dim); margin-top: 22px; letter-spacing: .4px; }
+@media (max-width: 690px) { .entrada-nucleo { width: 70vw; height: 70vw; } .entrada-marca { font-size: 32px; } }
+
+/* ── Sobreposições ──────────────────────────────────────────────────────────
+   O protótipo usa <dialog> nativo, que traz o fundo escurecido e o Esc de
+   graça. Aqui são componentes React montados sob demanda, então o fundo e o
+   posicionamento vêm daqui; o Esc é tratado na casca. */
+.busca-fundo, .gaveta-fundo { position: fixed; inset: 0; z-index: 90; background: #16282133; backdrop-filter: blur(3px); animation: surgir .16s ease; }
+.busca-fundo { display: flex; align-items: flex-start; justify-content: center; padding: 12vh 20px 20px; }
+.gaveta-fundo { display: flex; justify-content: flex-end; }
+@keyframes surgir { from { opacity: 0; } to { opacity: 1; } }
+
+.search-dialog.aberta { position: relative; inset: auto; width: min(560px, 100%); max-height: 70vh; overflow-y: auto; animation: reveal .2s ease both; }
+.search-result.ativo { background: var(--color-surface-soft); }
+
+.drawer.aberta { position: relative; inset: auto; height: 100dvh; width: min(430px, 100%); overflow-y: auto; border-radius: 0; animation: slide-in .22s ease both; }
+
+/* ── Conversa em tela cheia ─────────────────────────────────────────────────
+   A tela ocupa a altura livre e só a lista de mensagens rola. No protótipo a
+   conversa tem altura fixa, o que sobra espaço vazio em tela grande e cria uma
+   segunda barra de rolagem quando a conversa cresce: duas barras na mesma tela
+   fazem a interface parecer quebrada.
+
+   A conta desconta o topo (78px) e o respiro do `main` (37px + 28px). */
+.view-conversa { display: flex; flex-direction: column; height: calc(100dvh - 78px - 65px); }
+.view-conversa .chat-layout { flex: 1; min-height: 0; }
+.view-conversa .chat-main { min-height: 0; height: 100%; }
+.view-conversa .chat-messages { max-height: none; flex: 1; min-height: 0; }
+.view-conversa .chat-history { overflow-y: auto; }
+@media (min-width: 1500px) { .view-conversa { height: calc(100dvh - 78px - 74px); } }
+@media (max-width: 950px) { .view-conversa { height: auto; } .view-conversa .chat-messages { max-height: 60vh; } }
+
+/* Aviso trazido por uma rotina: some de vista quando já foi lido, sem sumir
+   da lista, porque saber o que já chegou também é informação. */
+.aviso-rotina { display: flex; gap: 10px; width: 100%; text-align: left; padding: 13px 2px; border-bottom: 1px solid var(--color-line); align-items: flex-start; }
+.aviso-rotina:last-child { border-bottom: 0; }
+.aviso-rotina .tiny-dot { margin-top: 6px; background: var(--color-green); }
+.aviso-rotina.lido { opacity: .55; }
+.aviso-rotina.lido .tiny-dot { background: var(--color-line); }
+.aviso-rotina strong { display: block; font-size: 15px; font-weight: 500; }
+.aviso-rotina small { display: block; font-size: 13px; color: var(--color-ink-dim); margin-top: 4px; line-height: 1.7; }
+
+.descricao-secao { font-size: 14px; color: var(--color-ink-dim); margin-top: 6px; }
+.acoes-secao { display: flex; gap: 9px; flex-shrink: 0; }
+
+/* Cartão de conector: a conta ligada aparece sob a descrição, porque saber
+   QUAL conta está conectada é metade da confiança numa integração. */
+.connector-card { display: flex; flex-direction: column; }
+.connector-card p { flex: 1; }
+.connector-conta { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--color-green); margin-top: 10px; flex: 0; }
+.connector-conta .icon { width: 13px; height: 13px; }
+.connector-card .button, .connector-card form { margin-top: 16px; }
+.connector-card .field:first-of-type { margin-top: 0; }
+
+/* Lançamento quitado continua visível, só recua: sumir da lista tira a
+   confirmação de que foi você que quitou. */
+.lancamento .icon-button { width: 28px; height: 28px; flex-shrink: 0; }
+.lancamento .icon-button .icon { width: 14px; height: 14px; }
+.lancamento.quitado { opacity: .5; }
+.lancamento.quitado strong { text-decoration: line-through; }
+.money-value.vencida { color: var(--color-danger); }
+
+/* O protótipo tem três números em Finanças; aqui são quatro (o saldo projetado
+   ganhou lugar próprio, porque é o único que responde "posso gastar?"). */
+.stat-grid.quatro { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1190px) { .stat-grid.quatro { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 690px) { .stat-grid.quatro { grid-template-columns: 1fr; } }
+
+/* Campo com ação ao lado (guardar um fato, adicionar um item). */
+.linha-fato { display: flex; gap: 9px; align-items: stretch; margin: 6px 0 18px; }
+.linha-fato .inline-input { flex: 1; }
+.linha-fato .button { flex-shrink: 0; }
+.list-row .icon-button { flex-shrink: 0; width: 28px; height: 28px; }
+.list-row .icon-button .icon { width: 14px; height: 14px; }
+
+/* Cartão de ambiente: o cabeçalho ilustrado vem do protótipo; embaixo, o que
+   existe de fato naquele cômodo. Não há interruptor aqui de propósito — agir
+   num dispositivo passa pelo gate de permissão, não por um clique na lista. */
+.room-card { display: flex; flex-direction: column; }
+.room-card .room-body { flex: 1; display: flex; flex-direction: column; }
+.room-label .icon-button { width: 28px; height: 28px; }
+.room-label .icon-button .icon { width: 14px; height: 14px; }
+.room-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.room-novo { padding: 24px; }
+.room-novo h3 { margin: 14px 0 8px; }
+.room-novo p { font-size: 14px; color: var(--color-ink-dim); line-height: 1.8; }
+
+/* Reuniões: a onda vive no cartão ao vivo, o tempo logo abaixo dela.
+   O cartão é ESCURO, e o protótipo já define as cores de texto dentro dele
+   (`.meeting-live p`, `.eyebrow`, `.button`). Aqui só entra posicionamento:
+   repetir a cor com a mesma especificidade apagaria a do protótipo e o texto
+   voltaria ao tom claro sobre fundo escuro. */
+.meeting-live { display: flex; flex-direction: column; align-items: flex-start; }
+.meeting-live .tag { margin-bottom: 14px; float: none; }
+.meeting-live h2 { margin: 10px 0; }
+.meeting-live > p { line-height: 1.9; }
+.meeting-tempo { font-size: 33px; letter-spacing: -1px; font-variant-numeric: tabular-nums; margin: 4px 0 6px; color: #e2efd9; }
+.meeting-live .button { align-self: stretch; }
+.meeting-live .switch-row { color: #bacdb2; }
+.meeting-live .aviso-erro { align-self: stretch; }
+.nota-fila { font-size: 13px; color: #bacdb2; margin-top: 10px; line-height: 1.8; }
+
+.locutor { border-bottom: 1px solid var(--color-line); padding: 14px 0; display: flex; flex-direction: column; gap: 9px; }
+.locutor:last-of-type { border-bottom: 0; }
+.locutor-linha { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.locutor-linha .inline-input { flex: 1; min-width: 180px; }
+
+.resumo-texto { white-space: pre-wrap; font-size: 15px; line-height: 1.95; color: var(--color-ink); margin-top: 12px; }
+
+/* Barra por modelo: nome, trilho e contagem na mesma linha. */
+.barra-modelo { display: flex; align-items: center; gap: 12px; padding: 9px 0; font-size: 14px; }
+.barra-nome { width: 150px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-ink); }
+.barra-trilho { flex: 1; height: 7px; border-radius: 7px; background: var(--color-surface-soft); overflow: hidden; }
+.barra-preenchida { display: block; height: 100%; border-radius: 7px; background: var(--color-forest); }
+.barra-modelo b { font-weight: 500; color: var(--color-ink-dim); font-variant-numeric: tabular-nums; }
+
+/* Fila de aprovação: o contorno âmbar existe para a pessoa reparar que algo
+   está PARADO esperando ela. É o gate do §5.1 aparecendo na tela. */
+.aprovacoes { border-color: color-mix(in oklab, var(--color-peach) 70%, var(--color-line)); }
+.aprovacoes h3 { margin: 10px 0 8px; }
+.aprovacoes > p { font-size: 14px; color: var(--color-ink-dim); line-height: 1.85; }
+.aprovacao { border-top: 1px solid var(--color-line); margin-top: 16px; padding-top: 16px; }
+.aprovacao .form-actions { margin-top: 14px; }
+
+.tarefa .icon-button { flex-shrink: 0; }
+.tarefa.feita { opacity: .5; }
+.tarefa.feita strong { text-decoration: line-through; }
+.tarefa-imagem { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+.icon-button.com-anexo { color: var(--color-forest); background: var(--color-mint); }
+
+/* Cards fixados pelo dono: mesma moldura dos cartões rápidos da Visão geral,
+   para não virarem um terceiro tipo de cartão na mesma tela. */
+.cards-do-dono { margin-bottom: 8px; }
+.card-fixado { cursor: default; }
+.card-fixado:hover { transform: none; box-shadow: none; border-color: var(--color-line); }
+.card-fixado-topo { display: flex; align-items: flex-start; gap: 10px; }
+.card-fixado-topo h3 { flex: 1; margin: 0; font-size: 15px; font-weight: 550; }
+.card-fixado-topo .icon-button { width: 26px; height: 26px; margin: -4px -6px 0 0; }
+.card-fixado-topo .icon-button .icon { width: 13px; height: 13px; }
+.card-valor { margin-top: 14px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.card-valor strong { font-size: 29px; font-weight: 500; letter-spacing: -.8px; color: var(--color-forest); }
+.card-valor span { font-size: 13px; color: var(--color-ink-dim); }
+.card-valor span.subiu { color: var(--color-good); }
+.card-valor span.caiu { color: var(--color-danger); }
+.card-novo { text-align: left; }
+.card-novo h3 { margin-top: 16px; }
+
+/* ── Bloco do universo, na barra lateral ────────────────────────────────────
+   "Seu universo pessoal" cabe numa linha na largura de projeto, mas não com
+   zoom do navegador nem com escala de tela do sistema (comum no Windows), e
+   menos ainda com a tipografia um degrau maior. Em vez de cortar o texto, o
+   bloco passa a aceitar duas linhas sem desalinhar o ícone nem o ponto. */
+.workspace { align-items: flex-start; }
+.workspace-icon { flex-shrink: 0; }
+.workspace > div { min-width: 0; flex: 1; }
+.workspace strong { line-height: 1.35; }
+.workspace > .tiny-dot { margin-top: 9px; }
+
+/* Contador de passo: números alinhados sem recorrer a fonte monoespaçada, que
+   destoa do resto e era herança do visual de console. */
+.passo-numero { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--color-ink-dim); flex-shrink: 0; }
+
+/* ── Linhas de ação em tela estreita ────────────────────────────────────────
+   O `.button` do protótipo tem `white-space:nowrap`, então dois botões lado a
+   lado com rótulo longo ("Importar extrato em PDF") estouram 390px e fazem a
+   página inteira rolar na horizontal. Quebram linha em vez de empurrar. */
+.acoes-secao { flex-wrap: wrap; }
+@media (max-width: 690px) {
+  /* O cabeçalho de seção é uma linha só (título à esquerda, ações à direita) e
+     o bloco de ações não encolhe: em 390px ele empurra a página inteira para
+     fora. Em tela estreita o título fica em cima e as ações embaixo. */
+  .section-heading { flex-wrap: wrap; }
+  .acoes-secao, .form-actions { width: 100%; flex-shrink: 1; }
+  .acoes-secao .button, .form-actions .button { flex: 1 1 auto; }
+  .linha-fato { flex-wrap: wrap; }
+  .linha-fato .inline-input { flex: 1 1 100%; }
+  .linha-fato .button { flex: 1 1 auto; }
+  .locutor-linha .inline-input { min-width: 0; }
+}
+
+/* ── Barra lateral: largura e recolher ──────────────────────────────────────
+   O protótipo fixa 234px em três pontos (largura, margem do conteúdo e cada
+   media query). Com a tipografia um degrau maior isso aperta, e um valor fixo
+   repetido não permite recolher. Vira uma variável, e o recolhido é só outro
+   valor dela.
+
+   O estado mora no <html>, não em classe de componente: o script de boot
+   precisa aplicá-lo ANTES do primeiro paint, senão a barra abre larga e salta
+   para estreita na frente de quem já a tinha recolhido. */
+:root { --largura-lateral: 272px; }
+:root[data-lateral="recolhida"] { --largura-lateral: 76px; }
+
+.sidebar { width: var(--largura-lateral); transition: width .22s ease; }
+.app-shell { margin-left: var(--largura-lateral); transition: margin-left .22s ease; }
+
+@media (max-width: 1190px) { :root { --largura-lateral: 248px; } .sidebar { padding-left: 14px; padding-right: 14px; } }
+@media (max-width: 950px) { :root { --largura-lateral: 226px; } .sidebar { padding-left: 12px; padding-right: 12px; } }
+
+/* Recolhida: só os símbolos, e nada de transição em telefone (lá a barra é
+   gaveta, não coluna, e a animação de largura brigaria com a de deslizar). */
+:root[data-lateral="recolhida"] .sidebar { padding-left: 12px; padding-right: 12px; align-items: center; overflow-x: hidden; }
+:root[data-lateral="recolhida"] .sidebar-bottom, :root[data-lateral="recolhida"] .nav-main { width: 100%; }
+:root[data-lateral="recolhida"] .brand > span:last-child,
+:root[data-lateral="recolhida"] .workspace > div,
+:root[data-lateral="recolhida"] .workspace > .tiny-dot,
+:root[data-lateral="recolhida"] .search-trigger > span,
+:root[data-lateral="recolhida"] .search-trigger kbd,
+:root[data-lateral="recolhida"] .nav-caption,
+:root[data-lateral="recolhida"] .nav-rotulo,
+:root[data-lateral="recolhida"] .focus-teaser strong,
+:root[data-lateral="recolhida"] .focus-teaser > span:last-child,
+:root[data-lateral="recolhida"] .profile > span:not(.avatar),
+:root[data-lateral="recolhida"] .profile .icon { display: none; }
+
+:root[data-lateral="recolhida"] .brand { padding: 3px 0 22px; justify-content: center; }
+:root[data-lateral="recolhida"] .workspace { justify-content: center; margin-bottom: 16px; }
+:root[data-lateral="recolhida"] .search-trigger { justify-content: center; padding: 11px 0; }
+:root[data-lateral="recolhida"] .nav-main { gap: 6px; }
+:root[data-lateral="recolhida"] .nav-link { justify-content: center; padding: 11px 0; }
+:root[data-lateral="recolhida"] .nav-link .nav-active-dot { display: none; }
+:root[data-lateral="recolhida"] .nav-count { position: absolute; top: 4px; right: 6px; margin: 0; padding: 0 4px; }
+:root[data-lateral="recolhida"] .focus-teaser { padding: 14px 0; text-align: center; }
+:root[data-lateral="recolhida"] .focus-teaser:after { display: none; }
+:root[data-lateral="recolhida"] .focus-symbol { margin: 0; display: flex; justify-content: center; }
+:root[data-lateral="recolhida"] .profile { justify-content: center; padding-left: 0; padding-right: 0; }
+
+/* O botão de recolher é de coluna, não de gaveta: some onde a barra vira
+   gaveta, que já tem o próprio botão no topo. */
+.recolher-lateral { display: inline-flex; }
+@media (max-width: 690px) {
+  .recolher-lateral { display: none; }
+  .sidebar, .app-shell { transition: none; }
+  :root[data-lateral="recolhida"] .sidebar { width: 272px; padding-left: 18px; padding-right: 18px; align-items: stretch; }
+  :root[data-lateral="recolhida"] .app-shell { margin-left: 0; }
+}
+
+/* ── Ícone dentro de emblema ────────────────────────────────────────────────
+   O protótipo dava `display:inline-flex` a todo `span[data-icon]` no reset, e
+   várias regras contam com isso para centralizar (`.workspace-icon` define
+   `align-items` e `justify-content`, mas não o `display`, e o ícone encostava
+   no canto). Aqui os ícones são componentes React e o atributo não existe:
+   este seletor é o equivalente, para qualquer span que só embrulhe um ícone. */
+span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
+.workspace-icon { display: flex; }
+
+/* ── Barra recolhida: um alvo só para tudo ──────────────────────────────────
+   Aberta, cada item tem a própria forma (o emblema do universo é uma caixa, o
+   item de menu é uma linha, a marca é grande). Recolhida, todos viram a mesma
+   coisa: um quadrado do mesmo tamanho, com o ícone do mesmo tamanho no meio.
+   Sem isto a coluna vira uma fila de símbolos de tamanhos diferentes. */
+:root[data-lateral="recolhida"] .nav-link,
+:root[data-lateral="recolhida"] .search-trigger,
+:root[data-lateral="recolhida"] .workspace-icon,
+:root[data-lateral="recolhida"] .focus-teaser,
+:root[data-lateral="recolhida"] .profile {
+  width: 44px;
+  height: 44px;
+  min-height: 0;
+  padding: 0;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+}
+:root[data-lateral="recolhida"] .sidebar .icon { width: 19px; height: 19px; }
+:root[data-lateral="recolhida"] .brand-symbol { width: 23px; height: 27px; }
+:root[data-lateral="recolhida"] .brand-symbol:before { inset: 6px -7px; }
+:root[data-lateral="recolhida"] .brand-symbol:after { width: 8px; height: 8px; left: 6px; top: 9px; }
+:root[data-lateral="recolhida"] .avatar { width: 34px; height: 34px; font-size: 15px; }
+:root[data-lateral="recolhida"] .workspace { padding: 12px 0; margin-bottom: 14px; }
+:root[data-lateral="recolhida"] .profile { margin-top: 14px; padding-top: 0; border-top: 0; }
+:root[data-lateral="recolhida"] .sidebar-bottom { padding-top: 22px; }
+
+/* Aviso na gaveta: quem leva a algum lugar mostra a seta e reage ao passar o
+   cursor; quem não leva só some de destaque ao ser lido. */
+.activity-item.aviso { width: 100%; text-align: left; border-radius: 10px; padding: 12px 10px; }
+.activity-item.aviso.navega:hover { background: var(--color-surface-soft); }
+.activity-item.aviso.lido { opacity: .58; }
+.activity-item.aviso > .icon { margin-left: auto; align-self: center; color: var(--color-ink-dim); width: 15px; height: 15px; }
+.activity-item.aviso small { display: block; margin-top: 5px; color: var(--color-ink-dim); font-size: 11px; }
+
+/* ── Busca (⌘K) ─────────────────────────────────────────────────────────────
+   A lista rola por dentro, não a caixa inteira: o campo tem de ficar visível
+   enquanto se escolhe, senão a pessoa perde de vista o que digitou. */
+.search-dialog.aberta { display: flex; flex-direction: column; max-height: min(600px, 76vh); overflow: hidden; }
+.busca-fundo { padding-top: 9vh; }
+.busca-lista { flex: 1; overflow-y: auto; min-height: 0; padding: 6px 0; }
+.busca-grupo + .busca-grupo { border-top: 1px solid var(--color-line); margin-top: 6px; padding-top: 10px; }
+.busca-grupo .panel-label { margin: 6px 20px 8px; }
+.busca-lista .search-result kbd { margin-left: auto; opacity: .7; }
+.busca-dica { padding: 10px 20px 14px; font-size: 12px; color: var(--color-ink-dim); }
+
+/* ── Fundo das sobreposições ────────────────────────────────────────────────
+   No protótipo a gaveta e a busca são <dialog>, e o fundo, o contorno e a
+   sombra vêm da regra `dialog{}`. Aqui são componentes React montados sob
+   demanda (o <dialog> nativo não conversa bem com montagem condicional), então
+   herdam a forma do protótipo mas não a superfície: a gaveta abria transparente
+   e o conteúdo da página aparecia por baixo do texto. */
+.drawer.aberta, .search-dialog.aberta {
+  color: var(--color-ink);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  box-shadow: 0 25px 100px #162b2826;
+}

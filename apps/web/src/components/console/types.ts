@@ -20,3 +20,13 @@ export type VoiceBridge = {
   /** Interrompe a fala imediatamente (barge-in / botão parar). */
   stopSpeaking: () => void;
 };
+
+/**
+ * Estado do núcleo durante um turno. Vivia em `components/orb.tsx`, junto do
+ * núcleo antigo; virou tipo compartilhado quando aquele componente saiu, porque
+ * quem depende dele é o caminho do chat e da voz, não o desenho.
+ *
+ * O núcleo do Presença tem dez estados; estes seis são os que o chat produz
+ * hoje. `components/presenca/conversa.tsx` faz a tradução.
+ */
+export type OrbMode = "standby" | "listening" | "speaking" | "searching" | "studying" | "connecting";

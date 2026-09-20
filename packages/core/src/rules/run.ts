@@ -25,7 +25,7 @@ export const BUILTIN_RULES: (RuleInput & { builtinKey: string })[] = [
     enabled: true,
     trigger: { kind: "event", type: "finance.bill_due" },
     conditions: [{ path: "payload.quantidade", op: "gt", value: 0 }],
-    actions: [{ kind: "notify", title: "Contas a vencer ({{payload.quantidade}})", body: "{{payload.resumo}}" }],
+    actions: [{ kind: "notify", title: "Contas a vencer ({{payload.quantidade}})", body: "{{payload.resumo}}", destino: "/app/financas" }],
   },
   {
     // Onda 12: regras COM CONDIÇÃO SOBRE PESSOA. Vêm desligadas: quem decide se
@@ -35,7 +35,7 @@ export const BUILTIN_RULES: (RuleInput & { builtinKey: string })[] = [
     enabled: false,
     trigger: { kind: "event", type: "identity.presence_changed" },
     conditions: [],
-    actions: [{ kind: "notify", title: "Movimento em casa", body: "Alguém da casa foi reconhecido em outro cômodo." }],
+    actions: [{ kind: "notify", title: "Movimento em casa", body: "Alguém da casa foi reconhecido em outro cômodo.", destino: "/app/casa" }],
   },
   {
     builtinKey: "identity.seen_unknown",
@@ -43,7 +43,7 @@ export const BUILTIN_RULES: (RuleInput & { builtinKey: string })[] = [
     enabled: false,
     trigger: { kind: "event", type: "identity.seen" },
     conditions: [{ path: "payload.outcome", op: "eq", value: "desconhecido" }],
-    actions: [{ kind: "notify", title: "Rosto desconhecido", body: "A câmera viu alguém que a Órbita não reconhece ({{payload.desconhecido}})." }],
+    actions: [{ kind: "notify", title: "Rosto desconhecido", body: "A câmera viu alguém que a Órbita não reconhece ({{payload.desconhecido}}).", destino: "/app/casa" }],
   },
   {
     builtinKey: "identity.gesture",
@@ -51,7 +51,7 @@ export const BUILTIN_RULES: (RuleInput & { builtinKey: string })[] = [
     enabled: false,
     trigger: { kind: "event", type: "identity.gesture" },
     conditions: [{ path: "payload.gesto", op: "eq", value: "mao_levantada" }],
-    actions: [{ kind: "notify", title: "Gesto na câmera", body: "Mão levantada em {{payload.comodo}} ({{payload.camera}})." }],
+    actions: [{ kind: "notify", title: "Gesto na câmera", body: "Mão levantada em {{payload.comodo}} ({{payload.camera}}).", destino: "/app/casa" }],
   },
   {
     builtinKey: "connector.refresh_failed",
@@ -59,7 +59,7 @@ export const BUILTIN_RULES: (RuleInput & { builtinKey: string })[] = [
     enabled: true,
     trigger: { kind: "event", type: "connector.refresh_failed" },
     conditions: [],
-    actions: [{ kind: "notify", title: "Conector {{payload.provider}} precisa reconectar", body: "A renovação do acesso falhou: {{payload.error}}. Reconecte em Conectores." }],
+    actions: [{ kind: "notify", title: "Conector {{payload.provider}} precisa reconectar", body: "A renovação do acesso falhou: {{payload.error}}. Reconecte em Conectores.", destino: "/app/conexoes" }],
   },
   {
     builtinKey: "calendar.meeting_upcoming",
@@ -67,7 +67,7 @@ export const BUILTIN_RULES: (RuleInput & { builtinKey: string })[] = [
     enabled: true,
     trigger: { kind: "event", type: "calendar.meeting_upcoming" },
     conditions: [],
-    actions: [{ kind: "notify", title: "Reunião em breve: {{payload.titulo}}", body: "{{payload.resumo}}" }],
+    actions: [{ kind: "notify", title: "Reunião em breve: {{payload.titulo}}", body: "{{payload.resumo}}", destino: "/app/reunioes" }],
   },
   {
     builtinKey: "gmail.important_received",
@@ -125,7 +125,7 @@ async function executeActions(rule: AutomationRule, actions: RuleAction[], conte
       // Quem recebe é escolha da REGRA, nunca do evento: o `personId` do evento
       // é de quem foi VISTO, e mandar o aviso sobre a Anna para o aparelho ao
       // lado da Anna seria o oposto do que o dono pediu.
-      await notifyUser(rule.userId, renderTemplate(a.title, context), renderTemplate(a.body, context), rule.id, { personId: a.avisarPersonId ?? null });
+      await notifyUser(rule.userId, renderTemplate(a.title, context), renderTemplate(a.body, context), rule.id, { personId: a.avisarPersonId ?? null, destino: a.destino ?? null });
     } else if (a.kind === "prompt") {
       const body = await runPromptForUser(
         rule.userId,

@@ -1,7 +1,7 @@
 "use client";
 
 import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, useRef, useState } from "react";
-import type { OrbMode } from "@/components/orb";
+import type { OrbMode } from "@/components/console/types";
 import type { Msg } from "@/components/console/types";
 import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
 import { RealtimeSession } from "@/lib/voice/realtime";

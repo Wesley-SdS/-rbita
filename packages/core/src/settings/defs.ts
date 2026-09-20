@@ -68,6 +68,7 @@ export const SETTING_GROUPS = {
   graph: { label: "Grafo de conhecimento", order: 85 },
   identity: { label: "Identidade e biometria", order: 66 },
   auth: { label: "Acesso", order: 90 },
+  presenca: { label: "Presença (interface)", order: 5 },
 } as const;
 export type SettingGroupId = keyof typeof SETTING_GROUPS;
 
@@ -120,6 +121,13 @@ const text = (group: SettingGroupId, label: string, description: string, def: st
 });
 
 export const SETTING_DEFS = {
+  // ── presença: como a interface se comporta ──
+  // Vieram do protótipo, onde eram constantes no JS e preferências só do
+  // navegador. Aqui são config de verdade: o dono muda pela tela e vale em
+  // qualquer aparelho dele, não só no que estava aberto na hora.
+  "presenca.focoMinutos": num("presenca", "Duração do modo foco", "Quanto tempo dura um bloco de foco, do início até o aviso de fim.", 25, 1, 180, { unit: "minutos", integer: true }),
+  "presenca.intensidade": num("presenca", "Intensidade da presença", "Quanto o núcleo se move e brilha. Menor é mais discreto, maior é mais expressivo.", 85, 15, 100, { unit: "%", integer: true }),
+  "presenca.movimentoReduzido": bool("presenca", "Movimento reduzido", "Mantém o núcleo praticamente parado e conta o estado por cor e texto. O sistema operacional também pode pedir isso sozinho.", false),
   // ── motor do chat (api/chat/route.ts) ──
   "chat.historyWindow": num("chat", "Janela de histórico", "Quantas mensagens anteriores da conversa vão para o modelo a cada turno.", 24, 1, 200, { unit: "mensagens" }),
   "chat.ragTimeoutMs": num("chat", "Timeout do RAG", "Tempo máximo que o turno espera pela busca de contexto antes de começar a responder sem ela.", 3500, 0, 15000, { unit: "ms" }),

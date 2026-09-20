@@ -1,36 +1,27 @@
 import type { ButtonHTMLAttributes, CSSProperties } from "react";
 
-type Variant = "primary" | "outline" | "danger";
+type Variant = "primary" | "outline" | "danger" | "subtle";
 type Size = "sm" | "md" | "lg";
 
-// Tamanhos alinhados aos botões já usados nos painéis:
-// sm = mini (ex. "+"), md = botão de painel (o mais comum), lg = ação do compositor.
-const SIZES: Record<Size, string> = {
-  sm: "px-2 py-1 text-xs",
-  md: "px-3 py-1.5 text-xs",
-  lg: "px-4 py-2.5 text-sm",
+/**
+ * Botão do Presença. `primary` é o verde floresta da ação principal, `outline`
+ * é o contorno discreto, `danger` é o vermelho de apagar e `subtle` some no
+ * fundo.
+ *
+ * `lg` usa a altura cheia do protótipo (42px, feita para o toque). `sm` e `md`
+ * usam a versão compacta, porque os painéis colocam muitos botões por linha e
+ * a altura cheia ali empurraria tudo para baixo.
+ */
+const VARIANTES: Record<Variant, string> = {
+  primary: "primary",
+  outline: "secondary",
+  danger: "danger",
+  subtle: "subtle",
 };
 
-/** Estilos por variante (batem com os botões inline já usados no app). */
-function variantStyle(variant: Variant): CSSProperties {
-  if (variant === "primary") return { background: "linear-gradient(120deg, var(--color-amber), var(--color-gold))", color: "#241403" };
-  if (variant === "danger") return { background: "var(--color-danger)", color: "#fff" };
-  return { borderColor: "var(--color-line)", color: "var(--color-ink-dim)", background: "var(--color-surface)" }; // outline
-}
-
-/**
- * Botão do design system. `primary` = gradiente dourado (ação principal),
- * `outline` = borda discreta, `danger` = vermelho. Mantém `disabled:opacity`.
- */
 export function Button({
   variant = "primary", size = "md", className = "", style, ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: Size }) {
-  const border = variant === "outline" ? "border" : "";
-  return (
-    <button
-      {...rest}
-      className={`rounded-lg font-semibold leading-none disabled:opacity-50 ${border} ${SIZES[size]} ${className}`}
-      style={{ ...variantStyle(variant), ...style }}
-    />
-  );
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: Size; style?: CSSProperties }) {
+  const compacto = size === "lg" ? "" : size === "sm" ? "mini" : "compacto";
+  return <button {...rest} className={`button ${VARIANTES[variant]} ${compacto} ${className}`.trim()} style={style} />;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Card, PanelTitle } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { acompanharJob, enfileirar } from "@/lib/jobs";
 
 /* Tipos mínimos da File System Access API (não incluída no lib.dom padrão). */
@@ -19,7 +19,6 @@ const MAX_BYTES = 200_000;
  * sobre eles no chat. Nenhum arquivo sai da máquina além do backend do próprio app.
  */
 export function FolderPanel() {
-  const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const supported = typeof window !== "undefined" && "showDirectoryPicker" in window;
@@ -81,23 +80,20 @@ export function FolderPanel() {
 
   return (
     <Card>
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center">
-        <PanelTitle>Arquivos</PanelTitle>
-        <span className="ml-auto text-xs" style={{ color: "var(--color-ink-dim)" }}>{open ? "▾" : "▸"}</span>
-      </button>
-      {open && (
-        <div className="mt-2 flex flex-col gap-2">
-          {supported ? (
-            <button onClick={connect} disabled={busy} className="rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50"
-              style={{ borderColor: "color-mix(in oklab, var(--color-gold) 40%, var(--color-line))", color: "var(--color-gold)" }}>
-              📁 dar acesso a uma pasta
-            </button>
-          ) : (
-            <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>navegador não suporta acesso a pastas (use Chrome/Edge)</span>
-          )}
-          {status && <div className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>{status}</div>}
-        </div>
-      )}
+      <div className="section-heading">
+        <h2>Arquivos</h2>
+      </div>
+      <div className="mt-2 flex flex-col gap-2">
+        {supported ? (
+          <button onClick={connect} disabled={busy} className="rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50"
+            style={{ borderColor: "color-mix(in oklab, var(--color-gold) 40%, var(--color-line))", color: "var(--color-gold)" }}>
+            Dar acesso a uma pasta
+          </button>
+        ) : (
+          <span className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>navegador não suporta acesso a pastas (use Chrome/Edge)</span>
+        )}
+        {status && <div className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>{status}</div>}
+      </div>
     </Card>
   );
 }

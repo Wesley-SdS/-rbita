@@ -60,29 +60,29 @@ export function ToolsPanel() {
     <Card>
       <div className="mb-2 flex items-baseline justify-between">
         <PanelTitle>Ferramentas</PanelTitle>
-        {tools && <span className="text-[11px]" style={dim}>{ativas} ativas de {tools.length}</span>}
+        {tools && <span className="text-[14px]" style={dim}>{ativas} ativas de {tools.length}</span>}
       </div>
-      <p className="mb-3 text-[12px]" style={dim}>O que a Órbita sabe fazer. Risco com "aprova" passa pelo painel de ações antes de executar.{!isOwner && " Só o dono desta instância liga, desliga ou muda o risco."}</p>
+      <p className="mb-3 text-[15px]" style={dim}>O que a Órbita sabe fazer. Risco com "aprova" passa pelo painel de ações antes de executar.{!isOwner && " Só o dono desta instância liga, desliga ou muda o risco."}</p>
       {!tools ? (
-        <p className="text-[12px]" style={dim}>Carregando…</p>
+        <p className="text-[15px]" style={dim}>Carregando…</p>
       ) : (
         <div className="flex flex-col gap-3">
           {domains.map((d) => (
             <div key={d}>
-              <div className="mb-1 text-[11px] uppercase tracking-wide" style={dim}>{d}</div>
+              <div className="mb-1 text-[14px] uppercase tracking-wide" style={dim}>{d}</div>
               <ul className="flex flex-col gap-1">
                 {tools.filter((t) => t.domain === d).map((t) => (
-                  <li key={t.name} className="flex items-start gap-2 rounded-lg border px-2 py-1.5 text-[12px]" style={{ borderColor: "var(--color-line)", opacity: t.enabled ? 1 : 0.55 }}>
+                  <li key={t.name} className="flex items-start gap-2 rounded-lg border px-2 py-1.5 text-[15px]" style={{ borderColor: "var(--color-line)", opacity: t.enabled ? 1 : 0.55 }}>
                     <input type="checkbox" className="mt-0.5" checked={t.enabled} disabled={!isOwner} onChange={(e) => void update(t.name, { enabled: e.target.checked })} title={t.enabled ? "desligar" : "ligar"} />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-2">
-                        <code className="text-[12px]">{t.name}</code>
-                        {!t.available && t.enabled && <span className="text-[10px]" style={dim}>{t.requires === "env" ? "sem configuração" : `precisa conectar ${t.requires}`}</span>}
+                        <code className="text-[15px]">{t.name}</code>
+                        {!t.available && t.enabled && <span className="text-[13px]" style={dim}>{t.requires === "env" ? "sem configuração" : `precisa conectar ${t.requires}`}</span>}
                       </div>
-                      <div className="text-[11px]" style={dim}>{t.description}</div>
+                      <div className="text-[14px]" style={dim}>{t.description}</div>
                     </div>
                     <select value={t.riskOverride ?? ""} disabled={!isOwner} onChange={(e) => changeRisk(t, e.target.value)}
-                      className="shrink-0 rounded-md border px-1 py-0.5 text-[11px]" style={{ borderColor: "var(--color-line)", background: "transparent", color: GATED.includes(t.effectiveRisk) ? "var(--color-gold)" : "inherit" }}
+                      className="shrink-0 rounded-md border px-1 py-0.5 text-[14px]" style={{ borderColor: "var(--color-line)", background: "transparent", color: GATED.includes(t.effectiveRisk) ? "var(--color-gold)" : "inherit" }}
                       title="Risco efetivo. Vazio = o declarado no código.">
                       <option value="">{RISK_LABEL[t.risk]} (padrão)</option>
                       {/* só sobe: o servidor recusa rebaixar abaixo do risco declarado */}
@@ -95,7 +95,7 @@ export function ToolsPanel() {
           ))}
         </div>
       )}
-      {msg && <p className="mt-2 text-[11px]" style={{ color: "var(--color-danger, var(--color-gold))" }}>{msg}</p>}
+      {msg && <p className="mt-2 text-[14px]" style={{ color: "var(--color-danger, var(--color-gold))" }}>{msg}</p>}
     </Card>
   );
 }

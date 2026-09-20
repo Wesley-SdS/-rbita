@@ -74,14 +74,14 @@ export function JobsPanel() {
     <Card>
       <PanelTitle className="mb-2">Trabalhos em segundo plano</PanelTitle>
       {!jobs ? (
-        <p className="text-[12px]" style={dim}>Carregando…</p>
+        <p className="text-[15px]" style={dim}>Carregando…</p>
       ) : jobs.length === 0 ? (
-        <p className="text-[12px]" style={dim}>
+        <p className="text-[15px]" style={dim}>
           Nada na fila agora. Reunião, extrato, comprovante, recalcular biometria e indexação de
           documento aparecem aqui enquanto rodam.
         </p>
       ) : (
-        <div className="flex flex-col gap-2 text-[12px]">
+        <div className="flex flex-col gap-2 text-[15px]">
           {jobs.map((j) => (
             <div key={j.id} className="rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
               <JobProgress job={j} onChange={refresh} live={false} />

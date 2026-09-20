@@ -51,7 +51,10 @@ export async function lerPdf(bytes: Uint8Array): Promise<PaginaPdf[]> {
   // itens posicionados: é o que permite reconhecer tabela em PDF nativo
   try {
     const { extractTextItems } = await unpdf();
-    const porPagina = await extractTextItems(pdf);
+    // `extractTextItems` devolve { totalPages, items }, não o array direto. Iterar
+    // o objeto estourava dentro do try e o catch engolia: os itens posicionados
+    // ficavam sempre vazios e a extração de tabela nunca rodava de verdade.
+    const { items: porPagina } = await extractTextItems(pdf);
     porPagina.forEach((itens: UnpdfItem[], i: number) => {
       const pagina = paginas[i];
       if (!pagina) return;

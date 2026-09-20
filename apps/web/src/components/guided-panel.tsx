@@ -86,13 +86,13 @@ export function GuidedPanel() {
   return (
     <Card>
       <PanelTitle className="mb-2">Acompanhar tarefa</PanelTitle>
-      <p className="mb-3 text-[12px]" style={dim}>
+      <p className="mb-3 text-[15px]" style={dim}>
         A Órbita guarda os passos, olha a câmera do cômodo de tempos em tempos e avisa o próximo
         passo quando achar que o atual terminou.
       </p>
 
       {!tarefas ? (
-        <p className="text-[12px]" style={dim}>Carregando…</p>
+        <p className="text-[15px]" style={dim}>Carregando…</p>
       ) : ativa ? (
         <ActiveTask task={ativa} onChanged={refresh} />
       ) : starting ? (
@@ -103,8 +103,8 @@ export function GuidedPanel() {
 
       {historico.length > 0 && (
         <div className="mt-3 border-t pt-2" style={{ borderColor: "var(--color-line)" }}>
-          <p className="mb-1 text-[11px] font-medium">Últimas tarefas</p>
-          <div className="flex flex-col gap-0.5 text-[11px]" style={dim}>
+          <p className="mb-1 text-[14px] font-medium">Últimas tarefas</p>
+          <div className="flex flex-col gap-0.5 text-[14px]" style={dim}>
             {historico.map((t) => (
               <div key={t.id}>{t.titulo} · {STATUS_LABEL[t.status]}</div>
             ))}
@@ -150,10 +150,10 @@ function ActiveTask({ task, onChanged }: { task: GuidedView; onChanged: () => vo
   }
 
   return (
-    <div className="flex flex-col gap-2 text-[12px]">
+    <div className="flex flex-col gap-2 text-[15px]">
       <div>
         <p className="font-medium">{task.titulo}</p>
-        <p className="text-[11px]" style={dim}>
+        <p className="text-[14px]" style={dim}>
           {task.camera ?? "câmera"}{task.comodo ? ` · ${task.comodo}` : ""} · expira em {fmtHora(task.expiraEm)}
         </p>
       </div>
@@ -165,18 +165,18 @@ function ActiveTask({ task, onChanged }: { task: GuidedView; onChanged: () => vo
             className="flex items-baseline gap-2"
             style={i === task.passoAtual ? gold : i < task.passoAtual ? { color: "var(--color-ink-dim)", textDecoration: "line-through" } : dim}
           >
-            <span className="font-mono text-[10px]">{i + 1}.</span>
+            <span className="passo-numero">{i + 1}.</span>
             <span>{p}</span>
           </li>
         ))}
       </ol>
 
       <div className="rounded-lg border p-2" style={{ borderColor: "var(--color-line)" }}>
-        <p className="text-[10px] uppercase tracking-wide" style={dim}>o que a câmera achou que viu</p>
+        <p className="text-[13px] uppercase tracking-wide" style={dim}>o que a câmera achou que viu</p>
         {task.ultimaObservacao ? (
           <>
             <p className="mt-1">{task.ultimaObservacao}</p>
-            <p className="mt-1 text-[10px]" style={dim}>
+            <p className="mt-1 text-[13px]" style={dim}>
               não é verdade absoluta, é a leitura do modelo de visão{task.ultimaOlhada ? ` · ${fmtHora(task.ultimaOlhada)}` : ""}
             </p>
           </>
@@ -244,7 +244,7 @@ function StartForm({ cameras, rooms, onCancel, onStarted }: {
   }
 
   return (
-    <div className="flex flex-col gap-2 text-[12px]">
+    <div className="flex flex-col gap-2 text-[15px]">
       <Input placeholder="título da tarefa (ex.: fazer o bolo de cenoura)" value={titulo} disabled={busy} onChange={(e) => setTitulo(e.target.value)} />
       <Textarea
         placeholder={"um passo por linha, ex.:\nseparar os ingredientes\nbater no liquidificador\nlevar ao forno"}
@@ -263,7 +263,7 @@ function StartForm({ cameras, rooms, onCancel, onStarted }: {
         <option value="">câmera que vai olhar</option>
         {opcoes.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
       </select>
-      {!opcoes.length && <p className="text-[11px]" style={dim}>Nenhuma câmera ligada. Ligue uma em Câmeras antes de começar.</p>}
+      {!opcoes.length && <p className="text-[14px]" style={dim}>Nenhuma câmera ligada. Ligue uma em Câmeras antes de começar.</p>}
       {msg && <p style={danger}>{msg}</p>}
       <div className="flex gap-2">
         <Button size="sm" disabled={busy} onClick={() => void submit()}>começar</Button>

@@ -1,120 +1,128 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 
-interface Totals {
+interface Totais {
   conversations: number; messages: number; tokens: number; localTokens: number;
   avgLatencyMs: number; documents: number; memories: number; activeRoutines: number;
   notifications: number; connectors: number; expenseBRL: number; savedBRL: number;
 }
-interface ModelRow { model: string; n: number; tokens: number }
-interface DailyRow { day: string; n: number }
+interface LinhaModelo { model: string; n: number; tokens: number }
+interface LinhaDia { day: string; n: number }
 interface GraphNode { id: string; label: string }
 interface GraphEdge { source: string; target: string; sim: number }
 
 const brl = (n: number) => "R$" + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function Insights() {
-  const [totals, setTotals] = useState<Totals | null>(null);
-  const [byModel, setByModel] = useState<ModelRow[]>([]);
-  const [daily, setDaily] = useState<DailyRow[]>([]);
-  const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
+  const [totais, setTotais] = useState<Totais | null>(null);
+  const [porModelo, setPorModelo] = useState<LinhaModelo[]>([]);
+  const [diario, setDiario] = useState<LinhaDia[]>([]);
+  const [grafo, setGrafo] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
 
   useEffect(() => {
     fetch("/api/analytics").then((r) => r.json()).then((d) => {
-      setTotals(d.totals); setByModel(d.byModel ?? []); setDaily(d.daily ?? []);
+      setTotais(d.totais); setPorModelo(d.porModelo ?? []); setDiario(d.diario ?? []);
     }).catch(() => {});
-    fetch("/api/knowledge/graph").then((r) => r.json()).then((d) => setGraph({ nodes: d.nodes ?? [], edges: d.edges ?? [] })).catch(() => {});
+    fetch("/api/knowledge/grafo").then((r) => r.json()).then((d) => setGrafo({ nodes: d.nodes ?? [], edges: d.edges ?? [] })).catch(() => {});
   }, []);
 
-  const maxDaily = Math.max(1, ...daily.map((d) => d.n));
+  const maxDiario = Math.max(1, ...diario.map((d) => d.n));
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <h1 className="font-mono text-lg tracking-widest" style={{ color: "var(--color-gold)" }}>INSIGHTS</h1>
-        <Link href="/app" className="ml-auto text-sm" style={{ color: "var(--color-ink-dim)" }}>← voltar ao console</Link>
+    <>
+      <div className="stat-grid quatro">
+        <Numero rotulo="Conversas" valor={totais?.conversations ?? "—"} nota="Fios de assunto que você começou" />
+        <Numero rotulo="Mensagens" valor={totais?.messages ?? "—"} nota="Tudo que foi dito de lado a lado" />
+        <Numero rotulo="Latência média" valor={totais ? `${totais.avgLatencyMs} ms` : "—"} nota="Do envio ao primeiro pedaço da resposta" />
+        <Numero rotulo="Economia vs. nuvem" valor={totais ? brl(totais.savedBRL) : "—"} nota="O que o modelo local deixou de custar" destaque />
       </div>
 
-      {/* cards de totais */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Conversas" value={totals?.conversations ?? "—"} />
-        <Stat label="Mensagens" value={totals?.messages ?? "—"} />
-        <Stat label="Tokens gerados" value={totals ? totals.tokens.toLocaleString("pt-BR") : "—"} />
-        <Stat label="Latência média" value={totals ? `${totals.avgLatencyMs} ms` : "—"} />
-        <Stat label="Economizou vs nuvem" value={totals ? brl(totals.savedBRL) : "—"} good />
-        <Stat label="Gastos registrados" value={totals ? brl(totals.expenseBRL) : "—"} />
-        <Stat label="Docs · Memórias" value={totals ? `${totals.documents} · ${totals.memories}` : "—"} />
-        <Stat label="Rotinas · Conectores" value={totals ? `${totals.activeRoutines} · ${totals.connectors}` : "—"} />
-      </div>
-
-      {/* atividade diária (14 dias) */}
-      <Card title="Atividade (14 dias)">
-        {daily.length === 0 ? (
-          <Empty />
-        ) : (
-          <div className="flex h-28 items-end gap-1">
-            {daily.map((d) => (
-              <div key={d.day} className="flex flex-1 flex-col items-center gap-1" title={`${d.day}: ${d.n}`}>
-                <div className="w-full rounded-t" style={{ height: `${(d.n / maxDaily) * 100}%`, minHeight: 2, background: "linear-gradient(180deg, var(--color-gold), var(--color-amber))" }} />
-                <span className="text-[8px]" style={{ color: "var(--color-ink-dim)" }}>{d.day.slice(8)}</span>
-              </div>
-            ))}
+      <div className="two-columns">
+        <article className="panel">
+          <div className="section-heading">
+            <h2>Seus últimos 14 dias</h2>
+            <span className="tag">conversas por dia</span>
           </div>
-        )}
-      </Card>
-
-      {/* uso por modelo */}
-      <Card title="Uso por modelo">
-        {byModel.length === 0 ? <Empty /> : (
-          <div className="flex flex-col gap-1.5">
-            {byModel.map((m) => (
-              <div key={m.model} className="flex items-center gap-2 text-xs">
-                <span className="w-40 truncate" style={{ color: "var(--color-ink)" }}>{m.model}</span>
-                <div className="h-2 flex-1 overflow-hidden rounded" style={{ background: "var(--color-ground)" }}>
-                  <div className="h-full rounded" style={{ width: `${(m.n / Math.max(...byModel.map((x) => x.n))) * 100}%`, background: "var(--color-gold)" }} />
+          {diario.length === 0 ? (
+            <div className="empty-state">Ainda não há histórico suficiente.</div>
+          ) : (
+            <div className="finance-chart" role="img" aria-label="Conversas por dia nos últimos 14 dias">
+              {diario.map((d) => (
+                <div key={d.day} className="chart-column" title={`${d.day}: ${d.n}`}>
+                  <div className="chart-bar" style={{ ["--height" as string]: `${Math.max(4, (d.n / maxDiario) * 100)}%` }} />
+                  <span>{d.day.slice(8)}</span>
                 </div>
-                <span style={{ color: "var(--color-ink-dim)" }}>{m.n}</span>
+              ))}
+            </div>
+          )}
+        </article>
+
+        <article className="panel">
+          <div className="section-heading">
+            <h2>Quem respondeu</h2>
+            <span className="tag">por modelo</span>
+          </div>
+          {porModelo.length === 0 ? (
+            <div className="empty-state">Nenhuma resposta registrada ainda.</div>
+          ) : (
+            porModelo.map((m) => (
+              <div key={m.model} className="barra-modelo">
+                <span className="barra-nome">{m.model}</span>
+                <span className="barra-trilho">
+                  <span className="barra-preenchida" style={{ width: `${(m.n / Math.max(...porModelo.map((x) => x.n))) * 100}%` }} />
+                </span>
+                <b>{m.n}</b>
               </div>
-            ))}
+            ))
+          )}
+        </article>
+      </div>
+
+      <article className="panel" style={{ marginTop: 22 }}>
+        <div className="section-heading">
+          <h2>O mapa do que você sabe</h2>
+          <span className="tag">
+            {grafo.nodes.length} {grafo.nodes.length === 1 ? "memória" : "memórias"} · {grafo.edges.length}{" "}
+            {grafo.edges.length === 1 ? "conexão" : "conexões"}
+          </span>
+        </div>
+        <p className="description">
+          Cada ponto é uma memória; os fios ligam as que falam da mesma coisa. É assim que a Órbita
+          puxa uma ideia antiga quando o assunto volta.
+        </p>
+        {grafo.nodes.length === 0 ? (
+          <div className="empty-state">
+            Peça à Órbita para lembrar de algo (&quot;lembre que eu prefiro…&quot;) e o mapa começa a se formar.
+          </div>
+        ) : (
+          <div className="memory-grafo">
+            <KnowledgeGraph nodes={grafo.nodes} edges={grafo.edges} />
           </div>
         )}
-      </Card>
+      </article>
 
-      {/* grafo de conhecimento */}
-      <Card title={`Grafo de conhecimento (${graph.nodes.length} memórias, ${graph.edges.length} conexões)`}>
-        {graph.nodes.length === 0 ? (
-          <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>Salve memórias no chat (&quot;lembre que…&quot;) para ver o grafo.</p>
-        ) : (
-          <KnowledgeGraph nodes={graph.nodes} edges={graph.edges} />
-        )}
-      </Card>
-    </div>
+      <div className="stat-grid" style={{ marginTop: 22 }}>
+        <Numero rotulo="Documentos e memórias" valor={totais ? `${totais.documents} · ${totais.memories}` : "—"} nota="O acervo que a Órbita consulta" />
+        <Numero rotulo="Rotinas e conexões" valor={totais ? `${totais.activeRoutines} · ${totais.connectors}` : "—"} nota="O que trabalha por você sozinho" />
+        <Numero rotulo="Gastos registrados" valor={totais ? brl(totais.expenseBRL) : "—"} nota="O que passou por Finanças" />
+      </div>
+    </>
   );
 }
 
-function Stat({ label, value, good }: { label: string; value: string | number; good?: boolean }) {
+function Numero({ rotulo, valor, nota, destaque }: { rotulo: string; valor: string | number; nota: string; destaque?: boolean }) {
   return (
-    <div className="rounded-xl border p-3" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
-      <div className="font-mono text-[10px] uppercase tracking-wide" style={{ color: "var(--color-ink-dim)" }}>{label}</div>
-      <div className="mt-1 text-lg font-bold" style={{ color: good ? "var(--color-gold)" : "var(--color-ink)" }}>{value}</div>
-    </div>
+    <article className="panel stat-card">
+      <span>{rotulo}</span>
+      <div className="stat-value" style={destaque ? { color: "var(--color-forest)" } : undefined}>
+        {valor}
+      </div>
+      <small>{nota}</small>
+    </article>
   );
-}
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
-      <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--color-ink-dim)" }}>{title}</h3>
-      {children}
-    </div>
-  );
-}
-function Empty() {
-  return <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>sem dados ainda</p>;
 }
 
-/** Grafo force-directed simples em SVG (layout calculado no cliente, sem libs). */
 function KnowledgeGraph({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge[] }) {
   const W = 720, H = 380;
   const [hover, setHover] = useState<string | null>(null);

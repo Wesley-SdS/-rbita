@@ -35,6 +35,14 @@ export const ActionSchema = z.discriminatedUnion("kind", [
     // "a voz segue a pessoa": com uma pessoa escolhida, o aviso sai no aparelho
     // do cômodo onde ELA está agora. Vazio avisa em todos os aparelhos.
     avisarPersonId: z.string().uuid().nullable().optional(),
+    /**
+     * Para onde o aviso leva. Só caminho interno do app.
+     *
+     * O `(?!\/)` não é detalhe: "//exemplo.com" começa com barra e passaria,
+     * mas o navegador lê isso como endereço externo com o mesmo protocolo. Sem
+     * essa recusa, uma regra viraria um jeito de tirar o dono do app pelo sino.
+     */
+    destino: z.string().regex(/^\/(?!\/)[\w\-/?=&.]*$/).max(200).nullable().optional(),
   }),
   // pede ao modelo (com ferramentas) e notifica com a resposta
   z.object({ kind: z.literal("prompt"), prompt: z.string().min(1).max(4000) }),

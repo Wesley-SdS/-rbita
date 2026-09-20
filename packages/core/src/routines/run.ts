@@ -19,12 +19,14 @@ import { log } from "../observability/logger";
  */
 
 /** Cria uma notificação e dispara push (best-effort). */
-export async function notifyUser(userId: string, title: string, body: string, routineId?: string | null, opts: { personId?: string | null } = {}): Promise<void> {
-  await db.insert(notification).values({ userId, routineId: routineId ?? null, title, content: body });
+export async function notifyUser(userId: string, title: string, body: string, routineId?: string | null, opts: { personId?: string | null; destino?: string | null } = {}): Promise<void> {
+  await db.insert(notification).values({ userId, routineId: routineId ?? null, title, content: body, destino: opts.destino ?? null });
   // A VOZ SEGUE A PESSOA (Onda 12): quando o aviso é sobre alguém e essa pessoa
   // foi vista num cômodo com dispositivo, avisa ali. Sem isso, avisa em todos.
   const alvo = opts.personId ? await import("../identity/device").then((m) => m.deviceForPerson(userId, opts.personId!)).catch(() => null) : null;
-  void sendPush(userId, { title, body: body.slice(0, 180), url: "/app" }, { deviceId: alvo?.id ?? null });
+  // O push abre onde o aviso aponta: tocar na notificação do celular e cair na
+  // tela inicial obriga a pessoa a refazer o caminho que o aviso já sabia.
+  void sendPush(userId, { title, body: body.slice(0, 180), url: opts.destino || "/app" }, { deviceId: alvo?.id ?? null });
   await events.emit("notification.created", { title, body: body.slice(0, 500), personId: opts.personId ?? null, deviceId: alvo?.id ?? null }, { userId });
 }
 
