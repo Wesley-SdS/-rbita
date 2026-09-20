@@ -194,6 +194,27 @@ export async function touchHeartbeat(jobId: string): Promise<void> {
  * morreu. Ver `ehZumbi` para o porquê de ser por coração parado e não por id
  * de instância. `emExecucao` é o que ESTE processo está rodando agora.
  */
+/**
+ * Quem está "rodando" desde antes do corte.
+ *
+ * Fica separado para poder ser inspecionado em teste sem banco, porque foi
+ * exatamente aqui que morava um bug que ficou calado: o lado esquerdo é um
+ * `coalesce` CRU, não uma coluna tipada, então o Drizzle não tem o tipo para
+ * mapear o valor e serializa um `Date` com `toString()`. O Postgres recebia
+ * "Sun Sep 20 2026 15:56:47 GMT-0300 (Horário Padrão de Brasília)", recusava
+ * com `invalid input syntax for type timestamp`, e a recuperação falhava a
+ * cada volta do agendador — silenciosa, porque o erro morria num `catch`.
+ *
+ * O efeito era o pior: trabalho preso por processo morto nunca voltava à fila.
+ * Daí o `toISOString()`, que não é enfeite.
+ */
+export function rodandoDesdeAntesDe(corte: Date) {
+  return and(
+    eq(job.status, "rodando"),
+    lt(sql`coalesce(${job.heartbeatAt}, ${job.startedAt}, ${job.createdAt})`, corte.toISOString()),
+  );
+}
+
 export async function recoverZombies(emExecucao: ReadonlySet<string>): Promise<{ devolvidos: number; desistidos: number }> {
   const paradoMs = (await settings.get("jobs.staleMinutes")) * 60_000;
   const agora = new Date();
@@ -201,7 +222,7 @@ export async function recoverZombies(emExecucao: ReadonlySet<string>): Promise<{
   const candidatos = await db
     .select()
     .from(job)
-    .where(and(eq(job.status, "rodando"), lt(sql`coalesce(${job.heartbeatAt}, ${job.startedAt}, ${job.createdAt})`, corte)));
+    .where(rodandoDesdeAntesDe(corte));
   const zumbis = candidatos.filter((c) => ehZumbi(c, emExecucao, paradoMs, agora));
   let devolvidos = 0;
   let desistidos = 0;
