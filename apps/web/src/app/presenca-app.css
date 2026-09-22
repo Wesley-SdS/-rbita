@@ -628,3 +628,109 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
   /* espelhado, como todo mundo espera de uma câmera frontal */
   transform: scaleX(-1);
 }
+
+/* ── Seletor de modelo ──────────────────────────────────────────────────────
+   Era um <select> nativo. Com o gateway ligado a descoberta passou a trazer
+   378 modelos, e a lista nativa do navegador travava a tela ao abrir. */
+.seletor-modelo { position: relative; }
+
+.seletor-gatilho {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; padding: 10px 12px; font-size: 14px;
+  border: 1px solid var(--color-line); border-radius: 9px;
+  background: var(--color-surface); color: var(--color-ink); cursor: pointer;
+}
+.seletor-gatilho:hover:not(:disabled) { border-color: var(--color-forest); }
+.seletor-gatilho:disabled { opacity: .55; cursor: not-allowed; }
+.seletor-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seletor-gatilho .icon { width: 14px; height: 14px; flex-shrink: 0; color: var(--color-ink-dim); }
+
+.seletor-popover {
+  position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 6px);
+  display: flex; flex-direction: column; max-height: 340px;
+  border: 1px solid var(--color-line); border-radius: 12px;
+  background: var(--color-surface); box-shadow: var(--shadow-panel); overflow: hidden;
+}
+
+.seletor-busca { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--color-line); }
+.seletor-busca .icon { width: 14px; height: 14px; color: var(--color-ink-dim); flex-shrink: 0; }
+.seletor-busca input { flex: 1; min-width: 0; border: 0; outline: none; background: none; font: inherit; font-size: 14px; color: var(--color-ink); }
+
+.seletor-lista { overflow-y: auto; padding: 5px; }
+.seletor-grupo + .seletor-grupo { margin-top: 4px; }
+.seletor-grupo-titulo {
+  padding: 7px 9px 4px; font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--color-ink-dim);
+}
+.seletor-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; text-align: left; padding: 8px 9px; border-radius: 7px;
+  font-size: 14px; color: var(--color-ink); background: none; border: 0; cursor: pointer;
+}
+/* o realce usa a MENTA (a secundária da paleta), não o verde de ação: o verde
+   é para o que se confirma, e percorrer a lista com o teclado não é confirmar */
+.seletor-item:hover, .seletor-item:focus-visible { background: var(--color-mint); }
+.seletor-item.ativo { color: var(--color-forest); font-weight: 550; }
+.seletor-item .icon { width: 14px; height: 14px; flex-shrink: 0; }
+.seletor-item-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.seletor-vazio { padding: 16px 12px; font-size: 14px; color: var(--color-ink-dim); text-align: center; }
+
+.seletor-tudo {
+  border-top: 1px solid var(--color-line); padding: 10px 12px; font-size: 13px;
+  color: var(--color-ink-dim); background: none; cursor: pointer; text-align: left;
+}
+.seletor-tudo:hover { color: var(--color-forest); background: var(--color-surface-soft); }
+
+/* ── Gestão de gastos ────────────────────────────────────────────────────── */
+.gestao-periodos { display: flex; gap: 7px; margin-bottom: 18px; flex-wrap: wrap; }
+
+.gestao-barras { display: flex; flex-direction: column; gap: 9px; margin-top: 14px; }
+.gestao-linha { display: grid; grid-template-columns: minmax(120px, 1.3fr) 2fr auto auto; align-items: center; gap: 12px; font-size: 14px; }
+.gestao-rotulo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gestao-barra { height: 8px; border-radius: 999px; background: var(--color-surface-soft); overflow: hidden; }
+.gestao-barra i { display: block; height: 100%; background: var(--color-forest); border-radius: 999px; }
+.gestao-valor { font-variant-numeric: tabular-nums; color: var(--color-ink); }
+.gestao-detalhe { font-size: 13px; color: var(--color-ink-dim); font-variant-numeric: tabular-nums; }
+.gestao-detalhe b { font-weight: 500; color: var(--color-peach-ink); }
+
+.gestao-duas { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 22px; }
+@media (max-width: 860px) { .gestao-duas { grid-template-columns: 1fr; } }
+
+/* As barras do dia começam pela base e têm altura mínima: um dia sem gasto
+   precisa aparecer como dia, não sumir do gráfico. */
+.gestao-dias { display: flex; align-items: flex-end; gap: 5px; height: 130px; margin-top: 14px; }
+.gestao-dia { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 5px; }
+.gestao-dia i { display: block; width: 100%; background: var(--color-mint); border-radius: 4px 4px 0 0; min-height: 3px; }
+.gestao-dia:hover i { background: var(--color-forest); }
+.gestao-dia span { font-size: 11px; color: var(--color-ink-dim); }
+
+.gestao-tabela { display: flex; flex-direction: column; margin-top: 12px; }
+.gestao-item {
+  display: grid; grid-template-columns: 96px minmax(130px, 1.2fr) minmax(120px, 1fr) auto auto auto;
+  align-items: center; gap: 12px; padding: 9px 2px; font-size: 13px;
+  border-top: 1px solid var(--color-line);
+}
+.gestao-item.falhou { background: var(--color-peach); border-radius: 7px; padding-inline: 8px; }
+.gestao-hora, .gestao-modelo { color: var(--color-ink-dim); }
+.gestao-modelo, .gestao-fluxo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gestao-fluxo small { color: var(--color-ink-dim); }
+.gestao-qtd, .gestao-custo { font-variant-numeric: tabular-nums; text-align: right; }
+.gestao-erro .icon { width: 14px; height: 14px; color: var(--color-peach-ink); }
+@media (max-width: 860px) {
+  .gestao-item { grid-template-columns: 1fr auto; row-gap: 4px; }
+  .gestao-hora, .gestao-modelo { grid-column: 1 / -1; }
+}
+
+/* A pergunta de provedor: a Órbita não troca sozinha, ela conta o que houve e
+   deixa a escolha com o dono. Fica em argila (contratempo), não em vermelho. */
+.escolha-provedor {
+  background: var(--color-peach); color: var(--color-peach-ink);
+  border-radius: var(--radius-card); padding: 14px 16px;
+}
+.escolha-motivo { margin: 0; font-size: 15px; }
+.escolha-pergunta { margin: 6px 0 0; font-size: 14px; opacity: .85; }
+.escolha-opcoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+/* o custo vai DENTRO do botão: quem clica precisa saber o preço antes, não depois */
+.escolha-opcoes .button { flex-direction: column; align-items: flex-start; gap: 2px; background: var(--color-surface); }
+.escolha-opcoes .button small { font-size: 11px; color: var(--color-ink-dim); font-weight: 400; }

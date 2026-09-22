@@ -62,6 +62,7 @@ import * as cameraIngest from "./camera-ingest";
 import * as cameraQuadro from "./camera-quadro";
 import * as cameraLimits from "./camera-limits";
 import * as meetingLive from "./meeting-live";
+import * as gestao from "./gestao";
 import * as ingest from "./ingest";
 import * as finance from "./finance";
 import * as financeReceipt from "./finance-receipt";
@@ -121,6 +122,7 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/cameras/quadro", cameraQuadro),
   webRoute("api/cameras/limits", cameraLimits),
   webRoute("api/meeting/live", meetingLive),
+  webRoute("api/gestao", gestao),
   webRoute("api/vision", vision),
   webRoute("api/models", models),
   // dia a dia
