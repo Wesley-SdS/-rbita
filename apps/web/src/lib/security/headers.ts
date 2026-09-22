@@ -39,7 +39,10 @@ export function origemDe(url: string | null | undefined): string | null {
 }
 
 export function buildCsp(o: CspOpcoes): string {
-  const connect = new Set<string>(["'self'", "https://api.openai.com"]);
+  // Destinos do modo de voz em tempo real: o navegador fala DIRETO com o
+  // provedor (é o que mantém a latência baixa), então a CSP precisa liberar
+  // exatamente esses dois e nada mais. WebRTC na OpenAI, WebSocket no Gemini.
+  const connect = new Set<string>(["'self'", "https://api.openai.com", "wss://generativelanguage.googleapis.com"]);
   const ws = origemDe(o.voiceWs);
   if (ws) connect.add(ws);
   for (const extra of (o.extraConnect ?? "").split(",")) {

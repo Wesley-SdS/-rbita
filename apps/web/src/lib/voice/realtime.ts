@@ -1,11 +1,12 @@
 import { getOwnDeviceId } from "@/lib/device-id";
 
-/**
- * Cliente WebRTC da OpenAI Realtime (voz S2S premium, baixa latência).
- * Fluxo: pega token efêmero do nosso backend → abre RTCPeerConnection direto
- * com a OpenAI → streama o mic e toca a resposta de áudio. Barge-in é nativo
- * (o modelo para de falar quando você fala).
- */
+/** O que a tela precisa de uma sessão de voz, seja qual for o provedor. */
+export interface SessaoRealtime {
+  start(): Promise<void>;
+  stop(): void;
+  readonly active: boolean;
+}
+
 export interface RealtimeCallbacks {
   onState?: (state: "connecting" | "listening" | "speaking" | "closed") => void;
   onError?: (msg: string) => void;
@@ -14,7 +15,15 @@ export interface RealtimeCallbacks {
   onToolCall?: (name: string, result: unknown) => void;
 }
 
-export class RealtimeSession {
+/**
+ * Cliente WebRTC da OpenAI Realtime (voz S2S premium, baixa latência).
+ * Fluxo: pega token efêmero do nosso backend → abre RTCPeerConnection direto
+ * com a OpenAI → streama o mic e toca a resposta de áudio. Barge-in é nativo
+ * (o modelo para de falar quando você fala).
+ *
+ * O irmão barato dele é o `GeminiLiveSession`; quem escolhe é o servidor.
+ */
+export class RealtimeSession implements SessaoRealtime {
   private pc: RTCPeerConnection | null = null;
   private stream: MediaStream | null = null;
   private audioEl: HTMLAudioElement | null = null;
@@ -134,4 +143,31 @@ export class RealtimeSession {
   get active(): boolean {
     return this.pc !== null;
   }
+}
+
+/**
+ * A sessão de voz do provedor que o servidor escolheu.
+ *
+ * Quem chama não sabe (nem precisa saber) se vai falar por WebRTC com a OpenAI
+ * ou por WebSocket com o Gemini: a decisão é config do dono, resolvida no
+ * servidor (`realtime.provider`), e as duas implementações têm a mesma
+ * interface. O `import()` do Gemini é dinâmico porque ele carrega o código de
+ * áudio (worklet, reamostragem) que a casa que usa OpenAI nunca vai baixar.
+ */
+export function criarSessaoRealtime(cb: RealtimeCallbacks = {}): SessaoRealtime {
+  let interna: SessaoRealtime | null = null;
+  return {
+    async start() {
+      const cfg: { provider?: string } = await fetch("/api/realtime/config").then((r) => r.json()).catch(() => ({}));
+      interna = cfg.provider === "gemini" ? new (await import("./gemini-live")).GeminiLiveSession(cb) : new RealtimeSession(cb);
+      await interna.start();
+    },
+    stop() {
+      interna?.stop();
+      interna = null;
+    },
+    get active() {
+      return interna?.active ?? false;
+    },
+  };
 }

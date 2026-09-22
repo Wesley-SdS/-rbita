@@ -56,6 +56,7 @@ export const SETTING_GROUPS = {
   routines: { label: "Rotinas e regras", order: 60 },
   tools: { label: "Ferramentas", order: 62 },
   meetings: { label: "Reuniões e agenda", order: 63 },
+  realtime: { label: "Conversa por voz (tempo real)", order: 63.5 },
   home: { label: "Casa (Home Assistant)", order: 64 },
   cameras: { label: "Câmeras", order: 64.5 },
   vision: { label: "Visão: objetos e gestos", order: 64.8 },
@@ -386,6 +387,33 @@ export const SETTING_DEFS = {
   "mcp.idleMinutes": num("tools", "MCP: fechar conexão parada após", "Conexão sem uso por este tempo é fechada. A próxima chamada reabre sozinha.", 15, 1, 1440, { unit: "min" }),
   "mcp.catalogRefreshHours": num("tools", "MCP: atualizar a lista de tools a cada", "A lista de tools de cada servidor fica guardada e é o que o modelo enxerga, sem conectar a cada mensagem. De tempos em tempos ela é buscada de novo.", 24, 1, 720, { unit: "h" }),
   "mcp.retryAfterSeconds": num("tools", "MCP: esperar antes de tentar de novo", "Servidor que nunca respondeu (sem lista de tools guardada) espera isto antes de uma nova tentativa, para não custar um timeout em toda mensagem.", 60, 5, 3600, { unit: "s" }),
+
+  // ── conversa por voz em tempo real (packages/core/src/realtime/) ──
+  // O provedor é config, e não "a chave que existir", porque os dois cobram
+  // muito diferente: medido em 21/09/2026, meia hora de conversa por dia sai
+  // perto de US$ 10/mês no Gemini Live e de US$ 60 a 99 na OpenAI Realtime.
+  "realtime.provider": sel(
+    "realtime",
+    "Quem atende a conversa por voz",
+    "No automático, a Órbita usa o Gemini Live quando a chave do Google está configurada (é a mesma dos embeddings, e custa por volta de um quinto do minuto da OpenAI). Escolher um provedor que não tem chave desliga o modo, em vez de cair calado no outro e aparecer na fatura.",
+    "auto",
+    [
+      { value: "auto", label: "Automático (o mais barato que estiver configurado)" },
+      { value: "gemini", label: "Gemini Live (Google)" },
+      { value: "openai", label: "OpenAI Realtime" },
+    ],
+  ),
+  "realtime.geminiModel": text("realtime", "Modelo do Gemini Live", "Modelo de voz em tempo real do Google. Só modelos da família Live servem aqui.", "gemini-3.8-live", 80),
+  "realtime.geminiVoice": sel(
+    "realtime",
+    "Voz do Gemini",
+    "A voz que a Órbita usa na conversa em tempo real. O padrão é a mesma que ela já usa para falar no resto do app.",
+    "Sulafat",
+    // conferidas uma a uma contra a API em 21/09/2026: todas abrem sessão
+    ["Sulafat", "Zephyr", "Puck", "Charon", "Kore", "Fenrir", "Aoede", "Leda", "Orus", "Callirrhoe", "Autonoe", "Despina", "Erinome", "Laomedeia", "Achernar", "Gacrux"].map((v) => ({ value: v, label: v })),
+  ),
+  "realtime.openaiModel": text("realtime", "Modelo da OpenAI Realtime", "O `gpt-realtime-mini` custa por volta de um terço do `gpt-realtime` por minuto, com a mesma integração.", "gpt-realtime", 80),
+  "realtime.openaiVoice": text("realtime", "Voz da OpenAI", "Nome da voz do modelo realtime da OpenAI (ex.: marin, cedar, alloy).", "marin", 40),
 
   // ── fila de trabalho pesado ──
   "jobs.pollSeconds": num("jobs", "Conferir a fila a cada", "Piso de segurança: o trabalho novo acorda o processo na hora, então isto só pega retentativa agendada e fila herdada de um processo que caiu.", 3, 1, 300, { unit: "s" }),

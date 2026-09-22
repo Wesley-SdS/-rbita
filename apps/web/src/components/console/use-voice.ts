@@ -4,7 +4,7 @@ import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, u
 import type { OrbMode } from "@/components/console/types";
 import type { Msg } from "@/components/console/types";
 import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
-import { RealtimeSession } from "@/lib/voice/realtime";
+import { criarSessaoRealtime, type SessaoRealtime } from "@/lib/voice/realtime";
 import { getRecognitionCtor, LocalWake, type RecognitionCtor, type RecognitionLike } from "@/lib/voice/speech";
 import { identityLimits } from "@/lib/identity-limits";
 
@@ -117,7 +117,7 @@ export function useVoice(p: Params) {
   const chunksRef = useRef<Blob[]>([]);
   const ttsRef = useRef<LocalTTS | null>(null);
   const wakeRef = useRef<WakeCtl | null>(null);
-  const rtRef = useRef<RealtimeSession | null>(null);
+  const rtRef = useRef<SessaoRealtime | null>(null);
   const audioFileRef = useRef<HTMLInputElement | null>(null);
   // falhas seguidas do /api/tts; após MAX_TTS_FALHAS usa a voz do navegador.
   // tolera >1 porque um 429 momentâneo do Gemini não deve custar a sessão inteira.
@@ -233,7 +233,7 @@ export function useVoice(p: Params) {
     }
   }
 
-  /** Modo tempo real (S2S premium via OpenAI Realtime). */
+  /** Modo tempo real. Quem atende (Gemini Live ou OpenAI Realtime) é config do dono, decidida no servidor. */
   async function toggleRealtime() {
     if (rtRef.current?.active) {
       rtRef.current.stop();
@@ -245,7 +245,7 @@ export function useVoice(p: Params) {
     // não mistura com o wake word local
     if (wakeRef.current?.active) { wakeRef.current.stop(); wakeRef.current = null; setWakeOn(false); }
     stopSpeaking();
-    const rt = new RealtimeSession({
+    const rt = criarSessaoRealtime({
       onState: (s) => p.setMode(s === "speaking" ? "speaking" : s === "connecting" ? "connecting" : s === "listening" ? "listening" : "standby"),
       onError: () => { p.setError("Falha no modo tempo real."); rt.stop(); rtRef.current = null; setRealtimeOn(false); },
       onTranscript: (role, text) => p.setMessages((m) => [...m, { role, content: text }]),

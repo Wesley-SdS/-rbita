@@ -10,9 +10,25 @@ describe("CSP", () => {
   const prod = buildCsp({ dev: false, voiceWs: "ws://localhost:8001/ws/wake" });
 
   it("libera o que a Órbita usa de fato", () => {
-    expect(prod).toContain("connect-src 'self' https://api.openai.com ws://localhost:8001");
+    expect(prod).toContain("connect-src 'self' https://api.openai.com wss://generativelanguage.googleapis.com ws://localhost:8001");
     expect(prod).toContain("media-src 'self' data: blob:");
     expect(prod).toContain("img-src 'self' data: blob:");
+  });
+
+  it("não libera script de blob:, nem em desenvolvimento", () => {
+    // O worklet de áudio do Gemini Live começou como blob e foi recusado:
+    // `audioWorklet.addModule` passa por `script-src`. A saída foi servir o
+    // worklet de `public/audio/captura-pcm.js`, e NÃO abrir `blob:` aqui —
+    // que liberaria qualquer script montado em tempo de execução.
+    expect(prod).not.toMatch(/script-src[^;]*blob:/);
+    expect(buildCsp({ dev: true })).not.toMatch(/script-src[^;]*blob:/);
+  });
+
+  it("libera os DOIS provedores de voz em tempo real", () => {
+    // o navegador abre a sessão direto com o provedor; sem isto no connect-src,
+    // o modo de voz falha em silêncio, que é exatamente o que este arquivo evita
+    expect(prod).toContain("https://api.openai.com"); // WebRTC
+    expect(prod).toContain("wss://generativelanguage.googleapis.com"); // WebSocket do Gemini Live
   });
 
   it("fecha plugin, embutir em outro site, base e formulário", () => {
