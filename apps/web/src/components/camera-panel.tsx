@@ -4,6 +4,7 @@ import { useState } from "react";
 import { invalidar, useRecurso, useRecursos } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 import { Card, PanelTitle, Input, Button, ErrorRetry } from "@/components/ui";
+import { CameraDesteAparelho } from "@/components/camera-do-aparelho";
 
 /**
  * Câmeras (Onda 5): cadastro sem lista fixa, token de webhook por câmera
@@ -123,6 +124,7 @@ Precisão: contraluz, rosto de lado e gente longe da câmera costumam sair como 
   return (
     <div className="flex flex-col gap-2 text-[15px]">
       <p style={dim}>Sem lista fixa: cadastre cada câmera e aponte o Frigate (ou script equivalente) para o webhook com o token gerado.</p>
+      <CameraDesteAparelho cameras={cams} />
       {novoToken && (
         <div className="rounded-lg border p-2" style={{ borderColor: "var(--color-gold)" }}>
           <p>Token de <b>{novoToken.nome}</b> (copie agora, não aparece de novo):</p>
