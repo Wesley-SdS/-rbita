@@ -15,7 +15,10 @@
  * conta como custo zero (era o bug do RV.2: a nuvem sem preço passava na frente
  * do modelo local).
  */
-export const FAILOVER_ORDERS = ["assinatura_local_paga", "assinatura_paga_local", "local_primeiro"] as const;
+// "paga_primeiro" existe porque as outras três todas começam por assinatura
+// ou por local. Numa casa com a assinatura no limite e sem GPU, isso obrigava
+// a Órbita a tentar dois caminhos ruins antes de chegar no que funciona.
+export const FAILOVER_ORDERS = ["assinatura_local_paga", "assinatura_paga_local", "paga_primeiro", "local_primeiro"] as const;
 export type FailoverOrder = (typeof FAILOVER_ORDERS)[number];
 
 /** Modelo pré-selecionado na UI: nuvem responde rápido; local mantém tudo em casa. */

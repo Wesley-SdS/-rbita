@@ -43,6 +43,22 @@ describe("ordem do failover (RV.2)", () => {
     ]);
   });
 
+  it("nuvem paga primeiro: a paga abre, a assinatura vem atrás e o local fecha", () => {
+    // faltava esta ordem: as outras três começam por assinatura ou por local, e
+    // numa casa com a assinatura no limite e sem GPU isso obrigava a tentar
+    // dois caminhos ruins antes do que funciona
+    expect(ordenarAlternativas(todos, "paga_primeiro").map((x) => x.key)).toEqual([
+      "gateway/mini", "gateway/big", "groq/llama", "claude/sonnet", "local/qwen2.5:3b",
+    ]);
+  });
+
+  it("nuvem paga primeiro mantém a regra do preço desconhecido (RV.2)", () => {
+    // sem preço informado continua DEPOIS da paga com preço, mesmo sendo a
+    // classe preferida: custo desconhecido não é custo zero
+    const ordem = ordenarAlternativas([groqSemPreco, gatewayCaro], "paga_primeiro").map((x) => x.key);
+    expect(ordem).toEqual(["gateway/big", "groq/llama"]);
+  });
+
   it("local primeiro coloca o local até antes da assinatura", () => {
     expect(ordenarAlternativas(todos, "local_primeiro")[0].key).toBe("local/qwen2.5:3b");
   });

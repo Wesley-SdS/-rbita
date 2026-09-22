@@ -144,9 +144,13 @@ function classe(m: ModelInfo, ordem: FailoverOrder): number {
   const rank =
     ordem === "local_primeiro"
       ? { local: 0, assinatura: 1, paga: 2, semPreco: 3 }
-      : ordem === "assinatura_paga_local"
-        ? { assinatura: 0, paga: 1, semPreco: 2, local: 3 }
-        : { assinatura: 0, local: 1, paga: 2, semPreco: 3 };
+      : ordem === "paga_primeiro"
+        ? // a assinatura vem logo atrás: se a nuvem paga falhar, o que já está
+          // pago é a próxima escolha mais sensata, e o local fecha a fila
+          { paga: 0, semPreco: 1, assinatura: 2, local: 3 }
+        : ordem === "assinatura_paga_local"
+          ? { assinatura: 0, paga: 1, semPreco: 2, local: 3 }
+          : { assinatura: 0, local: 1, paga: 2, semPreco: 3 };
   if (assinatura) return rank.assinatura;
   if (local) return rank.local;
   return pagaConhecida ? rank.paga : rank.semPreco;

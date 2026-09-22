@@ -8,6 +8,7 @@ import type { FailoverOrder } from "@orbita/llm";
 const FAILOVER_LABEL: Record<FailoverOrder, string> = {
   assinatura_local_paga: "Assinatura, depois local, depois nuvem paga",
   assinatura_paga_local: "Assinatura, depois nuvem paga, depois local",
+  paga_primeiro: "Nuvem paga primeiro (mais rápida; use quando a assinatura está no limite)",
   local_primeiro: "Local primeiro (máxima privacidade, lento sem GPU)",
 };
 const FAILOVER_OPTIONS = (Object.entries(FAILOVER_LABEL) as [FailoverOrder, string][]).map(([value, label]) => ({ value, label }));
