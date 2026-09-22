@@ -253,6 +253,13 @@
       "when": 1789908217881,
       "tag": "0035_indices_leitura",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790098233698,
+      "tag": "0036_uso_registrado",
+      "breakpoints": true
     }
   ]
 }

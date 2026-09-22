@@ -56,6 +56,8 @@ export * from "./device-schema";
 export * from "./job-schema";
 // Acompanhar uma tarefa passo a passo pela câmera ("me ajuda com essa receita").
 export * from "./guided-schema";
+// Contabilidade de consumo: toda chamada paga da casa, seja qual for o fluxo.
+export * from "./usage-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {
