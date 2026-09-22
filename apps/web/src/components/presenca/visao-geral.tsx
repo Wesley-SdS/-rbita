@@ -10,6 +10,7 @@ import { useRecursos } from "@/lib/dados/recurso";
 import { ESTADO_DO_MODO, Nucleo } from "./nucleo";
 import { ESTADOS_NUCLEO } from "./estados";
 import { useConsoleDeVoz } from "@/components/console/use-console-voz";
+import { capturarUmQuadro } from "@/lib/camera/aparelho";
 
 /* "Meus cards": o que o dono fixou para olhar todo dia. É o painel mais ligado
    à ideia de visão geral, então mora aqui e não atrás de uma aba. */
@@ -37,6 +38,11 @@ export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
   // aqui, e o núcleo reage ao que está acontecendo.
   const assistente = useConsoleDeVoz();
   const estado = ESTADO_DO_MODO[assistente.mode];
+
+  /** Captura UM quadro e repete a pergunta, agora com o que olhar. */
+  async function deixarOlhar(pergunta: string) {
+    if (await capturarUmQuadro()) assistente.chat.sendMessage(pergunta);
+  }
 
   // O Modo foco abre por cima e tem voz própria; dois reconhecedores no mesmo
   // microfone não ouvem nenhum dos dois.
@@ -155,11 +161,41 @@ export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
 
           {/* O rastro da conversa falada: sem isto, quem fala não tem como
               conferir o que a Órbita entendeu sem trocar de tela. */}
-          {(assistente.erro || assistente.ultima) && (
+          {/* A pergunta de provedor e o pedido de câmera chegam com TEXTO
+              VAZIO. Mostrando só `content`, a tela ficava muda e parecia que a
+              Órbita não tinha ouvido — era o mesmo buraco do Modo foco. */}
+          {assistente.ultima?.escolha ? (
+            <div className="escolha-provedor" style={{ marginTop: 12 }}>
+              <p className="escolha-motivo">{assistente.ultima.escolha.motivo}</p>
+              <div className="escolha-opcoes">
+                {assistente.ultima.escolha.opcoes.map((o) => (
+                  <button
+                    key={o.classe}
+                    type="button"
+                    className="button secondary compacto"
+                    onClick={() => assistente.chat.sendMessage(assistente.ultima!.escolha!.pergunta, undefined, [o.classe])}
+                  >
+                    Usar {o.rotulo}
+                    <small>{o.custo}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : assistente.ultima?.pedidoCamera ? (
+            <div className="escolha-provedor" style={{ marginTop: 12 }}>
+              <p className="escolha-motivo">{assistente.ultima.pedidoCamera.motivo}</p>
+              <div className="escolha-opcoes">
+                <button type="button" className="button secondary compacto" onClick={() => void deixarOlhar(assistente.ultima!.pedidoCamera!.pergunta)}>
+                  Deixar ela olhar
+                  <small>tira uma foto agora e responde</small>
+                </button>
+              </div>
+            </div>
+          ) : (assistente.erro || assistente.ultima) ? (
             <p className={`visao-fala ${assistente.erro ? "erro" : ""}`} aria-live="polite">
               {assistente.erro ?? assistente.ultima?.content}
             </p>
-          )}
+          ) : null}
 
           <div className="presence-foot">
             <span>

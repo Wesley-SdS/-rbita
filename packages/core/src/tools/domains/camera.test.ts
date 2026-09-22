@@ -115,9 +115,15 @@ describe("casa_ver_camera: nuvem barrada em câmera que identifica (decisão 9.6
 });
 
 describe("casa_listar_cameras", () => {
-  it("sem câmera nenhuma, avisa em vez de devolver lista vazia sem contexto", async () => {
+  it("sem câmera nenhuma, aponta o caminho em vez de virar beco sem saída", async () => {
+    // O modelo listava, via vazio e desistia ali ("não encontrei nenhuma
+    // câmera cadastrada"), sem saber que o aparelho de quem fala pode virar
+    // uma. A lista vazia agora carrega o próximo passo.
     cameras = [];
-    expect(await set().casa_listar_cameras!.execute!({}, exec)).toEqual({ cameras: [], aviso: "Nenhuma câmera cadastrada ainda." });
+    const r = (await set().casa_listar_cameras!.execute!({}, exec)) as { cameras: unknown[]; aviso: string; proximo_passo: string };
+    expect(r.cameras).toEqual([]);
+    expect(r.aviso).toMatch(/aparelho/i);
+    expect(r.proximo_passo).toMatch(/casa_ver_camera/);
   });
 
   it("lista nome e se está ligada, sem devolver id interno ao modelo", async () => {

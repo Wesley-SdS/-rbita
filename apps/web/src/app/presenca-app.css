@@ -734,3 +734,7 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
 /* o custo vai DENTRO do botão: quem clica precisa saber o preço antes, não depois */
 .escolha-opcoes .button { flex-direction: column; align-items: flex-start; gap: 2px; background: var(--color-surface); }
 .escolha-opcoes .button small { font-size: 11px; color: var(--color-ink-dim); font-weight: 400; }
+
+/* O que o reconhecedor entendeu, enquanto espera o chamado. Discreto: é
+   diagnóstico, não conversa. Sem isto, um wake que não dispara é invisível. */
+.foco-ouvido { font-size: 13px; color: var(--color-ink-dim); font-style: italic; }

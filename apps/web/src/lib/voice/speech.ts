@@ -39,7 +39,23 @@ export function getRecognitionCtor(): RecognitionCtor | null {
 
 // "Ei Órbita" / "Órbita". Casamos no texto SEM acento porque o `\b` do JS não
 // trata letras acentuadas como caractere de palavra ("ó" quebraria a borda).
-const WAKE_RE = /\b(?:ei\s+)?orbita\b/i;
+/**
+ * O reconhecedor do navegador quase nunca devolve "Ei Órbita" na grafia certa.
+ * O que chega são variações fonéticas, e cada uma que falta é um chamado
+ * perdido em silêncio: sem erro, sem log, sem nada explicando. Medido nesta
+ * casa, "Ei Órbita" falado chegou escrito como **"em órbita"**.
+ *
+ * A raiz é sempre o mesmo som (o/ó + r + b/p + vogal + t/d + a), e o prefixo
+ * varia entre ei, e, eh, hey, em, ai, oi.
+ *
+ * O NOME SOZINHO só acorda no COMEÇO da fala. É o que separa "Órbita, tá me
+ * ouvindo?" (chamado) de "a órbita da lua é elíptica" (assunto). No meio da
+ * frase, exige o prefixo de chamamento — acordar sozinha durante uma conversa
+ * sobre astronomia é pior do que não acordar.
+ */
+const CHAMA = "(?:ei|e|eh|hey|ai|em|oi)";
+const NOME = "[oóh]+r[bp]i?[dt]a[s]?\\b";
+const WAKE_RE = new RegExp(`(?:^\\s*(?:${CHAMA}[\\s,]+)?|[\\s,.!?]${CHAMA}[\\s,]+)${NOME}`, "i");
 
 /** Remove acentos (NFD + tira as marcas combinantes U+0300–U+036F). */
 function semAcento(s: string): string {
@@ -65,7 +81,18 @@ export class LocalWake {
 
   constructor(
     private Ctor: RecognitionCtor,
-    private cb: { onWake: () => void; onError?: (msg: string) => void },
+    private cb: {
+      onWake: () => void;
+      onError?: (msg: string) => void;
+      /**
+       * O que o reconhecedor ENTENDEU, tenha acordado ou não.
+       *
+       * Sem isto, um wake que não dispara é invisível: não há erro, não há
+       * log, e a única informação é "não funcionou". Com isto dá para ver que
+       * a fala virou "em órbita" e corrigir o padrão em vez de adivinhar.
+       */
+      onOuvido?: (texto: string) => void;
+    },
   ) {}
 
   start(): void {
@@ -116,6 +143,7 @@ export class LocalWake {
     rec.interimResults = true;
     rec.onresult = (e) => {
       const last = e.results[e.results.length - 1];
+      if (last) this.cb.onOuvido?.(last[0].transcript);
       if (last && matchesWake(last[0].transcript)) {
         this.pause(); // libera o mic para o comando
         this.cb.onWake();

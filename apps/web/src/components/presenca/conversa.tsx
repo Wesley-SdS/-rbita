@@ -369,7 +369,13 @@ export function Conversa({
             <span>ativar “Ei Órbita”</span>
           </button>
         ) : (
-          <span>{mode === "standby" ? 'ouvindo · diga "Ei Órbita"' : ROTULO_DO_MODO[mode]}</span>
+          <span>
+            {mode === "standby"
+              ? voz.ultimoOuvido
+                ? `ouvi: “${voz.ultimoOuvido.slice(0, 40)}”`
+                : 'ouvindo · diga "Ei Órbita"'
+              : ROTULO_DO_MODO[mode]}
+          </span>
         )}
       </div>
     </div>

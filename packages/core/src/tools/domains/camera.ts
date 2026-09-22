@@ -10,13 +10,23 @@ import { registerTools, type ToolContext, type ToolDef } from "../registry";
 export const casa_listar_cameras: ToolDef<z.ZodObject<Record<string, never>>> = {
   name: "casa_listar_cameras",
   domain: "camera",
-  description: "Lista as câmeras cadastradas na casa, o cômodo de cada uma e se estão ligadas.",
+  description: "Lista as câmeras cadastradas na casa, o cômodo de cada uma e se estão ligadas. Se a lista vier vazia, NÃO conclua que é impossível ver: o aparelho de quem está falando pode virar câmera, e `casa_ver_camera` com local \"aqui\" resolve.",
   risk: "leitura",
   keywords: ["câmera", "camera", "vigilância", "cameras cadastradas"],
   inputSchema: z.object({}),
   run: async (_input, { userId }) => {
     const cams = await listCameras(userId);
-    if (cams.length === 0) return { cameras: [], aviso: "Nenhuma câmera cadastrada ainda." };
+    // Casa sem câmera nenhuma NÃO é um beco sem saída: o aparelho de quem está
+    // falando pode ser a primeira. Sem esta dica o modelo lista, vê a lista
+    // vazia e desiste ali — foi o que aconteceu com "acesse minha câmera", que
+    // recebeu "não encontrei nenhuma câmera cadastrada" e parou.
+    if (cams.length === 0) {
+      return {
+        cameras: [],
+        aviso: "Nenhuma câmera cadastrada ainda, mas o aparelho de quem está falando pode ser usado como câmera.",
+        proximo_passo: "Para ver agora, chame casa_ver_camera com local 'aqui'.",
+      };
+    }
     return { cameras: cams.map((c) => ({ nome: c.name, ligada: c.enabled })) };
   },
 };

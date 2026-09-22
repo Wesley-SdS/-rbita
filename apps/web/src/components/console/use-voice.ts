@@ -110,6 +110,8 @@ export function useVoice(p: Params) {
   const [voiceOn, setVoiceOn] = useState(true);
   const [recording, setRecording] = useState(false);
   const [wakeOn, setWakeOn] = useState(false);
+  // o que o reconhecedor entendeu por último, para o wake deixar de ser caixa-preta
+  const [ultimoOuvido, setUltimoOuvido] = useState("");
   const [realtimeEnabled, setRealtimeEnabled] = useState(false); // S2S premium disponível?
   const [realtimeOn, setRealtimeOn] = useState(false);
   const recRef = useRef<MediaRecorder | null>(null);
@@ -285,6 +287,7 @@ export function useVoice(p: Params) {
         return;
       }
       const w = new LocalWake(Ctor, {
+        onOuvido: setUltimoOuvido,
         onWake: () => {
           stopSpeaking(); // barge-in ao ouvir "Ei Órbita"
           if (p.modeRef.current === "standby") startDictation(Ctor); // capta o comando (retoma o wake no fim)
@@ -440,7 +443,7 @@ export function useVoice(p: Params) {
   }, []);
 
   return {
-    voiceOn, setVoiceOn, recording, wakeOn, realtimeEnabled, realtimeOn,
+    voiceOn, setVoiceOn, recording, wakeOn, ultimoOuvido, realtimeEnabled, realtimeOn,
     audioFileRef, speak, stopSpeaking, seeScreen, sendAudioFile,
     voiceCommand, toggleRealtime, toggleWake, toggleMic, handleAssistantResponse,
   };

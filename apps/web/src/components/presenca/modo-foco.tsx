@@ -172,6 +172,11 @@ export function ModoFoco({
             </div>
           ) : ultima ? (
             <p className={ultima.role === "user" ? "foco-fala-sua" : "foco-fala-dela"}>{ultima.content}</p>
+          ) : voz.wakeOn && voz.ultimoOuvido ? (
+            /* O que ela ENTENDEU, enquanto espera o chamado. Sem isto, um wake
+               que não dispara é invisível: não há erro nem log, e a única
+               informação disponível é "não funcionou". */
+            <p className="foco-ouvido">ouvi: “{voz.ultimoOuvido}”</p>
           ) : (
             <p className="foco-dica">Diga “Ei Órbita” e peça o que precisar, ou abra uma conversa contínua.</p>
           )}
