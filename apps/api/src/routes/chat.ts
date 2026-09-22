@@ -4,7 +4,7 @@ import { and, asc, count, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   resolveModel, resolveVisionModel, getModelInfo, routeModelKey, providerEnv, discoveredSnapshot,
-  buildModelChain, discoverModels, recordProviderResult, CACHE_BREAK,
+  buildModelChain, discoverModels, recordProviderResult, statusDoErro, CACHE_BREAK,
 } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { conversation, message } from "@orbita/db/chat-schema";
@@ -319,6 +319,8 @@ export async function POST(req: Request, ctx: RouteCtx) {
           try { result = makeStream(key); } catch { continue; } // provedor não resolvido → próximo
           const buffered: unknown[] = [];
           let gotText = false;
+          // guardado para o disjuntor: 429/401/403 é limite de conta e abre na hora
+          let statusDaFalha: number | undefined;
           try {
             for await (const part of result.fullStream) {
               if (part.type === "text-delta") {
@@ -331,15 +333,18 @@ export async function POST(req: Request, ctx: RouteCtx) {
                 const ev = { t: "tool-done", name: part.toolName };
                 gotText ? send(ev) : buffered.push(ev);
               } else if (part.type === "error") {
-                if (!gotText) throw new Error("provider-error"); // ainda dá p/ trocar
+                if (!gotText) {
+                  statusDaFalha = statusDoErro((part as { error?: unknown }).error);
+                  throw new Error("provider-error"); // ainda dá p/ trocar
+                }
                 send({ t: "error", msg: "A resposta foi interrompida. Tente reenviar." });
                 finished = true;
               }
             }
             finished = true;
             recordProviderResult(key, gotText); // sucesso fecha o disjuntor do provedor
-          } catch {
-            recordProviderResult(key, false); // falha conta p/ abrir o disjuntor
+          } catch (e) {
+            recordProviderResult(key, false, statusDaFalha ?? statusDoErro(e)); // falha conta p/ abrir o disjuntor
             if (gotText) { finished = true; } // já emitiu texto: não troca no meio
             // senão: silenciosamente tenta o próximo candidato da cadeia
           }
