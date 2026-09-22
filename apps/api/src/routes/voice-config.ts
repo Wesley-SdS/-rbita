@@ -2,6 +2,7 @@
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { voiceServiceUrl } from "@orbita/core/voice/service-url";
+import { settings } from "@orbita/core/settings/index";
 
 /**
  * Config pública do serviço de voz para o cliente:
@@ -41,9 +42,14 @@ export async function GET(_req: Request, ctx: RouteCtx) {
     }
   }
 
+  // O motor e as frases são do dono (§5.6). O navegador não pode repetir essa
+  // decisão em constante: mudar na tela e o wake continuar igual seria pior do
+  // que não ter a opção.
+  const cfg = await settings.getMany(["voice.wakeEngine", "voice.wakePhrases"]);
+
   // cache curtinho: evita martelar o /health do voice, mas reflete rápido quando ele sobe.
   return Response.json(
-    { up, wsWakeUrl: wsBase ? `${wsBase}/ws/wake` : null, wakePhrase },
+    { up, wsWakeUrl: wsBase ? `${wsBase}/ws/wake` : null, wakePhrase, motor: cfg["voice.wakeEngine"], frases: cfg["voice.wakePhrases"] },
     { headers: { "Cache-Control": "private, max-age=10" } },
   );
 }

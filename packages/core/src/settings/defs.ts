@@ -480,6 +480,31 @@ export const SETTING_DEFS = {
    * Frase de uma palavra só acorda no COMEÇO da fala; com duas ou mais, em
    * qualquer posição. É o que separa chamar de falar sobre.
    */
+  /**
+   * Quem escuta o chamado.
+   *
+   * Os dois caminhos falham de jeitos DIFERENTES, e por isso a escolha importa:
+   *
+   *  • navegador  Web Speech. Não precisa de nada rodando, mas transcreve a
+   *    frase inteira e às vezes come o nome — medido nesta casa: "Oi Órbita,
+   *    você tá aí?" chegou como "Oi você tá ai". E manda o áudio para o Google.
+   *  • vosk       O serviço local, com gramática restrita à frase. Não existe
+   *    "a palavra sumiu": ou casa com confiança, ou cai em desconhecido. Roda
+   *    offline, nada sai de casa, mas exige o apps/voice de pé e consome CPU
+   *    enquanto escuta.
+   */
+  "voice.wakeEngine": sel(
+    "identity",
+    "Quem escuta o “Ei Órbita”",
+    "SERVIÇO LOCAL (Vosk): só sabe reconhecer as frases de chamada, então não existe \"a palavra sumiu\": ou casa com confiança, ou ignora. Roda offline e nenhum áudio sai de casa. Em troca, exige o apps/voice de pé, consome CPU enquanto escuta e não reconhece frase livre. NAVEGADOR (Web Speech): não precisa de nada rodando e entende fala livre, mas transcreve a frase inteira e às vezes come o nome (aqui, \"Oi Órbita, você tá aí?\" chegou como \"Oi você tá ai\"), só funciona no Chrome e no Edge, e manda seu áudio para o Google. No automático, usa o local quando ele está no ar.",
+    "auto",
+    [
+      { value: "auto", label: "Automático (serviço local quando disponível)" },
+      { value: "vosk", label: "Serviço local (Vosk, offline)" },
+      { value: "navegador", label: "Navegador (Web Speech, manda áudio ao Google)" },
+    ],
+  ),
+
   "voice.wakePhrases": list(
     "identity",
     "Frases que acordam a Órbita",

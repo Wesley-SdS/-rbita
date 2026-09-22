@@ -274,8 +274,47 @@ export function useVoice(p: Params) {
     // não mistura com o tempo real: os dois disputariam o microfone (achado de auditoria pós-Onda 6)
     if (rtRef.current?.active) { rtRef.current.stop(); rtRef.current = null; setRealtimeOn(false); }
 
-    // Preferido: wake word NO APARELHO (Web Speech API) — sem servidor, sem
-    // cold-start. Detecta "Ei Órbita" e dispara o ditado do comando.
+    // QUEM ESCUTA é escolha do dono (`voice.wakeEngine`). Os dois falham de
+    // jeitos diferentes: a Web Speech transcreve a frase inteira e às vezes
+    // come o nome (medido: "Oi Órbita, você tá aí?" virou "Oi você tá ai"), e
+    // ainda manda o áudio para o Google; o Vosk usa gramática restrita à
+    // frase, roda offline, mas precisa do apps/voice de pé.
+    const cfgVoz = await fetch("/api/voice-config").then((r) => r.json()).catch(() => ({}) as Record<string, unknown>);
+    const motor = (cfgVoz.motor as string) ?? "auto";
+    const frases = Array.isArray(cfgVoz.frases) ? (cfgVoz.frases as string[]) : undefined;
+    const voskDisponivel = Boolean(cfgVoz.up && cfgVoz.wsWakeUrl);
+    const usarVosk = motor === "vosk" || (motor === "auto" && voskDisponivel);
+
+    if (usarVosk) {
+      if (!voskDisponivel) {
+        p.setError("O serviço local de voz não está no ar. Suba o apps/voice ou mude quem escuta, em Preferências.");
+        return;
+      }
+      try {
+        const listener = new WakeListener(cfgVoz.wsWakeUrl as string, {
+          onWake: () => {
+            stopSpeaking();
+            const C = getRecognitionCtor();
+            if (p.modeRef.current === "standby") { if (C) startDictation(C); else void voiceCommand(); }
+            else wakeRef.current?.resume?.();
+          },
+          onEnergy: (rms: number) => {
+            if (ttsRef.current?.speaking && rms > 0.06) stopSpeaking();
+          },
+          onError: () => p.setError("Falha no wake word (serviço de voz)."),
+        });
+        await listener.start();
+        wakeRef.current = listener;
+        setWakeOn(true);
+        setUltimoOuvido("");
+        return;
+      } catch {
+        p.setError("Sem acesso ao microfone para o wake word.");
+        return;
+      }
+    }
+
+    // Web Speech: no aparelho, sem servidor e sem cold-start.
     const Ctor = getRecognitionCtor();
     if (Ctor) {
       try {
@@ -288,6 +327,7 @@ export function useVoice(p: Params) {
       }
       const w = new LocalWake(Ctor, {
         onOuvido: setUltimoOuvido,
+        frases,
         onWake: () => {
           stopSpeaking(); // barge-in ao ouvir "Ei Órbita"
           if (p.modeRef.current === "standby") startDictation(Ctor); // capta o comando (retoma o wake no fim)

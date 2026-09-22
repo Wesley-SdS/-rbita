@@ -108,6 +108,8 @@ export class LocalWake {
        * a fala virou "em órbita" e corrigir o padrão em vez de adivinhar.
        */
       onOuvido?: (texto: string) => void;
+      /** as frases que acordam; vazio usa as do padrão */
+      frases?: string[];
     },
   ) {}
 
@@ -160,7 +162,7 @@ export class LocalWake {
     rec.onresult = (e) => {
       const last = e.results[e.results.length - 1];
       if (last) this.cb.onOuvido?.(last[0].transcript);
-      if (last && matchesWake(last[0].transcript)) {
+      if (last && matchesWake(last[0].transcript, this.cb.frases?.length ? this.cb.frases : undefined)) {
         this.pause(); // libera o mic para o comando
         this.cb.onWake();
       }
