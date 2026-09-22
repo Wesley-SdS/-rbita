@@ -445,6 +445,22 @@ export const SETTING_DEFS = {
     // conferidas uma a uma contra a API em 21/09/2026: todas abrem sessão
     ["Sulafat", "Zephyr", "Puck", "Charon", "Kore", "Fenrir", "Aoede", "Leda", "Orus", "Callirrhoe", "Autonoe", "Despina", "Erinome", "Laomedeia", "Achernar", "Gacrux"].map((v) => ({ value: v, label: v })),
   ),
+  // A Órbita ASSISTINDO, não fotografando. O quadro sob demanda serve para
+  // "o que estou segurando"; não serve para acompanhar uma palestra, que foi
+  // o caso que o dono trouxe. O Gemini Live aceita vídeo no mesmo canal do
+  // áudio (conferido contra a API em 22/09/2026: descreveu corretamente uma
+  // imagem enviada no meio da sessão).
+  "realtime.videoFps": num(
+    "realtime",
+    "Quadros por segundo quando ela está vendo",
+    "Um por segundo é o que o Gemini Live recomenda e costuma bastar para acompanhar uma cena. Mais quadros custam mais e raramente mudam a resposta.",
+    1,
+    0.2,
+    5,
+    { step: 0.2, unit: "/s" },
+  ),
+  "realtime.videoLargura": num("realtime", "Largura do quadro de vídeo", "O quadro é reduzido para esta largura antes de subir. Maior enxerga texto de slide mais longe e custa mais por minuto.", 768, 320, 1920, { unit: "px" }),
+
   "realtime.openaiModel": text("realtime", "Modelo da OpenAI Realtime", "O `gpt-realtime-mini` custa por volta de um terço do `gpt-realtime` por minuto, com a mesma integração.", "gpt-realtime", 80),
   "realtime.openaiVoice": text("realtime", "Voz da OpenAI", "Nome da voz do modelo realtime da OpenAI (ex.: marin, cedar, alloy).", "marin", 40),
 

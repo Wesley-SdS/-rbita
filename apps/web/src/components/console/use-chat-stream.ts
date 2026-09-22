@@ -168,6 +168,11 @@ export function useChatStream(p: Params) {
         const daqui = pedido.cameraId === null ? await garantirCameraDoAparelho() : ehCameraDesteAparelho(pedido.cameraId) ? pedido.cameraId : null;
         if (daqui && cameraAutorizada() && (await capturarUmQuadro(daqui))) {
           stopTimer();
+          // o REF, e não só o estado: `modeRef` só é atualizado num efeito,
+          // depois da renderização, e o `sendMessage` logo abaixo lê o ref.
+          // Sem esta linha ele via "studying", desistia calado, e a pergunta
+          // nunca era refeita — a Órbita mostrava a foto e não respondia nada.
+          p.modeRef.current = "standby";
           p.setMode("standby");
           // a foto entra na conversa: a câmera acendeu, e quem autorizou tem
           // de ver o que foi enviado em vez de confiar que deu certo
