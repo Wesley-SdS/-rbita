@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invalidar } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
-import { CameraDoAparelho, cameraAutorizada, definirAutorizacao } from "@/lib/camera/aparelho";
+import { CameraDoAparelho, cameraAutorizada, definirAutorizacao, nomeDaCameraDoAparelho } from "@/lib/camera/aparelho";
 
 /**
  * Transforma a webcam deste aparelho numa câmera da casa.
@@ -96,7 +96,7 @@ export function CameraDesteAparelho({ cameras }: { cameras: CameraRow[] }) {
    */
   async function garantirCamera(): Promise<string | null> {
     if (cam) return cam.id;
-    const nome = "Câmera deste aparelho";
+    const nome = nomeDaCameraDoAparelho();
     const r = await fetch("/api/cameras", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -108,6 +108,10 @@ export function CameraDesteAparelho({ cameras }: { cameras: CameraRow[] }) {
       return null;
     }
     escolher(d.id);
+    // criar a câmera do próprio aparelho JÁ é o consentimento; obrigar a um
+    // segundo interruptor depois disso é burocracia sem ganho de privacidade
+    definirAutorizacao(true);
+    setAutorizada(true);
     invalidar("/api/cameras");
     return d.id;
   }
@@ -194,9 +198,9 @@ export function CameraDesteAparelho({ cameras }: { cameras: CameraRow[] }) {
           Essa câmera está desligada. Ligue na lista abaixo para poder enviar.
         </p>
       )}
-      {/* A autorização permanente é o que dispensa o botão no meio da conversa:
-          com ela, a Órbita captura UM quadro junto da sua mensagem, em vez de
-          ficar transmitindo. A câmera acende por um instante, não fica acesa. */}
+      {/* Isto dispensa o botão no meio da conversa. A câmera NÃO fica ligada e
+          NÃO tira foto a cada mensagem: ela abre só quando o pedido exigiu ver
+          ("o que estou segurando?"), por uma fração de segundo. */}
       {cam && (
         <label className="switch-row" style={{ marginTop: 12 }}>
           <input
@@ -209,13 +213,13 @@ export function CameraDesteAparelho({ cameras }: { cameras: CameraRow[] }) {
           />
           <span>
             <Icone nome="spark" />
-            Deixar a Órbita olhar quando precisar, sem perguntar
+            Abrir a câmera quando eu pedir algo que precise dela
           </span>
         </label>
       )}
       {autorizada && (
         <p className="mt-1 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
-          Ela tira uma foto junto de cada mensagem sua e usa só se precisar ver. Sem isso, ela pergunta antes.
+          A câmera abre só no momento em que a Órbita precisa ver, e fecha em seguida. Sem isso, ela pergunta antes e você clica.
         </p>
       )}
 

@@ -4,7 +4,7 @@ import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, u
 import type { OrbMode } from "@/components/console/types";
 import type { Msg, OpcaoDeProvedor, ToolStep, VoiceBridge } from "@/components/console/types";
 import { getOwnDeviceId } from "@/lib/device-id";
-import { cameraAutorizada, capturarUmQuadro, limitesDaCamera } from "@/lib/camera/aparelho";
+import { cameraAutorizada, capturarUmQuadro, ehCameraDesteAparelho } from "@/lib/camera/aparelho";
 
 interface Params {
   modelKey: string;
@@ -65,14 +65,6 @@ export function useChatStream(p: Params) {
     if (imgToSend) setImageAttach(null);
     p.setError(null); p.setMode("studying");
 
-    // A Órbita autorizada a olhar captura um quadro JUNTO da mensagem, para já
-    // ter o que ver se precisar. Com prazo: a câmera leva um tempo para
-    // acordar, e esperar por ela atrasaria toda conversa — inclusive as que
-    // não têm nada a ver com imagem.
-    if (cameraAutorizada()) {
-      const teto = await limitesDaCamera().then((l) => l.esperaAoFalarMs).catch(() => 1500);
-      await Promise.race([capturarUmQuadro(), new Promise((r) => setTimeout(r, teto))]);
-    }
     p.setMessages((m) => [...m, { role: "user", content, image: imgToSend ?? undefined }, { role: "assistant", content: "" }]);
     const started = Date.now();
     let spoke = false;
@@ -110,7 +102,7 @@ export function useChatStream(p: Params) {
       // quando a Órbita pergunta qual provedor usar, não vem texto nenhum: o
       // pintor não pode sobrescrever a pergunta com uma bolha vazia
       let perguntou = false;
-      let pedidoDeCamera: { motivo: string; pergunta: string } | null = null;
+      let pedidoDeCamera: { motivo: string; pergunta: string; cameraId: string | null } | null = null;
       const steps: ToolStep[] = [];
       // O stream entrega muitos pedaços por segundo. Re-renderizar o React a
       // cada pedaço engasgava a animação do Orb (medido: 47fps parado contra
@@ -134,7 +126,7 @@ export function useChatStream(p: Params) {
         buf = lines.pop() ?? "";
         for (const line of lines) {
           if (!line.trim()) continue;
-          let ev: { t: string; v?: string; name?: string; msg?: string; motivo?: string; opcoes?: OpcaoDeProvedor[]; tipo?: string; camera?: string | null };
+          let ev: { t: string; v?: string; name?: string; msg?: string; motivo?: string; opcoes?: OpcaoDeProvedor[]; tipo?: string; camera?: string | null; cameraId?: string | null };
           try { ev = JSON.parse(line); } catch { continue; }
           if (ev.t === "text") {
             acc += ev.v ?? "";
@@ -148,7 +140,7 @@ export function useChatStream(p: Params) {
           } else if (ev.t === "pedido" && ev.tipo === "camera") {
             // a Órbita precisa ver e não tem imagem recente: guarda o pedido
             // para a tela oferecer o botão quando a resposta terminar
-            pedidoDeCamera = { motivo: ev.motivo ?? "Preciso de uma imagem para responder.", pergunta: content };
+            pedidoDeCamera = { motivo: ev.motivo ?? "Preciso de uma imagem para responder.", pergunta: content, cameraId: ev.cameraId ?? null };
           } else if (ev.t === "escolha" && ev.opcoes?.length) {
             // A Órbita não trocou de provedor sozinha: ela pergunta. A pergunta
             // vira parte da mensagem para continuar ali depois de rolar a tela.
@@ -163,8 +155,22 @@ export function useChatStream(p: Params) {
       flush(true); // garante que o texto final apareça inteiro
       // o pedido de imagem entra NA MENSAGEM, junto da resposta: assim ele
       // sobrevive ao rolar da conversa, como a pergunta de provedor
+      // A Órbita precisou ver. Quem pediu "o que estou segurando" já autorizou
+      // a câmera no próprio pedido — perguntar de novo seria burocracia. Então
+      // a captura acontece agora e a pergunta é refeita, já com o que olhar.
+      //
+      // O botão continua existindo, mas só quando a captura NÃO deu certo
+      // (permissão negada, câmera ocupada): aí a pessoa precisa saber o porquê.
       if (pedidoDeCamera) {
-        p.setMessages((m) => { const c = [...m]; const ult = c[c.length - 1]; if (ult) c[c.length - 1] = { ...ult, pedidoCamera: pedidoDeCamera! }; return c; });
+        const pedido = pedidoDeCamera;
+        // só captura se a câmera pedida for a DESTE aparelho
+        if (ehCameraDesteAparelho(pedido.cameraId) && cameraAutorizada() && (await capturarUmQuadro())) {
+          stopTimer();
+          p.setMode("standby");
+          void sendMessage(pedido.pergunta);
+          return;
+        }
+        p.setMessages((m) => { const c = [...m]; const ult = c[c.length - 1]; if (ult) c[c.length - 1] = { ...ult, pedidoCamera: pedido }; return c; });
       }
 
       // métricas da sessão (tokens estimados por chars quando não há usage do provedor).

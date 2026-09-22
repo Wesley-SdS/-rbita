@@ -10,7 +10,7 @@ export interface OpcaoDeProvedor { classe: "assinatura" | "local" | "paga"; rotu
  */
 export interface PerguntaDeProvedor { motivo: string; opcoes: OpcaoDeProvedor[]; pergunta: string }
 /** "Preciso ver para responder": o pedido fica na mensagem, com o botão. */
-export interface PedidoDeCamera { motivo: string; pergunta: string }
+export interface PedidoDeCamera { motivo: string; pergunta: string; cameraId: string | null }
 export interface Msg { role: Role; content: string; steps?: ToolStep[]; image?: string; escolha?: PerguntaDeProvedor; pedidoCamera?: PedidoDeCamera }
 export interface ModelInfo {
   key: string;

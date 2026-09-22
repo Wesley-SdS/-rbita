@@ -182,7 +182,16 @@ export class CameraDoAparelho {
 
 /** A câmera que este aparelho alimenta. Preferência DO APARELHO, guardada aqui. */
 export const CHAVE_CAMERA = "orbita.cameraDoAparelho";
-/** "A Órbita pode olhar quando precisar", por aparelho. */
+/**
+ * "A Órbita pode abrir a câmera quando o pedido exigir", por aparelho.
+ *
+ * Liga junto com a câmera do aparelho, de propósito: cadastrar a webcam da
+ * casa já é o consentimento, e pedir "o que estou segurando" é o segundo. A
+ * primeira versão capturava um quadro em TODA mensagem para estar pronta — e
+ * isso custava latência em conversas que nada tinham a ver com imagem, além
+ * de piscar a luz da webcam a cada frase. Agora a câmera só abre quando a
+ * tool de fato precisou de uma imagem.
+ */
 export const CHAVE_AUTORIZADA = "orbita.cameraAutorizada";
 
 function ler(chave: string): string | null {
@@ -257,4 +266,33 @@ export async function capturarUmQuadro(cameraId?: string | null): Promise<boolea
   } finally {
     stream?.getTracks().forEach((t) => t.stop());
   }
+}
+
+/**
+ * A câmera pedida é a DESTE aparelho?
+ *
+ * O navegador só consegue abrir a própria câmera. Sem esta checagem, pedir "a
+ * câmera do quarto" e não haver imagem recente faria o notebook fotografar a
+ * si mesmo e a Órbita responder, com confiança, sobre o lugar errado.
+ */
+export function ehCameraDesteAparelho(cameraId: string | null | undefined): boolean {
+  if (!cameraId) return false;
+  return ler(CHAVE_CAMERA) === cameraId;
+}
+
+/**
+ * Como chamar a câmera criada para este aparelho.
+ *
+ * O nome importa porque é por ele que a Órbita encontra a câmera: o
+ * `findCamera` casa por `ILIKE %texto%` no nome da câmera ou do cômodo. Com o
+ * nome genérico "Câmera deste aparelho", pedir "a câmera do meu notebook" não
+ * achava nada — e a Órbita respondia que não tinha câmera, tendo.
+ *
+ * É um palpite pelo agente do navegador, e palpite erra: por isso o nome pode
+ * ser trocado na lista de câmeras, e a busca continua valendo pelo nome novo.
+ */
+export function nomeDaCameraDoAparelho(ua = typeof navigator === "undefined" ? "" : navigator.userAgent): string {
+  if (/iPad|Tablet/i.test(ua)) return "Câmera do tablet";
+  if (/Android|iPhone|Mobile/i.test(ua)) return "Câmera do celular";
+  return "Câmera do notebook";
 }

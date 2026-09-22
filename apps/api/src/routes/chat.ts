@@ -367,9 +367,12 @@ export async function POST(req: Request, ctx: RouteCtx) {
                 // ela PEDE uma. Aqui o pedido vira um evento para a tela, que
                 // mostra o botão "deixar ela olhar". A câmera só acende com o
                 // aval de quem está na frente dela.
-                const saida = (part as { output?: unknown }).output as { precisa_de_imagem?: boolean; camera?: string; motivo?: string } | undefined;
+                const saida = (part as { output?: unknown }).output as { precisa_de_imagem?: boolean; camera_id?: string; camera?: string; motivo?: string } | undefined;
                 if (saida?.precisa_de_imagem) {
-                  const pedido = { t: "pedido", tipo: "camera", camera: saida.camera ?? null, motivo: saida.motivo ?? "Preciso de uma imagem para responder." };
+                  // o ID importa: só o navegador pode capturar a câmera DELE. Pedir a
+                  // câmera do quarto e capturar a webcam do notebook responderia
+                  // com confiança sobre a coisa errada.
+                  const pedido = { t: "pedido", tipo: "camera", cameraId: saida.camera_id ?? null, camera: saida.camera ?? null, motivo: saida.motivo ?? "Preciso de uma imagem para responder." };
                   gotText ? send(pedido) : buffered.push(pedido);
                 }
               } else if (part.type === "error") {

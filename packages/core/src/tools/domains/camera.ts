@@ -46,7 +46,7 @@ export const casa_ver_camera: ToolDef<typeof VerInput> = {
     // Sem imagem RECENTE a tool não desiste: ela PEDE. O chat transforma isto
     // num botão ("deixar ela olhar"), e o quadro é capturado na hora, em vez
     // de a Órbita descrever uma imagem de horas atrás como se fosse agora.
-    if (!ev?.snapshot) return { precisa_de_imagem: true, camera: cam.name, motivo: `A câmera "${cam.name}" não tem imagem recente.` };
+    if (!ev?.snapshot) return { precisa_de_imagem: true, camera_id: cam.id, camera: cam.name, motivo: `A câmera "${cam.name}" não tem imagem recente.` };
     const descricao = await narrateSnapshot(ev.snapshot, undefined, { localOnly: cam.identifyFaces });
     return { camera: cam.name, descricao, capturadoEm: ev.createdAt };
   },
