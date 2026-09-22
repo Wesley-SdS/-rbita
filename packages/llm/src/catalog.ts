@@ -1,5 +1,5 @@
 import { discoverModels, discoveredSnapshot, type DiscoveredModel } from "./discovery";
-import { BOOTSTRAP_MODEL_KEY, policySnapshot, readPolicy, type DefaultPreference } from "./policy";
+import { BOOTSTRAP_MODEL_KEY, policySnapshot, readPolicy, type DefaultPreference, type FailoverOrder } from "./policy";
 
 export type ProviderId = "local" | "gateway" | "claude" | "groq" | "google" | "openai" | "cohere";
 
@@ -172,12 +172,22 @@ function melhorLocal(lista: ModelInfo[], tier?: ModelInfo["tier"]): ModelInfo | 
 }
 
 /** Melhor modelo de nuvem: assinatura primeiro (já paga), depois porte; preço desconhecido por último no empate. */
-function melhorNuvem(lista: ModelInfo[], tier?: ModelInfo["tier"]): ModelInfo | undefined {
+/**
+ * O melhor modelo de nuvem.
+ *
+ * `assinaturaPrimeiro` existe porque a preferência "melhor de nuvem" tratava
+ * assinatura como sempre melhor, ignorando a ordem escolhida pelo dono. O
+ * efeito, medido em 22/09/2026: com "nuvem paga primeiro" configurado, o chat
+ * ainda abria com o Claude, e o dono tinha de responder a uma pergunta que a
+ * configuração dele já tinha respondido.
+ */
+function melhorNuvem(lista: ModelInfo[], tier?: ModelInfo["tier"], assinaturaPrimeiro = true): ModelInfo | undefined {
   const nuvem = lista.filter((m) => !m.local);
   const candidatos = tier ? nuvem.filter((m) => m.tier === tier) : nuvem;
+  const peso = (m: ModelInfo) => (m.billing === "subscription" ? 1 : 0) * (assinaturaPrimeiro ? 1 : -1);
   return candidatos.sort(
     (a, b) =>
-      Number(b.billing === "subscription") - Number(a.billing === "subscription") ||
+      peso(b) - peso(a) ||
       ordemTier[a.tier] - ordemTier[b.tier] ||
       Number(b.priceKnown) - Number(a.priceKnown) ||
       a.costPer1k - b.costPer1k,
@@ -189,15 +199,21 @@ function melhorNuvem(lista: ModelInfo[], tier?: ModelInfo["tier"]): ModelInfo | 
  * Nuvem é o padrão enquanto a casa não tem GPU: um 7B local na CPU leva de 30 s a
  * minutos por turno. Derivado da descoberta, não de uma lista fixa.
  */
-export function escolherPadrao(lista: ModelInfo[], preferencia: DefaultPreference): ModelInfo | undefined {
+export function escolherPadrao(lista: ModelInfo[], preferencia: DefaultPreference, ordem?: FailoverOrder): ModelInfo | undefined {
   const uteis = lista.filter((m) => m.key !== "auto");
-  const escolha = preferencia === "local" ? melhorLocal(uteis) ?? melhorNuvem(uteis) : melhorNuvem(uteis) ?? melhorLocal(uteis);
+  // a ordem do dono manda também aqui: dizer "nuvem paga primeiro" e a tela
+  // abrir com a assinatura é a configuração não valendo onde mais aparece
+  const assinaturaPrimeiro = ordem !== "paga_primeiro";
+  const escolha =
+    preferencia === "local"
+      ? melhorLocal(uteis) ?? melhorNuvem(uteis, undefined, assinaturaPrimeiro)
+      : melhorNuvem(uteis, undefined, assinaturaPrimeiro) ?? melhorLocal(uteis);
   return escolha ?? uteis[0];
 }
 
 export async function defaultModelKey(_env?: ProviderEnv): Promise<string> {
   const [lista, policy] = await Promise.all([availableModels(), readPolicy()]);
-  return escolherPadrao(lista, policy.defaultPreference)?.key ?? (policy.fallbackModel.trim() || BOOTSTRAP_MODEL_KEY);
+  return escolherPadrao(lista, policy.defaultPreference, policy.failoverOrder)?.key ?? (policy.fallbackModel.trim() || BOOTSTRAP_MODEL_KEY);
 }
 
 /**
@@ -223,16 +239,17 @@ export function classificarComplexidade(content: string): boolean {
  * Simples → local pequeno (latência é o que importa; é o caminho do comando de
  * casa). Complexo → o mais forte disponível, preferindo nuvem.
  */
-export function escolherModelo(lista: ModelInfo[], opts: { complexo: boolean }): ModelInfo | undefined {
+export function escolherModelo(lista: ModelInfo[], opts: { complexo: boolean; ordem?: FailoverOrder }): ModelInfo | undefined {
   const uteis = lista.filter((m) => m.key !== "auto");
   if (!uteis.length) return undefined;
+  const ap = opts.ordem !== "paga_primeiro";
   return opts.complexo
-    ? melhorNuvem(uteis, "large") ?? melhorNuvem(uteis) ?? melhorLocal(uteis, "large") ?? melhorLocal(uteis)
-    : melhorLocal(uteis, "small") ?? melhorLocal(uteis) ?? melhorNuvem(uteis, "small") ?? melhorNuvem(uteis);
+    ? melhorNuvem(uteis, "large", ap) ?? melhorNuvem(uteis, undefined, ap) ?? melhorLocal(uteis, "large") ?? melhorLocal(uteis)
+    : melhorLocal(uteis, "small") ?? melhorLocal(uteis) ?? melhorNuvem(uteis, "small", ap) ?? melhorNuvem(uteis, undefined, ap);
 }
 
 /** Auto-router: aplica `escolherModelo` sobre o que a descoberta já encontrou. */
 export function routeModelKey(content: string, _env?: ProviderEnv): string {
-  const escolha = escolherModelo(availableModelsSync(), { complexo: classificarComplexidade(content) });
+  const escolha = escolherModelo(availableModelsSync(), { complexo: classificarComplexidade(content), ordem: policySnapshot().failoverOrder });
   return escolha?.key ?? fallbackSync();
 }

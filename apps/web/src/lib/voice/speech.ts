@@ -40,31 +40,47 @@ export function getRecognitionCtor(): RecognitionCtor | null {
 // "Ei Órbita" / "Órbita". Casamos no texto SEM acento porque o `\b` do JS não
 // trata letras acentuadas como caractere de palavra ("ó" quebraria a borda).
 /**
- * O reconhecedor do navegador quase nunca devolve "Ei Órbita" na grafia certa.
- * O que chega são variações fonéticas, e cada uma que falta é um chamado
- * perdido em silêncio: sem erro, sem log, sem nada explicando. Medido nesta
- * casa, "Ei Órbita" falado chegou escrito como **"em órbita"**.
- *
- * A raiz é sempre o mesmo som (o/ó + r + b/p + vogal + t/d + a), e o prefixo
- * varia entre ei, e, eh, hey, em, ai, oi.
- *
- * O NOME SOZINHO só acorda no COMEÇO da fala. É o que separa "Órbita, tá me
- * ouvindo?" (chamado) de "a órbita da lua é elíptica" (assunto). No meio da
- * frase, exige o prefixo de chamamento — acordar sozinha durante uma conversa
- * sobre astronomia é pior do que não acordar.
+ * As frases que acordam, quando o servidor ainda não respondeu quais são.
+ * O valor que vale é o da config (`voice.wakePhrases`, tela de Ajustes).
  */
-const CHAMA = "(?:ei|e|eh|hey|ai|em|oi)";
-const NOME = "[oóh]+r[bp]i?[dt]a[s]?\\b";
-const WAKE_RE = new RegExp(`(?:^\\s*(?:${CHAMA}[\\s,]+)?|[\\s,.!?]${CHAMA}[\\s,]+)${NOME}`, "i");
+export const FRASES_PADRAO = ["ei órbita", "em órbita", "e órbita", "eh órbita", "hey órbita", "oi órbita", "órbita"];
 
 /** Remove acentos (NFD + tira as marcas combinantes U+0300–U+036F). */
 function semAcento(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
-/** Detecta a frase de ativação no texto reconhecido. */
-export function matchesWake(text: string): boolean {
-  return WAKE_RE.test(semAcento(text));
+const escapar = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * O padrão de uma frase de chamado.
+ *
+ * Frase de UMA palavra só acorda no COMEÇO da fala; com duas ou mais, em
+ * qualquer posição. É o que separa chamar ("Órbita, tá me ouvindo?") de falar
+ * sobre ("então eu falei órbita pra ela", "a órbita da lua"). Acordar no meio
+ * de uma conversa é pior do que não acordar.
+ */
+function padraoDaFrase(frase: string): RegExp | null {
+  const limpa = semAcento(frase).trim().toLowerCase();
+  if (!limpa) return null;
+  const palavras = limpa.split(/\s+/).map(escapar);
+  // `s?` no fim: o reconhecedor às vezes pluraliza ("ei orbitas")
+  // vírgula entre as palavras: "ei, órbita" é como se chama alguém
+  const corpo = palavras.join("[\\s,]+") + "s?";
+  return palavras.length === 1 ? new RegExp(`^\\s*${corpo}\\b`, "i") : new RegExp(`\\b${corpo}\\b`, "i");
+}
+
+/**
+ * Detecta a frase de ativação no texto reconhecido.
+ *
+ * As frases vêm da config do dono: o reconhecedor do navegador às vezes não
+ * transcreve o nome (medido: "Oi Órbita, você tá aí?" chegou como "Oi você tá
+ * ai"), e nenhum padrão casa com o que não veio. Podendo escolher, o dono usa
+ * o que o aparelho dele de fato entrega.
+ */
+export function matchesWake(text: string, frases: string[] = FRASES_PADRAO): boolean {
+  const alvo = semAcento(text);
+  return frases.some((f) => padraoDaFrase(f)?.test(alvo) ?? false);
 }
 
 /**

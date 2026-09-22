@@ -75,6 +75,19 @@ describe("modelo pré-selecionado", () => {
     expect(escolherPadrao(todos, "nuvem")?.key).toBe("claude/sonnet");
   });
 
+  it("com 'nuvem paga primeiro', o pré-selecionado NÃO é a assinatura", () => {
+    // o dono configurou "nuvem paga primeiro" e o chat abria com o Claude
+    // assim mesmo: a ordem valia só para o failover, e a tela ignorava.
+    // Resultado, medido: ele respondia a uma pergunta que a config dele já
+    // tinha respondido.
+    expect(escolherPadrao(todos, "nuvem", "paga_primeiro")?.key).not.toBe("claude/sonnet");
+  });
+
+  it("nas outras ordens a assinatura continua na frente", () => {
+    expect(escolherPadrao(todos, "nuvem", "assinatura_local_paga")?.key).toBe("claude/sonnet");
+    expect(escolherPadrao(todos, "nuvem", "local_primeiro")?.key).toBe("claude/sonnet");
+  });
+
   it("local: melhor local", () => {
     expect(escolherPadrao(todos, "local")?.key).toBe("local/qwen2.5:3b");
   });

@@ -22,11 +22,27 @@ describe("a Órbita acorda quando é chamada", () => {
     "órbita, tá me ouvindo?",
     "ei, órbita",
     "ei orbitas",         // plural que o reconhecedor às vezes inventa
-    "ei orbida",          // d no lugar do t
   ];
   for (const frase of acorda) {
     it(`acorda com "${frase}"`, () => expect(matchesWake(frase)).toBe(true));
   }
+});
+
+describe("a lista de frases é config, e é para isso que ela serve", () => {
+  it("o que o reconhecedor entrega de verdade pode ser acrescentado", () => {
+    // o caso real: "Oi Órbita, você tá aí?" chegou como "Oi você tá ai" — o
+    // nome sumiu. Nenhum padrão casa com o que não veio; escolher a frase, sim.
+    expect(matchesWake("ei orbida", ["ei orbida"])).toBe(true);
+    expect(matchesWake("computador, que horas são", ["computador"])).toBe(true);
+  });
+
+  it("frase de uma palavra só vale no começo, mesmo sendo personalizada", () => {
+    expect(matchesWake("falei computador pra ela", ["computador"])).toBe(false);
+  });
+
+  it("lista vazia não acorda com nada", () => {
+    expect(matchesWake("ei órbita", [])).toBe(false);
+  });
 });
 
 describe("a Órbita NÃO acorda sozinha", () => {

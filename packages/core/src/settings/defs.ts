@@ -468,6 +468,25 @@ export const SETTING_DEFS = {
   // modelo COM ferramentas, e nada impedia cadastrar "a cada 1 minuto": foi o
   // que aconteceu em 22/09/2026, e ela rodou 356 vezes sem ninguém notar,
   // porque rotina não registra consumo em lugar nenhum.
+  /**
+   * As frases que acordam a Órbita.
+   *
+   * É config, e não constante, por um motivo medido: o reconhecedor do
+   * navegador às vezes simplesmente NÃO transcreve o nome. Dito "Oi Órbita,
+   * você tá aí?", o que chegou foi "Oi você tá ai" — a palavra sumiu, e
+   * nenhum padrão casa com o que não veio. Podendo escolher a frase, o dono
+   * usa uma que o reconhecedor dele entrega de verdade.
+   *
+   * Frase de uma palavra só acorda no COMEÇO da fala; com duas ou mais, em
+   * qualquer posição. É o que separa chamar de falar sobre.
+   */
+  "voice.wakePhrases": list(
+    "identity",
+    "Frases que acordam a Órbita",
+    "O reconhecedor do navegador nem sempre entende o nome; acrescente aqui o que ele realmente escreve quando você chama. Frase de uma palavra só vale no começo da fala.",
+    ["ei órbita", "em órbita", "e órbita", "eh órbita", "hey órbita", "oi órbita", "órbita"],
+  ),
+
   "routines.minIntervalMinutes": num(
     "routines",
     "Intervalo mínimo entre execuções",
