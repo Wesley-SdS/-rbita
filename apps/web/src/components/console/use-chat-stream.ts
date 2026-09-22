@@ -4,7 +4,7 @@ import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, u
 import type { OrbMode } from "@/components/console/types";
 import type { Msg, OpcaoDeProvedor, ToolStep, VoiceBridge } from "@/components/console/types";
 import { getOwnDeviceId } from "@/lib/device-id";
-import { cameraAutorizada, capturarUmQuadro, ehCameraDesteAparelho } from "@/lib/camera/aparelho";
+import { cameraAutorizada, capturarUmQuadro, ehCameraDesteAparelho, garantirCameraDoAparelho } from "@/lib/camera/aparelho";
 
 interface Params {
   modelKey: string;
@@ -163,8 +163,10 @@ export function useChatStream(p: Params) {
       // (permissão negada, câmera ocupada): aí a pessoa precisa saber o porquê.
       if (pedidoDeCamera) {
         const pedido = pedidoDeCamera;
-        // só captura se a câmera pedida for a DESTE aparelho
-        if (ehCameraDesteAparelho(pedido.cameraId) && cameraAutorizada() && (await capturarUmQuadro())) {
+        // `cameraId: null` = a casa não tem câmera nenhuma e este aparelho
+        // pode ser a primeira. Com id, só captura se for a DESTE aparelho.
+        const daqui = pedido.cameraId === null ? await garantirCameraDoAparelho() : ehCameraDesteAparelho(pedido.cameraId) ? pedido.cameraId : null;
+        if (daqui && cameraAutorizada() && (await capturarUmQuadro(daqui))) {
           stopTimer();
           p.setMode("standby");
           void sendMessage(pedido.pergunta);

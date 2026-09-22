@@ -78,10 +78,14 @@ vi.mock("../../vision/objects", () => ({
 vi.mock("../../meetings/quem-disse", () => ({
   quemDisse: async () => [{ documentId: "d1", titulo: "Reunião", quando: new Date(), locutor: "A", nome: "Anna", trecho: "entrego na sexta" }],
 }));
+let camerasDaCasa: { id: string; name: string }[] = [];
 vi.mock("../../cameras/query", () => ({
   findCamera: async () => camera,
   latestEventWithSnapshot: async () => ({ id: "e1", snapshot: "data:image/jpeg;base64,AA", createdAt: new Date() }),
   cameraRoomName: async () => "Quarto",
+  // a tool pergunta quantas câmeras a casa tem para decidir entre "não achei
+  // essa" e "não há nenhuma, posso usar a deste aparelho?"
+  listCameras: async () => (camera ? [camera] : camerasDaCasa),
 }));
 vi.mock("../../cameras/narrate", () => ({
   narrateCameraEvent: async (id: string) => {
@@ -219,9 +223,24 @@ describe("câmera: permissão por cômodo antes do modelo de visão", () => {
     expect(narradas).toEqual(["e1"]);
   });
 
-  it("câmera inexistente responde sem chamar o modelo", async () => {
+  it("casa SEM câmera nenhuma: oferece a deste aparelho em vez de recusar", async () => {
+    // "liga a câmera e vê o que estou segurando" tem de funcionar na primeira
+    // vez, sem passar por tela de configuração. `camera_id: null` é o sinal
+    // de que o aparelho de quem pediu pode ser a primeira câmera da casa.
     camera = null;
-    expect(await ver_camera.run({ local: "garagem", pergunta: "tem carro?" }, ctx)).toMatchObject({ erro: expect.stringContaining("Não achei") });
+    camerasDaCasa = [];
+    const r = await ver_camera.run({ local: "aqui", pergunta: "o que estou segurando?" }, ctx);
+    expect(r).toMatchObject({ precisa_de_imagem: true, camera_id: null });
+    expect(narradas).toEqual([]);
+  });
+
+  it("câmera pedida que não existe, havendo outras: recusa e NÃO usa outra", async () => {
+    // pedir a do quarto e receber a da garagem seria responder com confiança
+    // sobre o lugar errado
+    camera = null;
+    camerasDaCasa = [{ id: "outra", name: "Garagem" }];
+    const r = await ver_camera.run({ local: "quarto da Madalena", pergunta: "tem alguém?" }, ctx);
+    expect(r).toMatchObject({ erro: expect.stringContaining("Não achei") });
     expect(narradas).toEqual([]);
   });
 });

@@ -7,7 +7,7 @@ import { createPerson, listPeople, currentTerm } from "../../identity/people";
 import { apagarBiometriaDe, usarFalaComoAmostra } from "../../identity/actions";
 import { cameraDigest, findObject, knownObjectLabels } from "../../vision/objects";
 import { quemDisse } from "../../meetings/quem-disse";
-import { cameraRoomName, findCamera, latestEventWithSnapshot } from "../../cameras/query";
+import { cameraRoomName, findCamera, latestEventWithSnapshot, listCameras } from "../../cameras/query";
 import { imagemFresca } from "../../cameras/fresca";
 import { allowedRooms, authorizeRoomForRequester } from "../../home/room-permission";
 import { narrateCameraEvent, narrateSnapshot } from "../../cameras/narrate";
@@ -127,6 +127,14 @@ export const ver_camera: ToolDef<typeof VerCameraInput> = {
   authorize: autorizarCamera("ver a câmera"),
   run: async ({ local, pergunta }, ctx) => {
     const cam = await findCamera(ctx.userId, local);
+    // NENHUMA câmera cadastrada não é "não achei": é uma casa que ainda não
+    // tem câmera. Pedir "liga a câmera e vê o que estou segurando" deveria
+    // funcionar na primeira vez, sem passar por tela de configuração — o
+    // aparelho de quem pediu pode ser a câmera, e quem autoriza de fato é o
+    // pedido de permissão do próprio navegador.
+    if (!cam && (await listCameras(ctx.userId)).length === 0) {
+      return { precisa_de_imagem: true, camera_id: null, camera: null, motivo: "Ainda não há nenhuma câmera nesta casa." };
+    }
     if (!cam) return { erro: `Não achei uma câmera para "${local}".` };
     const ev = await imagemFresca(cam.id);
     // irmã da `casa_ver_camera`: as duas fazem a mesma coisa e o modelo escolhe

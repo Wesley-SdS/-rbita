@@ -296,3 +296,30 @@ export function nomeDaCameraDoAparelho(ua = typeof navigator === "undefined" ? "
   if (/Android|iPhone|Mobile/i.test(ua)) return "Câmera do celular";
   return "Câmera do notebook";
 }
+
+/**
+ * A câmera deste aparelho, cadastrando-a se ainda não existir.
+ *
+ * Mora aqui, e não só na tela de câmeras, porque o primeiro uso costuma vir
+ * do chat: "liga a câmera e vê o que estou segurando" tem de funcionar sem
+ * passar por tela de configuração. Quem autoriza de verdade é o pedido de
+ * permissão do próprio navegador, que aparece logo em seguida.
+ */
+export async function garantirCameraDoAparelho(): Promise<string | null> {
+  const guardada = ler(CHAVE_CAMERA);
+  if (guardada) return guardada;
+  try {
+    const r = await fetch("/api/cameras", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nomeDaCameraDoAparelho() }),
+    });
+    const d = (await r.json().catch(() => ({}))) as { id?: string };
+    if (!r.ok || !d.id) return null;
+    localStorage.setItem(CHAVE_CAMERA, d.id);
+    definirAutorizacao(true);
+    return d.id;
+  } catch {
+    return null;
+  }
+}

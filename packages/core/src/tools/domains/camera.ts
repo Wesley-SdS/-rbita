@@ -41,6 +41,14 @@ export const casa_ver_camera: ToolDef<typeof VerInput> = {
   },
   run: async ({ local }, { userId }) => {
     const cam = await findCamera(userId, local);
+    // NENHUMA câmera cadastrada não é "não achei": é uma casa que ainda não
+    // tem câmera. Pedir "liga a câmera e vê o que estou segurando" deveria
+    // funcionar na primeira vez, sem passar por tela de configuração — o
+    // aparelho de quem pediu pode ser a câmera, e quem autoriza de fato é o
+    // pedido de permissão do próprio navegador.
+    if (!cam && (await listCameras(userId)).length === 0) {
+      return { precisa_de_imagem: true, camera_id: null, camera: null, motivo: "Ainda não há nenhuma câmera nesta casa." };
+    }
     if (!cam) return { erro: `Não achei uma câmera para "${local}".` };
     const ev = await imagemFresca(cam.id);
     // Sem imagem RECENTE a tool não desiste: ela PEDE. O chat transforma isto
