@@ -4,7 +4,6 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { Icone } from "./icones";
-import type { EstadoNucleo } from "./nucleo";
 import { useCasca } from "./contexto";
 import { Markdown } from "@/components/markdown";
 import type { ModelInfo, Msg, VoiceBridge } from "@/components/console/types";
@@ -22,17 +21,8 @@ const ActionsPanel = dynamic(() => import("@/components/actions-panel").then((m)
  * têm origem no caminho do chat: vão chegar do gate de aprovação e do fim de
  * execução de ferramenta, não de um `setState` solto aqui.
  */
-const ESTADO_DO_MODO: Record<OrbMode, EstadoNucleo> = {
-  standby: "idle",
-  listening: "listening",
-  speaking: "speaking",
-  searching: "searching",
-  studying: "thinking",
-  connecting: "connecting",
-};
-
 const ROTULO_DO_MODO: Record<OrbMode, string> = {
-  standby: 'em espera · diga "Ei Órbita"',
+  standby: "em espera",
   studying: "processando…",
   speaking: "respondendo…",
   searching: "pesquisando…",
@@ -155,6 +145,18 @@ export function Conversa({
   });
   useEffect(() => {
     pontesVoz.current = { handleAssistantResponse: voz.handleAssistantResponse, stopSpeaking: voz.stopSpeaking };
+  });
+
+  // O modo foco tem voz própria e abre por cima desta tela. Aqui dizemos à
+  // casca como soltar o microfone, senão os dois reconhecedores disputam o
+  // mesmo aparelho e nenhum ouve direito.
+  useEffect(() => {
+    casca.registrarPausaDeVoz(() => {
+      voz.stopSpeaking();
+      if (voz.wakeOn) void voz.toggleWake();
+      if (voz.realtimeOn) void voz.toggleRealtime();
+    });
+    return () => casca.registrarPausaDeVoz(null);
   });
 
   useEffect(() => {
@@ -314,7 +316,18 @@ export function Conversa({
       </div>
       <div className="composer-hint">
         <span>Enter envia · Shift+Enter quebra linha</span>
-        <span>{ROTULO_DO_MODO[mode]}</span>
+        {/* O rodapé dizia 'diga "Ei Órbita"' o tempo todo, inclusive com o wake
+            word desligado (que é o padrão): a interface prometia escutar sem
+            escutar nada. Agora ele diz o estado real e, quando está desligado,
+            é o próprio atalho para ligar, em vez de esconder isso no menu "+". */}
+        {mode === "standby" && !voz.wakeOn ? (
+          <button type="button" className="dica-wake" onClick={() => void voz.toggleWake()}>
+            <Icone nome="mic" />
+            <span>ativar “Ei Órbita”</span>
+          </button>
+        ) : (
+          <span>{mode === "standby" ? 'ouvindo · diga "Ei Órbita"' : ROTULO_DO_MODO[mode]}</span>
+        )}
       </div>
     </div>
   );

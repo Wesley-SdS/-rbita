@@ -38,7 +38,9 @@ export function useChatStream(p: Params) {
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []); // limpa o cronômetro no unmount
 
   // auto-cresce o textarea conforme o conteúdo (até um teto), sem barra de rolagem.
-  const autoGrow = (el: HTMLTextAreaElement) => { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 160) + "px"; };
+  // O teto tem de ser o MESMO do `max-height` da folha: com 160 aqui e 110 lá,
+  // o JS esticava além do que o CSS permitia e sobrava barra de rolagem.
+  const autoGrow = (el: HTMLTextAreaElement) => { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 132) + "px"; };
 
   function send() {
     const content = input.trim();

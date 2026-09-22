@@ -14,6 +14,15 @@ export interface Casca {
   abrirFoco: () => void;
   abrirBusca: () => void;
   abrirAtividade: () => void;
+  /**
+   * A tela deixa aqui como soltar o microfone dela.
+   *
+   * O modo foco tem voz própria (ele abre por cima de qualquer rota), e dois
+   * reconhecedores no mesmo microfone não ouvem nenhum dos dois. Quem tem voz
+   * registra; quem abre o foco chama. Guardado em ref pela casca, então
+   * registrar não provoca renderização.
+   */
+  registrarPausaDeVoz: (parar: (() => void) | null) => void;
   /** Preferências de interface, já resolvidas pelo servidor. */
   intensidade: number;
   reduzido: boolean;

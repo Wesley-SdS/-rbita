@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { Icone } from "./icones";
@@ -125,6 +125,15 @@ export function Casca({
   const [atividadeAberta, setAtividadeAberta] = useState(false);
   const [focoAberto, setFocoAberto] = useState(false);
 
+  // Como soltar o microfone da tela de trás quando o foco abre. Em ref, e não
+  // em estado, porque registrar não pode disparar renderização: a tela
+  // registra a cada render, e um `setState` aqui viraria laço.
+  const pausaVozRef = useRef<(() => void) | null>(null);
+  const registrarPausaDeVoz = useCallback((parar: (() => void) | null) => {
+    pausaVozRef.current = parar;
+  }, []);
+  const pausarVozDaTela = useCallback(() => pausaVozRef.current?.(), []);
+
   // O sistema operacional também pede calma: se a pessoa configurou movimento
   // reduzido no aparelho, isso vale mesmo que a chave do app esteja desligada.
   const [reduzidoNoAparelho, setReduzidoNoAparelho] = useState(false);
@@ -218,6 +227,7 @@ export function Casca({
           abrirFoco: () => setFocoAberto(true),
           abrirBusca: () => setBuscaAberta(true),
           abrirAtividade: () => setAtividadeAberta(true),
+          registrarPausaDeVoz,
           intensidade,
           reduzido: movimentoReduzido,
         }}
@@ -339,6 +349,7 @@ export function Casca({
           minutos={focoMinutos}
           intensidade={intensidade}
           reduzido={movimentoReduzido}
+          pausarVozDaTela={pausarVozDaTela}
         />
       </ProvedorCasca>
     </ProvedorCacheDados>

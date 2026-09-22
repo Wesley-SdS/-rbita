@@ -83,7 +83,18 @@ textarea.inline-input { resize: vertical; min-height: 84px; }
 .stat-row b.acento { color: var(--color-forest); }
 .stat-row b.bom { color: var(--color-good); }
 
-.aviso-erro { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 9px; font-size: 14px; background: var(--color-danger-soft); color: var(--color-danger); }
+/* Recados da Órbita.
+   Nada aqui é vermelho de propósito. O vermelho ficou reservado para o que
+   destrói (apagar conta, remover pessoa); um contratempo comum, como uma
+   gravação que saiu muda, não é um alarme, e pintar isso de vermelho ensina a
+   pessoa a ignorar a cor quando ela realmente importar.
+   `.aviso-ameno` é informação; `.atencao` é algo que não deu certo, em argila
+   quente em vez de vermelho. */
+.aviso-ameno,
+.aviso-erro { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 9px; font-size: 14px; background: var(--color-surface-soft); color: var(--color-ink); border: 1px solid var(--color-line); }
+.aviso-ameno.atencao,
+.aviso-erro { background: var(--color-peach); color: var(--color-peach-ink); border-color: transparent; }
+.aviso-ameno > span,
 .aviso-erro > span { flex: 1; }
 
 .esqueleto { animation: pulsar 1.6s ease-in-out infinite; }
@@ -450,3 +461,153 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
    cabe em uma linha na coluna de conversas e encostava na borda do painel. */
 .switch-row span { flex-wrap: wrap; }
 .switch-row { line-height: 1.6; }
+
+/* Atalho do wake word no rodapé do compositor.
+   Herda a tipografia da dica para não virar um botão gritando no rodapé: a
+   diferença que importa é ser CLICÁVEL, porque antes o único caminho para
+   ligar o "Ei Órbita" estava escondido dentro do menu "+". */
+.dica-wake {
+  font: inherit;
+  color: var(--color-forest);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* o traço fica só sob a PALAVRA: sublinhar o ícone junto deixa o rodapé sujo */
+  text-decoration: none;
+}
+.dica-wake span {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dica-wake .icon {
+  width: 12px;
+  height: 12px;
+}
+.dica-wake:hover {
+  color: var(--color-forest-soft);
+}
+
+/* Compositor: caixa de texto sem barra de rolagem fantasma.
+   O porte subiu a fonte de 14 para 15px e manteve a altura de 40px que veio do
+   protótipo. Com linha de 22px mais 20px de respiro, o conteúdo já nascia com
+   42px: maior que a caixa, então o navegador desenhava a barra de rolagem (com
+   setas, no tema do Windows) num campo VAZIO. A altura agora acompanha a fonte,
+   e o teto casa com o do `autoGrow` — antes o JS ia até 160px e o CSS cortava
+   em 110px, que era a segunda fonte de barra. */
+.composer textarea {
+  line-height: 22px;
+  height: 42px;
+  max-height: 132px;
+  scrollbar-width: none;
+}
+.composer textarea::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* ── Modo foco: voz no centro, tempo no canto ─────────────────────────────── */
+
+/* A última troca falada. Fica em altura fixa para a tela não pular a cada
+   frase: no modo de menor ruído, layout dançando é ruído. */
+.foco-dialogo {
+  min-height: 52px;
+  max-width: 520px;
+  margin: 14px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.foco-dialogo p {
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0;
+}
+.foco-fala-sua {
+  color: var(--color-ink-dim);
+}
+.foco-fala-dela {
+  color: var(--color-ink);
+}
+.foco-dica {
+  color: var(--color-ink-dim);
+  font-size: 13px;
+}
+.foco-erro {
+  color: var(--color-danger);
+  font-size: 13px;
+}
+
+/* O tempo virou canto. `position: fixed` e não no fluxo: ele não pode empurrar
+   a Órbita do centro, que é o que a tela veio mostrar. */
+.foco-tempo {
+  position: fixed;
+  right: 22px;
+  bottom: 20px;
+  z-index: 2;
+}
+.foco-tempo-botao {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--color-ink-dim);
+  background: color-mix(in oklab, var(--color-surface) 70%, transparent);
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+.foco-tempo-botao:hover {
+  color: var(--color-ink);
+  border-color: var(--color-forest);
+}
+.foco-tempo-botao .icon {
+  width: 13px;
+  height: 13px;
+}
+.foco-tempo-painel {
+  background: color-mix(in oklab, var(--color-surface) 88%, transparent);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  backdrop-filter: blur(12px);
+  text-align: center;
+  box-shadow: var(--shadow-panel);
+}
+.foco-relogio {
+  font-size: 30px;
+  letter-spacing: -0.03em;
+  color: var(--color-forest);
+  margin: 0 0 10px;
+  font-variant-numeric: tabular-nums;
+}
+.foco-tempo-acoes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .foco-tempo {
+    right: 14px;
+    bottom: 14px;
+  }
+}
+
+/* A última fala, no cartão de presença da Visão geral. Altura mínima para a
+   coluna não pular quando a frase aparece e some. */
+.visao-fala {
+  min-height: 20px;
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-ink-dim);
+}
+.visao-fala.erro {
+  color: var(--color-danger);
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { OrbMode } from "@/components/console/types";
 
 /**
  * O núcleo da Órbita: geometria 3D em WebGL, com o renderizador Canvas 2D como
@@ -23,6 +24,22 @@ export type EstadoNucleo =
   | "success"
   | "attention"
   | "error";
+
+/**
+ * Como o estado do console vira estado visual do núcleo.
+ *
+ * Mora aqui, junto do tipo, porque agora são DUAS telas desenhando a mesma
+ * Órbita (a Conversa e o Modo foco): com uma cópia em cada uma, elas
+ * divergiriam no primeiro estado novo.
+ */
+export const ESTADO_DO_MODO: Record<OrbMode, EstadoNucleo> = {
+  standby: "idle",
+  listening: "listening",
+  speaking: "speaking",
+  searching: "searching",
+  studying: "thinking",
+  connecting: "connecting",
+};
 
 interface Motor {
   setState(modo: string): void;

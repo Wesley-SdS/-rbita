@@ -7,8 +7,9 @@ import { Icone } from "./icones";
 import { useCasca } from "./contexto";
 import { BlocoObservado } from "@/lib/use-visible";
 import { useRecursos } from "@/lib/dados/recurso";
-import { Nucleo } from "./nucleo";
-import { ESTADOS_NUCLEO, type EstadoNucleo } from "./estados";
+import { ESTADO_DO_MODO, Nucleo } from "./nucleo";
+import { ESTADOS_NUCLEO } from "./estados";
+import { useConsoleDeVoz } from "@/components/console/use-console-voz";
 
 /* "Meus cards": o que o dono fixou para olhar todo dia. É o painel mais ligado
    à ideia de visão geral, então mora aqui e não atrás de uma aba. */
@@ -29,7 +30,20 @@ function saudacaoDaHora(hora: number) {
 
 export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
   const casca = useCasca();
-  const [estado] = useState<EstadoNucleo>("idle");
+
+  // A Órbita desta tela OUVE. Antes o núcleo aqui era enfeite (estado fixo em
+  // "idle") e o botão de voz só levava para a tela de Conversa: para falar com
+  // ela era preciso sair da tela que a mostra. Agora o "Ei Órbita" funciona
+  // aqui, e o núcleo reage ao que está acontecendo.
+  const assistente = useConsoleDeVoz();
+  const estado = ESTADO_DO_MODO[assistente.mode];
+
+  // O Modo foco abre por cima e tem voz própria; dois reconhecedores no mesmo
+  // microfone não ouvem nenhum dos dois.
+  useEffect(() => {
+    casca.registrarPausaDeVoz(assistente.silenciar);
+    return () => casca.registrarPausaDeVoz(null);
+  }, [casca, assistente.silenciar]);
   // Os mesmos três recursos que as telas Memória, Rotinas e Casa já pedem:
   // com o cache, entrar em Casa logo depois da Visão geral não busca de novo.
   const { dados } = useRecursos<{
@@ -113,16 +127,39 @@ export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
             <p>{fala.description}</p>
           </div>
 
+          {/* Falar acontece AQUI; escrever é que muda de tela. */}
           <div className="voice-actions">
-            <Link className="button primary voice-button" href="/app/conversa?voz=1">
+            <button
+              type="button"
+              className={`button ${assistente.voz.wakeOn ? "secondary" : "primary"} voice-button`}
+              onClick={() => void assistente.voz.toggleWake()}
+            >
               <Icone nome="mic" />
-              <span>Conversar com a Órbita</span>
-            </Link>
+              <span>{assistente.voz.wakeOn ? "Parar de ouvir" : "Ouvir “Ei Órbita”"}</span>
+            </button>
+            {assistente.voz.realtimeEnabled && (
+              <button
+                type="button"
+                className={`button ${assistente.voz.realtimeOn ? "primary" : "secondary"}`}
+                onClick={() => void assistente.voz.toggleRealtime()}
+              >
+                <Icone nome="wave" />
+                {assistente.voz.realtimeOn ? "Encerrar tempo real" : "Tempo real"}
+              </button>
+            )}
             <Link className="button secondary" href="/app/conversa">
               <Icone nome="keyboard" />
               Prefiro escrever
             </Link>
           </div>
+
+          {/* O rastro da conversa falada: sem isto, quem fala não tem como
+              conferir o que a Órbita entendeu sem trocar de tela. */}
+          {(assistente.erro || assistente.ultima) && (
+            <p className={`visao-fala ${assistente.erro ? "erro" : ""}`} aria-live="polite">
+              {assistente.erro ?? assistente.ultima?.content}
+            </p>
+          )}
 
           <div className="presence-foot">
             <span>
