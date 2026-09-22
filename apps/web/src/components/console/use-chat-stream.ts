@@ -4,7 +4,7 @@ import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, u
 import type { OrbMode } from "@/components/console/types";
 import type { Msg, OpcaoDeProvedor, ToolStep, VoiceBridge } from "@/components/console/types";
 import { getOwnDeviceId } from "@/lib/device-id";
-import { cameraAutorizada, capturarUmQuadro, ehCameraDesteAparelho, garantirCameraDoAparelho } from "@/lib/camera/aparelho";
+import { cameraAutorizada, capturarUmQuadro, ehCameraDesteAparelho, garantirCameraDoAparelho, quadroEnviado } from "@/lib/camera/aparelho";
 
 interface Params {
   modelKey: string;
@@ -169,6 +169,10 @@ export function useChatStream(p: Params) {
         if (daqui && cameraAutorizada() && (await capturarUmQuadro(daqui))) {
           stopTimer();
           p.setMode("standby");
+          // a foto entra na conversa: a câmera acendeu, e quem autorizou tem
+          // de ver o que foi enviado em vez de confiar que deu certo
+          const foto = quadroEnviado();
+          p.setMessages((m) => [...m, { role: "assistant", content: "Dei uma olhada pela câmera.", olhou: foto ?? undefined }]);
           void sendMessage(pedido.pergunta);
           return;
         }

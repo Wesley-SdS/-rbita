@@ -59,6 +59,10 @@ const Bolha = memo(function Bolha({ m, estado, aoEscolherProvedor, aoDeixarOlhar
           // eslint-disable-next-line @next/next/no-img-element
           <img src={m.image} alt="anexo" className="message-image" />
         )}
+        {m.olhou && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={m.olhou} alt="o que a Órbita viu pela câmera" className="message-image olhada" />
+        )}
         {m.steps?.length ? (
           <div className="message-steps">
             {m.steps.map((s, i) => (

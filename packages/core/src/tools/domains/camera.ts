@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { findCamera, listCameras } from "../../cameras/query";
+import { resolverCamera } from "../../cameras/resolver";
 import { imagemFresca } from "../../cameras/fresca";
 import { narrateSnapshot } from "../../cameras/narrate";
 import { authorizeRoomForRequester } from "../../home/room-permission";
@@ -50,13 +51,14 @@ export const casa_ver_camera: ToolDef<typeof VerInput> = {
     return authorizeRoomForRequester(cam.roomId, quem, "ver a câmera");
   },
   run: async ({ local }, { userId }) => {
-    const cam = await findCamera(userId, local);
+    // "aqui" e "meu notebook" não casam por nome com "Câmera do notebook": a
+    // resolução trata isso, e nunca deixa um lugar inexistente cair na webcam.
+    const { camera: cam, total } = await resolverCamera(userId, local);
     // NENHUMA câmera cadastrada não é "não achei": é uma casa que ainda não
     // tem câmera. Pedir "liga a câmera e vê o que estou segurando" deveria
-    // funcionar na primeira vez, sem passar por tela de configuração — o
-    // aparelho de quem pediu pode ser a câmera, e quem autoriza de fato é o
-    // pedido de permissão do próprio navegador.
-    if (!cam && (await listCameras(userId)).length === 0) {
+    // funcionar na primeira vez, sem passar por tela de configuração, e quem
+    // autoriza de fato é o pedido de permissão do próprio navegador.
+    if (!cam && total === 0) {
       return { precisa_de_imagem: true, camera_id: null, camera: null, motivo: "Ainda não há nenhuma câmera nesta casa." };
     }
     if (!cam) return { erro: `Não achei uma câmera para "${local}".` };

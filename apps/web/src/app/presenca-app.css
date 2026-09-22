@@ -738,3 +738,7 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
 /* O que o reconhecedor entendeu, enquanto espera o chamado. Discreto: é
    diagnóstico, não conversa. Sem isto, um wake que não dispara é invisível. */
 .foco-ouvido { font-size: 13px; color: var(--color-ink-dim); font-style: italic; }
+
+/* A foto que a Órbita olhou para responder. Espelhada como toda câmera
+   frontal, e com moldura de acento para não passar por anexo do usuário. */
+.message-image.olhada { transform: scaleX(-1); border: 2px solid var(--color-forest); max-height: 200px; }

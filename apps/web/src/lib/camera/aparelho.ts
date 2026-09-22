@@ -227,6 +227,18 @@ export function definirAutorizacao(valor: boolean): void {
  * ocupada): quem chama segue com a conversa, e a Órbita dirá que não
  * conseguiu ver — melhor do que travar a mensagem.
  */
+/**
+ * O quadro que acabou de ser enviado, para a tela poder MOSTRAR.
+ *
+ * Existe porque a câmera abrir e a pessoa não ver nada é o pior dos mundos:
+ * a luz acende, algo é enviado, e ela fica sem saber o quê. Ver a foto que a
+ * Órbita está olhando é o mínimo de quem autorizou o olhar.
+ */
+let ultimoQuadro: string | null = null;
+export function quadroEnviado(): string | null {
+  return ultimoQuadro;
+}
+
 export async function capturarUmQuadro(cameraId?: string | null): Promise<boolean> {
   const id = cameraId ?? ler(CHAVE_CAMERA);
   if (!id) return false;
@@ -260,6 +272,7 @@ export async function capturarUmQuadro(cameraId?: string | null): Promise<boolea
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cameraId: id, snapshot: dataUrl, label: "sob demanda" }),
     });
+    if (r.ok) ultimoQuadro = dataUrl;
     return r.ok;
   } catch {
     return false;
