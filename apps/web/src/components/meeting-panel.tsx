@@ -5,6 +5,7 @@ import { useRecurso } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 import { ContinuousRecorder, startMeetingCapture, type MeetingCapture } from "@/lib/voice/capture";
 import { ContinuousDictation, getRecognitionCtor } from "@/lib/voice/speech";
+import { TranscricaoViva } from "@/lib/voice/transcricao-viva";
 import { avaliarGravacao } from "@/lib/voice/gravacao";
 import type { SttUtterance } from "@orbita/core/stt/types";
 import { parsePrazo, type Compromisso } from "@orbita/core/meetings/compromissos";
@@ -68,8 +69,16 @@ function autoSpeakerNames(identities: SpeakerIdentity[]): Record<string, string>
  *
  *  • VERDADE   gravação CONTÍNUA do início ao fim → ao encerrar, sobe inteira
  *              para o /api/stt com `diarize` → transcrição com quem falou o quê.
- *  • PRÉVIA    Web Speech no aparelho, só para você ver que está funcionando.
- *              Instantânea, de graça, e sem separar vozes.
+ *  • PRÉVIA    o texto correndo na tela enquanto se fala, só para você ver que
+ *              está funcionando. Nunca separa vozes. Quem a faz é escolha do
+ *              dono (`meetings.liveTranscription`): a Web Speech do aparelho,
+ *              grátis e só no Chrome e Edge, ou o Gemini, melhor e cobrado por
+ *              minuto.
+ *
+ * Por que a separação de vozes não pode subir para a prévia: medido em
+ * 22/09/2026, o Gemini Live aceita `diarization` no setup e não devolve rótulo
+ * nenhum. E mesmo que devolvesse, rótulo de locutor só é coerente atribuído
+ * sobre o áudio inteiro de uma vez.
  *
  * O fluxo antigo gravava janelas de 8s e transcrevia uma a uma: perdia o áudio
  * entre as janelas e nunca conseguiria separar vozes (os rótulos A/B/C são
@@ -104,6 +113,7 @@ export function MeetingPanel() {
   const captureRef = useRef<MeetingCapture | null>(null);
   const recorderRef = useRef<ContinuousRecorder | null>(null);
   const dictationRef = useRef<ContinuousDictation | null>(null);
+  const vivaRef = useRef<TranscricaoViva | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Pessoas cadastradas, para o seletor "vincular a pessoa" ao nomear locutor
@@ -116,6 +126,7 @@ export function MeetingPanel() {
   useEffect(() => {
     return () => {
       dictationRef.current?.stop();
+      vivaRef.current?.parar();
       captureRef.current?.stop();
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -151,12 +162,35 @@ export function MeetingPanel() {
     recorder.start(capture.stream);
     recorderRef.current = recorder;
 
-    // prévia ao vivo (best-effort — navegador sem Web Speech simplesmente não mostra)
-    const Ctor = getRecognitionCtor();
-    if (Ctor) {
-      const d = new ContinuousDictation(Ctor, { onText: setPreview });
-      d.start();
-      dictationRef.current = d;
+    // PRÉVIA ao vivo, best-effort: se ela não subir, a reunião continua sendo
+    // gravada e a transcrição final não depende dela em nada.
+    //
+    // Quem faz a prévia é escolha do dono (`meetings.liveTranscription`), e a
+    // tela pergunta ANTES de gravar: descobrir depois que o Gemini está
+    // desligado custaria uma sessão paga por reunião.
+    const modo = await fetch("/api/meeting/live")
+      .then((r) => (r.ok ? r.json() : { modo: "navegador" }))
+      .then((d: { modo?: string }) => d.modo ?? "navegador")
+      .catch(() => "navegador");
+
+    if (modo === "gemini") {
+      const viva = new TranscricaoViva({
+        aoTexto: setPreview,
+        aoFalhar: (texto) => avisar(texto),
+      });
+      try {
+        await viva.iniciar(capture.stream);
+        vivaRef.current = viva;
+      } catch {
+        avisar("A prévia ao vivo não subiu, mas estou gravando. O texto completo sai no fim.");
+      }
+    } else if (modo === "navegador") {
+      const Ctor = getRecognitionCtor();
+      if (Ctor) {
+        const d = new ContinuousDictation(Ctor, { onText: setPreview });
+        d.start();
+        dictationRef.current = d;
+      }
     }
 
     setActive(true);
@@ -170,6 +204,8 @@ export function MeetingPanel() {
     clearTimer();
     dictationRef.current?.stop();
     dictationRef.current = null;
+    vivaRef.current?.parar();
+    vivaRef.current = null;
 
     const blob = await recorderRef.current?.stop();
     recorderRef.current = null;

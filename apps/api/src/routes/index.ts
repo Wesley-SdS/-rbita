@@ -59,6 +59,9 @@ import * as channelsWhatsapp from "./channels-whatsapp";
 import * as cameras from "./cameras";
 import * as cameraEvents from "./camera-events";
 import * as cameraIngest from "./camera-ingest";
+import * as cameraQuadro from "./camera-quadro";
+import * as cameraLimits from "./camera-limits";
+import * as meetingLive from "./meeting-live";
 import * as ingest from "./ingest";
 import * as finance from "./finance";
 import * as financeReceipt from "./finance-receipt";
@@ -115,6 +118,9 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/cameras", cameras),
   webRoute("api/cameras/events", cameraEvents),
   webRoute("api/cameras/ingest", cameraIngest),
+  webRoute("api/cameras/quadro", cameraQuadro),
+  webRoute("api/cameras/limits", cameraLimits),
+  webRoute("api/meeting/live", meetingLive),
   webRoute("api/vision", vision),
   webRoute("api/models", models),
   // dia a dia

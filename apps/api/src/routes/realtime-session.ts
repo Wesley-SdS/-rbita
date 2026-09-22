@@ -8,6 +8,7 @@ import { log } from "@orbita/core/observability/logger";
 import { settings } from "@orbita/core/settings/index";
 import { escolherProvedorRealtime, type ChavesRealtime } from "@orbita/core/realtime/provider";
 import { montarSetupGemini, urlSessaoGemini, type FuncaoDeclarada } from "@orbita/core/realtime/gemini";
+import { criarTokenEfemeroGemini } from "@orbita/core/realtime/token";
 
 /** Quais provedores de voz em tempo real têm credencial. Exportada para a rota de config não repetir a regra. */
 export function chavesRealtime(): ChavesRealtime {
@@ -85,24 +86,12 @@ async function sessaoGemini(defs: ToolDef[], instrucoes: string, modelo: string,
   }));
 
   try {
-    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/auth_tokens", {
-      method: "POST",
-      headers: { "x-goog-api-key": key!, "Content-Type": "application/json" },
-      // uso único e vida curta: o token serve para abrir ESTA sessão e nada mais
-      body: JSON.stringify({ uses: 1, expireTime: new Date(Date.now() + 10 * 60_000).toISOString() }),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      log.error("realtime.session", { provider: "gemini", status: res.status, detail: detail.slice(0, 200) });
-      return Response.json({ error: "Falha ao abrir sessão de voz" }, { status: 502 });
-    }
-    const data = (await res.json()) as { name?: string };
-    if (!data.name) return Response.json({ error: "Sessão sem token" }, { status: 502 });
+    const token = await criarTokenEfemeroGemini(key!);
 
     log.info("realtime.session", { userId, provider: "gemini", model: modelo, tools: funcoes.length });
     return Response.json({
       provider: "gemini",
-      url: urlSessaoGemini(data.name),
+      url: urlSessaoGemini(token),
       setup: montarSetupGemini({ modelo, voz, instrucoes, funcoes }),
       model: modelo,
       voice: voz,

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { escolherProvedorRealtime } from "./provider";
-import { limparSchemaParaGemini, montarSetupGemini, urlSessaoGemini } from "./gemini";
+import { limparSchemaParaGemini, montarSetupGemini, montarSetupTranscricao, urlSessaoGemini } from "./gemini";
 
 describe("escolha do provedor de voz em tempo real", () => {
   it("no automático prefere o Gemini, que custa uma fração do minuto", () => {
@@ -108,6 +108,21 @@ describe("mensagem de setup do Gemini Live", () => {
 
   it("sem tool nenhuma não manda o campo tools, que a API recusa vazio", () => {
     expect(montarSetupGemini({ ...base, funcoes: [] }).tools).toBeUndefined();
+  });
+
+  it("a sessão de transcrição não deixa a Órbita falar nem declarar tool", () => {
+    const s = montarSetupTranscricao("gemini-3.5-transcribe-live");
+    expect(s.model).toBe("models/gemini-3.5-transcribe-live");
+    expect((s.generationConfig as Record<string, unknown>).responseModalities).toEqual(["TEXT"]);
+    expect(s.tools).toBeUndefined();
+    // a fala da Órbita não entra numa reunião: seria ela conversando no meio
+    expect(s.speechConfig).toBeUndefined();
+    expect(s.outputAudioTranscription).toBeUndefined();
+  });
+
+  it("a transcrição pede o idioma da casa", () => {
+    const s = montarSetupTranscricao("qualquer");
+    expect((s.inputAudioTranscription as Record<string, unknown>).languageCodes).toEqual(["pt-BR"]);
   });
 
   it("o token vai na query, porque o WebSocket do navegador não manda header", () => {

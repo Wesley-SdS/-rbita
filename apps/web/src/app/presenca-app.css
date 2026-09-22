@@ -611,3 +611,20 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
 .visao-fala.erro {
   color: var(--color-danger);
 }
+
+/* Prévia da câmera deste aparelho. É o MESMO elemento de vídeo que está sendo
+   capturado: mostrar outro seria mostrar uma coisa e enviar outra. */
+.camera-previa-caixa:not(:empty) {
+  margin-top: 10px;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: #000;
+  max-width: 320px;
+}
+.camera-previa {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* espelhado, como todo mundo espera de uma câmera frontal */
+  transform: scaleX(-1);
+}

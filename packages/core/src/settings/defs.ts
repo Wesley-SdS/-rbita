@@ -318,6 +318,15 @@ export const SETTING_DEFS = {
   ),
   "cameras.retentionDays": num("cameras", "Retenção de eventos de câmera", "Eventos (e o snapshot guardado com eles) mais antigos que isso são apagados.", 14, 1, 90, { unit: "dias" }),
   "cameras.snapshotMaxKB": num("cameras", "Tamanho máximo do snapshot", "Acima disso o evento é aceito mas sem a imagem, para não estourar o banco com um webhook mal configurado.", 400, 50, 4000, { unit: "KB" }),
+  // ── a câmera do próprio aparelho ──
+  // Um notebook não é um Frigate: quem manda o quadro é a aba aberta, e ela
+  // para quando a pessoa fecha. Por isso o intervalo é generoso por padrão —
+  // olhar de vez em quando serve para "o que está acontecendo aqui", e olhar
+  // toda hora só gasta banco, banda e bateria.
+  "cameras.deviceIntervalSeconds": num("cameras", "Aparelho: olhar a cada", "De quanto em quanto tempo a câmera deste aparelho manda um quadro enquanto estiver ligada. Cada quadro é um evento, então intervalo curto enche o histórico depressa.", 20, 2, 600, { unit: "s" }),
+  "cameras.deviceMaxWidth": num("cameras", "Aparelho: largura do quadro", "O quadro é reduzido para esta largura antes de subir. Maior enxerga mais detalhe e pesa mais no banco.", 640, 160, 1920, { unit: "px" }),
+  "cameras.deviceQuality": num("cameras", "Aparelho: qualidade do quadro", "Compressão JPEG do quadro enviado. Abaixo de 0,5 o modelo de visão começa a errar detalhe.", 0.7, 0.3, 1, { step: 0.05 }),
+
   "cameras.ingestRateLimitPerMinute": num("cameras", "Eventos por minuto (por câmera)", "Acima disso, o webhook de ingestão recusa novos eventos da mesma câmera. Protege o banco e evita disparar regra automática em excesso (cada evento pode virar uma chamada de modelo).", 60, 5, 600, { unit: "/min" }),
 
   // ── reuniões e agenda (packages/core/src/meetings/*, apps/api) ──
@@ -414,6 +423,22 @@ export const SETTING_DEFS = {
   ),
   "realtime.openaiModel": text("realtime", "Modelo da OpenAI Realtime", "O `gpt-realtime-mini` custa por volta de um terço do `gpt-realtime` por minuto, com a mesma integração.", "gpt-realtime", 80),
   "realtime.openaiVoice": text("realtime", "Voz da OpenAI", "Nome da voz do modelo realtime da OpenAI (ex.: marin, cedar, alloy).", "marin", 40),
+
+  // Transcrição AO VIVO da reunião (o texto correndo na tela enquanto se fala).
+  // Não confundir com a transcrição final, que é sempre feita sobre a gravação
+  // inteira no fim e é de onde sai a separação de quem falou.
+  "meetings.liveTranscription": sel(
+    "realtime",
+    "Transcrição ao vivo da reunião",
+    "No navegador é grátis, mas só funciona no Chrome e no Edge e erra bastante. No Gemini a qualidade é muito melhor e funciona em qualquer navegador, porém cada minuto de áudio é cobrado. Em nenhum dos dois a prévia separa quem falou: isso sai na transcrição final.",
+    "navegador",
+    [
+      { value: "navegador", label: "No navegador (grátis, só Chrome e Edge)" },
+      { value: "gemini", label: "Pelo Gemini (melhor, cobrado por minuto)" },
+      { value: "desligada", label: "Sem prévia ao vivo" },
+    ],
+  ),
+  "meetings.liveModel": text("realtime", "Modelo da transcrição ao vivo", "Modelo usado quando a prévia da reunião vai pelo Gemini.", "gemini-3.5-transcribe-live", 80),
 
   // ── fila de trabalho pesado ──
   "jobs.pollSeconds": num("jobs", "Conferir a fila a cada", "Piso de segurança: o trabalho novo acorda o processo na hora, então isto só pega retentativa agendada e fila herdada de um processo que caiu.", 3, 1, 300, { unit: "s" }),

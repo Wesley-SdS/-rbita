@@ -123,6 +123,31 @@ export function montarSetupGemini(o: OpcoesSetupGemini): Record<string, unknown>
   return setup;
 }
 
+/**
+ * Sessão de TRANSCRIÇÃO ao vivo (reunião), não de conversa.
+ *
+ * A Órbita não fala nada aqui: `responseModalities: ["TEXT"]` e só a
+ * transcrição da entrada ligada. O que volta são dois eventos, medidos contra
+ * a API em 22/09/2026:
+ *
+ *   `interimInputTranscription` — parcial, cresce enquanto a pessoa fala
+ *   `inputTranscription`        — o texto assentado do trecho
+ *
+ * ⚠️ `diarization` é ACEITO no setup e não produz rótulo nenhum: o objeto que
+ * volta tem só `text`. Medido com duas vozes diferentes num mesmo áudio. Ou
+ * seja, separar quem falou continua sendo trabalho do passe final sobre o
+ * áudio inteiro — que é onde ele funciona, e onde precisa ficar mesmo
+ * (rótulos são atribuídos por requisição; diarizar pedaços soltos da mesma
+ * reunião daria "Locutor A" para pessoas diferentes a cada pedaço).
+ */
+export function montarSetupTranscricao(modelo: string, idiomas: string[] = ["pt-BR"]): Record<string, unknown> {
+  return {
+    model: modelo.startsWith("models/") ? modelo : `models/${modelo}`,
+    generationConfig: { responseModalities: ["TEXT"] },
+    inputAudioTranscription: { languageCodes: idiomas },
+  };
+}
+
 /** URL do WebSocket da sessão. O token efêmero vai na query porque o WebSocket do navegador não manda header. */
 export function urlSessaoGemini(token: string): string {
   return (
