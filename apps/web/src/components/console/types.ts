@@ -1,7 +1,15 @@
 /** Tipos compartilhados do console (chat/voz/conversas). */
 export type Role = "user" | "assistant";
 export interface ToolStep { name: string; done: boolean }
-export interface Msg { role: Role; content: string; steps?: ToolStep[]; image?: string }
+/** Uma saída oferecida quando o provedor escolhido não pôde atender. */
+export interface OpcaoDeProvedor { classe: "assinatura" | "local" | "paga"; rotulo: string; custo: string }
+/**
+ * A pergunta que a Órbita faz em vez de trocar de provedor sozinha. Fica NA
+ * MENSAGEM (e não num estado solto) para sobreviver ao histórico: a pessoa
+ * pode rolar a conversa, voltar e a escolha ainda estar lá.
+ */
+export interface PerguntaDeProvedor { motivo: string; opcoes: OpcaoDeProvedor[]; pergunta: string }
+export interface Msg { role: Role; content: string; steps?: ToolStep[]; image?: string; escolha?: PerguntaDeProvedor }
 export interface ModelInfo {
   key: string;
   label: string;

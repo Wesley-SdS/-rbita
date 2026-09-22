@@ -2,7 +2,7 @@
 
 import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, useRef, useState } from "react";
 import type { OrbMode } from "@/components/console/types";
-import type { Msg, ToolStep, VoiceBridge } from "@/components/console/types";
+import type { Msg, OpcaoDeProvedor, ToolStep, VoiceBridge } from "@/components/console/types";
 import { getOwnDeviceId } from "@/lib/device-id";
 
 interface Params {
@@ -50,7 +50,12 @@ export function useChatStream(p: Params) {
     void sendMessage(content || "O que há nesta imagem?");
   }
 
-  async function sendMessage(content: string, voiceClip?: string) {
+  /**
+   * `liberar` é a resposta do dono à pergunta "o provedor que você escolheu
+   * falhou, uso outro?". Vale só para ESTE envio: autorizar uma vez não muda
+   * a configuração da casa.
+   */
+  async function sendMessage(content: string, voiceClip?: string, liberar?: ("assinatura" | "local" | "paga")[]) {
     if (!content || p.modeRef.current !== "standby" || !p.modelKey) return;
     // modo privacidade: quem troca para um modelo local é o SERVIDOR (só ele
     // sabe o que está instalado). Aqui só vai o pedido.
@@ -75,7 +80,7 @@ export function useChatStream(p: Params) {
         headers: { "Content-Type": "application/json" },
         // voiceClip: trecho de voz do ditado (Onda 9, "quem pediu"); mensagens digitadas nunca o têm.
         // deviceId: aparelho registrado em Casa → Aparelhos (Onda 12), diz "daqui" é onde.
-        body: JSON.stringify({ content, modelKey: effectiveModelKey, conversationId: p.convId.current ?? undefined, rich: true, image: imgToSend ?? undefined, voiceClip, deviceId: getOwnDeviceId() ?? undefined, privacidade: p.privacyMode || undefined }),
+        body: JSON.stringify({ content, modelKey: effectiveModelKey, conversationId: p.convId.current ?? undefined, rich: true, image: imgToSend ?? undefined, voiceClip, deviceId: getOwnDeviceId() ?? undefined, privacidade: p.privacyMode || undefined, liberar }),
         signal: ac.signal,
       });
       const cid = res.headers.get("x-conversation-id");
@@ -92,6 +97,9 @@ export function useChatStream(p: Params) {
       let acc = "";
       let buf = "";
       let speakingSet = false; // evita um setState de modo por token
+      // quando a Órbita pergunta qual provedor usar, não vem texto nenhum: o
+      // pintor não pode sobrescrever a pergunta com uma bolha vazia
+      let perguntou = false;
       const steps: ToolStep[] = [];
       // O stream entrega muitos pedaços por segundo. Re-renderizar o React a
       // cada pedaço engasgava a animação do Orb (medido: 47fps parado contra
@@ -99,8 +107,10 @@ export function useChatStream(p: Params) {
       // aparecendo fluido para o olho, com uma fração das renderizações.
       const FLUSH_MS = 60;
       let lastFlush = 0;
-      const paint = () =>
+      const paint = () => {
+        if (perguntou) return;
         p.setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: acc, steps: [...steps] }; return c; });
+      };
       const flush = (force = false) => {
         const now = Date.now();
         if (force || now - lastFlush >= FLUSH_MS) { lastFlush = now; paint(); }
@@ -113,7 +123,7 @@ export function useChatStream(p: Params) {
         buf = lines.pop() ?? "";
         for (const line of lines) {
           if (!line.trim()) continue;
-          let ev: { t: string; v?: string; name?: string; msg?: string };
+          let ev: { t: string; v?: string; name?: string; msg?: string; motivo?: string; opcoes?: OpcaoDeProvedor[] };
           try { ev = JSON.parse(line); } catch { continue; }
           if (ev.t === "text") {
             acc += ev.v ?? "";
@@ -124,6 +134,12 @@ export function useChatStream(p: Params) {
             p.setMode("searching"); steps.push({ name: ev.name, done: false }); flush(true);
           } else if (ev.t === "tool-done" && ev.name) {
             const s = steps.find((x) => x.name === ev.name && !x.done); if (s) s.done = true; flush(true);
+          } else if (ev.t === "escolha" && ev.opcoes?.length) {
+            // A Órbita não trocou de provedor sozinha: ela pergunta. A pergunta
+            // vira parte da mensagem para continuar ali depois de rolar a tela.
+            perguntou = true;
+            const pergunta = { motivo: ev.motivo ?? "O provedor escolhido não pôde atender.", opcoes: ev.opcoes, pergunta: content };
+            p.setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: "", escolha: pergunta }; return c; });
           } else if (ev.t === "error") {
             p.setError(ev.msg ?? "Falha ao gerar a resposta."); flush(true);
           }

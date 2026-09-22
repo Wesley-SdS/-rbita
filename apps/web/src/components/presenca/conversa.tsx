@@ -4,6 +4,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { Icone } from "./icones";
+import { SeletorDeModelo } from "./seletor-modelo";
 import { useCasca } from "./contexto";
 import { Markdown } from "@/components/markdown";
 import type { ModelInfo, Msg, VoiceBridge } from "@/components/console/types";
@@ -46,7 +47,7 @@ const rotuloDaFerramenta = (nome: string) => NOMES_DE_FERRAMENTA[nome] ?? nome.r
  * troca de referência, então apenas a última bolha re-renderiza e as antigas
  * pulam o reparse de markdown.
  */
-const Bolha = memo(function Bolha({ m, estado }: { m: Msg; estado: string | null }) {
+const Bolha = memo(function Bolha({ m, estado, aoEscolherProvedor }: { m: Msg; estado: string | null; aoEscolherProvedor?: (classe: "assinatura" | "local" | "paga", pergunta: string) => void }) {
   const daOrbita = m.role === "assistant";
   return (
     <div className={`message ${daOrbita ? "assistant" : "user"}`}>
@@ -67,7 +68,24 @@ const Bolha = memo(function Bolha({ m, estado }: { m: Msg; estado: string | null
             ))}
           </div>
         ) : null}
-        {daOrbita ? <Markdown>{m.content}</Markdown> : <p>{m.content}</p>}
+        {m.escolha ? (
+          /* A Órbita não trocou de provedor sozinha: ela conta o que houve e
+             deixa a decisão com o dono. Cada opção diz o que custa ANTES de
+             ser clicada — oferecer "nuvem paga" sem dizer que cobra seria
+             repetir o gasto silencioso, só que com mais passos. */
+          <div className="escolha-provedor">
+            <p className="escolha-motivo">{m.escolha.motivo}</p>
+            <p className="escolha-pergunta">Quer que eu use outro caminho para responder?</p>
+            <div className="escolha-opcoes">
+              {m.escolha.opcoes.map((o) => (
+                <button key={o.classe} type="button" className="button secondary compacto" onClick={() => aoEscolherProvedor?.(o.classe, m.escolha!.pergunta)}>
+                  Usar {o.rotulo}
+                  <small>{o.custo}</small>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : daOrbita ? <Markdown>{m.content}</Markdown> : <p>{m.content}</p>}
         {estado && (
           <div className="message-status">
             <span className="typing-dot" />
@@ -401,34 +419,15 @@ export function Conversa({
           ))}
 
           <div className="panel-label">O CÉREBRO DA RESPOSTA</div>
-          <label className="field">
-            <select
-              aria-label="Modelo de IA"
-              title="Qual modelo responde. Os grupos são os provedores configurados."
-              value={modoLocal ? (grupos.porProvedor.get("local")?.[0]?.key ?? chaveModelo) : chaveModelo}
-              disabled={modoLocal}
-              onChange={(e) => setChaveModelo(e.target.value)}
-            >
-              {!modoLocal && grupos.auto.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-              {[
-                { p: "local", label: "Local (grátis)" },
-                { p: "claude", label: "Claude (assinatura)" },
-                { p: "groq", label: "Groq" },
-                { p: "google", label: "Google Gemini" },
-                { p: "openai", label: "OpenAI" },
-                { p: "cohere", label: "Cohere" },
-                { p: "gateway", label: "Gateway (pago)" },
-              ].map((g) => {
-                const opcoes = grupos.porProvedor.get(g.p) ?? [];
-                if (!opcoes.length || (modoLocal && g.p !== "local")) return null;
-                return (
-                  <optgroup key={g.p} label={g.label}>
-                    {opcoes.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-                  </optgroup>
-                );
-              })}
-            </select>
-          </label>
+          {/* Com o gateway ligado a descoberta traz centenas de modelos: um
+              <select> nativo com tudo dentro travava a tela. Ver
+              components/presenca/seletor-modelo.tsx. */}
+          <SeletorDeModelo
+            modelos={modoLocal ? modelos.filter((m) => m.provider === "local") : modelos}
+            valor={modoLocal ? (grupos.porProvedor.get("local")?.[0]?.key ?? chaveModelo) : chaveModelo}
+            aoEscolher={setChaveModelo}
+            desabilitado={modoLocal}
+          />
           <label className="switch-row">
             <input type="checkbox" checked={modoLocal} onChange={(e) => setModoLocal(e.target.checked)} />
             <span>
@@ -468,6 +467,7 @@ export function Conversa({
                     ? `${ROTULO_DO_MODO[mode]}${chat.elapsed > 0 ? ` · ${chat.elapsed}s` : ""}`
                     : null
                 }
+                aoEscolherProvedor={(classe, pergunta) => chat.sendMessage(pergunta, undefined, [classe])}
               />
             ))}
           </div>
