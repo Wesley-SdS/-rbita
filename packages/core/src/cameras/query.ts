@@ -23,14 +23,29 @@ export async function listCameras(userId: string): Promise<Camera[]> {
   return db.select().from(camera).where(eq(camera.userId, userId)).orderBy(camera.name);
 }
 
-export async function latestEventWithSnapshot(cameraId: string): Promise<CameraEvent | null> {
+/**
+ * A última imagem da câmera — e, opcionalmente, só se ela for RECENTE.
+ *
+ * Sem a idade, "o que você está vendo?" podia ser respondido com um quadro de
+ * três horas atrás, e a Órbita descreveria a cozinha de manhã como se fosse
+ * agora. Imagem velha não é imagem: é outra pergunta, respondida com
+ * confiança que ela não tem.
+ */
+export async function latestEventWithSnapshot(cameraId: string, maxIdadeSegundos?: number): Promise<CameraEvent | null> {
   const [ev] = await db
     .select()
     .from(cameraEvent)
     .where(and(eq(cameraEvent.cameraId, cameraId), isNotNull(cameraEvent.snapshot)))
     .orderBy(desc(cameraEvent.createdAt))
     .limit(1);
-  return ev ?? null;
+  if (!ev) return null;
+  if (maxIdadeSegundos !== undefined && Date.now() - ev.createdAt.getTime() > maxIdadeSegundos * 1000) return null;
+  return ev;
+}
+
+/** Quanto tempo faz, em segundos, que esta imagem foi capturada. Puro. */
+export function idadeEmSegundos(quando: Date, agora = new Date()): number {
+  return Math.max(0, Math.round((agora.getTime() - quando.getTime()) / 1000));
 }
 
 export interface RecentEvent extends CameraEvent {

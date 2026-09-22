@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { findCamera, latestEventWithSnapshot, listCameras } from "../../cameras/query";
+import { findCamera, listCameras } from "../../cameras/query";
+import { imagemFresca } from "../../cameras/fresca";
 import { narrateSnapshot } from "../../cameras/narrate";
 import { authorizeRoomForRequester } from "../../home/room-permission";
 import { registerTools, type ToolContext, type ToolDef } from "../registry";
@@ -41,8 +42,11 @@ export const casa_ver_camera: ToolDef<typeof VerInput> = {
   run: async ({ local }, { userId }) => {
     const cam = await findCamera(userId, local);
     if (!cam) return { erro: `Não achei uma câmera para "${local}".` };
-    const ev = await latestEventWithSnapshot(cam.id);
-    if (!ev?.snapshot) return { erro: `A câmera "${cam.name}" ainda não tem nenhuma imagem recente para descrever.` };
+    const ev = await imagemFresca(cam.id);
+    // Sem imagem RECENTE a tool não desiste: ela PEDE. O chat transforma isto
+    // num botão ("deixar ela olhar"), e o quadro é capturado na hora, em vez
+    // de a Órbita descrever uma imagem de horas atrás como se fosse agora.
+    if (!ev?.snapshot) return { precisa_de_imagem: true, camera: cam.name, motivo: `A câmera "${cam.name}" não tem imagem recente.` };
     const descricao = await narrateSnapshot(ev.snapshot, undefined, { localOnly: cam.identifyFaces });
     return { camera: cam.name, descricao, capturadoEm: ev.createdAt };
   },

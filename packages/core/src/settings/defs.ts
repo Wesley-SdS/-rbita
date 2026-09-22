@@ -335,6 +335,12 @@ export const SETTING_DEFS = {
   ),
   "cameras.retentionDays": num("cameras", "Retenção de eventos de câmera", "Eventos (e o snapshot guardado com eles) mais antigos que isso são apagados.", 14, 1, 90, { unit: "dias" }),
   "cameras.snapshotMaxKB": num("cameras", "Tamanho máximo do snapshot", "Acima disso o evento é aceito mas sem a imagem, para não estourar o banco com um webhook mal configurado.", 400, 50, 4000, { unit: "KB" }),
+  // Uma imagem velha não serve para "o que você está vendo AGORA". Passado
+  // este tempo, a Órbita prefere pedir um quadro novo a descrever a cozinha de
+  // três horas atrás como se fosse o presente.
+  "cameras.imagemFrescaSegundos": num("cameras", "Imagem vale como “agora” por", "Depois disso a Órbita não usa a imagem guardada: ela pede um quadro novo, ou diz que não consegue ver.", 120, 5, 3600, { unit: "s" }),
+  "cameras.capturaAoFalarMs": num("cameras", "Espera pelo quadro ao falar", "Com a Órbita autorizada a olhar quando precisar, ela captura um quadro junto da sua mensagem. Este é o tempo máximo que ela espera por ele antes de mandar a mensagem assim mesmo.", 1500, 200, 8000, { unit: "ms" }),
+
   // ── a câmera do próprio aparelho ──
   // Um notebook não é um Frigate: quem manda o quadro é a aba aberta, e ela
   // para quando a pessoa fecha. Por isso o intervalo é generoso por padrão —

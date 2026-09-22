@@ -9,7 +9,9 @@ export interface OpcaoDeProvedor { classe: "assinatura" | "local" | "paga"; rotu
  * pode rolar a conversa, voltar e a escolha ainda estar lá.
  */
 export interface PerguntaDeProvedor { motivo: string; opcoes: OpcaoDeProvedor[]; pergunta: string }
-export interface Msg { role: Role; content: string; steps?: ToolStep[]; image?: string; escolha?: PerguntaDeProvedor }
+/** "Preciso ver para responder": o pedido fica na mensagem, com o botão. */
+export interface PedidoDeCamera { motivo: string; pergunta: string }
+export interface Msg { role: Role; content: string; steps?: ToolStep[]; image?: string; escolha?: PerguntaDeProvedor; pedidoCamera?: PedidoDeCamera }
 export interface ModelInfo {
   key: string;
   label: string;

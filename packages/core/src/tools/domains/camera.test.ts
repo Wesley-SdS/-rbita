@@ -100,10 +100,16 @@ describe("casa_ver_camera: nuvem barrada em câmera que identifica (decisão 9.6
     expect(narradas[0]!.opts).toEqual({ localOnly: false });
   });
 
-  it("câmera sem imagem recente não chama o modelo", async () => {
+  it("câmera sem imagem recente não chama o modelo: ela PEDE uma imagem", async () => {
+    // A intenção do teste é a de sempre (não gastar uma chamada de visão sem
+    // ter o que olhar). O que mudou é a saída: em vez de desistir com um erro,
+    // a tool pede um quadro, e o chat transforma isso num botão. Descrever
+    // uma imagem de horas atrás como se fosse agora seria pior que não ver.
     evento = null;
-    const r = (await set().casa_ver_camera!.execute!({ local: "cozinha" }, exec)) as { erro: string };
-    expect(r.erro).toMatch(/nenhuma imagem recente/i);
+    const r = (await set().casa_ver_camera!.execute!({ local: "cozinha" }, exec)) as { precisa_de_imagem?: boolean; motivo?: string; erro?: string };
+    expect(r.precisa_de_imagem).toBe(true);
+    expect(r.motivo).toMatch(/imagem recente/i);
+    expect(r.erro).toBeUndefined();
     expect(narradas).toEqual([]);
   });
 });

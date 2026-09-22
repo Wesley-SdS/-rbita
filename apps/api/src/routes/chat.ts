@@ -363,6 +363,15 @@ export async function POST(req: Request, ctx: RouteCtx) {
               } else if (part.type === "tool-result") {
                 const ev = { t: "tool-done", name: part.toolName };
                 gotText ? send(ev) : buffered.push(ev);
+                // A tool de câmera não desiste quando falta imagem recente:
+                // ela PEDE uma. Aqui o pedido vira um evento para a tela, que
+                // mostra o botão "deixar ela olhar". A câmera só acende com o
+                // aval de quem está na frente dela.
+                const saida = (part as { output?: unknown }).output as { precisa_de_imagem?: boolean; camera?: string; motivo?: string } | undefined;
+                if (saida?.precisa_de_imagem) {
+                  const pedido = { t: "pedido", tipo: "camera", camera: saida.camera ?? null, motivo: saida.motivo ?? "Preciso de uma imagem para responder." };
+                  gotText ? send(pedido) : buffered.push(pedido);
+                }
               } else if (part.type === "error") {
                 if (!gotText) {
                   statusDaFalha = statusDoErro((part as { error?: unknown }).error);

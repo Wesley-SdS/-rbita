@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { Icone } from "./icones";
 import { SeletorDeModelo } from "./seletor-modelo";
+import { capturarUmQuadro } from "@/lib/camera/aparelho";
 import { useCasca } from "./contexto";
 import { Markdown } from "@/components/markdown";
 import type { ModelInfo, Msg, VoiceBridge } from "@/components/console/types";
@@ -47,7 +48,7 @@ const rotuloDaFerramenta = (nome: string) => NOMES_DE_FERRAMENTA[nome] ?? nome.r
  * troca de referência, então apenas a última bolha re-renderiza e as antigas
  * pulam o reparse de markdown.
  */
-const Bolha = memo(function Bolha({ m, estado, aoEscolherProvedor }: { m: Msg; estado: string | null; aoEscolherProvedor?: (classe: "assinatura" | "local" | "paga", pergunta: string) => void }) {
+const Bolha = memo(function Bolha({ m, estado, aoEscolherProvedor, aoDeixarOlhar }: { m: Msg; estado: string | null; aoEscolherProvedor?: (classe: "assinatura" | "local" | "paga", pergunta: string) => void; aoDeixarOlhar?: (pergunta: string) => void }) {
   const daOrbita = m.role === "assistant";
   return (
     <div className={`message ${daOrbita ? "assistant" : "user"}`}>
@@ -86,6 +87,20 @@ const Bolha = memo(function Bolha({ m, estado, aoEscolherProvedor }: { m: Msg; e
             </div>
           </div>
         ) : daOrbita ? <Markdown>{m.content}</Markdown> : <p>{m.content}</p>}
+        {m.pedidoCamera && (
+          /* A Órbita precisa ver e não tem imagem recente. Ela PEDE: a câmera
+             acende por um instante, com o aval de quem está na frente dela. */
+          <div className="escolha-provedor" style={{ marginTop: 10 }}>
+            <p className="escolha-motivo">{m.pedidoCamera.motivo}</p>
+            <p className="escolha-pergunta">Posso dar uma olhada pela câmera deste aparelho?</p>
+            <div className="escolha-opcoes">
+              <button type="button" className="button secondary compacto" onClick={() => aoDeixarOlhar?.(m.pedidoCamera!.pergunta)}>
+                Deixar ela olhar
+                <small>tira uma foto agora e responde</small>
+              </button>
+            </div>
+          </div>
+        )}
         {estado && (
           <div className="message-status">
             <span className="typing-dot" />
@@ -192,6 +207,16 @@ export function Conversa({
     if (pergunta) chat.sendMessage(pergunta);
     else if (parametros?.get("voz")) void voz.toggleMic();
   }, [parametros, chat, voz, casca]);
+
+  /** Captura UM quadro e repete a pergunta, agora com o que ver. */
+  async function deixarOlhar(pergunta: string) {
+    const ok = await capturarUmQuadro();
+    if (!ok) {
+      setErro("Não consegui usar a câmera deste aparelho. Ligue ela em Casa → Câmeras.");
+      return;
+    }
+    chat.sendMessage(pergunta);
+  }
 
   const ocupado = mode !== "standby";
 
@@ -468,6 +493,7 @@ export function Conversa({
                     : null
                 }
                 aoEscolherProvedor={(classe, pergunta) => chat.sendMessage(pergunta, undefined, [classe])}
+                aoDeixarOlhar={(pergunta) => void deixarOlhar(pergunta)}
               />
             ))}
           </div>

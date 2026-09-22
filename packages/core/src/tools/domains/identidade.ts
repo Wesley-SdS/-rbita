@@ -8,6 +8,7 @@ import { apagarBiometriaDe, usarFalaComoAmostra } from "../../identity/actions";
 import { cameraDigest, findObject, knownObjectLabels } from "../../vision/objects";
 import { quemDisse } from "../../meetings/quem-disse";
 import { cameraRoomName, findCamera, latestEventWithSnapshot } from "../../cameras/query";
+import { imagemFresca } from "../../cameras/fresca";
 import { allowedRooms, authorizeRoomForRequester } from "../../home/room-permission";
 import { narrateCameraEvent, narrateSnapshot } from "../../cameras/narrate";
 import { db } from "@orbita/db";
@@ -127,8 +128,10 @@ export const ver_camera: ToolDef<typeof VerCameraInput> = {
   run: async ({ local, pergunta }, ctx) => {
     const cam = await findCamera(ctx.userId, local);
     if (!cam) return { erro: `Não achei uma câmera para "${local}".` };
-    const ev = await latestEventWithSnapshot(cam.id);
-    if (!ev?.snapshot) return { erro: `A câmera "${cam.name}" ainda não tem imagem recente.` };
+    const ev = await imagemFresca(cam.id);
+    // irmã da `casa_ver_camera`: as duas fazem a mesma coisa e o modelo escolhe
+    // entre elas, então a regra nova tem de entrar nas DUAS (CLAUDE.md §9)
+    if (!ev?.snapshot) return { precisa_de_imagem: true, camera: cam.name, motivo: `A câmera "${cam.name}" não tem imagem recente.` };
     // conteúdo de imagem é DADO, nunca instrução (CLAUDE.md §5.2); câmera que
     // identifica pessoas responde só com modelo local (decisão 9.6)
     const resposta = await narrateSnapshot(ev.snapshot, `${pergunta}\nResponda só com o que dá para ver na imagem. Se não der para saber, diga que não dá.`, { localOnly: cam.identifyFaces });

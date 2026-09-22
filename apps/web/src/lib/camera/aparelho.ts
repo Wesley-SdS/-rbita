@@ -22,6 +22,8 @@ export interface LimitesCamera {
   larguraMaxima: number;
   qualidade: number;
   quadroMaxKB: number;
+  /** quanto esperar pelo quadro capturado junto da mensagem antes de mandar assim mesmo */
+  esperaAoFalarMs: number;
 }
 
 export const LIMITES_CAMERA_PADRAO: LimitesCamera = {
@@ -29,6 +31,7 @@ export const LIMITES_CAMERA_PADRAO: LimitesCamera = {
   larguraMaxima: 640,
   qualidade: 0.7,
   quadroMaxKB: 400,
+  esperaAoFalarMs: 1500,
 };
 
 let cache: Promise<LimitesCamera> | null = null;
@@ -174,5 +177,84 @@ export class CameraDoAparelho {
     }
     this.stream = null;
     this.canvas = null;
+  }
+}
+
+/** A câmera que este aparelho alimenta. Preferência DO APARELHO, guardada aqui. */
+export const CHAVE_CAMERA = "orbita.cameraDoAparelho";
+/** "A Órbita pode olhar quando precisar", por aparelho. */
+export const CHAVE_AUTORIZADA = "orbita.cameraAutorizada";
+
+function ler(chave: string): string | null {
+  try {
+    return localStorage.getItem(chave);
+  } catch {
+    return null; // navegador sem storage: simplesmente não lembra
+  }
+}
+
+/** A Órbita está autorizada a olhar por este aparelho, sem perguntar toda vez? */
+export function cameraAutorizada(): boolean {
+  return ler(CHAVE_AUTORIZADA) === "1" && Boolean(ler(CHAVE_CAMERA));
+}
+
+export function definirAutorizacao(valor: boolean): void {
+  try {
+    if (valor) localStorage.setItem(CHAVE_AUTORIZADA, "1");
+    else localStorage.removeItem(CHAVE_AUTORIZADA);
+  } catch {
+    /* segue sem lembrar */
+  }
+}
+
+/**
+ * UM quadro, agora: abre a câmera, tira, fecha.
+ *
+ * É o caminho de "a Órbita precisa ver para responder". A câmera acende por
+ * uma fração de segundo em vez de ficar ligada, que é a diferença entre
+ * autorizar um olhar e autorizar vigilância.
+ *
+ * Devolve `false` sem reclamar quando não dá (sem permissão, sem câmera,
+ * ocupada): quem chama segue com a conversa, e a Órbita dirá que não
+ * conseguiu ver — melhor do que travar a mensagem.
+ */
+export async function capturarUmQuadro(cameraId?: string | null): Promise<boolean> {
+  const id = cameraId ?? ler(CHAVE_CAMERA);
+  if (!id) return false;
+
+  let stream: MediaStream | null = null;
+  try {
+    const limites = await limitesDaCamera();
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.muted = true;
+    video.playsInline = true;
+    await video.play();
+    // a câmera entrega o primeiro quadro preto: um tique de espera evita
+    // mandar uma imagem vazia e a Órbita dizer que está tudo escuro
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const { largura, altura } = dimensoesDoQuadro(video.videoWidth, video.videoHeight, limites.larguraMaxima);
+    if (!largura || !altura) return false;
+    const canvas = document.createElement("canvas");
+    canvas.width = largura;
+    canvas.height = altura;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return false;
+    ctx.drawImage(video, 0, 0, largura, altura);
+    const dataUrl = canvas.toDataURL("image/jpeg", limites.qualidade);
+    if (tamanhoDaDataUrlKB(dataUrl) > limites.quadroMaxKB) return false;
+
+    const r = await fetch("/api/cameras/quadro", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cameraId: id, snapshot: dataUrl, label: "sob demanda" }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  } finally {
+    stream?.getTracks().forEach((t) => t.stop());
   }
 }

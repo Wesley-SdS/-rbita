@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invalidar } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
-import { CameraDoAparelho } from "@/lib/camera/aparelho";
+import { CameraDoAparelho, cameraAutorizada, definirAutorizacao } from "@/lib/camera/aparelho";
 
 /**
  * Transforma a webcam deste aparelho numa câmera da casa.
@@ -18,6 +18,27 @@ import { CameraDoAparelho } from "@/lib/camera/aparelho";
  */
 const CHAVE = "orbita.cameraDoAparelho";
 
+/**
+ * Por que a câmera não abriu.
+ *
+ * O navegador distingue três casos bem diferentes e a primeira versão dizia a
+ * mesma frase para todos ("libere o acesso"), o que não ajuda quem tem a
+ * câmera ocupada por outro programa nem quem não tem câmera.
+ */
+function motivoDaCamera(e: unknown): string {
+  const nome = e instanceof DOMException ? e.name : "";
+  if (nome === "NotAllowedError" || nome === "SecurityError") {
+    return "O navegador bloqueou o acesso à câmera. Clique no cadeado ao lado do endereço e permita a câmera para este site.";
+  }
+  if (nome === "NotFoundError" || nome === "OverconstrainedError") {
+    return "Não encontrei nenhuma câmera neste aparelho.";
+  }
+  if (nome === "NotReadableError" || nome === "AbortError") {
+    return "A câmera existe, mas outro programa está usando ela agora (Teams, Meet, Zoom). Feche o outro e tente de novo.";
+  }
+  return "Não consegui abrir a câmera deste aparelho.";
+}
+
 interface CameraRow {
   id: string;
   name: string;
@@ -30,6 +51,7 @@ export function CameraDesteAparelho({ cameras }: { cameras: CameraRow[] }) {
   const [ligada, setLigada] = useState(false);
   const [recado, setRecado] = useState<{ texto: string; atencao?: boolean } | null>(null);
   const [enviados, setEnviados] = useState(0);
+  const [autorizada, setAutorizada] = useState(false);
   const capturaRef = useRef<CameraDoAparelho | null>(null);
   const previaRef = useRef<HTMLDivElement>(null);
 
@@ -37,6 +59,7 @@ export function CameraDesteAparelho({ cameras }: { cameras: CameraRow[] }) {
     try {
       const guardada = localStorage.getItem(CHAVE);
       if (guardada) setEscolhida(guardada);
+      setAutorizada(cameraAutorizada());
     } catch {
       /* navegador sem storage: só não lembra da escolha */
     }
@@ -63,6 +86,32 @@ export function CameraDesteAparelho({ cameras }: { cameras: CameraRow[] }) {
     }
   }
 
+  /**
+   * Cadastra a câmera deste aparelho, quando ainda não existe nenhuma.
+   *
+   * A primeira versão exigia cadastrar antes e escolher depois, como se faz
+   * com uma câmera do Frigate. Para a webcam do próprio aparelho isso é
+   * burocracia sem motivo: resultado medido, ninguém cadastrou nada e a
+   * Órbita seguiu dizendo (corretamente) que não tinha câmera.
+   */
+  async function garantirCamera(): Promise<string | null> {
+    if (cam) return cam.id;
+    const nome = "Câmera deste aparelho";
+    const r = await fetch("/api/cameras", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nome }),
+    }).catch(() => null);
+    const d = (await r?.json().catch(() => ({}))) as { id?: string; error?: string } | undefined;
+    if (!r?.ok || !d?.id) {
+      setRecado({ texto: d?.error ?? "Não consegui cadastrar a câmera deste aparelho.", atencao: true });
+      return null;
+    }
+    escolher(d.id);
+    invalidar("/api/cameras");
+    return d.id;
+  }
+
   async function alternar() {
     if (capturaRef.current?.ativa) {
       capturaRef.current.parar();
@@ -71,9 +120,10 @@ export function CameraDesteAparelho({ cameras }: { cameras: CameraRow[] }) {
       setRecado(null);
       return;
     }
-    if (!cam) return;
+    const cameraId = await garantirCamera();
+    if (!cameraId) return;
 
-    const captura = new CameraDoAparelho(cam.id, {
+    const captura = new CameraDoAparelho(cameraId, {
       aoEnviar: (kb) => {
         setEnviados((n) => n + 1);
         setRecado({ texto: `Último quadro enviado com ${kb} KB.` });
@@ -94,8 +144,8 @@ export function CameraDesteAparelho({ cameras }: { cameras: CameraRow[] }) {
       }
       // a Órbita passa a ter uma câmera: a lista e o histórico mudam
       invalidar("/api/cameras", "/api/cameras/events");
-    } catch {
-      setRecado({ texto: "Preciso da câmera para isso. Libere o acesso no navegador e tente de novo.", atencao: true });
+    } catch (e) {
+      setRecado({ texto: motivoDaCamera(e), atencao: true });
     }
   }
 
@@ -110,12 +160,12 @@ export function CameraDesteAparelho({ cameras }: { cameras: CameraRow[] }) {
         faz a Órbita enxergar aqui sem precisar de um Frigate.
       </p>
 
-      {cameras.length === 0 ? (
-        <p className="mt-2 text-[14px]" style={{ color: "var(--color-ink-dim)" }}>
-          Cadastre uma câmera abaixo primeiro (pode chamar de “Notebook”), e depois escolha ela aqui.
-        </p>
-      ) : (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button className={`button ${ligada ? "secondary" : "primary"} compacto`} onClick={() => void alternar()} disabled={!ligada && cam ? !cam.enabled : false}>
+          <Icone nome={ligada ? "stop" : "play"} />
+          {ligada ? "Parar de enviar" : cam ? "Começar a enviar" : "Ligar a câmera deste aparelho"}
+        </button>
+        {cameras.length > 1 && (
           <select
             className="inline-input compacto"
             value={escolhida}
@@ -131,23 +181,44 @@ export function CameraDesteAparelho({ cameras }: { cameras: CameraRow[] }) {
               </option>
             ))}
           </select>
-          <button className={`button ${ligada ? "secondary" : "primary"} compacto`} onClick={() => void alternar()} disabled={!cam || (!ligada && !cam.enabled)}>
-            <Icone nome={ligada ? "stop" : "play"} />
-            {ligada ? "Parar de enviar" : "Começar a enviar"}
-          </button>
-          {ligada && (
-            <span className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
-              {enviados} quadro(s) enviado(s)
-            </span>
-          )}
-        </div>
-      )}
+        )}
+        {ligada && (
+          <span className="text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
+            {enviados} quadro(s) enviado(s)
+          </span>
+        )}
+      </div>
 
       {cam && !cam.enabled && !ligada && (
         <p className="mt-2 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
           Essa câmera está desligada. Ligue na lista abaixo para poder enviar.
         </p>
       )}
+      {/* A autorização permanente é o que dispensa o botão no meio da conversa:
+          com ela, a Órbita captura UM quadro junto da sua mensagem, em vez de
+          ficar transmitindo. A câmera acende por um instante, não fica acesa. */}
+      {cam && (
+        <label className="switch-row" style={{ marginTop: 12 }}>
+          <input
+            type="checkbox"
+            checked={autorizada}
+            onChange={(e) => {
+              definirAutorizacao(e.target.checked);
+              setAutorizada(e.target.checked);
+            }}
+          />
+          <span>
+            <Icone nome="spark" />
+            Deixar a Órbita olhar quando precisar, sem perguntar
+          </span>
+        </label>
+      )}
+      {autorizada && (
+        <p className="mt-1 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
+          Ela tira uma foto junto de cada mensagem sua e usa só se precisar ver. Sem isso, ela pergunta antes.
+        </p>
+      )}
+
       {cam?.identifyFaces && (
         <p className="mt-2 text-[13px]" style={{ color: "var(--color-ink-dim)" }}>
           Essa câmera identifica quem aparece, então a narração dela usa só modelo local e nada vai para a nuvem.
