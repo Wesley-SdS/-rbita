@@ -1,6 +1,6 @@
-import { generateText, stepCountIs } from "ai";
 import { eq } from "drizzle-orm";
-import { resolveModel, fallbackModelKey } from "@orbita/llm";
+import { gerarTexto } from "../llm/gerar";
+import { FLUXO } from "../usage/registrar";
 import { db } from "@orbita/db";
 import { routine, notification } from "@orbita/db/routine-schema";
 import { buildAllTools, SYSTEM_PROMPT } from "../chat/tools";
@@ -34,22 +34,32 @@ export async function notifyUser(userId: string, title: string, body: string, ro
  * Pede uma resposta ao modelo com as ferramentas do usuário (é o mesmo motor
  * do chat, sem histórico). Usado por rotinas e por ações `prompt` das regras.
  */
-export async function runPromptForUser(userId: string, prompt: string, systemSuffix = ""): Promise<string> {
+export async function runPromptForUser(
+  userId: string,
+  prompt: string,
+  systemSuffix = "",
+  opts: { fluxo?: string; referencia?: string | null } = {},
+): Promise<string> {
   const [{ tools, cleanup, skillInstructions }, cfg] = await Promise.all([
     buildAllTools(userId),
     settings.getMany(["routines.model", "chat.maxSteps"]),
     applyLlmSettings(),
   ]);
   try {
-    const modelKey = cfg["routines.model"].trim() || (await fallbackModelKey());
-    const { text } = await generateText({
-      model: resolveModel(modelKey),
+    // `gerarTexto` traz duas coisas que faltavam aqui: a CADEIA da casa (antes
+    // era uma chave só, e com o Ollama desligado a rotina simplesmente
+    // desistia) e o REGISTRO do consumo. Ver packages/core/src/llm/gerar.ts.
+    const { texto } = await gerarTexto({
+      userId,
+      fluxo: opts.fluxo ?? FLUXO.rotina,
+      referencia: opts.referencia,
+      modeloPreferido: cfg["routines.model"],
       system: SYSTEM_PROMPT + skillInstructions + systemSuffix,
       prompt,
       tools,
-      stopWhen: stepCountIs(cfg["chat.maxSteps"]),
+      maxSteps: cfg["chat.maxSteps"],
     });
-    return text?.trim() || "(sem conteúdo)";
+    return texto || "(sem conteúdo)";
   } finally {
     await cleanup(); // fecha conexões MCP
   }
@@ -68,15 +78,27 @@ export interface RotinaAgendavel {
  * Quais rotinas estão devidas agora. Pura, para o agendamento poder ser
  * testado sem banco: é a regra que decide se a Órbita vai gastar uma chamada
  * de modelo, então ela merece estar travada.
+ *
+ * O piso (`minimoMinutos`) é aplicado AQUI, e não só na hora de cadastrar, de
+ * propósito: quem já está no banco com intervalo menor não pode continuar
+ * correndo. Em 22/09/2026 uma rotina de "a cada 1 minuto" rodou 356 vezes, e
+ * um piso só no cadastro teria deixado ela rodando para sempre.
  */
-export function rotinasDevidas<T extends RotinaAgendavel>(rows: T[], agora: number, force = false): T[] {
-  return rows.filter((r) => r.enabled && (force || !r.lastRunAt || agora - r.lastRunAt.getTime() >= r.intervalMinutes * 60000));
+export function rotinasDevidas<T extends RotinaAgendavel>(rows: T[], agora: number, force = false, minimoMinutos = 0): T[] {
+  return rows.filter((r) => {
+    if (!r.enabled) return false;
+    if (force) return true;
+    if (!r.lastRunAt) return true;
+    const intervalo = Math.max(r.intervalMinutes, minimoMinutos);
+    return agora - r.lastRunAt.getTime() >= intervalo * 60000;
+  });
 }
 
 /** Executa as rotinas devidas de UM usuário. `force` ignora o intervalo. */
 export async function runDueRoutines(userId: string, opts: { force?: boolean } = {}): Promise<{ devidas: number; notificacoes: number }> {
   const rows = await db.select().from(routine).where(eq(routine.userId, userId));
-  const due = rotinasDevidas(rows, Date.now(), opts.force);
+  const minimo = await settings.get("routines.minIntervalMinutes").catch(() => 0);
+  const due = rotinasDevidas(rows, Date.now(), opts.force, minimo);
   let criadas = 0;
   for (const r of due) {
     // A TENTATIVA já conta para o intervalo, dê certo ou não.
@@ -92,7 +114,7 @@ export async function runDueRoutines(userId: string, opts: { force?: boolean } =
     // limite, não.
     await db.update(routine).set({ lastRunAt: new Date() }).where(eq(routine.id, r.id));
     try {
-      const body = await runPromptForUser(userId, r.prompt, ROUTINE_SUFFIX);
+      const body = await runPromptForUser(userId, r.prompt, ROUTINE_SUFFIX, { fluxo: FLUXO.rotina, referencia: r.title });
       await notifyUser(userId, r.title, body, r.id);
       await events.emit("routine.finished", { routineId: r.id, title: r.title, resultado: body.slice(0, 500) }, { userId });
       criadas++;

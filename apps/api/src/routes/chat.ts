@@ -21,6 +21,8 @@ import { parseVoiceClip, requesterResolver } from "@orbita/core/identity/request
 import { ehComandoDaCasa, vocabularioDaCasa } from "@orbita/core/chat/fast-path";
 import { blocoDoResumo, inicioDoHistorico, quantasDobrar } from "@orbita/core/chat/conversation-summary";
 import { enqueueJob } from "@orbita/core/jobs/queue";
+import { alternativas, classeDaChave, classesPermitidas, filtrarCadeia, motivoDaFalha } from "@orbita/llm";
+import { registrarUso, FLUXO } from "@orbita/core/usage/registrar";
 
 const BodySchema = z.object({
   content: z.string().min(1).max(8000),
@@ -40,6 +42,9 @@ const BodySchema = z.object({
   privacidade: z.boolean().optional(),
   // de qual dispositivo veio o pedido (B5.4): é o "aqui" de "apaga a luz daqui"
   deviceId: z.string().uuid().optional(),
+  // O dono respondeu "pode usar a nuvem" à pergunta do turno anterior. Vale só
+  // para ESTE pedido: autorizar uma vez não é mudar a config da casa.
+  liberar: z.array(z.enum(["assinatura", "local", "paga"])).max(3).optional(),
 });
 
 const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.\n\n";
@@ -71,6 +76,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
     "rag.topK", "identity.commandClipMaxKB",
     "chat.fastPathEnabled", "chat.fastPathMaxChars", "chat.fastPathHistory",
     "chat.summaryEnabled", "chat.summaryMaxPending", "prompt.prioritySummary",
+    "llm.quandoFalhar",
   ]);
   await applyLlmSettings();
   const OUT_CAP: Record<string, number> = { small: cfg["chat.outputCapSmall"], medium: cfg["chat.outputCapMedium"], large: cfg["chat.outputCapLarge"] };
@@ -176,8 +182,14 @@ export async function POST(req: Request, ctx: RouteCtx) {
     primaryKey = local.key;
   }
 
-  // CADEIA DE FAILOVER: primário → um fallback por provedor descoberto.
-  const candidates = image ? ["vision"] : buildModelChain(primaryKey, env);
+  // CADEIA DE FAILOVER: primário → um fallback por provedor descoberto,
+  // FILTRADA pelo que o dono permite (`llm.quandoFalhar`). Antes a cadeia
+  // inteira era tentada sozinha: escolher assinatura e a Órbita ir gastar na
+  // nuvem por conta própria era o comportamento, não um bug.
+  const cadeiaCompleta = image ? ["vision"] : buildModelChain(primaryKey, env);
+  const classePreferida = classeDaChave(primaryKey) ?? "paga";
+  const permitidas = classesPermitidas(classePreferida, cfg["llm.quandoFalhar"], parsed.data.liberar ?? []);
+  const candidates = image ? cadeiaCompleta : filtrarCadeia(cadeiaCompleta, permitidas);
   if (!candidates.length) {
     // Nenhum provedor disponível: mensagem ESPECÍFICA e acionável (não genérica).
     return Response.json(
@@ -288,6 +300,22 @@ export async function POST(req: Request, ctx: RouteCtx) {
           userId, model: persistKey, tokens: tokens ?? 0, latencyMs, conv: conv.id,
           cacheRead: anth?.cacheReadInputTokens ?? 0, cacheWrite: anth?.cacheCreationInputTokens ?? 0,
         });
+        // o chat já gravava tokens na `message`, mas só ele: agora entra na
+        // MESMA conta dos outros 25 fluxos, para a tela de gestão somar tudo
+        registrarUso({
+          userId,
+          fluxo: FLUXO.chat,
+          referencia: conv.id,
+          modelKey: persistKey,
+          consumo: {
+            unidade: "tokens",
+            entrada: usage?.inputTokens ?? 0,
+            saida: usage?.outputTokens ?? 0,
+            // o SDK não expõe cache no `usage`; quem informa é o metadado do provedor
+            entradaCache: anth?.cacheReadInputTokens ?? 0,
+          },
+          duracaoMs: latencyMs,
+        });
         await cleanupOnce();
       },
       onError: (e) => {
@@ -313,6 +341,9 @@ export async function POST(req: Request, ctx: RouteCtx) {
       async start(controller) {
         const send = (o: unknown) => controller.enqueue(encoder.encode(JSON.stringify(o) + "\n"));
         let finished = false;
+        // guardado para a PERGUNTA no fim: o motivo precisa ser o da primeira
+        // recusa (a do provedor que o dono escolheu), não a da última tentativa
+        let statusDoPrimario: number | undefined;
         for (let i = 0; i < candidates.length && !finished; i++) {
           const key = candidates[i];
           let result: ReturnType<typeof makeStream>;
@@ -344,14 +375,35 @@ export async function POST(req: Request, ctx: RouteCtx) {
             finished = true;
             recordProviderResult(key, gotText); // sucesso fecha o disjuntor do provedor
           } catch (e) {
-            recordProviderResult(key, false, statusDaFalha ?? statusDoErro(e)); // falha conta p/ abrir o disjuntor
+            const status = statusDaFalha ?? statusDoErro(e);
+            recordProviderResult(key, false, status); // falha conta p/ abrir o disjuntor
+            // a tentativa que falhou também vai para a conta: ela custou TEMPO
+            // (um 429 do Claude são ~9 s), e às vezes custou dinheiro. Sem isto
+            // a tela de gastos diria "2,8 s" num turno que levou 10.
+            registrarUso({
+              userId,
+              fluxo: FLUXO.chat,
+              referencia: conv.id,
+              modelKey: key,
+              consumo: { unidade: "tokens", entrada: 0, saida: 0 },
+              erro: (status ? `${status}: ` : "") + (e instanceof Error ? e.message : String(e)).slice(0, 200),
+            });
+            if (i === 0) statusDoPrimario = status;
             if (gotText) { finished = true; } // já emitiu texto: não troca no meio
             // senão: silenciosamente tenta o próximo candidato da cadeia
           }
         }
         if (!finished) {
-          // todos os candidatos falharam → mensagem específica do primário + dica
-          send({ t: "error", msg: providerDownMessage(candidates[0]) + " Tentei os outros provedores disponíveis e todos falharam. Tente de novo em instantes." });
+          // Acabou o que o dono permitiu. Se existe outro caminho, a Órbita
+          // PERGUNTA em vez de gastar por conta própria: é a diferença entre
+          // "escolhi assinatura" valer e ser só uma sugestão.
+          const restantes = alternativas(cadeiaCompleta, permitidas);
+          const motivo = motivoDaFalha(statusDoPrimario, classePreferida);
+          if (restantes.length) {
+            send({ t: "escolha", motivo, opcoes: restantes });
+          } else {
+            send({ t: "error", msg: `${motivo} E não há outro caminho configurado para tentar.` });
+          }
         }
         await cleanupOnce();
         controller.close();

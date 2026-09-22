@@ -66,6 +66,8 @@ interface AaiTranscript {
   language_code?: string;
   error?: string;
   utterances?: AaiUtterance[];
+  /** duração do áudio em segundos — é por ela que a AssemblyAI cobra */
+  audio_duration?: number;
 }
 
 function normalizeUtterances(raw: AaiUtterance[] | undefined): SttUtterance[] | undefined {
@@ -119,6 +121,8 @@ export async function transcribeWithAssemblyAI(
         text: (d.text ?? "").trim(),
         language: d.language_code ?? "pt",
         provider: "assemblyai",
+        // a própria API informa a duração; é por ela que a transcrição é cobrada
+        ...(typeof d.audio_duration === "number" ? { duracaoS: d.audio_duration } : {}),
         ...(utterances ? { utterances, speakers: new Set(utterances.map((u) => u.speaker)).size } : {}),
         // pediu separação mas o áudio tinha uma voz só (ou a API não devolveu):
         // não é erro, mas a UI precisa saber para não prometer o que não tem.

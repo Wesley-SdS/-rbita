@@ -5,10 +5,13 @@ import { db } from "@orbita/db";
 import { routine } from "@orbita/db/routine-schema";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
+import { settings } from "@orbita/core/settings/index";
 
 const Body = z.object({
   title: z.string().min(1).max(120),
   prompt: z.string().min(1).max(2000),
+  // o piso REAL vem da config (`routines.minIntervalMinutes`), conferido
+  // abaixo: aqui só o limite absoluto do tipo
   intervalMinutes: z.number().int().min(1).max(43200).default(1440),
 });
 
@@ -28,6 +31,18 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: parsed.error?.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
+
+  // Uma rotina é uma chamada de modelo COM ferramentas, a cada volta. Sem este
+  // piso dava para cadastrar "a cada 1 minuto" sem nenhum aviso — foi o que
+  // aconteceu em 22/09/2026, e ela rodou 356 vezes antes de alguém reparar.
+  const minimo = await settings.get("routines.minIntervalMinutes");
+  if (parsed.data.intervalMinutes < minimo) {
+    return Response.json(
+      { error: `O intervalo mínimo é de ${minimo} minutos. Cada execução consulta um modelo, então rodar mais vezes que isso vira gasto contínuo. O mínimo se muda em Ajustes.` },
+      { status: 400 },
+    );
+  }
+
   const [row] = await db
     .insert(routine)
     .values({ userId: session.user.id, ...parsed.data })

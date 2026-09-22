@@ -1,6 +1,7 @@
 import { generateText } from "ai";
 import { asc, count, eq } from "drizzle-orm";
-import { resolveModel, fallbackModelKey } from "@orbita/llm";
+import { modeloDaCasa } from "../llm/gerar";
+import { registrarUso, FLUXO } from "../usage/registrar";
 import { db } from "@orbita/db";
 import { conversation, message } from "@orbita/db/chat-schema";
 import { settings } from "../settings";
@@ -74,7 +75,10 @@ export async function foldConversation(conversationId: string, progresso?: Progr
   const aDobrar = quantasDobrar(Number(total), conv.summaryCount, cfg["chat.historyWindow"]);
   if (!aDobrar) return { dobradas: 0 };
 
-  const model = resolveModel(cfg["chat.summaryModel"].trim() || (await fallbackModelKey()));
+  const { model, modelKey } = await modeloDaCasa(cfg["chat.summaryModel"]);
+  const comecou = Date.now();
+  let entrada = 0;
+  let saida = 0;
   let resumo = conv.summary ?? "";
   let jaResumidas = conv.summaryCount;
   let dobradas = 0;
@@ -92,12 +96,14 @@ export async function foldConversation(conversationId: string, progresso?: Progr
     if (!msgs.length) break;
 
     const trecho = msgs.map((m) => `${m.role === "user" ? "Dono" : m.role === "assistant" ? "Órbita" : "Sistema"}: ${m.content}`).join("\n\n");
-    const { text } = await generateText({
+    const { text, usage } = await generateText({
       model,
       prompt:
         PROMPT_DOBRA.replace("{max}", String(cfg["chat.summaryMaxChars"])) +
         `RESUMO ATUAL:\n${resumo || "(vazio, a conversa está começando)"}\n\nMENSAGENS NOVAS:\n${trecho}`,
     });
+    entrada += usage?.inputTokens ?? 0;
+    saida += usage?.outputTokens ?? 0;
     resumo = text.trim().slice(0, cfg["chat.summaryMaxChars"]);
     jaResumidas += msgs.length;
     dobradas += msgs.length;
@@ -106,5 +112,13 @@ export async function foldConversation(conversationId: string, progresso?: Progr
   }
 
   log.info("chat.resumo_dobrado", { conversationId, dobradas, jaResumidas });
+  registrarUso({
+    userId: conv.userId,
+    fluxo: FLUXO.resumoConversa,
+    referencia: conversationId,
+    modelKey,
+    consumo: { unidade: "tokens", entrada, saida },
+    duracaoMs: Date.now() - comecou,
+  });
   return { dobradas };
 }

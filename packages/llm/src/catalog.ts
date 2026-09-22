@@ -26,6 +26,13 @@ export interface ModelInfo {
   /** custo aproximado por 1k tokens de saída (0 = local/assinatura) */
   costPer1k: number;
   /**
+   * Custo por 1k tokens de ENTRADA. Separado da saída porque a diferença é
+   * grande (num modelo Flash a saída custa umas oito vezes mais), e a conta da
+   * casa é dominada pela entrada: cada turno carrega system, histórico e as
+   * ferramentas. Somar tudo pelo preço de saída inflaria a estimativa.
+   */
+  costPer1kInput?: number;
+  /**
    * O custo é conhecido? Falso para nuvem que não informa preço (Groq, Gemini,
    * OpenAI, Cohere diretos). Sem isto, preço ausente virava custo zero e a nuvem
    * passava na frente do modelo local na cadeia de failover (RV.2).
@@ -68,6 +75,7 @@ function paraModelInfo(m: DiscoveredModel): ModelInfo {
     tier: m.tier,
     billing: billingDe(m.provider),
     costPer1k: m.costPer1kOutput ?? 0,
+    costPer1kInput: m.costPer1kInput,
     priceKnown: m.provider === "local" || m.provider === "claude" || m.costPer1kOutput !== undefined,
     local: m.local,
     supportsTools: m.supportsTools,

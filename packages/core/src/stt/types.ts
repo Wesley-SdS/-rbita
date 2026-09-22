@@ -19,6 +19,8 @@ export interface SttResult {
   utterances?: SttUtterance[];
   /** Quantos locutores distintos foram identificados. */
   speakers?: number;
+  /** Duração do áudio em segundos. É a UNIDADE de cobrança da transcrição. */
+  duracaoS?: number;
   /**
    * A diarização foi pedida mas não pôde ser feita (ex.: caiu para o whisper
    * local, que não separa vozes). A UI usa isto para avisar em vez de mentir.
@@ -39,4 +41,8 @@ export interface SttOptions {
   diarize?: boolean;
   /** Dica de quantos locutores esperar — melhora a precisão quando conhecido. */
   expectedSpeakers?: number;
+  /** De quem é a conta. Sem isto a transcrição fica fora do registro de consumo. */
+  userId?: string;
+  /** O que está sendo transcrito, para a linha da conta dizer algo ("reunião de terça"). */
+  referencia?: string | null;
 }

@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { and, asc, cosineDistance, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
-import { embedText, resolveModel, fallbackModelKey } from "@orbita/llm";
+import { embedText } from "@orbita/llm";
+import { gerarEstruturado } from "../llm/gerar";
+import { FLUXO } from "../usage/registrar";
 import { db } from "@orbita/db";
 import { memory, memoryCandidate } from "@orbita/db/knowledge-schema";
 import { message } from "@orbita/db/chat-schema";
@@ -112,11 +114,15 @@ export async function extrairDaConversa(userId: string, conversationId: string, 
     .slice(-cfg["memory.extractMaxChars"]);
 
   await progresso?.(0, 3, "lendo a conversa");
-  const modelKey = cfg["memory.extractModel"] || (await fallbackModelKey());
   const prompt = instrucao(cfg["memory.categories"], cfg["memory.sensitiveCategories"]) + texto;
   let fatos: Candidato[];
   try {
-    ({ fatos } = await generateStructured(resolveModel(modelKey), prompt, ExtracaoSchema));
+    // antes era uma chave só (`memory.extractModel` ou o reserva) e sem
+    // registro: com o Ollama desligado, a extração morria calada
+    ({ dados: { fatos } } = await gerarEstruturado(
+      { userId, fluxo: FLUXO.memoria, referencia: conversationId, prompt, modeloPreferido: cfg["memory.extractModel"] },
+      ExtracaoSchema,
+    ));
   } catch (e) {
     log.error("memoria.extrair", { error: e instanceof Error ? e.message : String(e) });
     return vazio;

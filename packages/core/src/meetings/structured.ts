@@ -51,18 +51,27 @@ const JSON_INSTRUCTION =
  * reparo se o resultado vier inválido (reenvia o erro ao modelo e pede para
  * corrigir). Lança erro claro se falhar mesmo depois do reparo.
  */
-export async function generateStructured<T>(model: LanguageModel, prompt: string, schema: ZodType<T>): Promise<T> {
-  const { text } = await generateText({ model, prompt: prompt + JSON_INSTRUCTION });
+/**
+ * `aoUsar` recebe o consumo de CADA chamada, inclusive a de reparo. Sem isto a
+ * segunda tentativa ficava fora da conta da casa, e ela é justamente a que
+ * acontece quando o modelo está indo mal — ou seja, a que mais custa.
+ */
+export type RelatoDeUso = (u: { inputTokens?: number; outputTokens?: number }) => void;
+
+export async function generateStructured<T>(model: LanguageModel, prompt: string, schema: ZodType<T>, aoUsar?: RelatoDeUso): Promise<T> {
+  const { text, usage } = await generateText({ model, prompt: prompt + JSON_INSTRUCTION });
+  aoUsar?.(usage ?? {});
   const parsed = tryParseJson(text);
   const first = parsed !== null ? schema.safeParse(parsed) : undefined;
   if (first?.success) return first.data;
 
   // reparo: uma segunda chamada, mostrando o que veio e o que deu errado
   const motivo = parsed === null ? "o texto não é um JSON válido" : `o JSON não bate com o formato esperado: ${first?.error?.issues[0]?.message ?? "erro de validação"}`;
-  const { text: text2 } = await generateText({
+  const { text: text2, usage: usage2 } = await generateText({
     model,
     prompt: `Sua resposta anterior falhou porque ${motivo}.\n\nResposta anterior:\n${text.slice(0, 2000)}\n\nCorrija e responda de novo, só com o objeto JSON válido, sem texto antes ou depois e sem bloco de código.`,
   });
+  aoUsar?.(usage2 ?? {});
   const parsed2 = tryParseJson(text2);
   const second = parsed2 !== null ? schema.safeParse(parsed2) : undefined;
   if (second?.success) return second.data;

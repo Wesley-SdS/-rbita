@@ -1,6 +1,8 @@
 import { generateText } from "ai";
 import { z } from "zod";
-import { resolveModel, fallbackModelKey } from "@orbita/llm";
+import { modeloDaCasa } from "../llm/gerar";
+import { registrarUso, FLUXO } from "../usage/registrar";
+import type { RelatoDeUso } from "./structured";
 import { ingestDocument } from "../rag/ingest";
 import { chunkText } from "../rag/chunk";
 import { dedupeCompromissos, type Compromisso } from "./compromissos";
@@ -65,20 +67,20 @@ const REDUCE_PROMPT =
  *  caber no teto em vez de recusar. */
 const MAX_CHUNKS = 40;
 
-type Modelo = ReturnType<typeof resolveModel>;
+type Modelo = Awaited<ReturnType<typeof modeloDaCasa>>["model"];
 
-async function extractStructured(model: Modelo, prompt: string): Promise<{ resumo: string; compromissos: Compromisso[] }> {
-  return generateStructured(model, prompt, ExtractionSchema);
+async function extractStructured(model: Modelo, prompt: string, aoUsar?: RelatoDeUso): Promise<{ resumo: string; compromissos: Compromisso[] }> {
+  return generateStructured(model, prompt, ExtractionSchema, aoUsar);
 }
 
 /** Resumo em passada única (transcrição cabe no orçamento configurado). */
-async function summarizeSinglePass(model: Modelo, transcript: string) {
-  const { resumo, compromissos } = await extractStructured(model, SINGLE_PASS_PROMPT + transcript);
+async function summarizeSinglePass(model: Modelo, transcript: string, aoUsar?: RelatoDeUso) {
+  const { resumo, compromissos } = await extractStructured(model, SINGLE_PASS_PROMPT + transcript, aoUsar);
   return { summary: resumo.trim(), compromissos: dedupeCompromissos(compromissos) };
 }
 
 /** Resumo em mapa-redução (MTG.3): resume cada bloco, depois consolida. */
-async function summarizeMapReduce(model: Modelo, transcript: string, chunkChars: number, progresso?: Progresso) {
+async function summarizeMapReduce(model: Modelo, transcript: string, chunkChars: number, progresso?: Progresso, aoUsar?: RelatoDeUso) {
   const efetivo = Math.ceil(transcript.length / MAX_CHUNKS) > chunkChars ? Math.ceil(transcript.length / MAX_CHUNKS) : chunkChars;
   const blocos = chunkText(transcript, efetivo, Math.min(300, efetivo - 1));
 
@@ -87,12 +89,13 @@ async function summarizeMapReduce(model: Modelo, transcript: string, chunkChars:
     // o progresso é também o sinal de vida do trabalho na fila: sem ele, um
     // mapa-redução de vários minutos seria confundido com trabalho travado
     await progresso?.(i, blocos.length + 1, `resumindo o bloco ${i + 1} de ${blocos.length}`);
-    parciais.push(await extractStructured(model, CHUNK_PROMPT + bloco));
+    parciais.push(await extractStructured(model, CHUNK_PROMPT + bloco, aoUsar));
   }
 
   await progresso?.(blocos.length, blocos.length + 1, "juntando os resumos parciais");
   const combinado = parciais.map((p, i) => `### Trecho ${i + 1}\n${p.resumo}`).join("\n\n");
-  const { text } = await generateText({ model, prompt: REDUCE_PROMPT + combinado });
+  const { text, usage } = await generateText({ model, prompt: REDUCE_PROMPT + combinado });
+  aoUsar?.(usage ?? {});
 
   return { summary: text.trim(), compromissos: dedupeCompromissos(parciais.flatMap((p) => p.compromissos)), blocos: blocos.length };
 }
@@ -118,16 +121,27 @@ export async function summarizeMeeting(userId: string, input: SummarizeInput, pr
   const { transcript } = input;
   const title = input.title?.trim() || `Reunião ${new Date().toLocaleString("pt-BR")}`;
   const started = Date.now();
-  const model = resolveModel(await fallbackModelKey());
+  const { model, modelKey } = await modeloDaCasa();
+
+  // o resumo faz de 1 a 40 chamadas com o mesmo modelo; a conta soma todas e
+  // grava UMA linha, senão a tela de gestão viraria uma lista de fragmentos
+  let entrada = 0;
+  let saida = 0;
+  let cache = 0;
+  const aoUsar: RelatoDeUso = (u) => {
+    entrada += u.inputTokens ?? 0;
+    saida += u.outputTokens ?? 0;
+
+  };
 
   let summary: string;
   let compromissos: Compromisso[];
   let blocos = 1;
   if (transcript.length <= cfg["limits.summaryMaxChars"]) {
     await progresso?.(0, 2, "resumindo a reunião");
-    ({ summary, compromissos } = await summarizeSinglePass(model, transcript));
+    ({ summary, compromissos } = await summarizeSinglePass(model, transcript, aoUsar));
   } else {
-    const r = await summarizeMapReduce(model, transcript, cfg["meetings.mapChunkChars"], progresso);
+    const r = await summarizeMapReduce(model, transcript, cfg["meetings.mapChunkChars"], progresso, aoUsar);
     summary = r.summary;
     compromissos = r.compromissos;
     blocos = r.blocos;
@@ -142,6 +156,14 @@ export async function summarizeMeeting(userId: string, input: SummarizeInput, pr
   const res = await ingestDocument(userId, title, doc, "meeting").catch(() => ({ chunks: 0, documentId: null as string | null }));
 
   log.info("meeting.summarize", { userId, ms: Date.now() - started, chars: transcript.length, blocos, compromissos: compromissos.length, chunks: res.chunks });
+  registrarUso({
+    userId,
+    fluxo: FLUXO.resumoReuniao,
+    referencia: title,
+    modelKey,
+    consumo: { unidade: "tokens", entrada, saida, entradaCache: cache },
+    duracaoMs: Date.now() - started,
+  });
 
   // fail-soft: o resumo não pode falhar porque o vínculo de um desconhecido falhou
   if (res.documentId && input.desconhecidos?.length && (await isOwner(userId))) {

@@ -45,7 +45,15 @@ vi.mock("@orbita/db", () => {
 vi.mock("../settings", () => ({
   settings: { getMany: async () => ({ "chat.historyWindow": 4, "chat.summaryBatch": 3, "chat.summaryMaxChars": 500, "chat.summaryModel": "" }) },
 }));
-vi.mock("@orbita/llm", () => ({ resolveModel: () => ({}), fallbackModelKey: async () => "local/x" }));
+// `modeloDaCasa` passou a montar a CADEIA da casa em vez de resolver uma chave
+// solta: sem `buildModelChain` no dobro, o resumo nem chega ao modelo.
+vi.mock("@orbita/llm", () => ({
+  resolveModel: () => ({}),
+  fallbackModelKey: async () => "local/x",
+  buildModelChain: (k: string) => [k],
+}));
+// o registro de consumo é best-effort e não deve exigir banco no teste do resumo
+vi.mock("../usage/registrar", () => ({ registrarUso: () => {}, FLUXO: { resumoConversa: "resumo_conversa" } }));
 let chamada = 0;
 vi.mock("ai", () => ({
   generateText: async ({ prompt }: { prompt: string }) => {

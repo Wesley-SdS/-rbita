@@ -39,6 +39,24 @@ describe("quais rotinas rodam agora", () => {
     expect(rotinasDevidas([r({ lastRunAt: min(1) })], AGORA, true)).toHaveLength(1);
   });
 
+  it("o piso vale para rotina que JÁ está no banco com intervalo menor", () => {
+    // o caso real: "a cada 1 minuto", cadastrada antes de existir piso. Um
+    // piso só no cadastro a deixaria correndo para sempre.
+    const acelerada = r({ intervalMinutes: 1, lastRunAt: min(5) });
+    expect(rotinasDevidas([acelerada], AGORA)).toHaveLength(1); // sem piso, roda
+    expect(rotinasDevidas([acelerada], AGORA, false, 15)).toHaveLength(0); // com piso de 15, não
+    expect(rotinasDevidas([acelerada], AGORA, false, 3)).toHaveLength(1); // passados 5 min de um piso de 3, roda
+  });
+
+  it("o piso nunca ACELERA uma rotina mais lenta que ele", () => {
+    const diaria = r({ intervalMinutes: 1440, lastRunAt: min(60) });
+    expect(rotinasDevidas([diaria], AGORA, false, 15)).toHaveLength(0);
+  });
+
+  it("o botão 'rodar agora' passa por cima do piso", () => {
+    expect(rotinasDevidas([r({ intervalMinutes: 1, lastRunAt: min(0) })], AGORA, true, 60)).toHaveLength(1);
+  });
+
   it("uma tentativa recente segura a próxima, mesmo que tenha falhado", () => {
     // é o que impede o laço de 70 em 70 segundos contra um provedor fora do ar
     const tentouAgoraMesmo = r({ lastRunAt: min(0), intervalMinutes: 60 });

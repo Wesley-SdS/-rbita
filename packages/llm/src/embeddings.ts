@@ -67,9 +67,35 @@ export type EmbedPreference = "auto" | "local" | "cloud";
 // ingest, memória e skills, e vale logo depois de um restart.
 type PreferenceSource = EmbedPreference | (() => Promise<EmbedPreference> | EmbedPreference);
 let preference: PreferenceSource = "auto";
-export function configureEmbeddings(p: { provider?: PreferenceSource; localModel?: ModelSource }): void {
+
+/**
+ * Quem contabiliza o consumo de embedding.
+ *
+ * É um gancho e não uma chamada direta porque `packages/llm` não pode importar
+ * `packages/core` (a dependência é no sentido contrário). O core injeta isto
+ * no boot; sem injeção, o módulo funciona igual e só não aparece na conta.
+ */
+export type RelatoDeEmbedding = (info: {
+  provider: "cloud" | "local";
+  modelo: string;
+  itens: number;
+  caracteres: number;
+  duracaoMs: number;
+  userId?: string;
+  fluxo?: string;
+}) => void;
+let relatarEmbedding: RelatoDeEmbedding | null = null;
+
+export function configureEmbeddings(p: { provider?: PreferenceSource; localModel?: ModelSource; aoUsar?: RelatoDeEmbedding }): void {
   if (p.provider) preference = p.provider;
   if (p.localModel) localModel = p.localModel;
+  if (p.aoUsar) relatarEmbedding = p.aoUsar;
+}
+
+/** De quem é a conta desta chamada de embedding. Opcional: sem isto, ela não é atribuída. */
+export interface ContextoDeEmbedding {
+  userId?: string;
+  fluxo?: string;
 }
 async function resolvePreference(): Promise<EmbedPreference> {
   try {
@@ -149,29 +175,37 @@ async function cloudEmbed(inputs: string[], cfg: NonNullable<ReturnType<typeof c
 }
 
 /** Roteia conforme a preferência: local (Ollama), nuvem (quando há chave) ou auto. */
-async function embed(inputs: string[], kind: EmbedKind): Promise<number[][]> {
+async function embed(inputs: string[], kind: EmbedKind, ctx?: ContextoDeEmbedding): Promise<number[][]> {
+  const comecou = Date.now();
+  const caracteres = inputs.reduce((n, t) => n + t.length, 0);
   const pref = await resolvePreference();
   const cfg = pref === "local" ? null : cloudConfig();
   if (pref === "cloud" && !cfg) throw new Error("embeddings.provider = nuvem, mas não há chave de embedding (GEMINI_API_KEY ou OPENAI_API_KEY)");
-  if (cfg) return cloudEmbed(inputs, cfg); // nuvem: sem prefixo de tarefa
+  if (cfg) {
+    const r = await cloudEmbed(inputs, cfg); // nuvem: sem prefixo de tarefa
+    relatarEmbedding?.({ provider: "cloud", modelo: cfg.model, itens: inputs.length, caracteres, duracaoMs: Date.now() - comecou, ...ctx });
+    return r;
+  }
   const modelo = await resolveLocalModel();
   // só a família nomic usa prefixo de tarefa; mandar "search_query: " para um
   // modelo que não o espera é texto lixo dentro da consulta
-  return ollamaEmbed(usaPrefixoDeTarefa(modelo) ? inputs.map((v) => PREFIX[kind] + v) : inputs, modelo);
+  const r = await ollamaEmbed(usaPrefixoDeTarefa(modelo) ? inputs.map((v) => PREFIX[kind] + v) : inputs, modelo);
+  relatarEmbedding?.({ provider: "local", modelo, itens: inputs.length, caracteres, duracaoMs: Date.now() - comecou, ...ctx });
+  return r;
 }
 
-export async function embedText(value: string, kind: EmbedKind = "query"): Promise<number[]> {
+export async function embedText(value: string, kind: EmbedKind = "query", ctx?: ContextoDeEmbedding): Promise<number[]> {
   const key = `${kind}:${value}`;
   const hit = cacheGet(key);
-  if (hit) return hit;
-  const [emb] = await embed([value], kind);
+  if (hit) return hit; // acerto de cache não custa nada e por isso não entra na conta
+  const [emb] = await embed([value], kind, ctx);
   cacheSet(key, emb);
   return emb;
 }
 
-export async function embedTexts(values: string[], kind: EmbedKind = "document"): Promise<number[][]> {
+export async function embedTexts(values: string[], kind: EmbedKind = "document", ctx?: ContextoDeEmbedding): Promise<number[][]> {
   if (!values.length) return [];
-  return embed(values, kind);
+  return embed(values, kind, ctx);
 }
 
 /** Aquece o modelo de embedding (chamar no boot evita o cold-start no 1º uso).

@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { resolveModel, fallbackModelKey } from "@orbita/llm";
+import { modeloDaCasa } from "../llm/gerar";
+import { registrarUso, FLUXO } from "../usage/registrar";
+import type { RelatoDeUso } from "../meetings/structured";
 import { db } from "@orbita/db";
 import { expense } from "@orbita/db/finance-schema";
 import { settings } from "../settings";
@@ -71,10 +73,15 @@ export async function importReceipt(userId: string, dataUrl: string, progresso?:
 
   // 2) o modelo estrutura os campos
   await progresso?.(2, 3, "interpretando o comprovante");
-  const model = resolveModel(await fallbackModelKey());
+  const { model, modelKey } = await modeloDaCasa();
+  const comecou = Date.now();
+  let entrada = 0;
+  let saida = 0;
+  const aoUsar: RelatoDeUso = (u) => { entrada += u.inputTokens ?? 0; saida += u.outputTokens ?? 0; };
   let fields: z.infer<typeof ReceiptSchema>;
   try {
-    fields = await generateStructured(model, INSTRUCAO_CUPOM + ocrText.slice(0, 6000), ReceiptSchema);
+    fields = await generateStructured(model, INSTRUCAO_CUPOM + ocrText.slice(0, 6000), ReceiptSchema, aoUsar);
+    registrarUso({ userId, fluxo: FLUXO.financas, referencia: "comprovante", modelKey, consumo: { unidade: "tokens", entrada, saida }, duracaoMs: Date.now() - comecou });
   } catch (e) {
     log.error("finance.receipt.llm", { error: e instanceof Error ? e.message : String(e) });
     throw new DocumentoIlegivelError("Li o texto, mas não consegui interpretar o comprovante.");
@@ -159,20 +166,35 @@ export async function importStatement(userId: string, dataUrl: string, nome: str
   if (!text.trim()) throw new DocumentoIlegivelError("Não consegui extrair texto deste extrato.");
 
   // 2) o modelo extrai bloco a bloco (extrato longo não é truncado)
-  const model = resolveModel(await fallbackModelKey());
+  const { model, modelKey } = await modeloDaCasa();
+  const comecouExtrato = Date.now();
+  let entradaExtrato = 0;
+  let saidaExtrato = 0;
+  const aoUsarExtrato: RelatoDeUso = (u) => { entradaExtrato += u.inputTokens ?? 0; saidaExtrato += u.outputTokens ?? 0; };
   const cfg = await settings.getMany(["finance.statementBlockChars", "finance.statementMaxBlocks"]);
   const blocks = splitBlocks(text, cfg["finance.statementBlockChars"]).slice(0, cfg["finance.statementMaxBlocks"]);
   const all: z.infer<typeof ItemSchema>[] = [];
   for (const [i, block] of blocks.entries()) {
     await progresso?.(i, blocks.length + 1, `lendo o bloco ${i + 1} de ${blocks.length}`);
     try {
-      const { lancamentos } = await generateStructured(model, INSTRUCAO_EXTRATO + block, BlocoSchema);
+      const { lancamentos } = await generateStructured(model, INSTRUCAO_EXTRATO + block, BlocoSchema, aoUsarExtrato);
       all.push(...lancamentos);
     } catch (e) {
       // bloco ruim não invalida o extrato inteiro
       log.error("finance.statement.llm", { error: e instanceof Error ? e.message : String(e) });
     }
   }
+  // a conta vai ANTES do "não consegui": ler um extrato e não entender nada
+  // também custou, e é justamente o gasto que ninguém lembra de contar
+  registrarUso({
+    userId,
+    fluxo: FLUXO.financas,
+    referencia: "extrato",
+    modelKey,
+    consumo: { unidade: "tokens", entrada: entradaExtrato, saida: saidaExtrato },
+    duracaoMs: Date.now() - comecouExtrato,
+    erro: all.length === 0 ? "nenhum lançamento extraído" : null,
+  });
   if (all.length === 0) throw new DocumentoIlegivelError("Não consegui extrair lançamentos do extrato.");
 
   // 3) dedup (data + valor + descrição) e cadastro em lote

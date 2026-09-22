@@ -285,6 +285,23 @@ export const SETTING_DEFS = {
       { value: "local", label: "O melhor local (tudo fica em casa)" },
     ],
   ),
+  // A escolha de QUEM atende já existia como ordem (`llm.failoverOrder`). Esta
+  // chave responde a outra pergunta, que estava implícita e virava surpresa:
+  // o que fazer quando o escolhido não pode. O padrão é PERGUNTAR porque a
+  // queda automática já gastou por conta própria — em 22/09/2026 caiu num
+  // modelo local de 186 s, e com o local fora cairia na nuvem paga.
+  "llm.quandoFalhar": sel(
+    "models",
+    "Quando o provedor escolhido falhar",
+    "Escolher a assinatura e a Órbita ir gastar na nuvem sozinha é a surpresa que esta chave evita. Perguntando, ela explica o motivo (limite, crédito, fora do ar) e espera você decidir. Rotinas e regras não têm a quem perguntar: elas param e contam o motivo no aviso, sem gastar.",
+    "perguntar",
+    [
+      { value: "perguntar", label: "Perguntar antes de usar outro" },
+      { value: "sem_custo", label: "Cair sozinha, mas só para o que não cobra" },
+      { value: "proximo", label: "Cair sozinha para o próximo, seja qual for" },
+    ],
+  ),
+
   "llm.fallbackModel": text("models", "Modelo reserva", "Chave do modelo (ex.: local/qwen2.5:3b) usada quando nada foi descoberto e por resumos, extratos e rotinas sem modelo definido. Vazio usa o padrão de instalação.", ""),
   "llm.discoveryTtlMinutes": num("models", "Renovar a lista de modelos a cada", "A lista vencida continua valendo e é renovada em segundo plano, sem atrasar a resposta.", 5, 1, 1440, { unit: "min" }),
   "llm.discoveryTimeoutMs": num("models", "Timeout por provedor na descoberta", "Quanto esperar cada provedor responder a lista de modelos.", 4000, 500, 30000, { unit: "ms" }),
@@ -439,6 +456,20 @@ export const SETTING_DEFS = {
     ],
   ),
   "meetings.liveModel": text("realtime", "Modelo da transcrição ao vivo", "Modelo usado quando a prévia da reunião vai pelo Gemini.", "gemini-3.5-transcribe-live", 80),
+
+  // Piso de intervalo de rotina. Existe porque uma rotina é uma chamada de
+  // modelo COM ferramentas, e nada impedia cadastrar "a cada 1 minuto": foi o
+  // que aconteceu em 22/09/2026, e ela rodou 356 vezes sem ninguém notar,
+  // porque rotina não registra consumo em lugar nenhum.
+  "routines.minIntervalMinutes": num(
+    "routines",
+    "Intervalo mínimo entre execuções",
+    "Nenhuma rotina pode rodar mais vezes que isto. Cada execução é uma chamada de modelo com ferramentas, então intervalo curto vira conta correndo sozinha.",
+    15,
+    1,
+    1440,
+    { unit: "min", integer: true },
+  ),
 
   // ── fila de trabalho pesado ──
   "jobs.pollSeconds": num("jobs", "Conferir a fila a cada", "Piso de segurança: o trabalho novo acorda o processo na hora, então isto só pega retentativa agendada e fila herdada de um processo que caiu.", 3, 1, 300, { unit: "s" }),
