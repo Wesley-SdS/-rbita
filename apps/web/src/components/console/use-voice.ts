@@ -477,9 +477,37 @@ export function useVoice(p: Params) {
   }
 
   useEffect(() => {
-    // config de realtime (opcional) buscado no cliente; limpa listeners no unmount.
-    fetch("/api/realtime/config").then((r) => r.json()).then((d) => setRealtimeEnabled(!!d.enabled)).catch(() => {});
-    return () => { wakeRef.current?.stop(); ttsRef.current?.stop(); rtRef.current?.stop(); dictRef.current?.abort(); };
+    /**
+     * A disponibilidade do tempo real, com RETENTATIVA.
+     *
+     * Era uma busca só, e uma falha passageira escondia o botão para sempre:
+     * a página carregada no instante em que o `apps/api` reiniciava perdia o
+     * modo de voz sem nenhum aviso, e só recarregar trazia de volta. Um
+     * recurso sumir em silêncio é pior do que ele falhar dizendo por quê.
+     */
+    let vivo = true;
+    const tentar = async (restam: number, esperaMs: number): Promise<void> => {
+      try {
+        const d = await fetch("/api/realtime/config").then((r) => (r.ok ? r.json() : Promise.reject()));
+        if (vivo) setRealtimeEnabled(!!d.enabled);
+        return;
+      } catch {
+        if (!vivo || restam <= 0) return;
+        await new Promise((r) => setTimeout(r, esperaMs));
+        return tentar(restam - 1, esperaMs * 2);
+      }
+    };
+    void tentar(3, 1500);
+
+    // a aba volta do segundo plano: o servidor pode ter subido nesse meio-tempo
+    const aoVoltar = () => { if (document.visibilityState === "visible") void tentar(1, 1000); };
+    document.addEventListener("visibilitychange", aoVoltar);
+
+    return () => {
+      vivo = false;
+      document.removeEventListener("visibilitychange", aoVoltar);
+      wakeRef.current?.stop(); ttsRef.current?.stop(); rtRef.current?.stop(); dictRef.current?.abort();
+    };
   }, []);
 
   return {
