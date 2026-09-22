@@ -5,6 +5,7 @@ import { useRecurso } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 import { ContinuousRecorder, startMeetingCapture, type MeetingCapture } from "@/lib/voice/capture";
 import { ContinuousDictation, getRecognitionCtor } from "@/lib/voice/speech";
+import { avaliarGravacao } from "@/lib/voice/gravacao";
 import type { SttUtterance } from "@orbita/core/stt/types";
 import { parsePrazo, type Compromisso } from "@orbita/core/meetings/compromissos";
 import { enfileirar, type JobView } from "@/lib/jobs";
@@ -82,7 +83,10 @@ export function MeetingPanel() {
   const [utterances, setUtterances] = useState<SttUtterance[]>([]);
   const [transcript, setTranscript] = useState("");
   const [summary, setSummary] = useState("");
-  const [note, setNote] = useState<string | null>(null);
+  // O recado da reunião tem TOM. Antes era só texto, e tudo (inclusive
+  // "transcrevi no Whisper local") saía na mesma caixa vermelha de erro.
+  const [note, setNote] = useState<{ texto: string; atencao?: boolean } | null>(null);
+  const avisar = (texto: string, atencao = false) => setNote({ texto, atencao });
   const [phase, setPhase] = useState<"idle" | "transcrevendo" | "resumindo">("idle");
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [summarizeJob, setSummarizeJob] = useState<JobView | null>(null);
@@ -133,14 +137,14 @@ export function MeetingPanel() {
     try {
       capture = await startMeetingCapture({ systemAudio });
     } catch {
-      setNote("Sem acesso ao microfone.");
+      avisar("Preciso do microfone para ouvir a reunião. Libere o acesso no navegador e comece de novo.", true);
       return;
     }
     captureRef.current = capture;
 
     if (systemAudio && !capture.hasSystemAudio) {
       // falha silenciosa aqui significaria gravar meia reunião sem ninguém notar
-      setNote("Só o microfone foi capturado. Para pegar Teams/Meet, marque “compartilhar áudio” no diálogo do Chrome.");
+      avisar("Estou ouvindo só pelo microfone. Para pegar o som do Teams ou do Meet, marque “compartilhar áudio” no diálogo do Chrome.");
     }
 
     const recorder = new ContinuousRecorder();
@@ -172,8 +176,11 @@ export function MeetingPanel() {
     captureRef.current?.stop();
     captureRef.current = null;
 
-    if (!blob || blob.size === 0) {
-      setNote("Nada foi gravado.");
+    // Confere ANTES de subir: gravação muda vira trabalho de fila e
+    // transcrição paga para voltar vazia (ver lib/voice/gravacao.ts).
+    const avaliacao = avaliarGravacao(blob?.size ?? 0, elapsed);
+    if (!blob || !avaliacao.vale) {
+      avisar(avaliacao.vale ? "Não chegou som nenhum. Confira o microfone e tente de novo." : avaliacao.recado, true);
       return;
     }
 
@@ -188,7 +195,7 @@ export function MeetingPanel() {
       setTranscribeJob(await enfileirar(r));
     } catch (e) {
       setPhase("idle");
-      setNote(e instanceof Error ? e.message : "Falha ao enviar a gravação.");
+      avisar(e instanceof Error ? e.message : "Não consegui enviar a gravação. Quer tentar de novo?", true);
     }
   }
 
@@ -197,12 +204,12 @@ export function MeetingPanel() {
     setTranscribeJob(j);
     if (j.status === "falhou") {
       setPhase("idle");
-      setNote(j.erro?.mensagem ?? "Falha ao transcrever.");
+      avisar(j.erro?.mensagem ?? "Não consegui transcrever dessa vez. Quer tentar de novo?", true);
       return;
     }
     if (j.status === "cancelado") {
       setPhase("idle");
-      setNote("Transcrição cancelada.");
+      avisar("Transcrição cancelada.");
       return;
     }
     if (j.status !== "feito") return;
@@ -232,7 +239,7 @@ export function MeetingPanel() {
     } else {
       texto = (d.text ?? "").trim();
       if (d.diarizationUnavailable) {
-        setNote(
+        avisar(
           d.provider === "whisper-local"
             ? "Transcrito no Whisper local, que não separa vozes. Configure ASSEMBLYAI_API_KEY para ter os locutores."
             : "Só uma voz foi identificada no áudio.",
@@ -243,7 +250,7 @@ export function MeetingPanel() {
 
     if (!texto.trim() || !d.resumoJobId) {
       setPhase("idle");
-      if (!texto.trim()) setNote("A transcrição voltou vazia.");
+      if (!texto.trim()) avisar("Ouvi a gravação, mas não encontrei fala nenhuma nela. Confira o microfone escolhido no navegador e tente de novo.", true);
       return;
     }
 
@@ -391,8 +398,8 @@ export function MeetingPanel() {
           )}
 
           {note && (
-            <div className="aviso-erro" style={{ marginTop: 14 }}>
-              <span>{note}</span>
+            <div className={`aviso-ameno ${note.atencao ? "atencao" : ""}`} style={{ marginTop: 14 }}>
+              <span>{note.texto}</span>
             </div>
           )}
 
