@@ -91,13 +91,15 @@ describe("casa_ver_camera: permissão por cômodo", () => {
 describe("casa_ver_camera: nuvem barrada em câmera que identifica (decisão 9.6)", () => {
   it("câmera com identificação pede narração só local", async () => {
     await set().casa_ver_camera!.execute!({ local: "cozinha" }, exec);
-    expect(narradas[0]!.opts).toEqual({ localOnly: true });
+    // o que a decisão 9.6 exige é o `localOnly`; o resto das opções
+    // (hoje o dono da conta, para o gasto) pode crescer sem quebrar a regra
+    expect(narradas[0]!.opts).toMatchObject({ localOnly: true });
   });
 
   it("câmera sem identificação segue a configuração de visão de sempre", async () => {
     camera = { id: "cam2", name: "Garagem", roomId: "garagem", enabled: true, identifyFaces: false };
     await set().casa_ver_camera!.execute!({ local: "garagem" }, exec);
-    expect(narradas[0]!.opts).toEqual({ localOnly: false });
+    expect(narradas[0]!.opts).toMatchObject({ localOnly: false });
   });
 
   it("câmera sem imagem recente não chama o modelo: ela PEDE uma imagem", async () => {

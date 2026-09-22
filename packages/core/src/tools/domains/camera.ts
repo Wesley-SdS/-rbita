@@ -67,7 +67,7 @@ export const casa_ver_camera: ToolDef<typeof VerInput> = {
     // num botão ("deixar ela olhar"), e o quadro é capturado na hora, em vez
     // de a Órbita descrever uma imagem de horas atrás como se fosse agora.
     if (!ev?.snapshot) return { precisa_de_imagem: true, camera_id: cam.id, camera: cam.name, motivo: `A câmera "${cam.name}" não tem imagem recente.` };
-    const descricao = await narrateSnapshot(ev.snapshot, undefined, { localOnly: cam.identifyFaces });
+    const descricao = await narrateSnapshot(ev.snapshot, undefined, { localOnly: cam.identifyFaces, userId: userId });
     return { camera: cam.name, descricao, capturadoEm: ev.createdAt };
   },
 };

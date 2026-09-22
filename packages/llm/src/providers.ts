@@ -154,6 +154,30 @@ export function escolherProvedorDeVisao(preferencia: VisionCloudProvider, chaves
   return null;
 }
 
+/**
+ * TODOS os provedores de visão que podem atender, em ordem.
+ *
+ * A escolha era única, e isso bastava até a conta de um deles esvaziar: em
+ * 22/09/2026 a chave da OpenAI ficou sem crédito, a leitura da imagem tentou
+ * três vezes, levou 10 s e devolveu 500 — com a chave do Gemini configurada e
+ * funcionando ao lado, sem ser tentada.
+ *
+ * `localOnly` (câmera que identifica pessoas, decisão 9.6) e `preferLocal`
+ * continuam mandando: quando valem, a lista de nuvem sai vazia e só o modelo
+ * da casa atende.
+ */
+export function provedoresDeVisaoEmOrdem(
+  preferencia: VisionCloudProvider,
+  chaves: { openai: boolean; gemini: boolean; gateway: boolean },
+): ("openai" | "gemini" | "gateway")[] {
+  const todos: ("openai" | "gemini" | "gateway")[] = ["openai", "gemini", "gateway"];
+  const disponiveis = todos.filter((p) => chaves[p]);
+  if (preferencia === "auto") return disponiveis;
+  // a escolha explícita abre a fila, mas os outros continuam como reserva:
+  // ficar sem visão porque UMA conta zerou é pior do que usar a que existe
+  return disponiveis.includes(preferencia) ? [preferencia, ...disponiveis.filter((p) => p !== preferencia)] : disponiveis;
+}
+
 export function resolveVisionModel(opts: { localOnly?: boolean; preferLocal?: boolean; local?: string; cloud?: string; cloudProvider?: VisionCloudProvider } = {}): LanguageModel {
   const gemini = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
   const escolhido =

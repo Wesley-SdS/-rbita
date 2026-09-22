@@ -1,7 +1,9 @@
 import { generateText } from "ai";
 import { eq } from "drizzle-orm";
 import { camera } from "@orbita/db/camera-schema";
-import { resolveVisionModel } from "@orbita/llm";
+import { provedoresDeVisaoEmOrdem, resolveVisionModel, type VisionCloudProvider } from "@orbita/llm";
+import { registrarUso, FLUXO } from "../usage/registrar";
+import { log } from "../observability/logger";
 import { db } from "@orbita/db";
 import { cameraEvent } from "@orbita/db/camera-schema";
 import { settings } from "../settings";
@@ -11,31 +13,80 @@ import { settings } from "../settings";
  * padrão (decisão do dono): só roda quando alguém pergunta "o que está
  * acontecendo" ou uma regra pede explicitamente, nunca a cada evento.
  */
-export async function narrateSnapshot(snapshot: string, question = "O que está acontecendo nesta cena? Descreva em uma ou duas frases.", opts: { localOnly?: boolean } = {}): Promise<string> {
-  const cfg = await settings.getMany(["vision.localModel", "vision.cloudModel"]);
-  try {
-    const { text } = await generateText({
-      model: resolveVisionModel({ ...opts, local: cfg["vision.localModel"], cloud: cfg["vision.cloudModel"] }),
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: `${question} Responda em português do Brasil.` },
-            { type: "image", image: snapshot },
-          ],
-        },
-      ],
-    });
-    return text.trim();
-  } catch (e) {
-    // erro cru do Ollama ("model not found") não diz ao dono o que fazer, e
-    // com `localOnly` não existe plano B por decisão (nuvem está barrada aqui)
-    const msg = e instanceof Error ? e.message : String(e);
-    if (opts.localOnly && /not found|no such model|404/i.test(msg)) {
-      throw new Error(`O modelo de visão local "${cfg["vision.localModel"]}" não está instalado no Ollama, e esta câmera identifica pessoas, então a nuvem está barrada. Instale o modelo ou troque a chave "Modelo de visão local" em Ajustes.`);
+export async function narrateSnapshot(snapshot: string, question = "O que está acontecendo nesta cena? Descreva em uma ou duas frases.", opts: { localOnly?: boolean; userId?: string } = {}): Promise<string> {
+  const cfg = await settings.getMany(["vision.localModel", "vision.cloudModel", "vision.cloudProvider"]);
+
+  // A ORDEM de quem pode ler a imagem. Era um provedor só, e isso bastou até
+  // a conta de um deles esvaziar: em 22/09/2026 a chave da OpenAI ficou sem
+  // crédito, a leitura tentou três vezes, levou 10 s e devolveu 500 — com a
+  // chave do Gemini ao lado, configurada e funcionando, sem ser tentada.
+  const nuvem = opts.localOnly
+    ? []
+    : provedoresDeVisaoEmOrdem(cfg["vision.cloudProvider"], {
+        openai: Boolean(process.env.OPENAI_API_KEY),
+        gemini: Boolean(process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY),
+        gateway: Boolean(process.env.AI_GATEWAY_API_KEY),
+      });
+  // o local fecha a fila sempre: sem nuvem nenhuma, ele é o que sobra
+  const tentativas: (VisionCloudProvider | "local")[] = [...nuvem, "local"];
+
+  const perguntaCompleta = `${question} Responda em português do Brasil.`;
+  let ultimoErro: unknown = null;
+
+  for (const alvo of tentativas) {
+    const comecou = Date.now();
+    try {
+      const { text, usage } = await generateText({
+        model: resolveVisionModel({
+          localOnly: alvo === "local",
+          local: cfg["vision.localModel"],
+          cloud: cfg["vision.cloudModel"],
+          cloudProvider: alvo === "local" ? "auto" : alvo,
+        }),
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: perguntaCompleta },
+              { type: "image", image: snapshot },
+            ],
+          },
+        ],
+      });
+      if (opts.userId) {
+        registrarUso({
+          userId: opts.userId,
+          fluxo: FLUXO.visao,
+          referencia: alvo,
+          servico: alvo === "local" ? "visao-local" : `visao-${alvo}`,
+          consumo: { unidade: "tokens", entrada: usage?.inputTokens ?? 0, saida: usage?.outputTokens ?? 0 },
+          duracaoMs: Date.now() - comecou,
+        });
+      }
+      return text.trim();
+    } catch (e) {
+      ultimoErro = e;
+      const msg = e instanceof Error ? e.message : String(e);
+      log.warn("visao.tentativa_falhou", { alvo, erro: msg.slice(0, 160) });
+      if (opts.userId) {
+        registrarUso({
+          userId: opts.userId,
+          fluxo: FLUXO.visao,
+          referencia: alvo,
+          servico: alvo === "local" ? "visao-local" : `visao-${alvo}`,
+          consumo: { unidade: "tokens", entrada: 0, saida: 0 },
+          duracaoMs: Date.now() - comecou,
+          erro: msg.slice(0, 200),
+        });
+      }
+      // erro cru do Ollama ("model not found") não diz ao dono o que fazer, e
+      // com `localOnly` não existe plano B por decisão (nuvem está barrada aqui)
+      if (opts.localOnly && /not found|no such model|404/i.test(msg)) {
+        throw new Error(`O modelo de visão local "${cfg["vision.localModel"]}" não está instalado no Ollama, e esta câmera identifica pessoas, então a nuvem está barrada. Instale o modelo ou troque a chave "Modelo de visão local" em Ajustes.`);
+      }
     }
-    throw e;
   }
+  throw ultimoErro instanceof Error ? ultimoErro : new Error("Nenhum modelo de visão conseguiu ler a imagem.");
 }
 
 /** Narra e persiste na própria linha do evento (evita narrar o mesmo evento duas vezes). */

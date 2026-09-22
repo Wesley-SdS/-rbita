@@ -52,6 +52,12 @@ export const PRECO_SERVICOS: Record<string, { preco: PrecoUnitario; cobranca: Co
   // logo ~0,0000375 por 1k caracteres.
   "embedding-nuvem": { preco: { entrada: 0.0000375 }, cobranca: "uso", unidade: "caracteres" },
   "embedding-local": { preco: {}, cobranca: "local", unidade: "caracteres" },
+  // Leitura de imagem: preço de referência do modelo multimodal por 1k tokens.
+  // Uma imagem de 640px vale algumas centenas de tokens de entrada.
+  "visao-openai": { preco: { entrada: 0.0025, saida: 0.01 }, cobranca: "uso", unidade: "tokens" },
+  "visao-gemini": { preco: { entrada: 0.0003, saida: 0.0025 }, cobranca: "uso", unidade: "tokens" },
+  "visao-gateway": { preco: { entrada: 0.00125, saida: 0.01 }, cobranca: "uso", unidade: "tokens" },
+  "visao-local": { preco: {}, cobranca: "local", unidade: "tokens" },
 };
 
 /** Como o provedor cobra, quando é um modelo do catálogo. */

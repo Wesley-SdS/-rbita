@@ -11,7 +11,13 @@ vi.mock("@orbita/llm", () => ({
     visionCalls.push(opts);
     return { modelId: "fake" };
   },
+  // a narração passou a ter FILA de provedores. Com uma nuvem na fila, estes
+  // testes provam o que importa: câmera que identifica NUNCA chega nela, e
+  // câmera comum tenta a nuvem primeiro.
+  provedoresDeVisaoEmOrdem: () => ["gemini"],
 }));
+// o registro de consumo é best-effort e não deve exigir banco aqui
+vi.mock("../usage/registrar", () => ({ registrarUso: () => {}, FLUXO: { visao: "visao" } }));
 vi.mock("ai", () => ({ generateText: async () => ({ text: "uma pessoa na cozinha" }) }));
 // o modelo de visão virou config (§5.6): o nome sai daqui, não de constante
 vi.mock("../settings", () => ({
@@ -50,13 +56,18 @@ describe("narração de evento de câmera", () => {
     linha = { id: "e1", snapshot: "data:image/jpeg;base64,AAA", narration: null, identifica: true };
     await narrateCameraEvent("e1");
     // o nome do modelo local vem da config, junto com a trava de privacidade
-    expect(visionCalls[0]).toEqual({ localOnly: true, local: "moondream", cloud: "gpt-4o" });
+    // a regra guardada aqui é "câmera que identifica não vai para a nuvem".
+    // As demais opções (provedor tentado, dono da conta) podem crescer.
+    expect(visionCalls[0]).toMatchObject({ localOnly: true, local: "moondream", cloud: "gpt-4o" });
+    // e a nuvem não é tentada em NENHUMA posição da fila (decisão 9.6)
+    expect(visionCalls.every((c) => (c as { localOnly?: boolean }).localOnly)).toBe(true);
   });
 
   it("câmera sem identificação: segue a configuração de visão de sempre", async () => {
     linha = { id: "e2", snapshot: "data:image/jpeg;base64,AAA", narration: null, identifica: false };
     await narrateCameraEvent("e2");
-    expect(visionCalls[0]).toEqual({ localOnly: false, local: "moondream", cloud: "gpt-4o" });
+    // a primeira tentativa é a NUVEM: é isso que "não está barrada" significa
+    expect(visionCalls[0]).toMatchObject({ localOnly: false, cloudProvider: "gemini", local: "moondream", cloud: "gpt-4o" });
   });
 
   it("narração já feita não chama modelo de novo", async () => {

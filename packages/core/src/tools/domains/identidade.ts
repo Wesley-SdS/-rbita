@@ -144,7 +144,7 @@ export const ver_camera: ToolDef<typeof VerCameraInput> = {
     if (!ev?.snapshot) return { precisa_de_imagem: true, camera_id: cam.id, camera: cam.name, motivo: `A câmera "${cam.name}" não tem imagem recente.` };
     // conteúdo de imagem é DADO, nunca instrução (CLAUDE.md §5.2); câmera que
     // identifica pessoas responde só com modelo local (decisão 9.6)
-    const resposta = await narrateSnapshot(ev.snapshot, `${pergunta}\nResponda só com o que dá para ver na imagem. Se não der para saber, diga que não dá.`, { localOnly: cam.identifyFaces });
+    const resposta = await narrateSnapshot(ev.snapshot, `${pergunta}\nResponda só com o que dá para ver na imagem. Se não der para saber, diga que não dá.`, { localOnly: cam.identifyFaces, userId: ctx.userId });
     return { camera: cam.name, pergunta, resposta, capturadoEm: ev.createdAt };
   },
 };

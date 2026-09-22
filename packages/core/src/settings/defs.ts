@@ -572,6 +572,18 @@ export const SETTING_DEFS = {
   "vision.objectResults": num("vision", "Avistamentos por objeto na resposta", "Quantos avistamentos a Órbita lista ao responder onde um objeto foi visto. Mais que isso vira texto longo demais para ouvir.", 5, 1, 50),
   "vision.digestMaxEvents": num("vision", "Eventos no resumo das câmeras", "Teto de eventos lidos ao resumir o que as câmeras viram num período. Período movimentado é cortado neste número, do mais recente para trás.", 200, 10, 2000),
   "vision.localModel": text("vision", "Modelo de visão local", "Modelo do Ollama que descreve a imagem quando a resposta precisa ficar nesta casa (câmera com identificação, modo privacidade). Precisa estar instalado no Ollama.", "moondream"),
+  "vision.cloudProvider": sel(
+    "vision",
+    "Quem lê a imagem na nuvem",
+    "No automático tenta o que estiver configurado, na ordem. Escolher um não exclui os outros: eles continuam como reserva, porque ficar sem visão porque UMA conta zerou é pior do que usar a que existe.",
+    "auto",
+    [
+      { value: "auto", label: "Automático" },
+      { value: "gemini", label: "Google Gemini" },
+      { value: "openai", label: "OpenAI" },
+      { value: "gateway", label: "Gateway" },
+    ],
+  ),
   "vision.cloudModel": text("vision", "Modelo de visão de nuvem", "Modelo usado quando a nuvem é permitida (ver a tela, câmera sem identificação, com chave da OpenAI configurada).", "gpt-4o"),
   "vision.gestures": list(
     "vision",
