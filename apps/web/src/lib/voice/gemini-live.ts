@@ -1,4 +1,5 @@
 import { getOwnDeviceId } from "@/lib/device-id";
+import { capturarUmQuadro, ehCameraDesteAparelho, garantirCameraDoAparelho } from "@/lib/camera/aparelho";
 import type { RealtimeCallbacks, SessaoRealtime } from "./realtime";
 
 /**
@@ -224,8 +225,7 @@ export class GeminiLiveSession implements SessaoRealtime {
    * nome pelo registro e deriva o gate do risco (§5.1). É o que segura a
    * garantia mesmo com a config da sessão vindo do navegador.
    */
-  private async executarTool(id: string, nome: string, args: unknown) {
-    let saida: unknown;
+  private async chamar(nome: string, args: unknown): Promise<unknown> {
     try {
       const r = await fetch("/api/realtime/tool", {
         method: "POST",
@@ -233,9 +233,29 @@ export class GeminiLiveSession implements SessaoRealtime {
         body: JSON.stringify({ name: nome, arguments: args ?? {}, deviceId: getOwnDeviceId() ?? undefined }),
       });
       const d = await r.json().catch(() => ({}));
-      saida = r.ok ? d.result : { erro: d.error ?? "falha ao executar" };
+      return r.ok ? d.result : { erro: d.error ?? "falha ao executar" };
     } catch {
-      saida = { erro: "falha ao contatar o servidor" };
+      return { erro: "falha ao contatar o servidor" };
+    }
+  }
+
+  private async executarTool(id: string, nome: string, args: unknown) {
+    let saida = await this.chamar(nome, args);
+
+    // A tool de câmera pede uma imagem quando não tem nenhuma recente. No chat
+    // de texto isso vira um botão; aqui, em conversa por voz, não havia quem
+    // atendesse o pedido — a Órbita recebia "preciso de imagem" e improvisava
+    // uma resposta sem sentido ("não tenho acesso a streaming"). Agora o
+    // próprio cliente de voz captura e refaz a chamada, já com o que olhar.
+    const pedido = saida as { precisa_de_imagem?: boolean; camera_id?: string | null } | null;
+    if (pedido?.precisa_de_imagem) {
+      const daqui =
+        pedido.camera_id === null || pedido.camera_id === undefined
+          ? await garantirCameraDoAparelho()
+          : ehCameraDesteAparelho(pedido.camera_id)
+            ? pedido.camera_id
+            : null;
+      if (daqui && (await capturarUmQuadro(daqui))) saida = await this.chamar(nome, args);
     }
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ toolResponse: { functionResponses: [{ id, name: nome, response: { result: saida } }] } }));

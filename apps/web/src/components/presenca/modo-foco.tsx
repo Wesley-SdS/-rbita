@@ -5,6 +5,7 @@ import { Icone } from "./icones";
 import { ESTADO_DO_MODO, Nucleo } from "./nucleo";
 import { ESTADOS_NUCLEO } from "./estados";
 import { useConsoleDeVoz } from "@/components/console/use-console-voz";
+import { capturarUmQuadro } from "@/lib/camera/aparelho";
 
 const formatar = (segundos: number) =>
   `${String(Math.floor(segundos / 60)).padStart(2, "0")}:${String(segundos % 60).padStart(2, "0")}`;
@@ -51,7 +52,12 @@ export function ModoFoco({
   const prazo = useRef(0);
 
   // ── voz própria ───────────────────────────────────────────────────────────
-  const { mode, ultima, erro, voz, silenciar } = useConsoleDeVoz();
+  const { mode, ultima, erro, voz, chat, silenciar } = useConsoleDeVoz();
+
+  /** Captura UM quadro e repete a pergunta, agora com o que olhar. */
+  async function deixarOlhar(pergunta: string) {
+    if (await capturarUmQuadro()) chat.sendMessage(pergunta);
+  }
 
   // Abrir o foco tira a voz da tela de trás; fechar devolve o silêncio aqui.
   // Sem isto, dois reconhecedores disputariam o mesmo microfone e nenhum dos
@@ -134,6 +140,36 @@ export function ModoFoco({
         <div className="foco-dialogo" aria-live="polite">
           {erro ? (
             <p className="foco-erro">{erro}</p>
+          ) : ultima?.escolha ? (
+            /* A Órbita não trocou de provedor sozinha. Sem isto aqui, o turno
+               terminava numa pergunta que a tela não mostrava, e o núcleo
+               ficava girando em "processando" sem explicação nenhuma. */
+            <div className="escolha-provedor">
+              <p className="escolha-motivo">{ultima.escolha.motivo}</p>
+              <div className="escolha-opcoes">
+                {ultima.escolha.opcoes.map((o) => (
+                  <button
+                    key={o.classe}
+                    type="button"
+                    className="button secondary compacto"
+                    onClick={() => chat.sendMessage(ultima.escolha!.pergunta, undefined, [o.classe])}
+                  >
+                    Usar {o.rotulo}
+                    <small>{o.custo}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : ultima?.pedidoCamera ? (
+            <div className="escolha-provedor">
+              <p className="escolha-motivo">{ultima.pedidoCamera.motivo}</p>
+              <div className="escolha-opcoes">
+                <button type="button" className="button secondary compacto" onClick={() => void deixarOlhar(ultima.pedidoCamera!.pergunta)}>
+                  Deixar ela olhar
+                  <small>tira uma foto agora e responde</small>
+                </button>
+              </div>
+            </div>
           ) : ultima ? (
             <p className={ultima.role === "user" ? "foco-fala-sua" : "foco-fala-dela"}>{ultima.content}</p>
           ) : (

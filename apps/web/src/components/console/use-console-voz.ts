@@ -70,8 +70,14 @@ export function useConsoleDeVoz(opcoes: { modelKey?: string } = {}) {
     if (v.realtimeOn) void v.toggleRealtime();
   }).current;
 
-  /** A última fala com conteúdo, para a tela mostrar o rastro da conversa. */
-  const ultima = [...mensagens].reverse().find((m) => m.content.trim()) ?? null;
+  /**
+   * A última mensagem que tem algo a mostrar.
+   *
+   * Conta também a que só traz uma PERGUNTA (qual provedor usar, posso olhar
+   * pela câmera): ela vem com texto vazio, e ignorá-la deixava a tela parada
+   * em "processando" sem nada explicando o porquê.
+   */
+  const ultima = [...mensagens].reverse().find((m) => m.content.trim() || m.escolha || m.pedidoCamera) ?? null;
 
   return { mode, mensagens, ultima, erro, chat, voz, silenciar };
 }

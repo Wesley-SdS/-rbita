@@ -186,7 +186,11 @@ export function useChatStream(p: Params) {
 
       // pós-resposta: a voz (se ligada) fala e re-arma a escuta. Chamado pela ponte
       // (ref) para não acoplar o chat à voz nem sofrer stale-closure.
-      spoke = p.voiceRef.current?.handleAssistantResponse(acc) ?? false;
+      // Sem TEXTO não há o que falar. Quando o turno termina numa pergunta
+      // (qual provedor usar, posso olhar pela câmera), `acc` fica vazio, e
+      // mandar isso para a voz deixava o núcleo preso em "processando" para
+      // sempre: o TTS não tinha o que dizer e nunca devolvia o estado.
+      spoke = acc.trim() ? (p.voiceRef.current?.handleAssistantResponse(acc) ?? false) : false;
     } catch (e) {
       // parada intencional (botão parar): mantém o texto parcial, sem erro.
       if (e instanceof DOMException && e.name === "AbortError") {
