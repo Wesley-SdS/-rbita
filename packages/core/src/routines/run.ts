@@ -57,19 +57,43 @@ export async function runPromptForUser(userId: string, prompt: string, systemSuf
 
 const ROUTINE_SUFFIX = "\nVocê está executando uma rotina proativa. Produza um resultado útil e direto.";
 
+/** O mínimo de uma rotina para decidir se ela roda agora. */
+export interface RotinaAgendavel {
+  enabled: boolean;
+  lastRunAt: Date | null;
+  intervalMinutes: number;
+}
+
+/**
+ * Quais rotinas estão devidas agora. Pura, para o agendamento poder ser
+ * testado sem banco: é a regra que decide se a Órbita vai gastar uma chamada
+ * de modelo, então ela merece estar travada.
+ */
+export function rotinasDevidas<T extends RotinaAgendavel>(rows: T[], agora: number, force = false): T[] {
+  return rows.filter((r) => r.enabled && (force || !r.lastRunAt || agora - r.lastRunAt.getTime() >= r.intervalMinutes * 60000));
+}
+
 /** Executa as rotinas devidas de UM usuário. `force` ignora o intervalo. */
 export async function runDueRoutines(userId: string, opts: { force?: boolean } = {}): Promise<{ devidas: number; notificacoes: number }> {
   const rows = await db.select().from(routine).where(eq(routine.userId, userId));
-  const now = Date.now();
-  const due = rows.filter(
-    (r) => r.enabled && (opts.force || !r.lastRunAt || now - r.lastRunAt.getTime() >= r.intervalMinutes * 60000),
-  );
+  const due = rotinasDevidas(rows, Date.now(), opts.force);
   let criadas = 0;
   for (const r of due) {
+    // A TENTATIVA já conta para o intervalo, dê certo ou não.
+    //
+    // Antes isto só era gravado no sucesso, e o efeito foi medido em
+    // 22/09/2026: com o provedor fora do ar, duas rotinas continuavam
+    // "devidas" em todo tique e tentavam de novo a cada 70 segundos, por
+    // horas. Numa cadeia que chega à nuvem paga, isso é conta correndo
+    // sozinha a noite inteira por uma rotina que é de hora em hora.
+    //
+    // O preço de fazer assim é que uma falha passageira adia a rotina por um
+    // intervalo. Para trabalho periódico de casa, adiar é barato; repetir sem
+    // limite, não.
+    await db.update(routine).set({ lastRunAt: new Date() }).where(eq(routine.id, r.id));
     try {
       const body = await runPromptForUser(userId, r.prompt, ROUTINE_SUFFIX);
       await notifyUser(userId, r.title, body, r.id);
-      await db.update(routine).set({ lastRunAt: new Date() }).where(eq(routine.id, r.id));
       await events.emit("routine.finished", { routineId: r.id, title: r.title, resultado: body.slice(0, 500) }, { userId });
       criadas++;
     } catch (e) {
