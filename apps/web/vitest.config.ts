@@ -12,7 +12,16 @@ export default defineConfig({
     // passava de 20 s e derrubava a suíte por carga, não por bug.
     hookTimeout: 60_000,
     testTimeout: 30_000,
-    include: ["apps/web/src/**/*.test.ts", "apps/api/src/**/*.test.ts", "packages/*/src/**/*.test.ts"],
+    // `apps/mobile/lib` entra aqui de propósito, mesmo estando fora do
+    // workspace pnpm: a lógica PURA do app (o leitor de NDJSON, o corte de
+    // fala) é a que quebra em silêncio, e ficava sem rede de segurança. Só
+    // `lib`, porque as telas importam React Native e não rodam em node.
+    include: [
+      "apps/web/src/**/*.test.ts",
+      "apps/api/src/**/*.test.ts",
+      "apps/mobile/lib/**/*.test.ts",
+      "packages/*/src/**/*.test.ts",
+    ],
     // O client do @orbita/db exige DATABASE_URL no import (e só conecta no
     // primeiro uso). Um valor de teste permite importar módulos que dependem do
     // banco sem tocar nele; testes que tocam no banco usam a URL real do .env.

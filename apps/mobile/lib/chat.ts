@@ -1,10 +1,16 @@
 import { fetch as expoFetch } from "expo/fetch";
 import * as SecureStore from "expo-secure-store";
 import { getBaseUrl, api } from "./api";
+import { LeitorNdjson, textoDoEvento } from "./ndjson";
 
 /**
  * Envia uma mensagem e faz streaming da resposta (mesma API /api/chat do web).
  * Usa expo/fetch, que suporta leitura incremental do corpo no React Native.
+ *
+ * O corpo é NDJSON, uma linha JSON por evento. Isto aqui acumulava os BYTES
+ * CRUS e mandava para a tela, então a resposta aparecia como
+ * `{"t":"text","v":"Olá"}` literal: o app estava quebrado contra o servidor.
+ * Agora o `LeitorNdjson` junta o que vem picado e entrega evento por evento.
  */
 export async function streamChat(
   content: string,
@@ -34,13 +40,24 @@ export async function streamChat(
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
+  const leitor = new LeitorNdjson();
   let acc = "";
+
+  const aplicar = (eventos: ReturnType<LeitorNdjson["alimentar"]>) => {
+    let mudou = false;
+    for (const ev of eventos) {
+      const t = textoDoEvento(ev);
+      if (t) { acc += t; mudou = true; }
+    }
+    if (mudou) onChunk(acc);
+  };
+
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    acc += decoder.decode(value, { stream: true });
-    onChunk(acc);
+    aplicar(leitor.alimentar(decoder.decode(value, { stream: true })));
   }
+  aplicar(leitor.fim()); // o servidor pode não fechar com quebra de linha
   return { conversationId: cid, model };
 }
 
