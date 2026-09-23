@@ -368,6 +368,13 @@ export const SETTING_DEFS = {
   // ── conectores (apps/api) ──
   "connectors.refreshCheckMinutes": num("connectors", "Verificação de tokens", "De quanto em quanto tempo o processo persistente procura tokens perto de expirar.", 10, 1, 1440, { unit: "min" }),
   "connectors.refreshBackoffMaxHours": num("connectors", "Espera máxima após falha de renovação", "Conexão que falha ao renovar é tentada de novo com espera crescente, até este teto. O aviso \"reconecte\" sai uma vez só.", 24, 1, 168, { unit: "h" }),
+  "connectors.fusoHorario": text(
+    "connectors",
+    "Fuso horário da agenda",
+    "Usado ao criar evento nos serviços que exigem o fuso separado do horário (Outlook/Microsoft Graph). Nome IANA, ex.: America/Sao_Paulo.",
+    "America/Sao_Paulo",
+    60,
+  ),
   "connectors.refreshAheadMinutes": num("connectors", "Renovar com antecedência de", "Tokens que expiram dentro desse prazo são renovados em segundo plano.", 15, 1, 1440, { unit: "min" }),
 
   // ── finanças (aviso de vencimento) ──

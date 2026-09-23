@@ -26,11 +26,22 @@ interface TokenResponse extends RespostaDeToken {
   expires_in?: number;
 }
 
-async function postToken(providerId: string, url: string, body: URLSearchParams, headers: Record<string, string> = {}): Promise<TokenResponse> {
+async function postToken(
+  providerId: string,
+  url: string,
+  body: URLSearchParams,
+  headers: Record<string, string> = {},
+  comoJson = false,
+): Promise<TokenResponse> {
+  // o Atlassian recusa form-urlencoded com um 400 que não explica nada
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", ...headers },
-    body,
+    headers: {
+      "Content-Type": comoJson ? "application/json" : "application/x-www-form-urlencoded",
+      Accept: "application/json",
+      ...headers,
+    },
+    body: comoJson ? JSON.stringify(Object.fromEntries(body)) : body,
   });
   const json = (await res.json()) as TokenResponse & { error?: string; ok?: boolean };
   if (!res.ok || json.error || json.ok === false) {
@@ -57,7 +68,7 @@ export async function exchangeCodeAndSave(cid: ConnectorId, userId: string, code
       ? { Authorization: `Basic ${Buffer.from(`${def.clientId}:${def.clientSecret}`).toString("base64")}` }
       : {};
 
-  const tok = await postToken(cid, def.tokenUrl, body, headers);
+  const tok = await postToken(cid, def.tokenUrl, body, headers, def.tokenAsJson);
 
   // Slack: o token do usuário vem em authed_user.access_token.
   const accessToken = cid === "slack" ? tok.authed_user?.access_token ?? tok.access_token : tok.access_token;
@@ -66,7 +77,19 @@ export async function exchangeCodeAndSave(cid: ConnectorId, userId: string, code
 
   // QUAL conta é esta. Sem isto, conectar a segunda conta do Google
   // substituiria a primeira em silêncio (a chave única era usuário+provedor).
-  const { externalId, label } = identidadeDaConta(cid, tok);
+  let { externalId, label } = identidadeDaConta(cid, tok);
+  // provedor que não diz quem é no retorno do token (Atlassian) precisa de uma
+  // segunda chamada. Falhar aqui degrada para conta única em vez de perder a
+  // conexão inteira.
+  if (!externalId && def.descobrirConta) {
+    try {
+      const achado = await def.descobrirConta(accessToken);
+      externalId = achado.externalId;
+      label = label ?? achado.label;
+    } catch {
+      /* segue como conta única */
+    }
+  }
   const expiresAt = tok.expires_in ? new Date(Date.now() + tok.expires_in * 1000) : null;
 
   // A primeira conta de um provedor nasce principal. É ela que responde quando
@@ -129,6 +152,8 @@ export async function refreshConnectionToken(cid: ConnectorId, userId: string, r
       client_id: def.clientId,
       client_secret: def.clientSecret,
     }),
+    {},
+    def.tokenAsJson,
   );
   const expiresAt = tok.expires_in ? new Date(Date.now() + tok.expires_in * 1000) : null;
   await db

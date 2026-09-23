@@ -27,6 +27,8 @@ import "./domains/slack";
 import "./domains/whatsapp";
 import "./domains/casa";
 import "./domains/teams";
+import "./domains/outlook";
+import "./domains/jira";
 import "./domains/camera";
 import "./domains/identidade";
 import "./domains/acompanhamento";
