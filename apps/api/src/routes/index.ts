@@ -35,6 +35,7 @@ import * as realtimeConfig from "./realtime-config";
 import * as realtimeSession from "./realtime-session";
 import * as realtimeTool from "./realtime-tool";
 import * as usageSession from "./usage-session";
+import * as connectorAccounts from "./connector-accounts";
 import * as vision from "./vision";
 import * as meetingSummarize from "./meeting-summarize";
 import * as meetingSpeakers from "./meeting-speakers";
@@ -147,6 +148,9 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/push/test", pushTest),
   // conectores (o callback fica no Next)
   webRoute("api/connectors", connectors),
+  // ANTES de `:provider`: a rota com parâmetro casaria com "contas" e a
+  // gerência de contas viraria um "conector desconhecido"
+  webRoute("api/connectors/contas", connectorAccounts),
   webRoute("api/connectors/:provider/connect", connectorsProviderConnect),
   webRoute("api/connectors/:provider", connectorsProvider),
   // conta, uso e voz

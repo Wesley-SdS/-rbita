@@ -9,11 +9,14 @@ export async function GET(_req: Request, ctx: RouteCtx) {
   const session = sessionOf(ctx);
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const defs = listConnectors();
-  const { connected, labels } = await connectorStatus(session.user.id);
+  const { connected, labels, contas } = await connectorStatus(session.user.id);
   const connectors = defs.map((d) => ({
     ...d,
     connected: connected.has(d.id),
+    // rótulo da conta PRINCIPAL, mantido para quem só mostra uma linha
     accountLabel: labels.get(d.id) ?? null,
+    // e a lista inteira, que é o que a tela de conectores passa a mostrar
+    contas: contas.filter((c) => c.provider === d.id),
   }));
   return Response.json({ connectors });
 }

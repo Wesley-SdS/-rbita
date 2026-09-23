@@ -763,3 +763,18 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
 .tarefa-edicao textarea.inline-input { min-height: 68px; }
 .tarefa-edicao-acoes { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .tarefa-espacador { flex: 1; }
+
+/* --- Contas de um conector ---------------------------------------------- */
+/* O Google deixou de ser "conectado ou não": pode ter a conta pessoal e a do
+   trabalho ao mesmo tempo. A lista precisa deixar claro QUAL delas responde
+   quando o pedido não diz (a principal), e permitir desconectar uma sem levar
+   a outra junto. */
+.conta-lista { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.conta-item { display: flex; align-items: center; gap: 7px; font-size: 13px; padding: 7px 9px; border-radius: 8px; background: var(--color-surface-soft); }
+.conta-item .icon { width: 14px; height: 14px; flex-shrink: 0; }
+.conta-item .tag { font-size: 10px; padding: 2px 6px; flex-shrink: 0; }
+.conta-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conta-item .icon-button { width: 24px; height: 24px; flex-shrink: 0; }
+.conta-acao { font-size: 11px; color: var(--color-ink-dim); text-decoration: underline; flex-shrink: 0; }
+.conta-acao:hover { color: var(--color-ink); }
+.conta-botoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }

@@ -53,7 +53,10 @@ const DEFS: Record<ConnectorId, ConnectorDef> = {
       "openid",
       "email",
     ],
-    authorizeParams: { access_type: "offline", prompt: "consent" },
+    // `select_account` junto do `consent`: sem ele o Google reusa a conta já
+    // logada no navegador e a SEGUNDA conta nunca chega a ser oferecida. O
+    // dono clicava em "conectar outra" e reconectava a mesma.
+    authorizeParams: { access_type: "offline", prompt: "consent select_account" },
     clientId: G_ID,
     clientSecret: G_SECRET,
   },
@@ -88,6 +91,8 @@ const DEFS: Record<ConnectorId, ConnectorDef> = {
     blurb: "Ler e enviar mensagens em chats e canais do Teams.",
     authorizeUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    // mesma razão do Google: sem `select_account` a segunda conta não aparece
+    authorizeParams: { prompt: "select_account" },
     // escopo mínimo: chat + canal de equipe + listar equipes/canais, sem Mail/Calendar
     // (isso já é feito pelo Google) e sem acesso amplo ao diretório.
     scopes: ["offline_access", "openid", "email", "Chat.ReadWrite", "ChannelMessage.Send", "Team.ReadBasic.All", "Channel.ReadBasic.All"],

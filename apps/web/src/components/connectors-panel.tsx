@@ -4,6 +4,14 @@ import { useEffect, useState } from "react";
 import { invalidar, useRecurso } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 
+interface Conta {
+  id: string;
+  label: string | null;
+  principal: boolean;
+  expiraEm: string | null;
+  falhasDeRenovacao: number;
+}
+
 interface Conector {
   id: string;
   label: string;
@@ -12,6 +20,8 @@ interface Conector {
   configured: boolean;
   connected: boolean;
   accountLabel: string | null;
+  /** Uma linha por CONTA: o Google deixou de ser "conectado ou não". */
+  contas: Conta[];
 }
 
 /**
@@ -39,8 +49,25 @@ export function ConnectorsPanel() {
     }
   }, []);
 
-  async function desconectar(id: string) {
+  /** Desconecta TODAS as contas do provedor. */
+  async function desconectarTudo(id: string) {
     await fetch(`/api/connectors/${id}`, { method: "DELETE" });
+    invalidar("/api/connectors");
+  }
+
+  /** Desconecta UMA conta, sem levar as outras junto. */
+  async function desconectarConta(contaId: string) {
+    await fetch(`/api/connectors/contas?id=${contaId}`, { method: "DELETE" });
+    invalidar("/api/connectors");
+  }
+
+  /** Troca qual conta responde quando o pedido não diz qual. */
+  async function tornarPrincipal(contaId: string) {
+    await fetch("/api/connectors/contas", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: contaId }),
+    });
     invalidar("/api/connectors");
   }
 
@@ -60,26 +87,44 @@ export function ConnectorsPanel() {
               </div>
               <h3>{c.label}</h3>
               <p>{c.blurb}</p>
-              {c.connected && c.accountLabel && (
-                <p className="connector-conta">
-                  <Icone nome="check" />
-                  {c.accountLabel}
-                </p>
+              {c.contas.length > 0 && (
+                <ul className="conta-lista">
+                  {c.contas.map((conta, i) => (
+                    <li key={conta.id} className={`conta-item ${conta.principal ? "principal" : ""}`}>
+                      <Icone nome={conta.falhasDeRenovacao > 0 ? "clock" : "check"} />
+                      <span className="conta-nome">{conta.label ?? (i === 0 ? "Conta conectada" : `Conta ${i + 1}`)}</span>
+                      {/* "principal" só aparece quando há mais de uma: com uma conta só, a palavra não significa nada */}
+                      {conta.principal && c.contas.length > 1 && <span className="tag green">principal</span>}
+                      {conta.falhasDeRenovacao > 0 && <span className="tag orange-tag">reconecte</span>}
+                      {!conta.principal && (
+                        <button className="conta-acao" onClick={() => tornarPrincipal(conta.id)} title="Usar esta conta para enviar e criar">
+                          tornar principal
+                        </button>
+                      )}
+                      <button className="icon-button" onClick={() => desconectarConta(conta.id)} aria-label={`Desconectar ${conta.label ?? "conta"}`} title="Desconectar esta conta">
+                        <Icone nome="close" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
+
               {!c.configured ? (
                 <div className="notice" style={{ margin: "16px 0 0" }}>
                   Faltam as credenciais deste serviço no servidor. Sem elas a Órbita não tem como pedir acesso em seu nome.
                 </div>
-              ) : c.connected ? (
-                <button className="button danger" onClick={() => desconectar(c.id)}>
-                  <Icone nome="close" />
-                  Desconectar
-                </button>
               ) : (
-                <a className="button primary" href={`/api/connectors/${c.id}/connect`}>
-                  <Icone nome="link" />
-                  Conectar
-                </a>
+                <div className="conta-botoes">
+                  <a className={`button ${c.connected ? "secondary" : "primary"} compacto`} href={`/api/connectors/${c.id}/connect`}>
+                    <Icone nome={c.connected ? "plus" : "link"} />
+                    {c.connected ? "Conectar outra conta" : "Conectar"}
+                  </a>
+                  {c.contas.length > 1 && (
+                    <button className="button danger compacto" onClick={() => desconectarTudo(c.id)}>
+                      Desconectar todas
+                    </button>
+                  )}
+                </div>
               )}
             </article>
           ))}

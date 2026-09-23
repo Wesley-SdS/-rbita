@@ -38,8 +38,12 @@ export async function refreshExpiringTokens(): Promise<{ verificados: number; re
   const limite = new Date(now.getTime() + cfg["connectors.refreshAheadMinutes"] * 60_000);
   const rows = await db
     .select({
+      // o ID da conexão: com duas contas do mesmo provedor, renovar e marcar
+      // falha por (usuário, provedor) mexeria nas duas de uma vez
+      id: connection.id,
       userId: connection.userId,
       provider: connection.provider,
+      accountLabel: connection.accountLabel,
       refreshTokenEnc: connection.refreshTokenEnc,
       refreshFailures: connection.refreshFailures,
       refreshFailedAt: connection.refreshFailedAt,
@@ -57,18 +61,19 @@ export async function refreshExpiringTokens(): Promise<{ verificados: number; re
       adiados++;
       continue;
     }
-    const alvo = and(eq(connection.userId, r.userId), eq(connection.provider, r.provider));
+    const alvo = eq(connection.id, r.id);
     try {
-      await refreshConnectionToken(r.provider as ConnectorId, r.userId, decryptSecret(r.refreshTokenEnc));
+      await refreshConnectionToken(r.provider as ConnectorId, r.userId, decryptSecret(r.refreshTokenEnc), r.id);
       renovados++;
-      await events.emit("connector.token_refreshed", { provider: r.provider }, { userId: r.userId });
+      await events.emit("connector.token_refreshed", { provider: r.provider, conta: r.accountLabel }, { userId: r.userId });
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       const falhas = r.refreshFailures + 1;
       await db.update(connection).set({ refreshFailures: falhas, refreshFailedAt: now }).where(alvo);
-      log.warn("connectors.refresh_falhou", { provider: r.provider, userId: r.userId, falhas, error });
-      // avisa UMA vez (vira evento para regra/notificação "reconecte"); as próximas só registram
-      if (falhas === 1) await events.emit("connector.refresh_failed", { provider: r.provider, error }, { userId: r.userId });
+      log.warn("connectors.refresh_falhou", { provider: r.provider, conta: r.accountLabel, userId: r.userId, falhas, error });
+      // avisa UMA vez (vira evento para regra/notificação "reconecte"); as próximas só registram.
+      // a conta vai junto: "reconecte o Google" não diz QUAL Google reconectar.
+      if (falhas === 1) await events.emit("connector.refresh_failed", { provider: r.provider, conta: r.accountLabel, error }, { userId: r.userId });
     }
   }
   return { verificados: rows.length, renovados, adiados };
