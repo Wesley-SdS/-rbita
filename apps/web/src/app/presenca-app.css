@@ -811,3 +811,5 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
 .mapa-detalhe-acoes { display: flex; gap: 8px; margin-top: 22px; flex-wrap: wrap; }
 /* o recado de falha precisa receber clique; os outros recados do mapa não */
 .mapa-recado-acao { pointer-events: auto; flex-direction: column; gap: 14px; }
+/* dica de manuseio do mapa 3D: some quando algo está selecionado */
+.mapa-ajuda { position: absolute; right: 14px; bottom: 14px; color: #8f8f8f; font-size: 11px; letter-spacing: 0.3px; pointer-events: none; }
