@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, lt, sql } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { conversation, message } from "@orbita/db/chat-schema";
 import { document } from "@orbita/db/knowledge-schema";
@@ -144,7 +144,11 @@ export async function conversasPendentes(userId: string, paradaHaMinutos: number
     .where(
       and(
         eq(conversation.userId, userId),
-        sql`${conversation.updatedAt} < ${corte}`,
+        // `lt()` e não sql`... < ${corte}`: dentro do template a Date ia crua
+        // para o driver e chegava no Postgres como "Wed Sep 23 2026 ... GMT-0300
+        // (Horário Padrão de Brasília)", que ele não sabe ler. O laço do
+        // processo vivo falhava a cada volta, e nenhuma conversa era arquivada.
+        lt(conversation.updatedAt, corte),
         sql`not exists (select 1 from ${document} d where d.user_id = ${userId} and d.origem_id = ${conversation.id})`,
       ),
     )
@@ -200,7 +204,7 @@ export async function arquivarConversasDeTodos(): Promise<{ usuarios: number; ar
     .from(conversation)
     .where(
       and(
-        sql`${conversation.updatedAt} < ${corte}`,
+        lt(conversation.updatedAt, corte),
         sql`not exists (select 1 from ${document} d where d.user_id = ${conversation.userId} and d.origem_id = ${conversation.id})`,
       ),
     );

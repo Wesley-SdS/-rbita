@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { gmailWatchState } from "@orbita/db/meeting-schema";
-import { usersConnected, getAccessToken } from "../connectors/store";
+import { usersConnected } from "../connectors/store";
+import { lerDeTodasAsContas } from "../connectors/multi";
 import { listImportantUnread, type ImportantEmail } from "../connectors/google";
 import { events } from "../events/index";
 import { log } from "../observability/logger";
@@ -16,7 +17,7 @@ import { log } from "../observability/logger";
  */
 
 /** Mensagens mais novas que o cursor salvo — parte PURA, testável. */
-export function newImportantMessages(messages: ImportantEmail[], since: Date | null): ImportantEmail[] {
+export function newImportantMessages<T extends { internalDate: Date }>(messages: T[], since: Date | null): T[] {
   if (!since) return []; // primeira volta: só grava o cursor, não inunda com o histórico
   return messages.filter((m) => m.internalDate.getTime() > since.getTime());
 }
@@ -27,15 +28,17 @@ export async function emitImportantEmails(): Promise<{ verificados: number; avis
   let avisados = 0;
   for (const userId of userIds) {
     try {
-      const token = await getAccessToken("google", userId);
-      if (!token) continue;
-
       const [state] = await db.select().from(gmailWatchState).where(eq(gmailWatchState.userId, userId)).limit(1);
-      const messages = await listImportantUnread(token);
+      // TODAS as caixas conectadas: o e-mail importante costuma estar na do
+      // trabalho, e olhar só a principal fazia o aviso nunca sair para ela
+      const { itens: messages } = await lerDeTodasAsContas("google", userId, (t) => listImportantUnread(t));
+      if (!messages.length && state) continue;
       const novas = newImportantMessages(messages, state?.lastSeenAt ?? null);
 
       for (const m of novas) {
-        await events.emit("gmail.important_received", { messageId: m.id, de: m.from, assunto: m.subject, trecho: m.snippet }, { userId });
+        // a conta vai no evento: "chegou um e-mail importante" sem dizer em
+        // qual caixa faz o dono procurar na errada
+        await events.emit("gmail.important_received", { messageId: m.id, de: m.from, assunto: m.subject, trecho: m.snippet, conta: m.conta }, { userId });
         avisados++;
       }
 

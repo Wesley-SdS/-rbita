@@ -94,7 +94,7 @@ export function MapaConhecimento() {
     return `/api/knowledge/grafo${s ? `?${s}` : ""}`;
   }, [tipos, parecidos]);
 
-  const { dado, carregando, erro } = useRecurso<Grafo>(query);
+  const { dado, carregando, erro, recarregar } = useRecurso<Grafo>(query);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pontosRef = useRef<Ponto[]>([]);
@@ -387,7 +387,17 @@ export function MapaConhecimento() {
         />
 
         {carregando && !dado && <div className="mapa-recado">Montando o mapa…</div>}
-        {erro && !dado && <div className="mapa-recado">Não consegui montar o mapa.</div>}
+        {erro && !dado && (
+          // beco sem saída era o que estava aqui: o apps/api reiniciando por
+          // segundos deixava a tela morta até um F5. Falha de leitura tem de
+          // ter volta, como nos outros painéis.
+          <div className="mapa-recado mapa-recado-acao">
+            <p>Não consegui montar o mapa agora.</p>
+            <button className="button secondary compacto" onClick={() => recarregar()}>
+              Tentar de novo
+            </button>
+          </div>
+        )}
         {dado && dado.nos.length === 0 && (
           <div className="mapa-recado">
             Nada guardado ainda. Conversas viram parte do mapa quando são arquivadas, e reuniões entram junto com o resumo.

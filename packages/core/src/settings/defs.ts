@@ -392,7 +392,7 @@ export const SETTING_DEFS = {
   "limits.searchPerMinute": num("limits", "Buscas no acervo por minuto", "Limite da busca feita pela tela (cada busca gera um embedding da pergunta).", 60, 1, 600, { unit: "/min" }),
   "limits.summaryMaxChars": num("limits", "Limiar do resumo em blocos", "Até este tamanho a reunião é resumida em uma passada só. Acima disso, o resumo vira mapa-redução (por blocos, depois consolidado) em vez de cortar a transcrição.", 100000, 1000, 2000000, { unit: "chars" }),
 
-  // ── grafo (api/knowledge/graph) ──
+  // ── mapa do conhecimento (api/knowledge/grafo) ──
   // ── cache e navegação ──
   // Por que isto é config e não constante: quem decide o equilíbrio entre
   // "instantâneo" e "sempre fresco" é o dono, e esse equilíbrio muda conforme
@@ -403,6 +403,24 @@ export const SETTING_DEFS = {
   "cache.adiantarLeituras": bool("cache", "Adiantar as leituras pelo servidor", "O servidor busca os dados da primeira aba antes de mandar a tela. DESLIGADO por padrão: medindo nesta máquina, a ida extra do servidor custou mais (50 a 80ms por rota) do que a busca que ela poupa, porque o navegador está ao lado do servidor. Vale ligar quando se acessa a Órbita de fora de casa, onde a ida do navegador é a cara. A tela já adianta a busca por conta própria de qualquer jeito.", false),
   "cache.comprimirAcimaDeBytes": num("cache", "Comprimir respostas acima de", "Respostas JSON maiores que isto viajam comprimidas. Abaixo do limite, comprimir custa mais processador do que economiza banda. Zero desliga a compressão.", 1024, 0, 1048576, { unit: "bytes" }),
   "cache.offlineLeitura": bool("cache", "Abrir offline com o último dado conhecido", "Guarda no aparelho a última resposta das leituras seguras para o app abrir mostrando algo quando a rede cair. Nada que altere dados é guardado.", true),
+  "meetings.criarTarefas": sel(
+    "meetings",
+    "Virar tarefa depois da reunião",
+    "O que você ficou de fazer aparece nas suas tarefas, com o vínculo de volta à reunião que originou.",
+    "minhas",
+    [
+      { value: "minhas", label: "Só o que ficou para mim" },
+      { value: "todas", label: "Tudo que foi combinado" },
+      { value: "nenhuma", label: "Nada (só no resumo)" },
+    ],
+  ),
+  "meetings.meuNome": text(
+    "meetings",
+    "Como te chamam nas reuniões",
+    "Serve para saber quais compromissos são seus. Vazio, valem os que ninguém assumiu explicitamente.",
+    "",
+    80,
+  ),
   "graph.arquivarConversas": bool(
     "graph",
     "Guardar conversas na base",

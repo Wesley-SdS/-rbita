@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { RouteHandler } from "../http/web";
 import { sessionOf } from "../http/web-route";
-import { criarTarefa, editarTarefa, listarTarefas, removerTarefa } from "@orbita/core/tarefas/store";
+import { criarTarefa, editarTarefa, listarTarefas, removerTarefa, tarefasDaOrigem } from "@orbita/core/tarefas/store";
 
 // Migrada do Next em paridade (apps/web/src/app/api/todos/route.ts).
 // Controller fino (§6): autentica, valida com zod e delega para o `store`.
@@ -42,10 +42,14 @@ const Update = z.object({
   paraQuem: z.string().max(200).nullable().optional(),
 });
 
-export const GET: RouteHandler = async (_req, ctx) => {
+export const GET: RouteHandler = async (req, ctx) => {
   const session = sessionOf(ctx);
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
-  const rows = await listarTarefas(session.user.id);
+  // `?origem=<id da reunião>`: o caminho de volta. A tela da reunião pergunta
+  // "o que ficou para mim daqui?" sem ter de baixar a lista inteira e filtrar
+  // no cliente, que é regra de negócio no lugar errado (§6).
+  const origem = new URL(req.url).searchParams.get("origem");
+  const rows = origem ? await tarefasDaOrigem(session.user.id, origem) : await listarTarefas(session.user.id);
   return Response.json({ todos: rows.map((t) => ({ ...t, dueDate: t.dueDate?.toISOString() ?? null })) });
 };
 

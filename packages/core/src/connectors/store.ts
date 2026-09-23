@@ -243,9 +243,16 @@ export async function definirContaPrincipal(userId: string, connectionId: string
   return true;
 }
 
-/** IDs de todos os usuários que conectaram este provedor (para laços do processo persistente). */
+/**
+ * IDs dos usuários que conectaram este provedor (para laços do processo vivo).
+ *
+ * `selectDistinct` não é detalhe de performance: com a multi-conta, quem tem
+ * dois Gmails aparecia DUAS VEZES nesta lista, e o laço que avisa de reunião e
+ * de e-mail importante rodava duas vezes para a mesma pessoa. O dono receberia
+ * o mesmo aviso em dobro, e o segundo pareceria um bug de notificação.
+ */
 export async function usersConnected(cid: ConnectorId): Promise<string[]> {
-  const rows = await db.select({ userId: connection.userId }).from(connection).where(eq(connection.provider, cid));
+  const rows = await db.selectDistinct({ userId: connection.userId }).from(connection).where(eq(connection.provider, cid));
   return rows.map((r) => r.userId);
 }
 

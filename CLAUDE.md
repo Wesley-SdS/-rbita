@@ -222,7 +222,7 @@ dono faz pelo assistente. Crescer o catálogo é o objetivo, não um efeito a co
 Antes de considerar qualquer tarefa concluída:
 
 1. **`tsc --noEmit` limpo nos dois apps (`apps/web` e `apps/api`)** e **`vitest run` verde** (§3; baseline
-   após a onda de navegação e cache: 77 arquivos, 712 testes, mais 34 testes Python em `apps/perception`). Sem exceção.
+   após a onda do segundo cérebro: 105 arquivos, 1.029 testes, mais 34 testes Python em `apps/perception`). Sem exceção.
 2. **Erro pré-existente conta.** Achou teste quebrado ou tipo vermelho que já estava assim?
    Corrija antes de fechar.
 3. **Código novo em `lib/` precisa de teste.** Caminho feliz + pelo menos um de erro. A suíte
@@ -287,6 +287,13 @@ Antes de considerar qualquer tarefa concluída:
 | "Quem disse" entre reuniões | `packages/core/src/meetings/quem-disse.ts` |
 | Biometria (tabelas `biometric_*`, nunca sai de casa) | `packages/db/src/biometric-schema.ts` · guard `packages/core/src/privacy/egress.ts` · testes `privacy/no-leak*.test.ts` |
 | Serviço local de percepção | `apps/perception` · cliente `packages/core/src/perception/client.ts` |
+| Mapa do conhecimento (grafo puro + consulta) | `packages/core/src/knowledge/grafo.ts` · `grafo-query.ts` · rota `routes/knowledge-grafo.ts` · tela `components/mapa-conhecimento.tsx` |
+| Conversa virando base (o "continua aquele papo") | `packages/core/src/knowledge/conversas.ts` · laço `conhecimento` no `SchedulerService` |
+| Tarefas (campos puros, store, tools) | `packages/core/src/tarefas/campos.ts` · `tarefas/store.ts` · `tools/domains/tarefas.ts` |
+| Compromisso de reunião virando tarefa | `packages/core/src/meetings/tarefas-da-reuniao.ts` ← chaves `meetings.criarTarefas` e `meetings.meuNome` |
+| Multi-conta por conector (ler em todas, escrever em uma) | `packages/core/src/connectors/multi.ts` · `connectors/identidade.ts` · rota `routes/connector-accounts.ts` |
+| Outlook (e-mail e agenda) e Jira | `packages/core/src/connectors/microsoft.ts` · `connectors/jira.ts` · `tools/domains/{outlook,jira}.ts` |
+| Conta da sessão de voz (o navegador relata) | `packages/core/src/usage/sessao.ts` · rota `routes/usage-session.ts` |
 | Plano do Jarvis | `BRIEFING-JARVIS.md` · Fase 2: `PRD-FASE2-IDENTIDADE-PERCEPCAO.md` |
 | Backlog pré-existente | `CHECKLIST.md` |
 
@@ -361,6 +368,25 @@ Antes de considerar qualquer tarefa concluída:
 - **A fila roda no mesmo processo que a recebe.** Quem enfileira acorda o runner por chamada de
   função; por isso não há `LISTEN`/`NOTIFY`. Se um dia existir um segundo processo consumindo a
   fila, aí sim: conexão dedicada fora do pool, levando só o id.
+- **`Date` crua dentro de ``sql`...` `` não vira timestamp.** O driver manda o
+  `toString()` do JavaScript ("Wed Sep 23 2026 ... GMT-0300 (Horário Padrão de
+  Brasília)") e o Postgres recusa. O laço que arquivava conversas falhou a cada
+  volta por isso, em silêncio, porque o `scheduler` engole a falha da volta. Use
+  os operadores do Drizzle (`lt`, `lte`, `gt`), nunca a Date dentro do template.
+- **Multi-conta muda o significado de consultas antigas.** `usersConnected`
+  devolvia o mesmo dono uma vez por CONTA, e os laços proativos avisavam em
+  dobro; `refreshConnectionToken` atualizava por (usuário, provedor) e gravaria
+  o token de uma conta em cima da outra. Ao mexer em conector, pergunte sempre
+  "e se houver duas contas?".
+- **Leitura de conector varre TODAS as contas; escrita usa UMA** (`connectors/multi.ts`).
+  Pedido ambíguo devolve a lista e pergunta: mandar e-mail pela conta errada não
+  se desfaz.
+- **`prompt=select_account` é obrigatório** no Google e na Microsoft, senão o
+  provedor reusa a conta já logada no navegador e a segunda conta nunca entra.
+- **O mapa do conhecimento é DERIVADO**, não tem tabela de ligação: as arestas
+  saem do `origem_id` da tarefa e do documento. Apagou, sumiu do mapa, sem passo
+  de manutenção. Similaridade é aresta fraca e desligada por padrão, senão tudo
+  se liga com tudo e deixa de ser mapa.
 - **Zumbi é coração parado, não id de instância.** O coração é do runner (relógio próprio), não do
   progresso do handler: uma chamada de LLM de minutos sem progresso não pode parecer trabalho
   morto. E o `tsx watch` deixa dois processos vivos por segundos, então "outra instância" não é

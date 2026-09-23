@@ -809,3 +809,5 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
 .mapa-link { text-align: left; color: #e8e8e8; text-decoration: underline; text-underline-offset: 2px; }
 .mapa-link:hover { color: #fff; }
 .mapa-detalhe-acoes { display: flex; gap: 8px; margin-top: 22px; flex-wrap: wrap; }
+/* o recado de falha precisa receber clique; os outros recados do mapa não */
+.mapa-recado-acao { pointer-events: auto; flex-direction: column; gap: 14px; }

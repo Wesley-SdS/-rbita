@@ -20,7 +20,6 @@ import * as accountReindex from "./account-reindex";
 import * as knowledge from "./knowledge";
 import * as knowledgeSearch from "./knowledge-search";
 import * as memoryCandidates from "./memory-candidates";
-import * as knowledgeGraph from "./knowledge-graph";
 import * as knowledgeGrafo from "./knowledge-grafo";
 import * as models from "./models";
 import * as connectors from "./connectors";
@@ -91,7 +90,6 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/conversations/:id", conversationsById),
   webRoute("api/memory", memory),
   webRoute("api/knowledge", knowledge),
-  webRoute("api/knowledge/graph", knowledgeGraph),
   webRoute("api/knowledge/grafo", knowledgeGrafo),
   webRoute("api/knowledge/busca", knowledgeSearch),
   webRoute("api/memory/candidatos", memoryCandidates),

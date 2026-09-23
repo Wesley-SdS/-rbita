@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { meetingReminder } from "@orbita/db/meeting-schema";
-import { usersConnected, getAccessToken } from "../connectors/store";
+import { usersConnected } from "../connectors/store";
+import { lerDeTodasAsContas } from "../connectors/multi";
 import { listEventsStartingWithin, type CalEvent } from "../connectors/google";
 import { retrieveContext } from "../rag/retrieve";
 import { events } from "../events/index";
@@ -53,9 +54,9 @@ export async function emitUpcomingMeetings(): Promise<{ verificados: number; avi
   let avisados = 0;
   for (const userId of userIds) {
     try {
-      const token = await getAccessToken("google", userId);
-      if (!token) continue;
-      const upcoming = await listEventsStartingWithin(token, windowMinutes);
+      // TODAS as agendas conectadas, não só a principal: a reunião do trabalho
+      // está na conta do trabalho, e era justamente ela que nunca gerava aviso
+      const { itens: upcoming } = await lerDeTodasAsContas("google", userId, (t) => listEventsStartingWithin(t, windowMinutes));
       if (!upcoming.length) continue;
 
       const already = await db.select({ calendarEventId: meetingReminder.calendarEventId }).from(meetingReminder).where(eq(meetingReminder.userId, userId));

@@ -6,6 +6,7 @@ import type { RelatoDeUso } from "./structured";
 import { ingestDocument } from "../rag/ingest";
 import { chunkText } from "../rag/chunk";
 import { dedupeCompromissos, type Compromisso } from "./compromissos";
+import { criarTarefasDaReuniao } from "./tarefas-da-reuniao";
 import { generateStructured } from "./structured";
 import { settings } from "../settings";
 import { log } from "../observability/logger";
@@ -112,6 +113,8 @@ export interface SummarizeResult {
   summary: string;
   compromissos: Compromisso[];
   documentId: string | null;
+  /** quantas viraram tarefa do dono (ver `tarefas-da-reuniao.ts`) */
+  tarefasCriadas?: number;
   archived: boolean;
   blocos: number;
 }
@@ -165,6 +168,14 @@ export async function summarizeMeeting(userId: string, input: SummarizeInput, pr
     duracaoMs: Date.now() - started,
   });
 
+  // O que ficou para fazer vira TAREFA, com o vínculo de volta a esta reunião.
+  // Antes os compromissos paravam dentro do texto do resumo: quem lesse via,
+  // quem não lesse esquecia. Fail-soft pelo mesmo motivo do bloco abaixo.
+  const tarefasCriadas = await criarTarefasDaReuniao(userId, compromissos, { id: res.documentId, titulo: title }).catch((e) => {
+    log.warn("meeting.tarefas_falharam", { error: e instanceof Error ? e.message : String(e) });
+    return 0;
+  });
+
   // fail-soft: o resumo não pode falhar porque o vínculo de um desconhecido falhou
   if (res.documentId && input.desconhecidos?.length && (await isOwner(userId))) {
     await ligarDesconhecidosAReuniao(userId, input.desconhecidos, res.documentId).catch((e) =>
@@ -172,5 +183,5 @@ export async function summarizeMeeting(userId: string, input: SummarizeInput, pr
     );
   }
 
-  return { title, summary, compromissos, documentId: res.documentId, archived: res.chunks > 0, blocos };
+  return { title, summary, compromissos, documentId: res.documentId, archived: res.chunks > 0, blocos, tarefasCriadas };
 }

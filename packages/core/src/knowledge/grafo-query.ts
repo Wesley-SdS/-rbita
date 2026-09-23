@@ -3,8 +3,9 @@ import { db } from "@orbita/db";
 import { conversation } from "@orbita/db/chat-schema";
 import { document, memory } from "@orbita/db/knowledge-schema";
 import { todo } from "@orbita/db/todo-schema";
+import { person } from "@orbita/db/home-schema";
 import { settings } from "../settings";
-import { montarGrafo, type Grafo, type LinhaDeAresta, type LinhaDeNo } from "./grafo";
+import { ligarLocutores, montarGrafo, type Grafo, type LinhaDeAresta, type LinhaDeNo } from "./grafo";
 
 /**
  * De onde saem os nós e as ligações do mapa.
@@ -49,6 +50,7 @@ export async function montarGrafoDoUsuario(userId: string, opcoes: OpcoesDoGrafo
       source: document.source,
       origemId: document.origemId,
       createdAt: document.createdAt,
+      speakers: document.speakers,
     })
     .from(document)
     .where(eq(document.userId, userId))
@@ -59,6 +61,18 @@ export async function montarGrafoDoUsuario(userId: string, opcoes: OpcoesDoGrafo
     const tipo = tipoDoDocumento(d.source);
     if (!quer(tipo)) continue;
     linhas.push({ id: d.id, tipo, rotulo: d.title, quando: d.createdAt, origemId: d.origemId });
+  }
+
+  // --- pessoas: quem falou nas reuniões ------------------------------------
+  if (quer("pessoa")) {
+    const pessoas = await db
+      .select({ id: person.id, name: person.name, aliases: person.aliases, createdAt: person.createdAt })
+      .from(person)
+      .where(eq(person.userId, userId))
+      .limit(teto);
+    for (const p of pessoas) linhas.push({ id: p.id, tipo: "pessoa", rotulo: p.name, quando: p.createdAt });
+    // a ligação vem dos locutores NOMEADOS do documento de reunião
+    ligacoes.push(...ligarLocutores(pessoas.map((p) => ({ id: p.id, nome: p.name, apelidos: p.aliases })), docs));
   }
 
   // --- conversas ----------------------------------------------------------

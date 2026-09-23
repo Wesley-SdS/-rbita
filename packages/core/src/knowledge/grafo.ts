@@ -170,3 +170,45 @@ export function vizinhos(grafo: Grafo, id: string): { no: NoDoGrafo; tipo: TipoD
   }
   return out;
 }
+
+/**
+ * Quem falou em quê.
+ *
+ * O documento de reunião guarda os locutores NOMEADOS ({"A": "Ana"}), e a casa
+ * tem pessoas cadastradas com apelidos. Casar os dois é o que põe gente no
+ * mapa: sem isso, "quem estava naquela reunião?" só se responde lendo a
+ * transcrição.
+ *
+ * Casa por nome ou apelido, normalizado. Nome que não bate com ninguém NÃO
+ * vira pessoa nova: inventar cadastro a partir de uma transcrição encheria a
+ * casa de gente que ninguém registrou.
+ */
+export function ligarLocutores(
+  pessoas: { id: string; nome: string; apelidos?: string[] }[],
+  documentos: { id: string; speakers?: Record<string, string> | null }[],
+): LinhaDeAresta[] {
+  const sem = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  const porNome = new Map<string, string>();
+  for (const p of pessoas) {
+    for (const n of [p.nome, ...(p.apelidos ?? [])]) {
+      const chave = sem(n);
+      // primeiro cadastro ganha: dois homônimos não devem se sobrescrever em
+      // silêncio, e escolher o mais antigo é ao menos estável
+      if (chave && !porNome.has(chave)) porNome.set(chave, p.id);
+    }
+  }
+
+  const out: LinhaDeAresta[] = [];
+  const vistas = new Set<string>();
+  for (const d of documentos) {
+    for (const nome of Object.values(d.speakers ?? {})) {
+      const pid = porNome.get(sem(nome ?? ""));
+      if (!pid) continue;
+      const chave = `${pid}|${d.id}`;
+      if (vistas.has(chave)) continue;
+      vistas.add(chave);
+      out.push({ origem: pid, destino: d.id, tipo: "falou_em" });
+    }
+  }
+  return out;
+}
