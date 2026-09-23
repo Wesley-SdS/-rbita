@@ -5,6 +5,7 @@ import { settings } from "@orbita/core/settings/index";
 import { runDueRoutines, usersWithRoutines } from "@orbita/core/routines/run";
 import { ensureBuiltinRules, fireCronRules, fireRulesForEvent } from "@orbita/core/rules/run";
 import { refreshExpiringTokens } from "@orbita/core/connectors/refresh";
+import { arquivarConversasDeTodos } from "@orbita/core/knowledge/conversas";
 import { emitBillDueEvents } from "@orbita/core/finance/bill-due";
 import { emitUpcomingMeetings } from "@orbita/core/meetings/calendar-watch";
 import { emitImportantEmails } from "@orbita/core/meetings/gmail-watch";
@@ -114,6 +115,9 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     this.loop("models-warm", () => readPolicy().then((p) => (discoveredSnapshot().length ? p.discoveryTtlMs : EMPTY_DISCOVERY_RETRY_MS)), () => this.warmModels());
     this.loop("calendar", () => settings.get("meetings.calendarPollMinutes").then((m) => m * 60_000), () => this.tickCalendar());
     this.loop("gmail", () => settings.get("meetings.gmailPollMinutes").then((m) => m * 60_000), () => this.tickGmail());
+    // a conversa que parou vira base de conhecimento. O intervalo acompanha o
+    // "parada há": verificar muito mais rápido do que o corte é trabalho à toa.
+    this.loop("conhecimento", () => settings.get("graph.conversaParadaMinutos").then((m) => m * 60_000), () => this.tickConhecimento());
     this.loop("home-watch", () => settings.get("home.entitySyncMinutes").then((m) => m * 60_000), () => this.reconcileHaWatchers());
     this.loop("home-sync", () => settings.get("home.entitySyncMinutes").then((m) => m * 60_000), () => this.tickHomeSync());
     const pruneEvery = () => settings.get("events.pruneEveryHours").then((h) => h * 3_600_000);
@@ -216,6 +220,11 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   private async tickCalendar() {
     const r = await emitUpcomingMeetings();
     if (r.avisados) log.info("meetings.calendar_watch", r);
+  }
+
+  private async tickConhecimento() {
+    const r = await arquivarConversasDeTodos();
+    if (r.arquivadas) log.info("conhecimento.arquivadas", r);
   }
 
   private async tickGmail() {

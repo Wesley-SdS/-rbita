@@ -52,6 +52,20 @@ export const document = pgTable("document", {
   // reunião com diarização. É METADADO de exibição: o texto arquivado mantém
   // "Locutor A", a UI substitui na leitura. Nulo = nenhum locutor nomeado ainda.
   speakers: jsonb("speakers").$type<Record<string, string>>(),
+  /**
+   * DE ONDE ISTO VEIO: "conversa", "reuniao", "arquivo", "tarefa" ou nulo.
+   *
+   * É o que transforma a base num segundo cérebro em vez de uma pilha de
+   * textos: sem o vínculo, um resumo de reunião e uma conversa de três meses
+   * atrás são dois blocos soltos, e não dá para perguntar "de onde saiu isso?"
+   * nem desenhar o mapa.
+   *
+   * Sem chave estrangeira, pela mesma razão do `todo`: apagar a conversa não
+   * pode apagar o conhecimento que saiu dela. Por isso o título fica copiado.
+   */
+  origemTipo: text("origem_tipo"),
+  origemId: uuid("origem_id"),
+  origemTitulo: text("origem_titulo"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 },
 (t) => [
@@ -59,6 +73,9 @@ export const document = pgTable("document", {
   uniqueIndex("document_user_file_hash_idx").on(t.userId, t.fileHash).where(sql`${t.fileHash} is not null`),
   // o único acima é PARCIAL: não serve para listar os documentos do dono
   index("document_user_created_idx").on(t.userId, t.createdAt),
+  // "o que já foi arquivado desta conversa?" é a pergunta que evita indexar
+  // a mesma conversa duas vezes, e é o caminho de volta no mapa
+  index("document_user_origem_idx").on(t.userId, t.origemId),
 ]);
 
 export const chunk = pgTable(

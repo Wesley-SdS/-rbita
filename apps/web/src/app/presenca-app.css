@@ -778,3 +778,34 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
 .conta-acao { font-size: 11px; color: var(--color-ink-dim); text-decoration: underline; flex-shrink: 0; }
 .conta-acao:hover { color: var(--color-ink); }
 .conta-botoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+
+/* --- Mapa do conhecimento ----------------------------------------------- */
+/* Fundo escuro mesmo no tema claro: o mapa é uma vista de dados, e ponto
+   colorido sobre claro perde contraste justamente quando ficam muitos. */
+.mapa-filtros { display: flex; align-items: center; gap: 8px; margin: 20px 0 14px; flex-wrap: wrap; }
+.mapa-chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--color-line); padding: 7px 12px; border-radius: 7px; font-size: 13px; color: var(--color-ink-dim); opacity: 0.45; }
+.mapa-chip.ativo { opacity: 1; color: var(--color-ink); }
+.mapa-chip em { font-style: normal; font-size: 11px; opacity: 0.6; }
+.mapa-bolinha { width: 9px; height: 9px; border-radius: 50%; background: var(--cor, #999); flex-shrink: 0; display: inline-block; }
+
+.mapa-caixa { position: relative; height: min(72vh, 680px); border-radius: 17px; overflow: hidden; background: #232323; border: 1px solid var(--color-line); }
+.mapa-canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+.mapa-canvas:active { cursor: grabbing; }
+
+.mapa-recado { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #cfcfcf; font-size: 15px; text-align: center; padding: 0 40px; pointer-events: none; }
+.mapa-dica { position: absolute; left: 14px; bottom: 14px; background: rgba(0,0,0,0.72); color: #f0f0f0; font-size: 13px; padding: 7px 11px; border-radius: 7px; max-width: 60%; pointer-events: none; }
+.mapa-omitidos { position: absolute; right: 14px; top: 14px; background: rgba(0,0,0,0.65); color: #ddd; font-size: 12px; padding: 7px 11px; border-radius: 7px; max-width: 280px; pointer-events: none; }
+
+.mapa-detalhe { position: absolute; right: 0; top: 0; bottom: 0; width: min(340px, 82%); background: rgba(28,28,28,0.97); border-left: 1px solid rgba(255,255,255,0.08); padding: 18px; overflow-y: auto; color: #e8e8e8; }
+.mapa-detalhe small { color: #9f9f9f; font-size: 12px; }
+.mapa-detalhe-topo { display: flex; align-items: center; gap: 8px; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #bdbdbd; }
+.mapa-detalhe-topo strong { flex: 1; font-weight: 500; }
+.mapa-detalhe-topo .icon-button { width: 26px; height: 26px; color: #ddd; }
+.mapa-detalhe-titulo { font-size: 15px; line-height: 1.6; margin: 12px 0 4px; }
+.mapa-detalhe .panel-label { color: #8f8f8f; }
+.mapa-vizinhos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.mapa-vizinhos li { display: flex; align-items: baseline; gap: 7px; font-size: 13px; }
+.mapa-vizinhos em { font-style: normal; color: #8f8f8f; font-size: 11px; flex-shrink: 0; }
+.mapa-link { text-align: left; color: #e8e8e8; text-decoration: underline; text-underline-offset: 2px; }
+.mapa-link:hover { color: #fff; }
+.mapa-detalhe-acoes { display: flex; gap: 8px; margin-top: 22px; flex-wrap: wrap; }

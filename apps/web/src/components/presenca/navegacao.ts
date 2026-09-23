@@ -18,6 +18,7 @@ export const TELAS: Tela[] = [
   { slug: "inicio", href: "/app", titulo: "Visão geral", icone: "orbit", grupo: "espaco" },
   { slug: "conversa", href: "/app/conversa", titulo: "Conversas", icone: "chat", grupo: "espaco" },
   { slug: "memoria", href: "/app/memoria", titulo: "Memória", icone: "network", grupo: "espaco" },
+  { slug: "conhecimento", href: "/app/conhecimento", titulo: "Mapa", icone: "network", grupo: "espaco" },
   { slug: "rotinas", href: "/app/rotinas", titulo: "Rotinas", icone: "flow", grupo: "espaco" },
   { slug: "casa", href: "/app/casa", titulo: "Minha casa", icone: "home", grupo: "conectado" },
   { slug: "reunioes", href: "/app/reunioes", titulo: "Reuniões", icone: "wave", grupo: "conectado" },

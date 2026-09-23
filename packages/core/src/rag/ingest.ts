@@ -36,9 +36,15 @@ export async function ingestPaginas(
   userId: string,
   title: string,
   paginas: string[],
-  opcoes: { source?: string; fileHash?: string | null; progresso?: Progresso } = {},
+  opcoes: {
+    source?: string;
+    fileHash?: string | null;
+    progresso?: Progresso;
+    /** De onde este conhecimento veio: é o que liga o documento no mapa. */
+    origem?: { tipo: string; id?: string | null; titulo?: string | null } | null;
+  } = {},
 ): Promise<IngestResultado> {
-  const { source = "text", fileHash = null, progresso } = opcoes;
+  const { source = "text", fileHash = null, progresso, origem = null } = opcoes;
 
   // dedup por arquivo: o mesmo documento enviado duas vezes não é indexado de
   // novo (e não some o antigo, que pode já ter sido citado numa conversa)
@@ -72,7 +78,18 @@ export async function ingestPaginas(
   const documentId = await db.transaction(async (tx) => {
     const [doc] = await tx
       .insert(document)
-      .values({ userId, title, source, fileHash, pages: paginas.length, content: textoCompleto, pageOffsets: offsets })
+      .values({
+        userId,
+        title,
+        source,
+        fileHash,
+        pages: paginas.length,
+        content: textoCompleto,
+        pageOffsets: offsets,
+        origemTipo: origem?.tipo ?? null,
+        origemId: origem?.id ?? null,
+        origemTitulo: origem?.titulo ?? null,
+      })
       .returning();
     if (!doc) throw new Error("Falha ao criar documento");
     await tx.insert(chunk).values(
