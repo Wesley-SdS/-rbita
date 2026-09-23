@@ -124,8 +124,8 @@ Levantamento do que ainda está aberto no PRD + melhorias de código/performance
 **🎙️ P4 — Voz**
 - [~] **V1. Voz streaming** → o item foi conferido linha a linha em 23/09/2026 e está em três pedaços, não um:
   - [x] **Reunião com buffer contínuo** → ✅ JÁ RESOLVIDO. `ContinuousRecorder` (`lib/voice/capture.ts`) grava a reunião inteira num blob só e a transcrição final roda sobre ele. As janelas de 8s eram da PRÉVIA ao vivo, que hoje é Web Speech no aparelho ou Gemini Live. **Nada de áudio é perdido.**
-  - [ ] **`silero-vad` no lugar do VAD por energia** → hoje é `rms > 0.02` em `lib/voice/engine.ts`. Corta quem fala baixo e é enganado por ventilador e televisão. O limiar ainda é CONSTANTE no código (viola §5.6).
-  - [ ] **TTS em pedaços** → hoje `new Audio(url)` só toca quando o arquivo inteiro chega. Numa resposta longa isso é silêncio de segundos antes da primeira palavra.
+  - [x] **`silero-vad` no lugar do VAD por energia** → ✅ feito em 23/09/2026. Três camadas: a decisão pura com histerese (`vad.ts`), a energia com piso de ruído APRENDIDO no ambiente, e o silero por cima quando o modelo carrega. Medido antes de escrever o cliente: silêncio 0,05, ruído branco forte 0,06 (a energia acharia que é fala), voz 0,78. Limiares viraram config, no grupo "Voz".
+  - [x] **TTS em pedaços** → ✅ JÁ EXISTIA (primeiro trecho curto, prefetch do seguinte). Eu havia dito o contrário por um grep raso. O que faltava era outra coisa, e foi feita: a voz esperava o `onFinish` do chat, então o silêncio era o tempo de o modelo escrever TUDO. Agora ela fala enquanto ele ainda escreve.
 - [x] **V2. STT premium AssemblyAI** — feito e testado (Universal-3.5-Pro); chave do Wesley no `.env`.
 
 **🔒 P5 — Segurança**
@@ -517,8 +517,35 @@ Levantamento completo pedido pelo dono, conferido **item a item no código**, n�
 memória. O que estava marcado como pendente e já existia foi corrigido acima; o que
 sobrou está aqui, em ordem de quanto atrapalha hoje.
 
-Baseline de testes no momento deste levantamento: **105 arquivos, 1.029 testes**,
+Baseline de testes (23/09/2026, fim do dia): **108 arquivos, 1.073 testes**,
 mais 34 em Python no `apps/perception`.
+
+## 📱 Voz no celular (levantado em 23/09/2026)
+
+O caminho mudou depois de descobrir duas coisas: o navegador do celular NUNCA
+vai gravar sem HTTPS, e o `apps/mobile` (Expo) já existe e não precisa de
+HTTPS, porque app nativo pede microfone ao sistema, não ao navegador.
+
+- [ ] **Testar o `apps/mobile` no Android do dono** (`npm start`, ler o QR com
+  o Expo Go). Destrava voz no celular HOJE, sem certificado nem conta. Depende
+  só de o dono ter tempo e o backend de pé.
+- [ ] **"Ei Órbita" no app.** Não funciona no Expo Go: o serviço só detecta a
+  palavra por WebSocket com áudio CRU, e o Expo Go grava em arquivo. Exige um
+  APK próprio (grátis no Android), o que é outro degrau de ferramenta: ou
+  Android SDK na máquina, ou a compilação na nuvem do Expo (conta grátis).
+  Sem isso o app é um controle remoto, não um satélite.
+- [ ] **`apps/mobile/lib/split-fala.ts` é CÓPIA da versão do web** e já ficou
+  para trás uma vez (não tem o `prontoParaFalar`, que faz falar enquanto o
+  modelo escreve). Duplicação que diverge sozinha.
+- [x] **O app estava quebrado contra o servidor** → ✅ corrigido em 23/09/2026:
+  o chat virou NDJSON e o app lia bytes crus, mostrando `{"t":"text",...}` na
+  tela. Ficou assim desde a mudança de formato, sem ninguém ver, porque o app
+  estava fora da suíte. Agora `apps/mobile/lib` roda no `vitest`.
+- [ ] **HTTPS na rede local** continua valendo, mas deixou de ser urgente para
+  a voz. Ainda é o que conserta o login pelo iPhone e o modo satélite PELO
+  NAVEGADOR (que está escrito e não dá para testar sem ele). `npm run dev:rede`
+  já sobe o Next em HTTPS; falta aceitar o certificado no aparelho, ou usar
+  Tailscale, ou um subdomínio próprio.
 
 ## 🔴 Bloqueia usar hoje
 

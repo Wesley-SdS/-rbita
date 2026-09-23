@@ -222,7 +222,7 @@ dono faz pelo assistente. Crescer o catálogo é o objetivo, não um efeito a co
 Antes de considerar qualquer tarefa concluída:
 
 1. **`tsc --noEmit` limpo nos dois apps (`apps/web` e `apps/api`)** e **`vitest run` verde** (§3; baseline
-   após a onda do segundo cérebro: 105 arquivos, 1.029 testes, mais 34 testes Python em `apps/perception`). Sem exceção.
+   após a onda de voz: 108 arquivos, 1.073 testes, mais 34 testes Python em `apps/perception`). Sem exceção.
 2. **Erro pré-existente conta.** Achou teste quebrado ou tipo vermelho que já estava assim?
    Corrija antes de fechar.
 3. **Código novo em `lib/` precisa de teste.** Caminho feliz + pelo menos um de erro. A suíte
@@ -387,6 +387,15 @@ Antes de considerar qualquer tarefa concluída:
   saem do `origem_id` da tarefa e do documento. Apagou, sumiu do mapa, sem passo
   de manutenção. Similaridade é aresta fraca e desligada por padrão, senão tudo
   se liga com tudo e deixa de ser mapa.
+- **O navegador só dá microfone em CONTEXTO SEGURO.** Em `http://192.168.x.x`,
+  `navigator.mediaDevices` não existe e o código estoura sem explicar. É a causa
+  de a voz nunca ter funcionado no celular e, quase certamente, do "no iPhone não
+  consigo criar conta". `contexto-seguro.ts` existe para a falha ser DITA;
+  `npm run dev:rede` sobe o Next em HTTPS. App nativo NÃO tem essa regra.
+- **`apps/mobile` é fácil de esquecer.** Está fora do workspace pnpm, tem npm
+  próprio, e ficou quebrado contra o servidor por meses sem ninguém ver (o chat
+  virou NDJSON e ele lia bytes crus). Agora `apps/mobile/lib` roda no `vitest`.
+  Ao mudar o formato de uma rota, pergunte quem mais a consome.
 - **Zumbi é coração parado, não id de instância.** O coração é do runner (relógio próprio), não do
   progresso do handler: uma chamada de LLM de minutos sem progresso não pode parecer trabalho
   morto. E o `tsx watch` deixa dois processos vivos por segundos, então "outra instância" não é
