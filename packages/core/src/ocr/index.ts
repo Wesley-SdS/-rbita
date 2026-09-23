@@ -64,6 +64,8 @@ interface Opcoes {
   nome: string;
   mime: string;
   progresso?: Progresso;
+  /** de quem é a conta quando a página precisa ser relida por um modelo de visão */
+  userId?: string;
 }
 
 export async function lerDocumento(bytes: Buffer, opcoes: Opcoes): Promise<DocumentoLido> {
@@ -99,7 +101,7 @@ export async function lerDocumento(bytes: Buffer, opcoes: Opcoes): Promise<Docum
     const decisao = precisaDeVisao({ texto, confianca: r?.confianca ?? 0, fracaoRuim: r?.fracaoRuim ?? 1 }, limites);
     if (decisao.precisa) {
       await opcoes.progresso?.(1, 2, "olhando a imagem com o modelo de visão");
-      const visao = await lerComVisao(bytes, opcoes.mime).catch((e) => {
+      const visao = await lerComVisao(bytes, opcoes.mime, opcoes.userId).catch((e) => {
         log.error("ocr.visao.falhou", { error: e instanceof Error ? e.message : String(e) });
         return null;
       });
@@ -162,7 +164,7 @@ export async function lerDocumento(bytes: Buffer, opcoes: Opcoes): Promise<Docum
     const decisao = precisaDeVisao({ texto, confianca: r?.confianca ?? 0, fracaoRuim: r?.fracaoRuim ?? 1 }, limites);
     if (decisao.precisa) {
       await opcoes.progresso?.(i, total, `página ${pagina.numero}: lendo com o modelo de visão`);
-      const visao = await lerComVisao(imagem).catch((e) => {
+      const visao = await lerComVisao(imagem, "image/png", opcoes.userId).catch((e) => {
         log.error("ocr.visao.falhou", { pagina: pagina.numero, error: e instanceof Error ? e.message : String(e) });
         return null;
       });

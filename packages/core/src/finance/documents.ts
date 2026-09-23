@@ -63,7 +63,7 @@ export async function importReceipt(userId: string, dataUrl: string, progresso?:
   await progresso?.(0, 3, "lendo o texto da imagem");
   let ocrText = "";
   try {
-    const lido = await lerDocumento(arquivo.bytes, { nome: "comprovante", mime: arquivo.mime, progresso });
+    const lido = await lerDocumento(arquivo.bytes, { nome: "comprovante", mime: arquivo.mime, progresso, userId });
     ocrText = lido.textos.join(QUEBRA).trim();
   } catch (e) {
     log.error("finance.receipt.ocr", { error: e instanceof Error ? e.message : String(e) });
@@ -155,7 +155,7 @@ export async function importStatement(userId: string, dataUrl: string, nome: str
   await progresso?.(0, 2, "lendo o arquivo");
   let text = "";
   try {
-    const lido = await lerDocumento(arquivo.bytes, { nome, mime: arquivo.mime, progresso });
+    const lido = await lerDocumento(arquivo.bytes, { nome, mime: arquivo.mime, progresso, userId });
     // a página vai marcada: um lançamento cortado entre blocos continua
     // rastreável, e o modelo não junta linhas de páginas diferentes sem saber
     text = lido.paginas.map((p) => `--- Página ${p.numero} ---${QUEBRA}${p.texto}`).join(QUEBRA + QUEBRA);

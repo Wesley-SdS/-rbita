@@ -60,10 +60,14 @@ function deBase64(b64: string): Int16Array {
  */
 const CAMINHO_WORKLET = "/audio/captura-pcm.js";
 
+/** De quanto em quanto tempo a conta parcial sobe. Dois minutos perde pouco e não vira enxurrada de requisição. */
+const INTERVALO_DO_RELATO = 120_000;
+
 interface RespostaSessao {
   provider?: string;
   url?: string;
   setup?: Record<string, unknown>;
+  model?: string;
   error?: string;
 }
 
@@ -81,6 +85,24 @@ export class GeminiLiveSession implements SessaoRealtime {
   private transcricaoDela = "";
   private transcricaoMinha = "";
   private fechando = false;
+  /**
+   * O que esta sessão já consumiu, por tipo de unidade.
+   *
+   * O áudio vai do navegador DIRETO ao Google: o servidor não vê a conversa
+   * passar e portanto não tem como contar. Quem conta é o provedor, no
+   * `usageMetadata` de cada resposta, e quem entrega essa conta para a casa é
+   * este cliente (POST /api/uso/sessao).
+   *
+   * Somamos CADA mensagem em vez de guardar a última. Medido contra a API em
+   * 22/09/2026, em três turnos seguidos: `responseTokenCount` veio 22, 29 e 25
+   * (por turno, não acumulado) e `promptTokenCount` veio 548, 588 e 635 — o
+   * prompt inteiro recobrado a cada turno, que é como esses provedores cobram.
+   * Guardar só o último valor perderia quase toda a conta.
+   */
+  private uso = { audioEntrada: 0, audioSaida: 0, textoEntrada: 0, textoSaida: 0, videoEntrada: 0 };
+  private modelo = "";
+  private relogioDoRelato: ReturnType<typeof setInterval> | null = null;
+  private comecouEm = 0;
 
   constructor(private cb: RealtimeCallbacks = {}) {}
 
@@ -110,6 +132,11 @@ export class GeminiLiveSession implements SessaoRealtime {
     });
 
     await this.ligarMicrofone();
+    this.modelo = sess.model ?? "";
+    this.comecouEm = Date.now();
+    // relato periódico: uma aba fechada no tranco (ou a máquina dormindo) não
+    // pode apagar uma hora de conversa da conta da casa
+    this.relogioDoRelato = setInterval(() => void this.relatarUso(), INTERVALO_DO_RELATO);
     this.cb.onState?.("listening");
   }
 
@@ -166,8 +193,16 @@ export class GeminiLiveSession implements SessaoRealtime {
         interrupted?: boolean;
       };
       toolCall?: { functionCalls?: Array<{ id?: string; name?: string; args?: unknown }> };
+      usageMetadata?: {
+        promptTokenCount?: number;
+        responseTokenCount?: number;
+        promptTokensDetails?: Array<{ modality?: string; tokenCount?: number }>;
+        responseTokensDetails?: Array<{ modality?: string; tokenCount?: number }>;
+      };
     };
     try { m = JSON.parse(texto); } catch { return; }
+
+    if (m.usageMetadata) this.somarUso(m.usageMetadata);
 
     const sc = m.serverContent;
     // barge-in: a pessoa voltou a falar por cima, então o que já foi agendado
@@ -263,8 +298,70 @@ export class GeminiLiveSession implements SessaoRealtime {
     this.cb.onToolCall?.(nome, saida);
   }
 
+  /**
+   * Soma o que o Google cobrou por esta resposta.
+   *
+   * O detalhamento por modalidade é o que separa áudio (US$ 3/M na entrada) de
+   * texto (US$ 0,75/M) e de imagem — preços diferentes na mesma conversa. Sem
+   * ele a sessão viraria um número só, e o dono não saberia se foi a câmera
+   * aberta que encareceu a hora ou a conversa em si.
+   */
+  private somarUso(u: {
+    promptTokenCount?: number;
+    responseTokenCount?: number;
+    promptTokensDetails?: Array<{ modality?: string; tokenCount?: number }>;
+    responseTokensDetails?: Array<{ modality?: string; tokenCount?: number }>;
+  }) {
+    const entrada = u.promptTokensDetails ?? [];
+    const saida = u.responseTokensDetails ?? [];
+
+    for (const d of entrada) {
+      const n = d.tokenCount ?? 0;
+      if (d.modality === "AUDIO") this.uso.audioEntrada += n;
+      else if (d.modality === "IMAGE" || d.modality === "VIDEO") this.uso.videoEntrada += n;
+      else this.uso.textoEntrada += n;
+    }
+    for (const d of saida) {
+      const n = d.tokenCount ?? 0;
+      if (d.modality === "AUDIO") this.uso.audioSaida += n;
+      else this.uso.textoSaida += n;
+    }
+
+    // provedor que não detalhar não pode sumir da conta: o total vira a
+    // estimativa mais cara possível (tudo áudio), para o gasto nunca parecer
+    // menor do que foi
+    if (!entrada.length && u.promptTokenCount) this.uso.audioEntrada += u.promptTokenCount;
+    if (!saida.length && u.responseTokenCount) this.uso.audioSaida += u.responseTokenCount;
+  }
+
+  /** Entrega o acumulado e zera. Zerar é o que torna o relato periódico seguro contra contar duas vezes. */
+  private async relatarUso(): Promise<void> {
+    const uso = this.uso;
+    if (!uso.audioEntrada && !uso.audioSaida && !uso.textoEntrada && !uso.textoSaida && !uso.videoEntrada) return;
+    this.uso = { audioEntrada: 0, audioSaida: 0, textoEntrada: 0, textoSaida: 0, videoEntrada: 0 };
+    try {
+      await fetch("/api/uso/sessao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true, // a aba pode estar fechando; sem isto o último relato morre com ela
+        body: JSON.stringify({
+          fluxo: "voz_tempo_real",
+          provedor: "gemini",
+          modelo: this.modelo || "gemini-live",
+          ...uso,
+          duracaoMs: this.comecouEm ? Date.now() - this.comecouEm : undefined,
+        }),
+      });
+    } catch {
+      // registrar gasto nunca pode atrapalhar a conversa (mesma regra do registrarUso no servidor)
+    }
+  }
+
   stop() {
     this.fechando = true;
+    if (this.relogioDoRelato) clearInterval(this.relogioDoRelato);
+    this.relogioDoRelato = null;
+    void this.relatarUso();
     this.pararFala();
     this.no?.port.close();
     this.no?.disconnect();

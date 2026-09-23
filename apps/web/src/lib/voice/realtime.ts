@@ -30,6 +30,16 @@ export class RealtimeSession implements SessaoRealtime {
   private dc: RTCDataChannel | null = null;
   /** call_id → nome da função, preenchido quando o item aparece; os argumentos chegam depois, em partes. */
   private pendingCalls = new Map<string, string>();
+  /**
+   * A conta desta sessão. O áudio vai por WebRTC direto para a OpenAI, então
+   * o servidor não vê nada passar: quem conta é o `response.done`, que traz o
+   * `usage` de cada resposta, e quem entrega é este cliente.
+   *
+   * Aqui o `usage` é por RESPOSTA (não acumulado), então soma-se cada evento.
+   */
+  private uso = { audioEntrada: 0, audioSaida: 0, textoEntrada: 0, textoSaida: 0 };
+  private modelo = "";
+  private comecouEm = 0;
 
   constructor(private cb: RealtimeCallbacks = {}) {}
 
@@ -39,6 +49,8 @@ export class RealtimeSession implements SessaoRealtime {
     // 1) token efêmero do nosso servidor (a chave real fica no backend)
     const sess = await fetch("/api/realtime/session", { method: "POST" }).then((r) => r.json());
     if (!sess.clientSecret) throw new Error(sess.error ?? "sessão indisponível");
+    this.modelo = sess.model ?? "";
+    this.comecouEm = Date.now();
 
     // 2) peer connection + áudio de saída
     const pc = new RTCPeerConnection();
@@ -83,6 +95,14 @@ export class RealtimeSession implements SessaoRealtime {
       call_id?: string;
       arguments?: string;
       item?: { type?: string; call_id?: string; name?: string };
+      response?: {
+        usage?: {
+          input_token_details?: { audio_tokens?: number; text_tokens?: number };
+          output_token_details?: { audio_tokens?: number; text_tokens?: number };
+          input_tokens?: number;
+          output_tokens?: number;
+        };
+      };
     };
     try { ev = JSON.parse(raw); } catch { return; }
     const t = ev.type ?? "";
@@ -100,6 +120,8 @@ export class RealtimeSession implements SessaoRealtime {
       const name = this.pendingCalls.get(ev.call_id);
       this.pendingCalls.delete(ev.call_id);
       if (name) void this.executeFunctionCall(ev.call_id, name, ev.arguments ?? "{}");
+    } else if (t === "response.done") {
+      this.somarUso(ev.response?.usage);
     } else if (t === "error") {
       this.cb.onError?.("erro na sessão realtime");
     }
@@ -127,7 +149,55 @@ export class RealtimeSession implements SessaoRealtime {
     this.cb.onToolCall?.(name, output);
   }
 
+  /** Soma o que a OpenAI cobrou por esta resposta, separando áudio de texto (US$ 32/M contra US$ 4/M). */
+  private somarUso(u?: {
+    input_token_details?: { audio_tokens?: number; text_tokens?: number };
+    output_token_details?: { audio_tokens?: number; text_tokens?: number };
+    input_tokens?: number;
+    output_tokens?: number;
+  }) {
+    if (!u) return;
+    const ent = u.input_token_details;
+    const sai = u.output_token_details;
+    if (ent) {
+      this.uso.audioEntrada += ent.audio_tokens ?? 0;
+      this.uso.textoEntrada += ent.text_tokens ?? 0;
+    } else if (u.input_tokens) {
+      // sem detalhamento, assume o mais caro: nunca parecer mais barato do que foi
+      this.uso.audioEntrada += u.input_tokens;
+    }
+    if (sai) {
+      this.uso.audioSaida += sai.audio_tokens ?? 0;
+      this.uso.textoSaida += sai.text_tokens ?? 0;
+    } else if (u.output_tokens) {
+      this.uso.audioSaida += u.output_tokens;
+    }
+  }
+
+  private async relatarUso(): Promise<void> {
+    const uso = this.uso;
+    if (!uso.audioEntrada && !uso.audioSaida && !uso.textoEntrada && !uso.textoSaida) return;
+    this.uso = { audioEntrada: 0, audioSaida: 0, textoEntrada: 0, textoSaida: 0 };
+    try {
+      await fetch("/api/uso/sessao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          fluxo: "voz_tempo_real",
+          provedor: "openai",
+          modelo: this.modelo || "gpt-realtime",
+          ...uso,
+          duracaoMs: this.comecouEm ? Date.now() - this.comecouEm : undefined,
+        }),
+      });
+    } catch {
+      // a conta não pode derrubar a conversa
+    }
+  }
+
   stop() {
+    void this.relatarUso();
     this.dc?.close();
     this.pc?.getSenders().forEach((s) => s.track?.stop());
     this.pc?.close();

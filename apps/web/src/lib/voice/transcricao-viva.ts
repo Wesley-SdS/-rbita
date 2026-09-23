@@ -52,6 +52,19 @@ export class TranscricaoViva {
   /** trechos já assentados; o parcial do trecho em curso vai depois deles */
   private firmado = "";
   private fechando = false;
+  /**
+   * A conta da prévia ao vivo.
+   *
+   * Este modelo é cobrado por SEGUNDO de áudio (~US$ 0,54/hora), não por
+   * token, e o áudio vai do navegador direto ao Google. Então o que a casa
+   * precisa saber é quanto tempo a sessão ficou aberta, e é isso que sobe
+   * para /api/uso/sessao. Uma reunião de duas horas custa mais do que a
+   * transcrição final dela: sem esta linha, isso não apareceria em lugar
+   * nenhum.
+   */
+  private modelo = "";
+  private relatadoAte = 0;
+  private relogioDoRelato: ReturnType<typeof setInterval> | null = null;
 
   constructor(private cb: TranscricaoVivaCallbacks) {}
 
@@ -61,8 +74,10 @@ export class TranscricaoViva {
 
   /** `stream` é o MESMO da gravação: microfone mais áudio da tela, já misturados. */
   async iniciar(stream: MediaStream): Promise<void> {
-    const sess: { url?: string; setup?: Record<string, unknown>; error?: string } = await fetch("/api/meeting/live", { method: "POST" }).then((r) => r.json());
+    const sess: { url?: string; setup?: Record<string, unknown>; model?: string; error?: string } = await fetch("/api/meeting/live", { method: "POST" }).then((r) => r.json());
     if (!sess.url || !sess.setup) throw new Error(sess.error ?? "transcrição ao vivo indisponível");
+    this.modelo = sess.model ?? "gemini-transcribe-live";
+    this.relatadoAte = Date.now();
 
     await new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(sess.url!);
@@ -74,9 +89,18 @@ export class TranscricaoViva {
       ws.onerror = () => reject(new Error("não consegui abrir a transcrição ao vivo"));
       ws.onmessage = (e) => void this.receber(e.data);
       ws.onclose = () => {
-        if (!this.fechando) this.cb.aoFalhar?.("A transcrição ao vivo caiu. A gravação continua, e o texto final não depende dela.");
+        if (!this.fechando) {
+          // caiu sozinha: o que já foi consumido precisa entrar na conta agora,
+          // senão some junto com a sessão
+          void this.relatarUso();
+          this.cb.aoFalhar?.("A transcrição ao vivo caiu. A gravação continua, e o texto final não depende dela.");
+        }
       };
     });
+
+    // relato periódico: uma reunião de duas horas que termine com a aba
+    // fechada no tranco não pode sumir inteira da conta
+    this.relogioDoRelato = setInterval(() => void this.relatarUso(), 120_000);
 
     const ctx = new AudioContext({ sampleRate: TAXA });
     this.ctx = ctx;
@@ -132,8 +156,29 @@ export class TranscricaoViva {
     }
   }
 
+  /** Sobe os segundos consumidos desde o último relato. Só o delta, para não contar duas vezes. */
+  private async relatarUso(): Promise<void> {
+    if (!this.relatadoAte) return;
+    const segundos = Math.round((Date.now() - this.relatadoAte) / 1000);
+    this.relatadoAte = Date.now();
+    if (segundos <= 0) return;
+    try {
+      await fetch("/api/uso/sessao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({ fluxo: "transcricao_viva", provedor: "gemini", modelo: this.modelo, segundos }),
+      });
+    } catch {
+      // a conta nunca atrapalha a reunião
+    }
+  }
+
   parar(): void {
     this.fechando = true;
+    if (this.relogioDoRelato) clearInterval(this.relogioDoRelato);
+    this.relogioDoRelato = null;
+    void this.relatarUso();
     this.no?.port.close();
     this.no?.disconnect();
     void this.ctx?.close();

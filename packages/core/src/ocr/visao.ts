@@ -2,6 +2,7 @@ import { generateText } from "ai";
 import { resolveVisionModel } from "@orbita/llm";
 import { settings } from "../settings";
 import { log } from "../observability/logger";
+import { FLUXO, registrarUso } from "../usage/registrar";
 
 /**
  * O MODELO DE VISÃO LÊ A PÁGINA QUE O OCR LEU MAL.
@@ -44,7 +45,7 @@ export function ondeLer(provider: VisaoProvider, temChave: boolean): "local" | "
   return temChave ? "nuvem" : "local";
 }
 
-export async function lerComVisao(imagem: Buffer, mime = "image/png"): Promise<ResultadoVisao | null> {
+export async function lerComVisao(imagem: Buffer, mime = "image/png", userId?: string): Promise<ResultadoVisao | null> {
   const cfg = await settings.getMany(["ocr.visionProvider", "vision.localModel", "vision.cloudModel", "ocr.visionMaxTokens"]);
   const onde = ondeLer(cfg["ocr.visionProvider"] as VisaoProvider, temChaveDeNuvem());
   if (!onde) return null;
@@ -56,11 +57,24 @@ export async function lerComVisao(imagem: Buffer, mime = "image/png"): Promise<R
       : { local: cfg["vision.localModel"], cloud: cfg["vision.cloudModel"] },
   );
   const t0 = Date.now();
-  const { text } = await generateText({
+  const { text, usage } = await generateText({
     model,
     maxOutputTokens: cfg["ocr.visionMaxTokens"],
     messages: [{ role: "user", content: [{ type: "text", text: INSTRUCAO }, { type: "image", image: dataUrl }] }],
   });
   log.info("ocr.visao", { onde, ms: Date.now() - t0, chars: text.trim().length });
+  // Uma página relida por visão custa dezenas de vezes o OCR local. Um PDF de
+  // 40 páginas mal digitalizado vira 40 chamadas de nuvem sem ninguém pedir,
+  // e era exatamente isso que não deixava rastro na conta.
+  if (userId) {
+    registrarUso({
+      userId,
+      fluxo: FLUXO.ocr,
+      referencia: onde,
+      servico: onde === "local" ? "visao-local" : "visao-gemini",
+      consumo: { unidade: "tokens", entrada: usage?.inputTokens ?? 0, saida: usage?.outputTokens ?? 0 },
+      duracaoMs: Date.now() - t0,
+    });
+  }
   return { texto: text.trim(), onde };
 }

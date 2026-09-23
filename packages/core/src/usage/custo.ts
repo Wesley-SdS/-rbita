@@ -58,6 +58,27 @@ export const PRECO_SERVICOS: Record<string, { preco: PrecoUnitario; cobranca: Co
   "visao-gemini": { preco: { entrada: 0.0003, saida: 0.0025 }, cobranca: "uso", unidade: "tokens" },
   "visao-gateway": { preco: { entrada: 0.00125, saida: 0.01 }, cobranca: "uso", unidade: "tokens" },
   "visao-local": { preco: {}, cobranca: "local", unidade: "tokens" },
+
+  // --- Voz em tempo real ---------------------------------------------------
+  // O áudio de uma sessão ao vivo NÃO é cobrado como token de texto: o
+  // provedor tem tarifa própria, bem mais cara, e é ela que domina a conta de
+  // quem usa voz todo dia. Um minuto de conversa no `gpt-realtime-2.1` custa
+  // mais de tres vezes o mesmo minuto no Gemini Live, e essa diferença só
+  // aparece na tela se o áudio tiver preço separado aqui.
+  "gemini-live-audio": { preco: { entrada: 0.003, saida: 0.012 }, cobranca: "uso", unidade: "tokens" },
+  "gemini-live-texto": { preco: { entrada: 0.00075, saida: 0.0045 }, cobranca: "uso", unidade: "tokens" },
+  // o vídeo entra pela tarifa de entrada comum (não pela de áudio): é a
+  // diferença entre ~US$ 0,70 e ~US$ 2,80 por hora de câmera aberta
+  "gemini-live-video": { preco: { entrada: 0.00075 }, cobranca: "uso", unidade: "tokens" },
+  "openai-realtime-audio": { preco: { entrada: 0.032, saida: 0.064 }, cobranca: "uso", unidade: "tokens" },
+  "openai-realtime-mini-audio": { preco: { entrada: 0.01, saida: 0.02 }, cobranca: "uso", unidade: "tokens" },
+  "openai-realtime-texto": { preco: { entrada: 0.004, saida: 0.024 }, cobranca: "uso", unidade: "tokens" },
+  // transcrição ao vivo do Gemini: cobrada por SEGUNDO de áudio, não por token
+  // (US$ 0,00015/s = US$ 0,54/hora, mais caro que a AssemblyAI por hora fechada)
+  "gemini-transcribe-live": { preco: { entrada: 0.15 }, cobranca: "uso", unidade: "segundos" },
+  // Edge TTS é a voz padrão da Órbita e não custa nada; fica registrada assim
+  // mesmo, senão "de graça" vira indistinguível de "não foi medido"
+  "edge-tts": { preco: {}, cobranca: "gratis", unidade: "caracteres" },
 };
 
 /** Como o provedor cobra, quando é um modelo do catálogo. */

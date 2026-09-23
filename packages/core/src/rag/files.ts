@@ -42,6 +42,7 @@ export async function indexFile(userId: string, dataUrl: string, nome: string, p
   const lido = await lerDocumento(arquivo.bytes, {
     nome,
     mime: arquivo.mime,
+    userId,
     // a leitura é a etapa 1 de 3; ela reporta o progresso por página dentro dela
     progresso: progresso ? async (feito, total, passo) => progresso(feito / Math.max(1, total ?? 1), 3, passo) : undefined,
   });

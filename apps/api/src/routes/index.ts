@@ -34,6 +34,7 @@ import * as voiceConfig from "./voice-config";
 import * as realtimeConfig from "./realtime-config";
 import * as realtimeSession from "./realtime-session";
 import * as realtimeTool from "./realtime-tool";
+import * as usageSession from "./usage-session";
 import * as vision from "./vision";
 import * as meetingSummarize from "./meeting-summarize";
 import * as meetingSpeakers from "./meeting-speakers";
@@ -158,5 +159,6 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/realtime/config", realtimeConfig),
   webRoute("api/realtime/session", realtimeSession),
   webRoute("api/realtime/tool", realtimeTool),
+  webRoute("api/uso/sessao", usageSession),
   webRoute("api/health", health),
 ];
