@@ -115,26 +115,29 @@ Levantamento do que ainda está aberto no PRD + melhorias de código/performance
 - [~] **PF4. `cacheComponents` (Next 16)** → **AVALIADO e NÃO adotado**: é breaking (exige envolver todo dado dinâmico em Suspense/`use cache`), o app é self-hosted single-instance (sem CDN pra amortizar) e o ganho real viria do `next build` (já feito). Custo/risco > ganho agora. Reavaliar se migrar p/ deploy com CDN.
 
 **🧠 P3 — RAG / IA (nível Adalink)**
-- [ ] **R1. RAG <1s: embedding de query em API de nuvem** (Gemini text-embedding-004 / OpenAI, 768d = bate com a coluna; re-embedar corpus). Precisa de chave.
-- [ ] **R2. Hybrid BM25 + vetor (RRF) + rerank cross-encoder** (Cohere) time-boxed.
+- [x] **R1. Embedding de query em nuvem** → ✅ `embeddings.provider` (auto · sempre local · sempre nuvem), aplicado por requisição em `packages/llm/src/embeddings.ts`. Trocar de provedor invalida os vetores gravados e a tela avisa para reindexar. _(Verificado 23/09/2026.)_
+- [x] **R2. Hybrid BM25 + vetor (RRF) + rerank** → ✅ `fundirRRF` em `rag/retrieve.ts` (cosseno e `ts_rank_cd` não se somam, daí o RRF) + `rag/rerank.ts` com três caminhos escolhidos pela tela (`rag.rerank`), incluindo Cohere. _(Verificado 23/09/2026.)_
 - [x] **R3. Circuit breaker por provedor** → ✅ `failover.ts`: 3 falhas consecutivas abrem o provedor por 30s (pulado na cadeia; se todos abertos, mantém a cadeia). `/api/chat` registra sucesso/falha por tentativa. Typecheck ok. (Failover cross-model já existia.)
 - [x] **R4. Desacoplar o TTFT do RAG** → ✅ **FEITO (2026-07-20), versão segura sem regressão.** Como `buscar_conhecimento` JÁ é uma tool (RAG on-demand), fiz: (1) **cache de resultado de busca 60s** em `lib/rag/retrieve.ts` (Map LRU cap 200, chave `userId:k:query` normalizada) — dedup pré-injeção+tool no mesmo turno, retries e failover; (2) **gate conversacional** em `api/chat/route.ts`: pula a pré-injeção bloqueante para saudações/agradecimentos curtos SEM indício pessoal (regex `personalHint`/`conversational`), então o stream começa sem esperar embedding+busca; a tool cobre qualquer miss (rede de segurança). Núcleo do prompt/segurança intactos. **VERIFICADO**: `tsc` exit 0, **37/37 testes** (corrigi de quebra 1 teste STALE do `compose.test.ts` — o orçamento virou tokens no PF3, ajustei 120→40), Playwright: query conversacional responde limpa em pt-BR e query de conhecimento **aciona a tool `buscar_conhecimento`** (prova a rede de segurança), 0 erros. ⚠️ **ollama estava DOWN** → o efeito runtime do cache/gate (e a busca em si) não é totalmente mensurável agora; ganho é modesto por design (RAG já otimizado antes: paralelo+timeout 3,5s+keep_alive+cache de embedding). Alavanca dominante de fluidez segue sendo o **build de produção**.
-- [ ] **R5. Pipeline OCR completo** (Tesseract + fallback visão por confiança, dedup SHA-256, cross-modal, chunking tabular).
+- [x] **R5. Pipeline OCR completo** → ✅ `packages/core/src/ocr/` (`tesseract.ts`, `visao.ts`, `tabela.ts`, `pdf.ts`), dedup por SHA-256 e três gatilhos configuráveis para o fallback de visão. _(Verificado 23/09/2026.)_
 
 **🎙️ P4 — Voz**
-- [ ] **V1. Voz streaming**: STT parcial ao vivo + TTS em chunks + `silero-vad` (endpointing) no lugar do VAD por energia; reunião com buffer contínuo (hoje perde áudio entre janelas de 8s).
+- [~] **V1. Voz streaming** → o item foi conferido linha a linha em 23/09/2026 e está em três pedaços, não um:
+  - [x] **Reunião com buffer contínuo** → ✅ JÁ RESOLVIDO. `ContinuousRecorder` (`lib/voice/capture.ts`) grava a reunião inteira num blob só e a transcrição final roda sobre ele. As janelas de 8s eram da PRÉVIA ao vivo, que hoje é Web Speech no aparelho ou Gemini Live. **Nada de áudio é perdido.**
+  - [ ] **`silero-vad` no lugar do VAD por energia** → hoje é `rms > 0.02` em `lib/voice/engine.ts`. Corta quem fala baixo e é enganado por ventilador e televisão. O limiar ainda é CONSTANTE no código (viola §5.6).
+  - [ ] **TTS em pedaços** → hoje `new Audio(url)` só toca quando o arquivo inteiro chega. Numa resposta longa isso é silêncio de segundos antes da primeira palavra.
 - [x] **V2. STT premium AssemblyAI** — feito e testado (Universal-3.5-Pro); chave do Wesley no `.env`.
 
 **🔒 P5 — Segurança**
-- [~] **S1. Headers de segurança** → ✅ headers seguros no `next.config` (X-Content-Type-Options nosniff, X-Frame-Options SAMEORIGIN, Referrer-Policy, X-DNS-Prefetch-Control). **Verificado** (curl). **Falta**: CSP estrito + HSTS (exigem mapear todas as conexões — ollama/voz-ws/AssemblyAI/data:/blob: — e HTTPS real; alto risco de quebrar, fazer com teste dedicado). Origin nas rotas mutantes já coberto pelo Better Auth (trustedOrigins) + cookie SameSite.
+- [~] **S1. Headers de segurança** → ✅ headers seguros no `next.config` (X-Content-Type-Options nosniff, X-Frame-Options SAMEORIGIN, Referrer-Policy, X-DNS-Prefetch-Control). **Verificado** (curl). **CSP e HSTS FEITOS** (`apps/web/src/lib/security/headers.ts`, com teste que trava `blob:` fora do `script-src`). _(Verificado 23/09/2026.)_ Origin nas rotas mutantes já coberto pelo Better Auth (trustedOrigins) + cookie SameSite.
 
 **🔌 P6 — Conectores / integrações (dependem de chaves)**
-- [ ] **I1. Plugar OAuth** Google/Notion/Slack/WhatsApp + login Google/GitHub + `RESEND_API_KEY` p/ magic link por email real.
+- [~] **I1. Plugar OAuth** → o CÓDIGO está pronto para Google, Microsoft (Outlook+Teams), Jira, Notion e Slack, com multi-conta. Falta só a CREDENCIAL: os cinco aparecem `configured=false`. Cada um acende sozinho quando o par `*_CLIENT_ID`/`*_CLIENT_SECRET` entra no `.env` (ver `.env.example`). WhatsApp por usuário continua dependendo do Embedded Signup da Meta. `RESEND_API_KEY` para magic link continua pendente.
 - [ ] **I2. Mobile OAuth social nativo** (deep-link p/ capturar a sessão no app).
 
 **☁️ P7 — Deploy na nuvem** (guia completo em [`DEPLOY.md`](./DEPLOY.md))
 - [x] **Provedores de nuvem prontos** (Groq/Gemini/OpenAI/Cohere) + Sonnet 5 default + web responsivo (foco no celular) + projeto no GitHub.
-- [ ] **R1 (embedding de nuvem)** é o bloqueador do RAG na Vercel (sem Ollama lá). Chat/finanças/tarefas já sobem sem ele.
+- [x] **R1 (embedding de nuvem)** deixou de ser bloqueador: `embeddings.provider` resolve. _(Verificado 23/09/2026.)_
 - [ ] **Provedor Anthropic por API key** (o token Max OAuth não pode em servidor público — ToS).
 - [ ] **Serviço de voz hospedado** (Render/Fly) p/ wake word/STT/TTS na nuvem, ou versão cloud sem voz.
 - [ ] **Postgres gerenciado** (Neon/Supabase com pgvector) + migrações apontando pra ele.
@@ -505,3 +508,81 @@ verdade (migração `0029`), junto com o resto da validação da Fase 2.
   sozinha (com desfazer); confiança média pergunta no painel "Memórias a confirmar"; assunto
   sensível (saúde, dinheiro, terceiros, relacionamento) SEMPRE pergunta. Candidato parecido com
   memória existente atualiza em vez de duplicar. Tudo auditável, editável e apagável pela tela.
+
+---
+
+# 📋 BACKLOG VERIFICADO — 23/09/2026
+
+Levantamento completo pedido pelo dono, conferido **item a item no código**, não de
+memória. O que estava marcado como pendente e já existia foi corrigido acima; o que
+sobrou está aqui, em ordem de quanto atrapalha hoje.
+
+Baseline de testes no momento deste levantamento: **105 arquivos, 1.029 testes**,
+mais 34 em Python no `apps/perception`.
+
+## 🔴 Bloqueia usar hoje
+
+- [ ] **Nenhum conector tem credencial.** Google, Microsoft, Atlassian, Notion e Slack
+  aparecem `configured=false`. O código está pronto (multi-conta, Outlook, Jira, gate
+  humano); falta o par de chaves no `.env`. É a ação de MAIOR retorno da lista, e é do
+  dono, não de dev: destrava e-mail, agenda, Jira e Teams de uma vez.
+- [ ] **No iPhone não dá para criar conta.** Signup falha no Safari sobre HTTP/IP.
+  Provavelmente cookie de sessão (Secure/SameSite). Nunca investigado.
+- [ ] **O mapa do conhecimento está quase vazio.** Não é defeito: das 31 conversas do
+  dono, só 2 têm conteúdo suficiente para virar base. Enche com uso real, e adensa de
+  verdade quando houver reunião gravada (reunião gera resumo, tarefas e liga pessoas).
+
+## 🟠 Começado e parado pela metade
+
+- [ ] **Vídeo dentro da sessão do Gemini Live.** As configs existem
+  (`realtime.videoFps`, `realtime.videoLargura`) e o cliente já contabiliza tokens de
+  vídeo, mas **nenhum quadro é enviado**. É a "palestra assistida em tempo real".
+  Custo medido: US$ 0,70 a 1,40 por hora de câmera aberta.
+- [ ] **Quadros do navegador para o `apps/perception`.** Gestos e rosto a 30fps, local
+  e sem custo. O MediaPipe já está no serviço esperando; nada envia.
+
+## 🎙️ Voz (o maior buraco técnico)
+
+- [ ] **`silero-vad` no lugar do VAD por energia.** Ver V1 acima.
+- [ ] **TTS em pedaços.** Ver V1 acima.
+- [ ] **Satélites de voz por cômodo** (Onda 6 do briefing). Não existe nada. Hoje a
+  Órbita só escuta onde há um navegador aberto. Depende de: identidade de dispositivo
+  por cômodo (JÁ EXISTE, tabela `device` e `ToolContext.origin`), wake word rodando
+  fora do navegador, e roteamento da resposta para o alto-falante certo.
+
+## 📷 Câmeras
+
+- [ ] **Frigate e detecção contínua** (Onda 5 do briefing). Não existe nada. Hoje é
+  câmera sob demanda: a Órbita olha quando alguém pede. Falta evento contínuo
+  (movimento, pessoa, objeto) alimentando o event bus.
+
+## 🔒 Segurança e operação
+
+- [ ] **Escopo do Google é total.** `https://mail.google.com/` permite apagar a caixa
+  inteira. Vale reduzir para o mínimo antes de conectar de verdade.
+- [ ] **Trilha de auditoria incompleta.** `action_queue` cobre o que foi aprovado;
+  leitura, memória e MCP não deixam rastro. Identidade já tem trilha própria
+  (`identity_audit`).
+- [ ] **Rate limit em memória** (`packages/core/src/ratelimit.ts`). Só passa a importar
+  se existir um segundo processo.
+- [ ] **Lentidão intermitente de 40s** (item antigo). Provavelmente resolvida pelo
+  failover corrigido em 22/09, mas nunca foi confirmada com medição.
+
+## ☁️ Só para pôr fora de casa
+
+- [ ] **Anthropic por API key.** O token do Claude Code não pode em servidor público
+  (termos de uso). Irrelevante rodando na máquina do dono.
+- [ ] **Serviço de voz hospedado**, **Postgres gerenciado**, **OAuth social nativo no
+  mobile** (deep link), **WhatsApp por usuário** (Embedded Signup da Meta).
+
+## ✅ Encerrado nesta leva (22 e 23/09/2026)
+
+- [x] Toda chamada paga registrada, inclusive voz em tempo real, transcrição ao vivo,
+  TTS, OCR por visão e visão de tela. Tela de Gastos por fluxo.
+- [x] Tarefas: editar, anotar, datar, anexar imagem e **saber de onde veio**.
+- [x] Conectores multi-conta (ler em todas as contas, escrever em uma), Outlook
+  (e-mail e agenda) e Jira.
+- [x] Compromisso de reunião virando tarefa, com vínculo de volta à reunião.
+- [x] Conversa virando base de conhecimento consultável.
+- [x] Mapa do conhecimento em 3D, com vínculo real e apagar de verdade.
+- [x] As 69 tools passam a ter teste de `execute` (eram 21 sem nenhum).
