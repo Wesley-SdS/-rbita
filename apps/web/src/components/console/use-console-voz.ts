@@ -57,7 +57,11 @@ export function useConsoleDeVoz(opcoes: { modelKey?: string } = {}) {
     enviarRef.current = chat.sendMessage;
   });
   useEffect(() => {
-    pontesVoz.current = { handleAssistantResponse: voz.handleAssistantResponse, stopSpeaking: voz.stopSpeaking };
+    pontesVoz.current = {
+      handleAssistantResponse: voz.handleAssistantResponse,
+      iniciarFalaEmFluxo: voz.iniciarFalaEmFluxo,
+      stopSpeaking: voz.stopSpeaking,
+    };
   });
 
   /** Solta o microfone e cala a boca. Usado quando outra superfície assume a voz. */

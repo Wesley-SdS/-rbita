@@ -63,6 +63,51 @@ export function splitFala(text: string): string[] {
   return out.filter(Boolean);
 }
 
+/**
+ * O que já dá para falar do que o modelo escreveu ATÉ AGORA.
+ *
+ * A fala esperava o `onFinish` do chat, ou seja, o modelo terminar a resposta
+ * inteira. Com um modelo lento ou uma resposta longa, isso é o tempo de
+ * escrever tudo SOMADO ao tempo de sintetizar o começo, e a Órbita passa
+ * segundos calada parecendo travada.
+ *
+ * A regra: só é seguro falar até o ÚLTIMO fim de frase do que chegou. O que
+ * vem depois dele ainda pode crescer ("Vou" pode virar "Vou mandar amanhã"),
+ * e falar isso seria cortar a frase no meio.
+ *
+ * Trecho curto demais também espera: um pedido de três palavras gasta a ida e
+ * volta inteira para ganhar meio segundo de áudio. No FIM da resposta, o que
+ * sobrou sai de qualquer tamanho, senão "Sim." nunca seria falado.
+ */
+const QUEBRA = String.fromCharCode(10);
+
+export function prontoParaFalar(buffer: string, jaFalou: boolean, fim = false): { prontos: string[]; resto: string } {
+  if (fim) {
+    const t = buffer.trim();
+    return { prontos: t ? splitFala(t) : [], resto: "" };
+  }
+
+  // o último fim de frase é a fronteira do que não muda mais
+  const corte = Math.max(buffer.lastIndexOf("."), buffer.lastIndexOf("!"), buffer.lastIndexOf("?"), buffer.lastIndexOf("…"), buffer.lastIndexOf(QUEBRA));
+  if (corte < 0) return { prontos: [], resto: buffer };
+
+  const fechado = buffer.slice(0, corte + 1);
+  // o alvo do primeiro trecho é menor de propósito: é ele que manda na latência
+  if (fechado.trim().length < (jaFalou ? MIN_CH : PRIMEIRO_CH)) return { prontos: [], resto: buffer };
+
+  return { prontos: splitFala(fechado.trim()), resto: buffer.slice(corte + 1) };
+}
+
+/** O controle de uma fala que acompanha o texto chegando. */
+export interface FluxoDeFala {
+  /** o texto acumulado ATÉ AGORA (o chamador manda tudo; a fala descobre o que é novo) */
+  alimentar(acumulado: string): void;
+  /** o modelo terminou: solta o que sobrou e devolve a promessa do fim da fala */
+  fim(): Promise<void>;
+  /** já entrou alguma coisa na fila de fala */
+  readonly falou: boolean;
+}
+
 export class LocalTTS {
   private audio: HTMLAudioElement | null = null;
   // guardados para que stop() (barge-in) também finalize a fala em curso:
@@ -153,6 +198,106 @@ export class LocalTTS {
       }
       for (const u of urls) URL.revokeObjectURL(u);
     }
+  }
+
+  /**
+   * Começa a falar ENQUANTO o modelo ainda escreve.
+   *
+   * O chamador entrega o texto acumulado a cada token (`alimentar`), e esta
+   * fala vai soltando o que já está fechado por fim de frase. O ganho não é o
+   * corte em pedaços, que já existia: é não esperar o `onFinish` do chat. Numa
+   * resposta longa, isso troca "tempo de escrever tudo mais sintetizar o
+   * começo" por "tempo de escrever a primeira frase".
+   *
+   * Mesmo prefetch de profundidade 1 do `speak`: enquanto um trecho toca, o
+   * seguinte já está sendo sintetizado.
+   */
+  iniciarFluxo(opts?: { onStart?: () => void; onEnd?: () => void }): FluxoDeFala {
+    this.stop();
+    const ctrl = new AbortController();
+    this.abort = ctrl;
+
+    const fila: string[] = [];
+    const urls: string[] = [];
+    let buffer = "";
+    let consumido = 0; // quanto do acumulado já entrou no buffer
+    let enfileirouAlgum = false;
+    let terminou = false;
+    let acordar: (() => void) | null = null;
+    let emVoo: Promise<Blob | Error> | null = null;
+
+    const abortado = () => this.abort !== ctrl || ctrl.signal.aborted;
+    const espera = () => new Promise<void>((r) => { acordar = r; });
+    const sinalizar = () => { const a = acordar; acordar = null; a?.(); };
+    const puxar = () => {
+      if (emVoo || fila.length === 0) return;
+      emVoo = this.fetchTrecho(fila.shift()!, ctrl.signal).catch((e: unknown) => (e instanceof Error ? e : new Error("tts")));
+    };
+
+    let jaFalou = false;
+    const worker = (async () => {
+      try {
+        for (;;) {
+          if (abortado()) return;
+          puxar();
+          if (!emVoo) {
+            if (terminou) return;
+            await espera(); // nada pronto ainda: dorme até chegar mais texto
+            continue;
+          }
+          // o tipo vai explícito: `emVoo` é capturado por `puxar`, e o TS
+          // desiste de estreitar variável que uma closure reatribui
+          const pendente: Promise<Blob | Error> = emVoo;
+          emVoo = null;
+          const r: Blob | Error = await pendente;
+          if (abortado()) return;
+          if (r instanceof Error) {
+            if (r.name === "AbortError") return;
+            if (jaFalou) return; // já falou algo: não derruba a voz pela cauda
+            throw r;
+          }
+          puxar(); // o próximo é pedido ANTES de tocar o atual
+          await this.tocar(r, urls, jaFalou ? undefined : opts?.onStart);
+          jaFalou = true;
+        }
+      } finally {
+        if (this.abort === ctrl) {
+          this.abort = null;
+          this.audio = null;
+          opts?.onEnd?.();
+        }
+        for (const u of urls) URL.revokeObjectURL(u);
+      }
+    })();
+    // o erro é entregue por `fim()`; sem isto o Node/navegador reclamaria de
+    // promise rejeitada sem dono enquanto a resposta ainda está chegando
+    worker.catch(() => {});
+
+    return {
+      alimentar(acumulado: string) {
+        if (abortado() || terminou) return;
+        buffer += acumulado.slice(consumido);
+        consumido = acumulado.length;
+        const { prontos, resto } = prontoParaFalar(buffer, enfileirouAlgum);
+        if (!prontos.length) return;
+        fila.push(...prontos);
+        buffer = resto;
+        enfileirouAlgum = true;
+        sinalizar();
+      },
+      async fim() {
+        if (terminou) return worker;
+        const { prontos } = prontoParaFalar(buffer, enfileirouAlgum, true);
+        fila.push(...prontos);
+        buffer = "";
+        terminou = true;
+        sinalizar();
+        return worker;
+      },
+      get falou() {
+        return jaFalou || enfileirouAlgum;
+      },
+    };
   }
 
   /** Interrompe a fala imediatamente (barge-in) — resolve a Promise e roda onEnd. */

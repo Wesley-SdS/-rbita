@@ -33,9 +33,17 @@ export interface ModelInfo {
  * cada render), o que quebra o ciclo `sendMessage`↔`voiceCommand` e evita
  * stale-closure nos callbacks assíncronos (wake word/TTS).
  */
+import type { FluxoDeFala } from "@/lib/voice/engine";
+
 export type VoiceBridge = {
   /** Fala a resposta e re-arma a escuta; retorna true se a voz assumiu o pós-resposta. */
   handleAssistantResponse: (text: string) => boolean;
+  /**
+   * Abre uma fala que ACOMPANHA o texto chegando. `null` quando a voz está
+   * desligada ou o TTS do servidor está falhando: aí o chamador cai no
+   * `handleAssistantResponse` do fim, como antes.
+   */
+  iniciarFalaEmFluxo: () => FluxoDeFala | null;
   /** Interrompe a fala imediatamente (barge-in / botão parar). */
   stopSpeaking: () => void;
 };

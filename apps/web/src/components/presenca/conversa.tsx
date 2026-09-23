@@ -181,7 +181,11 @@ export function Conversa({
     enviarRef.current = chat.sendMessage;
   });
   useEffect(() => {
-    pontesVoz.current = { handleAssistantResponse: voz.handleAssistantResponse, stopSpeaking: voz.stopSpeaking };
+    pontesVoz.current = {
+      handleAssistantResponse: voz.handleAssistantResponse,
+      iniciarFalaEmFluxo: voz.iniciarFalaEmFluxo,
+      stopSpeaking: voz.stopSpeaking,
+    };
   });
 
   // O modo foco tem voz própria e abre por cima desta tela. Aqui dizemos à

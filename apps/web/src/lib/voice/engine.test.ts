@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitFala } from "./engine";
+import { splitFala, prontoParaFalar } from "./engine";
 
 /** Junta os trechos ignorando espaços — nada do texto original pode sumir. */
 const compacta = (s: string) => s.replace(/\s/g, "");
@@ -61,5 +61,92 @@ describe("splitFala", () => {
   it("texto vazio ou só espaços não gera trecho", () => {
     expect(splitFala("")).toEqual([]);
     expect(splitFala("   \n  ")).toEqual([]);
+  });
+});
+
+/**
+ * A fala que acompanha o texto chegando.
+ *
+ * O TTS já cortava em pedaços; o que esperava era o CHAT: a voz só era chamada
+ * no `onFinish`, com a resposta inteira. O silêncio era o tempo de escrever
+ * tudo somado ao de sintetizar o começo.
+ *
+ * O que só se vê testando: falar antes de a frase fechar corta a fala no meio
+ * ("Vou" vira "Vou mandar amanhã" dois tokens depois), e não falar nunca é o
+ * outro extremo, quando a resposta inteira não tem ponto final.
+ */
+describe("prontoParaFalar", () => {
+  it("não fala enquanto a frase não fecha", () => {
+    // "Vou" ainda pode virar "Vou mandar amanhã"
+    const r = prontoParaFalar("Vou mandar o relatório", false);
+    expect(r.prontos).toEqual([]);
+    expect(r.resto).toBe("Vou mandar o relatório");
+  });
+
+  it("solta até o último fim de frase e guarda o resto", () => {
+    const r = prontoParaFalar("Consegui achar o contrato que você pediu ontem. Agora vou", false);
+    expect(r.prontos.length).toBeGreaterThan(0);
+    expect(r.prontos.join(" ")).toContain("contrato");
+    expect(r.resto.trim()).toBe("Agora vou");
+  });
+
+  it("frase fechada curta demais ESPERA (não vale a ida e volta)", () => {
+    const r = prontoParaFalar("Oi. ", false);
+    expect(r.prontos).toEqual([]);
+  });
+
+  it("no FIM, o que sobrou sai de qualquer tamanho", () => {
+    // senão "Sim." nunca seria falado
+    const r = prontoParaFalar("Sim.", false, true);
+    expect(r.prontos).toEqual(["Sim."]);
+    expect(r.resto).toBe("");
+  });
+
+  it("no fim, texto sem pontuação nenhuma também sai", () => {
+    const r = prontoParaFalar("pronto", true, true);
+    expect(r.prontos).toEqual(["pronto"]);
+  });
+
+  it("quebra de linha conta como fim de frase", () => {
+    const texto = "Achei três coisas sobre o contrato de manutenção\nvou detalhar";
+    const r = prontoParaFalar(texto, false);
+    expect(r.prontos.length).toBeGreaterThan(0);
+    expect(r.resto.trim()).toBe("vou detalhar");
+  });
+
+  it("depois do primeiro trecho o alvo sobe: não pica a fala em migalhas", () => {
+    // o 1º trecho manda na latência e pode ser curto; os seguintes, não
+    // 54 caracteres: passa do alvo do 1º trecho (45) e não do dos seguintes (80)
+    const curto = "Certo, entendi o seu pedido e já estou cuidando disso. ";
+    expect(prontoParaFalar(curto, false).prontos.length).toBeGreaterThan(0);
+    expect(prontoParaFalar(curto, true).prontos).toEqual([]);
+  });
+
+  it("nada a falar não vira trecho vazio", () => {
+    expect(prontoParaFalar("", false, true).prontos).toEqual([]);
+    expect(prontoParaFalar("   ", false, true).prontos).toEqual([]);
+  });
+
+  it("alimentado token a token, nunca repete nem perde texto", () => {
+    // é a garantia que importa: o que foi falado mais o que sobrou tem de ser
+    // exatamente o que o modelo escreveu
+    const resposta = "Achei o contrato que você pediu. Ele vence em outubro. Quer que eu marque um lembrete?";
+    let buffer = "";
+    let jaFalou = false;
+    const falado: string[] = [];
+    for (const ch of resposta) {
+      buffer += ch;
+      const r = prontoParaFalar(buffer, jaFalou);
+      if (r.prontos.length) {
+        falado.push(...r.prontos);
+        buffer = r.resto;
+        jaFalou = true;
+      }
+    }
+    const fim = prontoParaFalar(buffer, jaFalou, true);
+    falado.push(...fim.prontos);
+
+    const juntado = falado.join(" ").replace(/\s+/g, " ").trim();
+    expect(juntado).toBe(resposta);
   });
 });

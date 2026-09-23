@@ -3,7 +3,7 @@
 import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, useRef, useState } from "react";
 import type { OrbMode } from "@/components/console/types";
 import type { Msg } from "@/components/console/types";
-import { LocalTTS, WakeListener, recordUntilSilence } from "@/lib/voice/engine";
+import { LocalTTS, WakeListener, recordUntilSilence, type FluxoDeFala } from "@/lib/voice/engine";
 import { criarSessaoRealtime, type SessaoRealtime } from "@/lib/voice/realtime";
 import { getRecognitionCtor, LocalWake, type RecognitionCtor, type RecognitionLike } from "@/lib/voice/speech";
 import { identityLimits } from "@/lib/identity-limits";
@@ -468,6 +468,30 @@ export function useVoice(p: Params) {
    * re-arma a escuta para um follow-up sem repetir "Ei Órbita". Retorna true
    * quando a voz assumiu a transição de estado (chat não deve forçar standby).
    */
+  /**
+   * A fala que ACOMPANHA o texto chegando.
+   *
+   * Antes a voz só era chamada no fim do turno, com a resposta inteira: o
+   * silêncio era o tempo de o modelo escrever tudo SOMADO ao de sintetizar o
+   * começo. Agora o chat alimenta este fluxo a cada token e a Órbita começa a
+   * falar assim que a primeira frase fecha.
+   *
+   * Só vale para o TTS do servidor. A voz do navegador (o degrau de reserva)
+   * não aceita texto em pedaços sem picotar a prosódia, então ela continua
+   * falando de uma vez, no fim.
+   */
+  function iniciarFalaEmFluxo(): FluxoDeFala | null {
+    if (!voiceOn || ttsFalhasRef.current >= MAX_TTS_FALHAS) return null;
+    if (!ttsRef.current) ttsRef.current = new LocalTTS();
+    return ttsRef.current.iniciarFluxo({
+      onStart: () => p.setMode("speaking"),
+      onEnd: () => {
+        p.setMode("standby");
+        if (wakeRef.current?.active) void voiceCommand();
+      },
+    });
+  }
+
   function handleAssistantResponse(text: string): boolean {
     if (!voiceOn) return false;
     void speak(text).then(() => {
@@ -513,6 +537,6 @@ export function useVoice(p: Params) {
   return {
     voiceOn, setVoiceOn, recording, wakeOn, ultimoOuvido, realtimeEnabled, realtimeOn,
     audioFileRef, speak, stopSpeaking, seeScreen, sendAudioFile,
-    voiceCommand, toggleRealtime, toggleWake, toggleMic, handleAssistantResponse,
+    voiceCommand, toggleRealtime, toggleWake, toggleMic, handleAssistantResponse, iniciarFalaEmFluxo,
   };
 }

@@ -3,6 +3,7 @@
 import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, useRef, useState } from "react";
 import type { OrbMode } from "@/components/console/types";
 import type { Msg, OpcaoDeProvedor, ToolStep, VoiceBridge } from "@/components/console/types";
+import type { FluxoDeFala } from "@/lib/voice/engine";
 import { getOwnDeviceId } from "@/lib/device-id";
 import { cameraAutorizada, capturarUmQuadro, ehCameraDesteAparelho, garantirCameraDoAparelho, quadroEnviado } from "@/lib/camera/aparelho";
 
@@ -68,6 +69,8 @@ export function useChatStream(p: Params) {
     p.setMessages((m) => [...m, { role: "user", content, image: imgToSend ?? undefined }, { role: "assistant", content: "" }]);
     const started = Date.now();
     let spoke = false;
+    // a fala do turno, aberta no primeiro token de texto
+    let fala: FluxoDeFala | null = null;
     // cronômetro ao vivo: mostra os segundos correndo enquanto a Órbita processa
     setElapsed(0);
     if (timerRef.current) clearInterval(timerRef.current);
@@ -132,6 +135,10 @@ export function useChatStream(p: Params) {
             acc += ev.v ?? "";
             // troca o estado UMA vez por resposta, não a cada token
             if (acc && !speakingSet) { speakingSet = true; p.setMode("speaking"); }
+            // a voz começa AQUI, não no fim: o fluxo solta o que já fechou em
+            // fim de frase enquanto o modelo ainda escreve o resto
+            if (!fala) fala = p.voiceRef.current?.iniciarFalaEmFluxo() ?? null;
+            fala?.alimentar(acc);
             flush();
           } else if (ev.t === "tool" && ev.name) {
             p.setMode("searching"); steps.push({ name: ev.name, done: false }); flush(true);
@@ -199,7 +206,14 @@ export function useChatStream(p: Params) {
       // (qual provedor usar, posso olhar pela câmera), `acc` fica vazio, e
       // mandar isso para a voz deixava o núcleo preso em "processando" para
       // sempre: o TTS não tinha o que dizer e nunca devolvia o estado.
-      spoke = acc.trim() ? (p.voiceRef.current?.handleAssistantResponse(acc) ?? false) : false;
+      if (fala) {
+        // já estava falando: só solta a cauda. Chamar `handleAssistantResponse`
+        // aqui repetiria a resposta inteira por cima da que está tocando.
+        void fala.fim();
+        spoke = fala.falou;
+      } else {
+        spoke = acc.trim() ? (p.voiceRef.current?.handleAssistantResponse(acc) ?? false) : false;
+      }
     } catch (e) {
       // parada intencional (botão parar): mantém o texto parcial, sem erro.
       if (e instanceof DOMException && e.name === "AbortError") {
