@@ -150,3 +150,32 @@ describe("prontoParaFalar", () => {
     expect(juntado).toBe(resposta);
   });
 });
+
+/**
+ * Os três defeitos que a auditoria de 23/09/2026 achou no que acabara de ser
+ * escrito. Nenhum deles aparece em typecheck, e dois só em uso real.
+ */
+describe("defeitos encontrados na auditoria", () => {
+  it("NÚMERO com ponto não é fim de frase", () => {
+    // cortar em "R$ 1.500" faria a Órbita respirar no meio do número
+    const r = prontoParaFalar("O contrato de manutenção ficou em R$ 1.500 por mês no reajuste deste ano", false);
+    expect(r.prontos).toEqual([]);
+
+    const v = prontoParaFalar("Estamos usando o modelo gpt-5.1 para essa tarefa desde ontem", false);
+    expect(v.prontos).toEqual([]);
+  });
+
+  it("mas o ponto final depois de número continua fechando a frase", () => {
+    const r = prontoParaFalar("O contrato de manutenção ficou em R$ 1.500 por mês. E agora", false);
+    expect(r.prontos.length).toBeGreaterThan(0);
+    expect(r.prontos.join(" ")).toContain("1.500");
+    expect(r.resto.trim()).toBe("E agora");
+  });
+
+  it("resposta curta: o que sobra no fim conta como falado", () => {
+    // o defeito: `fim()` enfileirava e `falou` seguia falso, então quem chama
+    // devolvia o núcleo para "standby" com a fala prestes a sair
+    const r = prontoParaFalar("Sim, já marquei.", false, true);
+    expect(r.prontos.length).toBeGreaterThan(0);
+  });
+});

@@ -58,6 +58,7 @@ export const SETTING_GROUPS = {
   tools: { label: "Ferramentas", order: 62 },
   meetings: { label: "Reuniões e agenda", order: 63 },
   realtime: { label: "Conversa por voz (tempo real)", order: 63.5 },
+  voz: { label: "Voz: escutar e falar", order: 63.6 },
   home: { label: "Casa (Home Assistant)", order: 64 },
   cameras: { label: "Câmeras", order: 64.5 },
   vision: { label: "Visão: objetos e gestos", order: 64.8 },
@@ -558,7 +559,7 @@ export const SETTING_DEFS = {
    *    enquanto escuta.
    */
   "voice.vadModo": sel(
-    "identity",
+    "voz",
     "Como saber que você parou de falar",
     "O modelo reconhece VOZ humana e não se engana com ventilador nem televisão. A energia é a reserva: funciona sem baixar nada, mas confunde som alto com fala.",
     "auto",
@@ -568,7 +569,7 @@ export const SETTING_DEFS = {
     ],
   ),
   "voice.silencioMs": num(
-    "identity",
+    "voz",
     "Silêncio que encerra a fala",
     "Quanto tempo calado antes de a Órbita considerar que você terminou. Aumente se ela te corta quando você pensa no meio da frase.",
     1200,
@@ -577,7 +578,7 @@ export const SETTING_DEFS = {
     { unit: "ms" },
   ),
   "voice.minFalaMs": num(
-    "identity",
+    "voz",
     "Fala mínima para valer",
     "Som mais curto que isso é estalo (porta, teclado), não fala. Evita que a captura acorde sozinha.",
     160,
@@ -586,7 +587,7 @@ export const SETTING_DEFS = {
     { unit: "ms" },
   ),
   "voice.maxFalaMs": num(
-    "identity",
+    "voz",
     "Teto de uma fala",
     "Depois disso a captura encerra de qualquer jeito, mesmo que você ainda esteja falando.",
     12000,
@@ -595,7 +596,7 @@ export const SETTING_DEFS = {
     { unit: "ms" },
   ),
   "voice.wakeEngine": sel(
-    "identity",
+    "voz",
     "Quem escuta o “Ei Órbita”",
     "SERVIÇO LOCAL (Vosk): só sabe reconhecer as frases de chamada, então não existe \"a palavra sumiu\": ou casa com confiança, ou ignora. Roda offline e nenhum áudio sai de casa. Em troca, exige o apps/voice de pé, consome CPU enquanto escuta e não reconhece frase livre. NAVEGADOR (Web Speech): não precisa de nada rodando e entende fala livre, mas transcreve a frase inteira e às vezes come o nome (aqui, \"Oi Órbita, você tá aí?\" chegou como \"Oi você tá ai\"), só funciona no Chrome e no Edge, e manda seu áudio para o Google. No automático, usa o local quando ele está no ar.",
     "auto",
@@ -607,7 +608,7 @@ export const SETTING_DEFS = {
   ),
 
   "voice.wakePhrases": list(
-    "identity",
+    "voz",
     "Frases que acordam a Órbita",
     "O reconhecedor do navegador nem sempre entende o nome; acrescente aqui o que ele realmente escreve quando você chama. Frase de uma palavra só vale no começo da fala.",
     ["ei órbita", "em órbita", "e órbita", "eh órbita", "hey órbita", "oi órbita", "órbita"],

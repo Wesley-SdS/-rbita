@@ -91,7 +91,10 @@ export function prontoParaFalar(buffer: string, jaFalou: boolean, fim = false): 
   }
 
   // o último fim de frase é a fronteira do que não muda mais
-  const corte = Math.max(buffer.lastIndexOf("."), buffer.lastIndexOf("!"), buffer.lastIndexOf("?"), buffer.lastIndexOf("…"), buffer.lastIndexOf(QUEBRA));
+  // `[^0-9]` antes e depois do ponto: "R$ 1.500" e "gpt-5.1" não são fim de
+  // frase, e cortar neles faria a Órbita respirar no meio de um número
+  const fins = [...buffer.matchAll(/(?<![0-9])[.!?…](?![0-9])|\n/g)];
+  const corte = fins.length ? fins[fins.length - 1]!.index! : -1;
   if (corte < 0) return { prontos: [], resto: buffer };
 
   const fechado = buffer.slice(0, corte + 1);
@@ -292,6 +295,10 @@ export class LocalTTS {
         if (terminou) return worker;
         const { prontos } = prontoParaFalar(buffer, enfileirouAlgum, true);
         fila.push(...prontos);
+        // marcar AQUI também: sem isto, `falou` saía falso logo depois de
+        // `fim()` numa resposta curta (o texto inteiro só fecha no fim), e
+        // quem chama devolvia o núcleo para "standby" com a fala prestes a sair
+        if (prontos.length) enfileirouAlgum = true;
         buffer = "";
         terminou = true;
         sinalizar();
@@ -340,8 +347,6 @@ export async function recordUntilSilence(opts?: {
   /** "auto" usa o modelo quando ele carrega; "energia" nunca usa. */
   modo?: "auto" | "energia";
   onSpeech?: () => void;
-  /** avisa qual detector acabou valendo, para a tela poder dizer */
-  onDetector?: (qual: "modelo" | "energia") => void;
 }): Promise<Blob | null> {
   const silenceMs = opts?.silenceMs ?? LIMIARES_PADRAO.silencioMs;
   const maxMs = opts?.maxMs ?? LIMIARES_PADRAO.maxMs;
@@ -349,7 +354,11 @@ export async function recordUntilSilence(opts?: {
   const ctx = new AudioContext();
   const src = ctx.createMediaStreamSource(stream);
   const analyser = ctx.createAnalyser();
-  analyser.fftSize = 1024;
+  // 8192 e não 1024: o silero decide sobre 1536 amostras a 16 kHz, que são
+  // 96 ms. A 48 kHz, 1024 amostras são 21 ms, então 78% do quadro entregue ao
+  // modelo ia ZERADO e ele via silêncio quase sempre. 8192 cobrem 170 ms, o
+  // bastante para sobrar quadro inteiro depois de reamostrar.
+  analyser.fftSize = 8192;
   src.connect(analyser);
   const buf = new Float32Array(analyser.fftSize);
 
@@ -372,10 +381,8 @@ export async function recordUntilSilence(opts?: {
       if (!s) return;
       s.reiniciar();
       silero = s;
-      opts?.onDetector?.("modelo");
     });
   }
-  if (opts?.modo === "energia") opts?.onDetector?.("energia");
 
   return new Promise<Blob | null>((resolve) => {
     const cleanup = () => {
@@ -398,13 +405,24 @@ export async function recordUntilSilence(opts?: {
         if (estado === "terminou" || estado === "estourou") cleanup();
       };
 
+      // a energia é alimentada SEMPRE, mesmo quando é o modelo que decide.
+      // Custa um laço sobre o quadro e resolve um caso que só apareceria em
+      // uso: se o modelo falhar no meio de uma frase, a energia começaria a
+      // calibrar naquele instante, tomaria a VOZ como piso de ruído, e o resto
+      // da fala passaria a ser silêncio para ela.
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+      const probEnergia = energia.prob(Math.sqrt(sum / buf.length));
+
       if (silero && !ocupado) {
         ocupado = true;
         const quadro = para16k(buf.slice(), ctx.sampleRate);
-        // o modelo quer um tamanho exato de quadro; completa com zero quando
-        // a janela do analisador não bate
+        // as ÚLTIMAS amostras, não as primeiras: o analisador entrega uma
+        // janela maior que o quadro do modelo, e o que interessa é o som mais
+        // recente. Só completa com zero se de fato faltar (taxa muito baixa).
         const pronto = new Float32Array(AMOSTRAS_POR_QUADRO);
-        pronto.set(quadro.subarray(0, AMOSTRAS_POR_QUADRO));
+        const inicio = Math.max(0, quadro.length - AMOSTRAS_POR_QUADRO);
+        pronto.set(quadro.subarray(inicio, inicio + AMOSTRAS_POR_QUADRO));
         void silero
           .prob(pronto)
           .then(decidir)
@@ -412,15 +430,12 @@ export async function recordUntilSilence(opts?: {
             // uma falha do modelo no meio da fala não pode emudecer a captura:
             // volta para a energia e segue
             silero = null;
-            opts?.onDetector?.("energia");
           })
           .finally(() => { ocupado = false; });
         return;
       }
 
-      let sum = 0;
-      for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-      decidir(energia.prob(Math.sqrt(sum / buf.length)));
+      decidir(probEnergia);
     }, 100);
   });
 }

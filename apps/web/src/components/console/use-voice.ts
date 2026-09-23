@@ -501,8 +501,11 @@ export function useVoice(p: Params) {
     return ttsRef.current.iniciarFluxo({
       onStart: () => p.setMode("speaking"),
       onEnd: () => {
+        p.modeRef.current = "standby"; // o ref antes do estado: a guarda abaixo lê o ref
         p.setMode("standby");
-        if (wakeRef.current?.active) void voiceCommand();
+        // mesma guarda da via antiga: sem ela, uma fala que termina depois de
+        // a pessoa já ter começado outra coisa reabriria o microfone por cima
+        if (wakeRef.current?.active && p.modeRef.current === "standby") void voiceCommand();
       },
     });
   }
