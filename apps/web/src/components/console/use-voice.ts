@@ -124,6 +124,21 @@ export function useVoice(p: Params) {
   // falhas seguidas do /api/tts; após MAX_TTS_FALHAS usa a voz do navegador.
   // tolera >1 porque um 429 momentâneo do Gemini não deve custar a sessão inteira.
   const ttsFalhasRef = useRef<number>(0);
+  /**
+   * Os limiares do detector de fala, vindos do servidor (§5.6).
+   *
+   * Buscados uma vez por sessão: pedir a config a cada "Ei Órbita" somaria uma
+   * ida e volta antes de abrir o microfone, que é exatamente o tempo que a
+   * pessoa percebe. Mudou em Preferências, vale na próxima abertura da aba.
+   */
+  const vadRef = useRef<{ modo?: "auto" | "energia"; silencioMs?: number; minFalaMs?: number; maxMs?: number } | null>(null);
+
+  async function limiaresDeFala() {
+    if (vadRef.current) return vadRef.current;
+    const cfg = await fetch("/api/voice-config").then((r) => r.json()).catch(() => ({}) as Record<string, unknown>);
+    vadRef.current = (cfg.vad as typeof vadRef.current) ?? {};
+    return vadRef.current!;
+  }
 
   function speakBrowser(text: string) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) { p.setMode("standby"); return; }
@@ -220,7 +235,7 @@ export function useVoice(p: Params) {
     if (p.modeRef.current !== "standby") return;
     p.setMode("listening");
     try {
-      const blob = await recordUntilSilence({ onSpeech: () => p.setMode("listening") });
+      const blob = await recordUntilSilence({ ...(await limiaresDeFala()), onSpeech: () => p.setMode("listening") });
       if (!blob) { p.setMode("standby"); return; }
       p.setMode("studying");
       const fd = new FormData();

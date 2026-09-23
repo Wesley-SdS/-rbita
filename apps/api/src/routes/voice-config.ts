@@ -45,11 +45,26 @@ export async function GET(_req: Request, ctx: RouteCtx) {
   // O motor e as frases são do dono (§5.6). O navegador não pode repetir essa
   // decisão em constante: mudar na tela e o wake continuar igual seria pior do
   // que não ter a opção.
-  const cfg = await settings.getMany(["voice.wakeEngine", "voice.wakePhrases"]);
+  const cfg = await settings.getMany(["voice.wakeEngine", "voice.wakePhrases", "voice.vadModo", "voice.silencioMs", "voice.minFalaMs", "voice.maxFalaMs"]);
 
   // cache curtinho: evita martelar o /health do voice, mas reflete rápido quando ele sobe.
   return Response.json(
-    { up, wsWakeUrl: wsBase ? `${wsBase}/ws/wake` : null, wakePhrase, motor: cfg["voice.wakeEngine"], frases: cfg["voice.wakePhrases"] },
+    {
+      up,
+      wsWakeUrl: wsBase ? `${wsBase}/ws/wake` : null,
+      wakePhrase,
+      motor: cfg["voice.wakeEngine"],
+      frases: cfg["voice.wakePhrases"],
+      // como decidir que a pessoa parou de falar. O navegador NÃO repete isto
+      // em constante: o limiar era 0,02 cravado no código e não havia como
+      // ajustar para um cômodo barulhento.
+      vad: {
+        modo: cfg["voice.vadModo"],
+        silencioMs: cfg["voice.silencioMs"],
+        minFalaMs: cfg["voice.minFalaMs"],
+        maxMs: cfg["voice.maxFalaMs"],
+      },
+    },
     { headers: { "Cache-Control": "private, max-age=10" } },
   );
 }

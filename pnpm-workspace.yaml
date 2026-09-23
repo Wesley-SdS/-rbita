@@ -5,7 +5,7 @@ packages:
   # apps/mobile (Expo) é gerenciado por npm próprio — Metro não convive bem com
   # os symlinks do pnpm. apps/voice é Python (sem package.json).
 
-# Builds nativos permitidos (allowlist).
+  # Builds nativos permitidos (allowlist).
 onlyBuiltDependencies:
   - esbuild
   - sharp
@@ -25,3 +25,7 @@ ignoredBuiltDependencies:
 # Isto rebaixa para aviso: esbuild/sharp continuam buildando; tesseract fica ignorado
 # sem abortar. Verificado: install limpo do zero passa (exit 0).
 strictDepBuilds: false
+
+allowBuilds:
+  onnxruntime-node: set this to true or false
+  protobufjs: set this to true or false

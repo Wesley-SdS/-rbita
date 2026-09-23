@@ -35,11 +35,22 @@ describe("CSP", () => {
     for (const d of ["object-src 'none'", "frame-ancestors 'self'", "base-uri 'self'", "form-action 'self'"]) expect(prod).toContain(d);
   });
 
+  it("WebAssembly é permitido, em dev e em produção", () => {
+    // sem isto o detector de fala (silero, em .wasm) morre calado em produção
+    // e a voz cai para a energia sem ninguém entender por quê
+    for (const csp of [prod, buildCsp({ dev: true })]) {
+      expect(csp.split(/[\s;]+/)).toContain("'wasm-unsafe-eval'");
+    }
+  });
+
   it("eval e WebSocket livre só em desenvolvimento", () => {
-    expect(prod).not.toContain("unsafe-eval");
+    // `'unsafe-eval'` como TOKEN, não como pedaço de texto: `'wasm-unsafe-eval'`
+    // contém essa sequência e é outra coisa, bem mais estreita. Comparar por
+    // substring reprovaria a permissão certa e aprovaria um descuido futuro.
+    expect(prod.split(/[\s;]+/)).not.toContain("'unsafe-eval'");
     expect(prod).not.toMatch(/connect-src[^;]*\bws: /);
     const dev = buildCsp({ dev: true });
-    expect(dev).toContain("'unsafe-eval'");
+    expect(dev.split(/[\s;]+/)).toContain("'unsafe-eval'");
     expect(dev).toContain("ws:");
   });
 

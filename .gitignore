@@ -56,3 +56,9 @@ apps/perception/**/*.npy
 # o CPF do dono no nome). O formato está em bench/perguntas.exemplo.json.
 bench/data
 bench/perguntas.json
+
+# runtime do WebAssembly do detector de fala: 14 MB gerados por
+# `apps/web/scripts/preparar-voz.mjs` a partir do node_modules. O MODELO
+# (silero_vad.onnx) é versionado; o runtime, não.
+apps/web/public/modelos/ort-*.wasm
+apps/web/public/modelos/ort-*.mjs

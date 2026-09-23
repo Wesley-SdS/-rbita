@@ -1,3 +1,6 @@
+import { DetectorDeFala, EnergiaAdaptativa, LIMIARES_PADRAO } from "./vad";
+import { AMOSTRAS_POR_QUADRO, carregarSilero, para16k, type DetectorSilero } from "./silero";
+
 /**
  * Engine de voz do cliente (browser):
  * - LocalTTS: sintetiza a fala por frases via /api/tts e toca em sequência,
@@ -322,17 +325,26 @@ export class LocalTTS {
 }
 
 /**
- * Grava o microfone até detectar silêncio (VAD por energia) — para o fluxo
- * mãos-livres "Ei Órbita, faça tal coisa". Espera o usuário começar a falar,
- * e encerra após `silenceMs` de silêncio, ou no `maxMs`.
+ * Grava o microfone até a pessoa parar de falar, para o fluxo mãos-livres
+ * "Ei Órbita, faça tal coisa".
+ *
+ * Quem decide é o `DetectorDeFala` (`vad.ts`), alimentado pelo silero quando o
+ * modelo carrega e pela energia adaptativa quando não. O limiar fixo de 0,02
+ * que morava aqui cortava quem fala baixo e nunca parava com ventilador
+ * ligado, e não tinha como ser ajustado sem mexer no código.
  */
 export async function recordUntilSilence(opts?: {
   silenceMs?: number;
   maxMs?: number;
+  minFalaMs?: number;
+  /** "auto" usa o modelo quando ele carrega; "energia" nunca usa. */
+  modo?: "auto" | "energia";
   onSpeech?: () => void;
+  /** avisa qual detector acabou valendo, para a tela poder dizer */
+  onDetector?: (qual: "modelo" | "energia") => void;
 }): Promise<Blob | null> {
-  const silenceMs = opts?.silenceMs ?? 1200;
-  const maxMs = opts?.maxMs ?? 12000;
+  const silenceMs = opts?.silenceMs ?? LIMIARES_PADRAO.silencioMs;
+  const maxMs = opts?.maxMs ?? LIMIARES_PADRAO.maxMs;
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
   const ctx = new AudioContext();
   const src = ctx.createMediaStreamSource(stream);
@@ -347,8 +359,23 @@ export async function recordUntilSilence(opts?: {
   rec.start();
 
   const started = Date.now();
-  let speechStarted = false;
-  let lastVoice = Date.now();
+  const detector = new DetectorDeFala(
+    { ...LIMIARES_PADRAO, silencioMs: silenceMs, maxMs, minFalaMs: opts?.minFalaMs ?? LIMIARES_PADRAO.minFalaMs },
+    started,
+  );
+  const energia = new EnergiaAdaptativa();
+  // o modelo carrega em paralelo com a gravação: esperar por ele antes de
+  // abrir o microfone somaria meio segundo ao "Ei Órbita" na primeira vez
+  let silero: DetectorSilero | null = null;
+  if (opts?.modo !== "energia") {
+    void carregarSilero().then((s) => {
+      if (!s) return;
+      s.reiniciar();
+      silero = s;
+      opts?.onDetector?.("modelo");
+    });
+  }
+  if (opts?.modo === "energia") opts?.onDetector?.("energia");
 
   return new Promise<Blob | null>((resolve) => {
     const cleanup = () => {
@@ -359,19 +386,41 @@ export async function recordUntilSilence(opts?: {
     };
     rec.onstop = () => resolve(chunks.length ? new Blob(chunks, { type: "audio/webm" }) : null);
 
+    let avisou = false;
+    let ocupado = false; // a inferência é assíncrona; não empilhar quadros
     const timer = setInterval(() => {
       analyser.getFloatTimeDomainData(buf);
+      const now = Date.now();
+
+      const decidir = (prob: number) => {
+        const estado = detector.alimentar(prob, now);
+        if (detector.houveFala && !avisou) { avisou = true; opts?.onSpeech?.(); }
+        if (estado === "terminou" || estado === "estourou") cleanup();
+      };
+
+      if (silero && !ocupado) {
+        ocupado = true;
+        const quadro = para16k(buf.slice(), ctx.sampleRate);
+        // o modelo quer um tamanho exato de quadro; completa com zero quando
+        // a janela do analisador não bate
+        const pronto = new Float32Array(AMOSTRAS_POR_QUADRO);
+        pronto.set(quadro.subarray(0, AMOSTRAS_POR_QUADRO));
+        void silero
+          .prob(pronto)
+          .then(decidir)
+          .catch(() => {
+            // uma falha do modelo no meio da fala não pode emudecer a captura:
+            // volta para a energia e segue
+            silero = null;
+            opts?.onDetector?.("energia");
+          })
+          .finally(() => { ocupado = false; });
+        return;
+      }
+
       let sum = 0;
       for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-      const rms = Math.sqrt(sum / buf.length);
-      const now = Date.now();
-      if (rms > 0.02) {
-        if (!speechStarted) { speechStarted = true; opts?.onSpeech?.(); }
-        lastVoice = now;
-      }
-      const elapsed = now - started;
-      const silentFor = now - lastVoice;
-      if ((speechStarted && silentFor > silenceMs) || elapsed > maxMs) cleanup();
+      decidir(energia.prob(Math.sqrt(sum / buf.length)));
     }, 100);
   });
 }

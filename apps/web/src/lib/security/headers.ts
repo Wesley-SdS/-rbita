@@ -54,7 +54,11 @@ export function buildCsp(o: CspOpcoes): string {
 
   const diretivas: Record<string, string[]> = {
     "default-src": ["'self'"],
-    "script-src": ["'self'", "'unsafe-inline'", ...(o.dev ? ["'unsafe-eval'"] : [])],
+    // `wasm-unsafe-eval` é o que deixa o WebAssembly compilar. Sem ele o
+    // detector de fala (silero, em .wasm) morre silenciosamente em produção e
+    // a voz cai para a energia sem ninguém entender por quê. Ele NÃO libera
+    // `eval` de JavaScript: é a permissão estreita, feita para este caso.
+    "script-src": ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", ...(o.dev ? ["'unsafe-eval'"] : [])],
     "style-src": ["'self'", "'unsafe-inline'"],
     "img-src": ["'self'", "data:", "blob:"],
     "media-src": ["'self'", "data:", "blob:"],

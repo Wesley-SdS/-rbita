@@ -557,6 +557,43 @@ export const SETTING_DEFS = {
    *    offline, nada sai de casa, mas exige o apps/voice de pé e consome CPU
    *    enquanto escuta.
    */
+  "voice.vadModo": sel(
+    "identity",
+    "Como saber que você parou de falar",
+    "O modelo reconhece VOZ humana e não se engana com ventilador nem televisão. A energia é a reserva: funciona sem baixar nada, mas confunde som alto com fala.",
+    "auto",
+    [
+      { value: "auto", label: "Modelo, com energia de reserva" },
+      { value: "energia", label: "Só energia (não baixa o modelo)" },
+    ],
+  ),
+  "voice.silencioMs": num(
+    "identity",
+    "Silêncio que encerra a fala",
+    "Quanto tempo calado antes de a Órbita considerar que você terminou. Aumente se ela te corta quando você pensa no meio da frase.",
+    1200,
+    300,
+    5000,
+    { unit: "ms" },
+  ),
+  "voice.minFalaMs": num(
+    "identity",
+    "Fala mínima para valer",
+    "Som mais curto que isso é estalo (porta, teclado), não fala. Evita que a captura acorde sozinha.",
+    160,
+    0,
+    1000,
+    { unit: "ms" },
+  ),
+  "voice.maxFalaMs": num(
+    "identity",
+    "Teto de uma fala",
+    "Depois disso a captura encerra de qualquer jeito, mesmo que você ainda esteja falando.",
+    12000,
+    3000,
+    60000,
+    { unit: "ms" },
+  ),
   "voice.wakeEngine": sel(
     "identity",
     "Quem escuta o “Ei Órbita”",
