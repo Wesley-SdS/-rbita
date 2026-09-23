@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { BIOMETRIC_HEADER, BiometricEgressError, guardFetch, isLocalHost, isLocalUrl } from "./egress";
 
@@ -160,13 +161,20 @@ describe("NV.1: fronteira no código", () => {
   });
 
   it("a regex de import pega as formas dinâmicas", () => {
-    const tmp = join(RAIZ, "packages/core/src/privacy/__imports_exemplo__.ts");
+    // FORA da árvore de fontes, de propósito. O arquivo de exemplo morava em
+    // `packages/core/src/privacy/` e, com os dev servers de pé, o watcher do
+    // `tsx` e o do Next seguravam o arquivo: o `unlink` no fim quebrava com
+    // EBUSY no Windows e derrubava a suíte por motivo nenhum. Pior, enquanto
+    // existia era um arquivo .ts falso dentro da pasta que os OUTROS testes
+    // deste mesmo arquivo varrem.
+    const pasta = mkdtempSync(join(tmpdir(), "orbita-imports-"));
+    const tmp = join(pasta, "exemplo.ts");
     const conteudo = 'import a from "x1";\nimport "x2";\nconst b = await import("x3");\nconst c = require("x4");\nexport * from "x5";';
     writeFileSync(tmp, conteudo);
     try {
       expect(importsDe(tmp)).toEqual(["x1", "x2", "x3", "x4", "x5"]);
     } finally {
-      unlinkSync(tmp);
+      rmSync(pasta, { recursive: true, force: true });
     }
   });
 });

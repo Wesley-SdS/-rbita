@@ -742,3 +742,24 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
 /* A foto que a Órbita olhou para responder. Espelhada como toda câmera
    frontal, e com moldura de acento para não passar por anexo do usuário. */
 .message-image.olhada { transform: scaleX(-1); border: 2px solid var(--color-forest); max-height: 200px; }
+
+/* --- Tarefas ------------------------------------------------------------ */
+/* A tarefa deixou de ser uma linha de texto: ela tem data, anotação, imagem e
+   de onde veio. O que muda o que a pessoa faz AGORA (venceu, é hoje) ganha
+   cor; o resto fica discreto para a lista continuar escaneável. */
+.tarefa-data { flex-shrink: 0; width: 150px; }
+.tarefa-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tarefa-meta .tag { font-size: 11px; padding: 3px 7px; }
+.tarefa-porque { font-style: italic; opacity: 0.85; }
+.tarefa-anotacao { white-space: pre-wrap; }
+.tarefa-imagem { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+.tarefa-imagem.grande { width: 120px; height: 90px; }
+.tarefa.feita strong { text-decoration: line-through; opacity: 0.55; }
+.tarefa.em-edicao { align-items: flex-start; }
+
+.tarefa-edicao { flex: 1; display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.tarefa-edicao-linha { display: flex; gap: 9px; flex-wrap: wrap; }
+.tarefa-edicao-linha .inline-input { flex: 1; min-width: 140px; }
+.tarefa-edicao textarea.inline-input { min-height: 68px; }
+.tarefa-edicao-acoes { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tarefa-espacador { flex: 1; }
