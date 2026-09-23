@@ -6,6 +6,7 @@ import type { Msg } from "@/components/console/types";
 import { LocalTTS, WakeListener, recordUntilSilence, type FluxoDeFala } from "@/lib/voice/engine";
 import { criarSessaoRealtime, type SessaoRealtime } from "@/lib/voice/realtime";
 import { getRecognitionCtor, LocalWake, type RecognitionCtor, type RecognitionLike } from "@/lib/voice/speech";
+import { diagnosticarVoz, type JanelaSuficiente } from "@/lib/voice/contexto-seguro";
 import { identityLimits } from "@/lib/identity-limits";
 
 /** Controle mínimo de um wake listener (Render ou local): o que o toggle usa. */
@@ -231,7 +232,24 @@ export function useVoice(p: Params) {
   }
 
   /** Fluxo mãos-livres: grava o comando até o silêncio, transcreve e envia. */
+  /**
+   * O navegador deste aparelho consegue gravar?
+   *
+   * Sem isto, o celular na rede local (http://192.168.x.x) estourava com
+   * "cannot read property getUserMedia of undefined" e a tela não dizia nada:
+   * parecia defeito da Órbita, quando é o navegador recusando microfone fora
+   * de HTTPS.
+   */
+  function checarContexto(): boolean {
+    const d = diagnosticarVoz(window as unknown as JanelaSuficiente);
+    if (d.podeGravar) return true;
+    p.setError(d.sugestao ? `${d.motivo} Pelo computador, abra ${d.sugestao}.` : d.motivo);
+    p.setMode("standby");
+    return false;
+  }
+
   async function voiceCommand() {
+    if (!checarContexto()) return;
     if (p.modeRef.current !== "standby") return;
     p.setMode("listening");
     try {

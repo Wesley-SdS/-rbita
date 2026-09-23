@@ -24,6 +24,7 @@ export const TELAS: Tela[] = [
   { slug: "reunioes", href: "/app/reunioes", titulo: "Reuniões", icone: "wave", grupo: "conectado" },
   { slug: "financas", href: "/app/financas", titulo: "Finanças", icone: "wallet", grupo: "conectado" },
   { slug: "conexoes", href: "/app/conexoes", titulo: "Conexões", icone: "plug", grupo: "conectado" },
+  { slug: "satelite", href: "/app/satelite", titulo: "Satélite", icone: "wave", grupo: "conectado" },
   { slug: "gestao", href: "/app/gestao", titulo: "Gastos", icone: "wallet", grupo: "rodape" },
   { slug: "ajustes", href: "/app/ajustes", titulo: "Preferências", icone: "settings", grupo: "rodape" },
 ];

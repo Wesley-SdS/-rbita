@@ -813,3 +813,23 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
 .mapa-recado-acao { pointer-events: auto; flex-direction: column; gap: 14px; }
 /* dica de manuseio do mapa 3D: some quando algo está selecionado */
 .mapa-ajuda { position: absolute; right: 14px; bottom: 14px; color: #8f8f8f; font-size: 11px; letter-spacing: 0.3px; pointer-events: none; }
+
+/* --- Modo satélite ------------------------------------------------------- */
+/* O repouso é quase preto de propósito: um celular na cozinha com a tela
+   acesa a noite toda ilumina o cômodo inteiro. Só o relógio e o orbe ficam
+   visíveis, e o orbe acende quando ele ouve. */
+.satelite-repouso {
+  position: fixed; inset: 0; z-index: 50; background: #050505; color: #4a4a4a;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  cursor: pointer; user-select: none; text-align: center;
+}
+.satelite-orbe {
+  width: 54px; height: 54px; border-radius: 50%;
+  background: radial-gradient(circle at 30% 28%, #2a3f33, #14261f 60%, #0b1712);
+  transition: box-shadow .4s ease, transform .4s ease;
+}
+.satelite-orbe[data-ouvindo="sim"] { box-shadow: 0 0 34px #8fd0a055; transform: scale(1.06); }
+.satelite-hora { font-size: 40px; font-weight: 200; letter-spacing: 1px; margin: 6px 0 0; color: #5d5d5d; }
+.satelite-local { font-size: 13px; letter-spacing: 1.5px; text-transform: lowercase; margin: 0; }
+.satelite-aviso { font-size: 11px; color: #6b5a34; margin: 8px 0 0; }
+.satelite-sair { position: absolute; bottom: 26px; font-size: 11px; letter-spacing: 1px; color: #333; margin: 0; }
