@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { cookies } from "next/headers";
 import { PWARegister } from "@/components/pwa-register";
+import { atributosDoHtml, COOKIE_LATERAL, COOKIE_TEMA } from "@/lib/preferencias-visuais";
 
 export const metadata: Metadata = {
   title: "ÓRBITA — Assistente Pessoal",
@@ -24,25 +26,18 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // O tema vem do COOKIE e sai já no HTML. Antes era um `<script>` no `<head>`
+  // lendo `localStorage`, que o React 19 passa a acusar no console, e a saída
+  // do `next/script` foi medida pondo o script DEPOIS do `<body>`, o que traria
+  // o flash de volta. Ver `lib/preferencias-visuais.ts`.
+  const jar = await cookies();
+  const atributos = atributosDoHtml(jar.get(COOKIE_TEMA)?.value, jar.get(COOKIE_LATERAL)?.value);
+
   return (
-    // `suppressHydrationWarning`: o script abaixo escreve `data-theme` no <html>
-    // ANTES da hidratação (é o que evita o flash de tema errado). O servidor não
-    // renderiza esse atributo, então sem isto o React acusa divergência em toda
-    // visita de quem salvou o tema escuro. A supressão vale só para este
-    // elemento e para os atributos dele, não para o conteúdo da página.
-    <html lang="pt-BR" suppressHydrationWarning>
-      <head>
-        {/* Aplica tema e estado da barra lateral ANTES do primeiro paint. Os
-            dois pela mesma razão: sem isto a página abre no padrão e salta para
-            a escolha da pessoa na frente dela. O padrão é Mineral claro e barra
-            aberta, então só quem escolhe o contrário grava preferência. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `try{var d=document.documentElement;if(localStorage.getItem('orbita.theme')==='dark')d.dataset.theme='dark';if(localStorage.getItem('orbita.lateral')==='recolhida')d.dataset.lateral='recolhida'}catch(e){}`,
-          }}
-        />
-      </head>
+    // sem `suppressHydrationWarning`: o servidor agora manda o mesmo atributo
+    // que o cliente veria, então não há divergência a suprimir
+    <html lang="pt-BR" {...atributos}>
       <body>
         {children}
         <PWARegister />

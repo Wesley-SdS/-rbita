@@ -1,5 +1,6 @@
 "use client";
 
+import { COOKIE_LATERAL, COOKIE_TEMA, gravarPreferencia, migrarDoLocalStorage } from "@/lib/preferencias-visuais";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
@@ -66,6 +67,10 @@ function Tema() {
   const [tema, setTema] = useState<"claro" | "escuro">("claro");
 
   useEffect(() => {
+    // quem já usava a Órbita tem a escolha no localStorage e nenhum cookie: sem
+    // esta migração o tema escuro "sumiria" na primeira carga depois da
+    // mudança, e a pessoa acharia que a preferência foi esquecida
+    migrarDoLocalStorage();
     setTema(document.documentElement.dataset.theme === "dark" ? "escuro" : "claro");
   }, []);
 
@@ -75,11 +80,9 @@ function Tema() {
     // O padrão é o Mineral claro: só o escuro grava atributo e preferência.
     if (proximo === "escuro") document.documentElement.dataset.theme = "dark";
     else delete document.documentElement.dataset.theme;
-    try {
-      localStorage.setItem("orbita.theme", proximo === "escuro" ? "dark" : "light");
-    } catch {
-      /* navegação privada */
-    }
+    // cookie e não localStorage: é o servidor que precisa ler isto para
+    // mandar o HTML já com o tema certo (ver `lib/preferencias-visuais.ts`)
+    gravarPreferencia(COOKIE_TEMA, proximo);
   }
 
   return (
@@ -157,11 +160,7 @@ export function Casca({
     setRecolhida(proxima);
     if (proxima) document.documentElement.dataset.lateral = "recolhida";
     else delete document.documentElement.dataset.lateral;
-    try {
-      localStorage.setItem("orbita.lateral", proxima ? "recolhida" : "aberta");
-    } catch {
-      /* navegação privada */
-    }
+    gravarPreferencia(COOKIE_LATERAL, proxima ? "recolhida" : "aberta");
   }
 
   // O service worker não lê a tabela de config: quem sabe da escolha é esta
