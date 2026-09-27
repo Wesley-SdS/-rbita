@@ -4,6 +4,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { Icone } from "./icones";
+import { PropostaCard } from "@/components/presenca/proposta-card";
 import { SeletorDeModelo } from "./seletor-modelo";
 import { capturarUmQuadro } from "@/lib/camera/aparelho";
 import { useCasca } from "./contexto";
@@ -63,7 +64,19 @@ const rotuloDaFerramenta = (nome: string) => NOMES_DE_FERRAMENTA[nome] ?? nome.r
  * troca de referência, então apenas a última bolha re-renderiza e as antigas
  * pulam o reparse de markdown.
  */
-const Bolha = memo(function Bolha({ m, estado, aoEscolherProvedor, aoDeixarOlhar }: { m: Msg; estado: string | null; aoEscolherProvedor?: (classe: "assinatura" | "local" | "paga", pergunta: string) => void; aoDeixarOlhar?: (pergunta: string) => void }) {
+const Bolha = memo(function Bolha({
+  m,
+  estado,
+  aoEscolherProvedor,
+  aoDeixarOlhar,
+  aoDecidirProposta,
+}: {
+  m: Msg;
+  estado: string | null;
+  aoEscolherProvedor?: (classe: "assinatura" | "local" | "paga", pergunta: string) => void;
+  aoDeixarOlhar?: (pergunta: string) => void;
+  aoDecidirProposta?: (id: string, estado: "confirmada" | "descartada", resultado?: string) => void;
+}) {
   const daOrbita = m.role === "assistant";
   return (
     <div className={`message ${daOrbita ? "assistant" : "user"}`}>
@@ -118,6 +131,13 @@ const Bolha = memo(function Bolha({ m, estado, aoEscolherProvedor, aoDeixarOlhar
                 <small>tira uma foto agora e responde</small>
               </button>
             </div>
+          </div>
+        )}
+        {m.proposta && (
+          /* A proposta espera VOCÊ. Fica aqui, na conversa, porque decidir
+             sobre o e-mail é parte da conversa sobre o e-mail. */
+          <div style={{ marginTop: 10 }}>
+            <PropostaCard proposta={m.proposta} aoDecidir={aoDecidirProposta ?? (() => {})} />
           </div>
         )}
         {estado && (
@@ -232,6 +252,19 @@ export function Conversa({
   }, [parametros, chat, voz, casca]);
 
   /** Captura UM quadro e repete a pergunta, agora com o que ver. */
+  /**
+   * O desfecho da proposta volta PARA A MENSAGEM.
+   *
+   * Guardar num estado solto perderia o desfecho ao rolar a conversa ou ao
+   * chegar a resposta seguinte, e o cartão voltaria a pedir confirmação de algo
+   * que já foi enviado. Na mensagem, ele fica onde aconteceu.
+   */
+  function decidirProposta(id: string, estado: "confirmada" | "descartada", resultado?: string) {
+    setMessages((m) =>
+      m.map((msg) => (msg.proposta?.id === id ? { ...msg, proposta: { ...msg.proposta, estado, resultado } } : msg)),
+    );
+  }
+
   async function deixarOlhar(pergunta: string) {
     const ok = await capturarUmQuadro();
     if (!ok) {
@@ -350,6 +383,26 @@ export function Conversa({
             }
           }}
         />
+
+        {/*
+          LER EM VOZ ALTA, à mão e à vista.
+          O interruptor existia só dentro do menu "+", e o dono não o achou:
+          "deveria ter um botão para eu marcar se eu quero que tenha a voz lendo
+          a resposta ou não". É uma escolha de momento, não de configuração,
+          porque muda de uma pergunta para a outra (de madrugada, ao lado de
+          alguém, numa resposta longa que se lê mais rápido do que se ouve).
+          Escolha de momento mora ao lado do campo, não em três cliques.
+        */}
+        <button
+          type="button"
+          className={`icon-button${voz.voiceOn ? " ativo" : ""}`}
+          onClick={() => voz.setVoiceOn(!voz.voiceOn)}
+          aria-pressed={voz.voiceOn}
+          aria-label={voz.voiceOn ? "Parar de ler as respostas em voz alta" : "Ler as respostas em voz alta"}
+          title={voz.voiceOn ? "Lendo em voz alta (clique para só texto)" : "Só texto (clique para ler em voz alta)"}
+        >
+          <Icone nome={voz.voiceOn ? "volume" : "mute"} />
+        </button>
 
         <button
           type="button"
@@ -523,6 +576,7 @@ export function Conversa({
                 }
                 aoEscolherProvedor={(classe, pergunta) => chat.sendMessage(pergunta, undefined, [classe])}
                 aoDeixarOlhar={(pergunta) => void deixarOlhar(pergunta)}
+                aoDecidirProposta={decidirProposta}
               />
             ))}
           </div>

@@ -243,7 +243,13 @@ textarea.inline-input { resize: vertical; min-height: 84px; }
 .locutor-linha { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .locutor-linha .inline-input { flex: 1; min-width: 180px; }
 
-.resumo-texto { white-space: pre-wrap; font-size: 15px; line-height: 1.95; color: var(--color-ink); margin-top: 12px; }
+/* O resumo é markdown RENDERIZADO (seções, bullets), não texto cru — por isso
+   sem `pre-wrap`, que dobraria o espaço entre os blocos que o markdown já cria. */
+.resumo-texto { font-size: 15px; line-height: 1.95; color: var(--color-ink); margin-top: 12px; }
+.resumo-texto .orbita-md { font-size: 15px; line-height: 1.9; }
+.resumo-texto .orbita-md :is(h1, h2, h3) { font-size: 1.02em; font-weight: 650; margin: 16px 0 4px; }
+.resumo-texto .orbita-md strong { font-weight: 650; }
+.resumo-texto .orbita-md li { margin: 2px 0; }
 
 /* Barra por modelo: nome, trilho e contagem na mesma linha. */
 .barra-modelo { display: flex; align-items: center; gap: 12px; padding: 9px 0; font-size: 14px; }
@@ -370,17 +376,17 @@ textarea.inline-input { resize: vertical; min-height: 84px; }
   .sidebar, .app-shell { transition: none; }
   :root[data-lateral="recolhida"] .sidebar { width: 272px; padding-left: 18px; padding-right: 18px; align-items: stretch; }
   :root[data-lateral="recolhida"] .app-shell { margin-left: 0; }
+  /* No telefone a barra é gaveta e não ocupa coluna. A regra `.app-shell {
+     margin-left: var(--largura-lateral) }` acima vem DEPOIS do protótipo e
+     anulava o `margin-left: 0` dele: com a barra aberta, o conteúdo do app
+     inteiro nascia empurrado 226 px e a página rolava de lado em 390 px. */
+  .app-shell { margin-left: 0; }
 }
 
 /* ── Ícone dentro de emblema ────────────────────────────────────────────────
    O protótipo dava `display:inline-flex` a todo `span[data-icon]` no reset, e
    várias regras contam com isso para centralizar (`.workspace-icon` define
    `align-items` e `justify-content`, mas não o `display`, e o ícone encostava
-  /* No telefone a barra é gaveta e não ocupa coluna. A regra `.app-shell {
-     margin-left: var(--largura-lateral) }` acima vem DEPOIS do protótipo e
-     anulava o `margin-left: 0` dele: com a barra aberta, o conteúdo do app
-     inteiro nascia empurrado 226 px e a página rolava de lado em 390 px. */
-  .app-shell { margin-left: 0; }
    no canto). Aqui os ícones são componentes React e o atributo não existe:
    este seletor é o equivalente, para qualquer span que só embrulhe um ícone. */
 span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
@@ -1188,4 +1194,26 @@ img.fin-pastilha { object-fit: cover; background: var(--color-surface-soft); }
   .fin-folha, .fin-veu, .fin-toast { animation: none; }
   .fin-barra i { transition: none; }
   .fin-falar.ouvindo i { animation: none; }
+}
+
+/* O cartão de aprovação dentro da conversa (`proposta-card.tsx`).
+   Os campos são derivados do payload da ação, então o CSS descreve a LISTA,
+   não cada tipo de ação: tool nova ganha o mesmo cartão sem tocar aqui. */
+.proposta-campos { display: grid; gap: 10px; margin: 12px 0 14px; }
+.proposta-campo { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 4px 12px; align-items: start; }
+.proposta-campo dt { font-size: 12px; letter-spacing: .4px; text-transform: uppercase; color: var(--color-ink-dim); padding-top: 6px; }
+.proposta-campo dd { margin: 0; min-width: 0; font-size: 14px; line-height: 1.7; }
+.proposta-campo dd span { display: block; padding: 5px 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.proposta-campo dd em { color: var(--color-ink-dim); }
+.proposta-campo input,
+.proposta-campo textarea {
+  width: 100%; font: inherit; font-size: 14px; color: var(--color-ink);
+  background: var(--color-surface); border: 1px solid var(--color-line);
+  border-radius: 9px; padding: 7px 10px; outline: none; resize: vertical;
+}
+.proposta-campo input:focus, .proposta-campo textarea:focus { border-color: var(--color-green); }
+.proposta-resumo { font-size: 14px; line-height: 1.8; margin: 10px 0 14px; overflow-wrap: anywhere; }
+@media (max-width: 690px) {
+  .proposta-campo { grid-template-columns: 1fr; }
+  .proposta-campo dt { padding-top: 0; }
 }

@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   resolveModel, resolveVisionModel, getModelInfo, routeModelKey, providerEnv, discoveredSnapshot,
   buildModelChain, discoverModels, recordProviderResult, statusDoErro, CACHE_BREAK,
+  descobrirLocalSobDemanda, SEM_MODELO,
 } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { conversation, message } from "@orbita/db/chat-schema";
@@ -172,7 +173,11 @@ export async function POST(req: Request, ctx: RouteCtx) {
   // modelo primário (resolve o "auto" por complexidade)
   let primaryKey = image ? "vision" : modelKey === "auto" ? routeModelKey(content, env) : modelKey;
   if (privacidade && !image && !primaryKey.startsWith("local/")) {
-    const local = discoveredSnapshot().find((m) => m.key.startsWith("local/"));
+    // a descoberta normal só pergunta ao Ollama quando a ordem do dono usa o
+    // local; o modo privacidade é "só o local", então pergunta na hora
+    const local =
+      discoveredSnapshot().find((m) => m.key.startsWith("local/")) ??
+      (await descobrirLocalSobDemanda()).find((m) => m.supportsTools !== false);
     if (!local) {
       return Response.json(
         { error: "Modo privacidade ligado e nenhum modelo local disponível. Instale um modelo no Ollama (ex.: ollama pull qwen2.5:7b) ou desligue o modo privacidade." },
@@ -193,7 +198,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if (!candidates.length) {
     // Nenhum provedor disponível: mensagem ESPECÍFICA e acionável (não genérica).
     return Response.json(
-      { error: "Nenhum modelo disponível. Rode `ollama serve` com algum modelo instalado, ou configure um provedor de nuvem (Claude Max, Gateway, Groq, Gemini…) no .env." },
+      { error: SEM_MODELO },
       { status: 503, headers: { "x-conversation-id": conv.id } },
     );
   }
@@ -381,6 +386,35 @@ export async function POST(req: Request, ctx: RouteCtx) {
                   send(pedido);
                   finished = true;
                   break;
+                }
+
+                // A PROPOSTA QUE ESPERA APROVAÇÃO, dita na hora.
+                //
+                // O gate humano (§5.1) sempre existiu, mas a conversa terminava
+                // mandando a pessoa para outro lugar: "aprove no painel Ações a
+                // confirmar". O dono pediu o contrário, e tem razão: "o ideal é
+                // aparecer um wizard mostrando como ficou, eu podendo alterar e
+                // confirmar". Decidir sobre o e-mail é parte da conversa sobre
+                // o e-mail, não uma segunda tarefa em outra tela.
+                //
+                // A regra NÃO muda: o modelo continua sem executar nada, e a
+                // execução continua acontecendo só no POST /api/actions, com o
+                // aval de quem está na frente. O que muda é onde o aval é pedido.
+                const proposta = (part as { output?: unknown }).output as
+                  | { proposta_enfileirada?: boolean; id?: string; resumo?: string }
+                  | undefined;
+                if (proposta?.proposta_enfileirada && proposta.id) {
+                  const ev = {
+                    t: "pedido",
+                    tipo: "acao",
+                    id: proposta.id,
+                    kind: part.toolName,
+                    resumo: proposta.resumo ?? "",
+                    // o payload vai junto para a tela poder MOSTRAR e deixar
+                    // corrigir sem uma segunda ida ao servidor
+                    payload: (part as { input?: unknown }).input ?? {},
+                  };
+                  gotText ? send(ev) : buffered.push(ev);
                 }
               } else if (part.type === "error") {
                 if (!gotText) {

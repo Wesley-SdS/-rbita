@@ -11,6 +11,24 @@ export interface OpcaoDeProvedor { classe: "assinatura" | "local" | "paga"; rotu
 export interface PerguntaDeProvedor { motivo: string; opcoes: OpcaoDeProvedor[]; pergunta: string }
 /** "Preciso ver para responder": o pedido fica na mensagem, com o botão. */
 export interface PedidoDeCamera { motivo: string; pergunta: string; cameraId: string | null }
+/**
+ * A PROPOSTA ESPERANDO APROVAÇÃO, na própria conversa.
+ *
+ * O gate humano (§5.1) mandava a pessoa para o painel "Ações a confirmar": a
+ * Órbita dizia "não consigo aprovar por você, abra o painel" e a conversa
+ * morria ali. O dono pediu "um wizard mostrando como ficou, eu podendo alterar
+ * e confirmar". O `payload` vem junto porque é ele que se edita; a execução
+ * continua acontecendo só no POST /api/actions.
+ */
+export interface PropostaPendente {
+  id: string;
+  kind: string;
+  resumo: string;
+  payload: Record<string, unknown>;
+  /** o que aconteceu depois de decidir, para o cartão parar de pedir ação */
+  estado?: "confirmada" | "descartada";
+  resultado?: string;
+}
 export interface Msg {
   role: Role;
   content: string;
@@ -18,6 +36,7 @@ export interface Msg {
   image?: string;
   escolha?: PerguntaDeProvedor;
   pedidoCamera?: PedidoDeCamera;
+  proposta?: PropostaPendente;
   /** o quadro que a Órbita olhou para responder: quem autorizou o olhar vê o que ela viu */
   olhou?: string;
 }

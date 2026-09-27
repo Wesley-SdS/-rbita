@@ -2,7 +2,7 @@
 
 import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, useRef, useState } from "react";
 import type { OrbMode } from "@/components/console/types";
-import type { Msg, OpcaoDeProvedor, ToolStep, VoiceBridge } from "@/components/console/types";
+import type { Msg, OpcaoDeProvedor, PropostaPendente, ToolStep, VoiceBridge } from "@/components/console/types";
 import type { FluxoDeFala } from "@/lib/voice/engine";
 import { getOwnDeviceId } from "@/lib/device-id";
 import { cameraAutorizada, capturarUmQuadro, ehCameraDesteAparelho, garantirCameraDoAparelho, quadroEnviado } from "@/lib/camera/aparelho";
@@ -106,6 +106,7 @@ export function useChatStream(p: Params) {
       // pintor não pode sobrescrever a pergunta com uma bolha vazia
       let perguntou = false;
       let pedidoDeCamera: { motivo: string; pergunta: string; cameraId: string | null } | null = null;
+      let proposta: PropostaPendente | null = null;
       const steps: ToolStep[] = [];
       // O stream entrega muitos pedaços por segundo. Re-renderizar o React a
       // cada pedaço engasgava a animação do Orb (medido: 47fps parado contra
@@ -115,7 +116,10 @@ export function useChatStream(p: Params) {
       let lastFlush = 0;
       const paint = () => {
         if (perguntou) return;
-        p.setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: acc, steps: [...steps] }; return c; });
+        // `proposta` vai junto a cada pintura: ela chega ANTES do texto (a tool
+        // roda primeiro) e o pintor recria a mensagem do zero a cada lote, então
+        // sem isto o primeiro token seguinte apagaria o cartão de aprovação
+        p.setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: "assistant", content: acc, steps: [...steps], ...(proposta ? { proposta } : {}) }; return c; });
       };
       const flush = (force = false) => {
         const now = Date.now();
@@ -129,7 +133,11 @@ export function useChatStream(p: Params) {
         buf = lines.pop() ?? "";
         for (const line of lines) {
           if (!line.trim()) continue;
-          let ev: { t: string; v?: string; name?: string; msg?: string; motivo?: string; opcoes?: OpcaoDeProvedor[]; tipo?: string; camera?: string | null; cameraId?: string | null };
+          let ev: {
+            t: string; v?: string; name?: string; msg?: string; motivo?: string;
+            opcoes?: OpcaoDeProvedor[]; tipo?: string; camera?: string | null; cameraId?: string | null;
+            id?: string; kind?: string; resumo?: string; payload?: Record<string, unknown>;
+          };
           try { ev = JSON.parse(line); } catch { continue; }
           if (ev.t === "text") {
             acc += ev.v ?? "";
@@ -148,6 +156,11 @@ export function useChatStream(p: Params) {
             // a Órbita precisa ver e não tem imagem recente: guarda o pedido
             // para a tela oferecer o botão quando a resposta terminar
             pedidoDeCamera = { motivo: ev.motivo ?? "Preciso de uma imagem para responder.", pergunta: content, cameraId: ev.cameraId ?? null };
+          } else if (ev.t === "pedido" && ev.tipo === "acao" && ev.id) {
+            // a ação ficou na fila esperando você: o cartão de aprovação nasce
+            // aqui e vive na mensagem, então continua ali depois de rolar a tela
+            proposta = { id: ev.id, kind: ev.kind ?? "", resumo: ev.resumo ?? "", payload: ev.payload ?? {} };
+            flush(true);
           } else if (ev.t === "escolha" && ev.opcoes?.length) {
             // A Órbita não trocou de provedor sozinha: ela pergunta. A pergunta
             // vira parte da mensagem para continuar ali depois de rolar a tela.
