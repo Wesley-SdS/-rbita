@@ -1,23 +1,254 @@
 import { z } from "zod";
-import { sendWhatsApp } from "../../connectors/whatsapp";
 import { registerTools, type ToolDef } from "../registry";
+import { settings } from "../../settings";
+import { enviarAudio, enviarImagem, enviarTexto, jidDoDestino } from "../../whatsapp/enviar";
+import * as store from "../../whatsapp/store";
+import { sessaoDe } from "../../whatsapp/sessao";
+import { lerMidia } from "../../whatsapp/midia";
+import { normalizarJid } from "../../whatsapp/traduzir";
+import { embrulhar, linhaDaMensagem } from "../../whatsapp/formatar";
 
-/** Domínio: WhatsApp (Cloud API da Meta, token cadastrado pela tela — CH.2). */
-const Input = z.object({ para: z.string(), texto: z.string() });
+export { embrulhar, linhaDaMensagem };
+import { narrateSnapshot } from "../../cameras/narrate";
 
-export const enviar_whatsapp: ToolDef<typeof Input> = {
+/**
+ * Domínio: WhatsApp (PRD-WHATSAPP W3 e W4).
+ *
+ * Ler é `leitura` e exige o número pessoal (a Cloud API não recebe nada).
+ * Mandar é `efeito_externo`: o registro ENFILEIRA, nunca envia; o `run` só roda
+ * depois que o dono aprova (tela, "manda" na conversa "Eu" ou por voz). Por
+ * isso todo `run` de envio passa `aprovacaoHumana: true`: é verdade por
+ * construção. A resposta automática (W7) NÃO usa estas tools: ela monta as
+ * dela, presas ao chat de origem, em `whatsapp/automatico.ts`.
+ *
+ * Todo texto de mensagem volta ao modelo embrulhado como DADO (§5.2): quem
+ * escreveu no WhatsApp não dá ordem à Órbita.
+ */
+
+/**
+ * "a Maria", "5511999998888" ou o JID: vira UM chat, ou um recado dizendo por
+ * que não. Ambíguo nunca escolhe: responder para a Maria errada não se desfaz.
+ */
+export async function resolverChat(userId: string, para: string): Promise<{ ok: true; jid: string; nome: string | null } | { ok: false; erro: string }> {
+  const p = para.trim();
+  if (p.includes("@")) {
+    const c = await store.contatoPorJid(userId, normalizarJid(p));
+    return { ok: true, jid: normalizarJid(p), nome: c?.apelido ?? c?.nome ?? null };
+  }
+  if (p.replace(/\D/g, "").length >= 10) return { ok: true, jid: jidDoDestino(p), nome: null };
+  const achados = store.casarContato(await store.listarContatos(userId, 2000), p);
+  if (achados.length === 1) return { ok: true, jid: achados[0].jid, nome: achados[0].apelido ?? achados[0].nome };
+  if (!achados.length) return { ok: false, erro: `Não encontrei "${p}" nas conversas do WhatsApp. Peça o número ou o nome como aparece no WhatsApp.` };
+  const opcoes = achados.slice(0, 8).map((c) => `${c.apelido ?? c.nome ?? "?"} (${c.jid})`).join("; ");
+  return { ok: false, erro: `Há mais de um contato para "${p}": ${opcoes}. Pergunte qual é e use o chat (jid) dele.` };
+}
+
+// ── leitura ──
+
+const Recentes = z.object({
+  horas: z.number().int().min(1).max(720).optional().describe("Olhar as conversas com movimento nas últimas N horas (padrão 24)."),
+  so_nao_lidas: z.boolean().optional().describe("Só conversas com mensagem que a Órbita ainda não leu."),
+});
+
+export const whatsapp_conversas_recentes: ToolDef<typeof Recentes> = {
+  name: "whatsapp_conversas_recentes",
+  domain: "whatsapp",
+  description: "Lista as conversas do WhatsApp do dono com movimento recente, com quantas mensagens novas cada uma tem e a última mensagem. Use para 'tem algo no zap?', 'quem me mandou mensagem?'.",
+  risk: "leitura",
+  keywords: ["whatsapp", "zap", "mensagens", "conversas", "novas", "quem", "mandou"],
+  requires: { whatsappPessoal: true },
+  inputSchema: Recentes,
+  run: async ({ horas, so_nao_lidas }, { userId }) => {
+    const sessao = await sessaoDe(userId);
+    const limite = await settings.get("whatsapp.leituraMax");
+    const lista = await store.conversasRecentes(userId, limite, new Date(Date.now() - (horas ?? 24) * 3_600_000), sessao?.jid ?? null);
+    const filtradas = so_nao_lidas ? lista.filter((c) => c.naoLidas > 0) : lista;
+    if (!filtradas.length) return "Nenhuma conversa com movimento nesse período.";
+    return embrulhar(
+      filtradas.map((c) => {
+        const nome = c.contato.apelido ?? c.contato.nome ?? c.contato.jid;
+        const ultima = c.ultima ? linhaDaMensagem(c.ultima, nome) : "";
+        return `${c.contato.grupo ? "Grupo " : ""}${nome} (chat ${c.contato.jid}) · ${c.naoLidas} nova(s) · última: ${ultima}`;
+      }),
+    );
+  },
+};
+
+const Ler = z.object({
+  contato: z.string().min(1).max(200).describe("Nome, apelido, número ou o chat (jid) da conversa."),
+  quantidade: z.number().int().min(1).max(200).optional().describe("Quantas mensagens trazer (as mais recentes)."),
+});
+
+export const ler_whatsapp: ToolDef<typeof Ler> = {
+  name: "ler_whatsapp",
+  domain: "whatsapp",
+  description: "Lê as mensagens recentes de UMA conversa do WhatsApp (pessoa ou grupo), com os áudios já transcritos. Use para 'o que a Maria mandou?', 'o que falaram no grupo da família?'.",
+  risk: "leitura",
+  keywords: ["whatsapp", "zap", "ler", "mensagem", "mandou", "disse", "audio", "grupo"],
+  requires: { whatsappPessoal: true },
+  inputSchema: Ler,
+  run: async ({ contato, quantidade }, { userId }) => {
+    const alvo = await resolverChat(userId, contato);
+    if (!alvo.ok) return alvo.erro;
+    const limite = quantidade ?? (await settings.get("whatsapp.leituraMax"));
+    const msgs = await store.mensagensDoChat(userId, alvo.jid, limite);
+    if (!msgs.length) return `Nenhuma mensagem guardada com ${alvo.nome ?? alvo.jid}.`;
+    await store.marcarLidas(userId, alvo.jid);
+    return `Conversa com ${alvo.nome ?? alvo.jid} (chat ${alvo.jid}):\n` + embrulhar(msgs.map((m) => linhaDaMensagem(m, alvo.nome)));
+  },
+};
+
+const Buscar = z.object({
+  termo: z.string().min(2).max(200).describe("O que procurar no texto e nos áudios transcritos."),
+  contato: z.string().max(200).optional().describe("Restringir a uma conversa (nome, número ou jid)."),
+});
+
+export const buscar_whatsapp: ToolDef<typeof Buscar> = {
+  name: "buscar_whatsapp",
+  domain: "whatsapp",
+  description: "Procura uma palavra ou assunto em todas as conversas do WhatsApp (texto e áudio transcrito). Use para 'quem falou do churrasco?', 'me mandaram o endereço?'.",
+  risk: "leitura",
+  keywords: ["whatsapp", "zap", "buscar", "procurar", "quem", "falou", "endereco"],
+  requires: { whatsappPessoal: true },
+  inputSchema: Buscar,
+  run: async ({ termo, contato }, { userId }) => {
+    let jid: string | null = null;
+    if (contato) {
+      const alvo = await resolverChat(userId, contato);
+      if (!alvo.ok) return alvo.erro;
+      jid = alvo.jid;
+    }
+    const achadas = await store.buscarMensagens(userId, termo, await settings.get("whatsapp.leituraMax"), jid);
+    if (!achadas.length) return `Nada encontrado sobre "${termo}".`;
+    const nomes = new Map((await store.listarContatos(userId, 2000)).map((c) => [c.jid, c.apelido ?? c.nome]));
+    return embrulhar(achadas.map((m) => `(chat ${m.chatJid}) ` + linhaDaMensagem(m, nomes.get(m.chatJid) ?? null)));
+  },
+};
+
+const VerImagem = z.object({
+  mensagem_id: z.string().uuid().describe("O id da imagem, como aparece em [imagem id=...] na leitura."),
+  pergunta: z.string().max(500).optional().describe("O que o dono quer saber da imagem."),
+});
+
+export const ver_imagem_whatsapp: ToolDef<typeof VerImagem> = {
+  name: "ver_imagem_whatsapp",
+  domain: "whatsapp",
+  description: "Olha uma imagem recebida no WhatsApp e descreve o que tem nela (ou responde a uma pergunta sobre ela). Use depois de ler_whatsapp, com o id da imagem.",
+  risk: "leitura",
+  keywords: ["whatsapp", "foto", "imagem", "figura", "print", "ver"],
+  requires: { whatsappPessoal: true },
+  inputSchema: VerImagem,
+  run: async ({ mensagem_id, pergunta }, { userId }) => {
+    const m = await store.mensagemPorId(userId, mensagem_id);
+    if (!m || m.tipo !== "imagem") return "Não encontrei essa imagem.";
+    if (!m.midiaCaminho) return "A imagem chegou, mas o arquivo não pôde ser baixado.";
+    if (!pergunta && m.descricaoImagem) return embrulhar([m.descricaoImagem]);
+    const bytes = await lerMidia(m.midiaCaminho);
+    const dataUrl = `data:${m.midiaMime ?? "image/jpeg"};base64,${Buffer.from(bytes).toString("base64")}`;
+    const descricao = await narrateSnapshot(dataUrl, pergunta ?? "Descreva esta imagem com detalhes úteis, transcrevendo textos e valores visíveis.", { userId });
+    // a descrição genérica fica guardada: a próxima pergunta não paga de novo
+    if (!pergunta) await store.atualizarMensagemPorId(userId, m.id, { descricaoImagem: descricao });
+    return embrulhar([descricao]);
+  },
+};
+
+// ── envio (sempre pelo gate) ──
+
+const Para = z.string().min(1).max(200).describe("Para quem: o chat (jid) devolvido pela leitura, de preferência; ou o número com DDI; ou o nome como aparece no WhatsApp.");
+
+/** Resumo da proposta com o TEXTO INTEIRO: o dono aprova exatamente o que vai sair. */
+const resumoDe = (acao: string, para: string, texto: string) => `${acao} para ${para}: "${texto.slice(0, 1000)}"`;
+
+async function destino(userId: string, para: string): Promise<string> {
+  const alvo = await resolverChat(userId, para);
+  if (!alvo.ok) throw new Error(alvo.erro);
+  return alvo.jid;
+}
+
+/** Recusa ANTES de enfileirar: proposta ambígua nem chega à fila de aprovação. */
+const conferirDestino = async (input: { para: string }, ctx: { userId: string }) => {
+  const alvo = await resolverChat(ctx.userId, input.para);
+  return alvo.ok ? null : alvo.erro;
+};
+
+const EnviarTexto = z.object({ para: z.string().min(1).max(200), texto: z.string().min(1).max(4000) });
+
+export const enviar_whatsapp: ToolDef<typeof EnviarTexto> = {
   name: "enviar_whatsapp",
   domain: "whatsapp",
-  description: "Propõe enviar uma mensagem de WhatsApp (número internacional, ex: 5511999998888). Não envia direto: enfileira uma proposta para o usuário aprovar no painel 'Ações a confirmar'.",
+  description: "Propõe enviar uma mensagem de texto de WhatsApp para um número (com DDI, ex: 5511999998888) ou contato. Não envia direto: a proposta espera a aprovação do dono.",
   risk: "efeito_externo",
   keywords: ["whatsapp", "zap", "mensagem", "mandar", "avisar"],
   requires: { whatsapp: true },
-  inputSchema: Input,
-  summarize: ({ para, texto }) => `Enviar WhatsApp para ${para}: "${texto.slice(0, 60)}"`,
+  inputSchema: EnviarTexto,
+  summarize: ({ para, texto }) => resumoDe("Enviar WhatsApp", para, texto),
+  authorize: conferirDestino,
   run: async ({ para, texto }, { userId }) => {
-    const r = await sendWhatsApp(userId, para, texto);
+    const r = await enviarTexto(userId, await destino(userId, para), texto, { aprovacaoHumana: true });
     return `WhatsApp enviado (id ${r.id}).`;
   },
 };
 
-registerTools([enviar_whatsapp]);
+const Responder = z.object({
+  para: Para,
+  texto: z.string().min(1).max(4000).describe("O texto exato da resposta."),
+  citar_mensagem_id: z.string().max(200).optional().describe("Id no WhatsApp da mensagem a citar (opcional)."),
+});
+
+export const responder_whatsapp: ToolDef<typeof Responder> = {
+  name: "responder_whatsapp",
+  domain: "whatsapp",
+  description: "Propõe responder em TEXTO numa conversa do WhatsApp do dono. Não envia direto: o dono aprova (tela, dizendo 'manda', ou por voz). Mostre a ele o texto exato.",
+  risk: "efeito_externo",
+  keywords: ["whatsapp", "zap", "responder", "resposta", "mandar", "dizer"],
+  requires: { whatsappPessoal: true },
+  inputSchema: Responder,
+  summarize: ({ para, texto }) => resumoDe("Responder no WhatsApp", para, texto),
+  authorize: conferirDestino,
+  run: async ({ para, texto, citar_mensagem_id }, { userId }) => {
+    const r = await enviarTexto(userId, await destino(userId, para), texto, { aprovacaoHumana: true, citando: citar_mensagem_id ?? null });
+    return `Resposta enviada (id ${r.id}).`;
+  },
+};
+
+const Audio = z.object({ para: Para, texto: z.string().min(1).max(2000).describe("O que a Órbita vai FALAR na nota de voz.") });
+
+export const enviar_audio_whatsapp: ToolDef<typeof Audio> = {
+  name: "enviar_audio_whatsapp",
+  domain: "whatsapp",
+  description: "Propõe mandar uma NOTA DE VOZ no WhatsApp, com a voz da Órbita falando o texto. Use quando o dono pedir resposta em áudio. Não envia direto: o dono aprova.",
+  risk: "efeito_externo",
+  keywords: ["whatsapp", "zap", "audio", "voz", "falar", "nota"],
+  requires: { whatsappPessoal: true },
+  inputSchema: Audio,
+  summarize: ({ para, texto }) => resumoDe("Mandar áudio no WhatsApp", para, texto),
+  authorize: conferirDestino,
+  run: async ({ para, texto }, { userId }) => {
+    const r = await enviarAudio(userId, await destino(userId, para), texto, { aprovacaoHumana: true });
+    return `Áudio enviado (id ${r.id}).`;
+  },
+};
+
+const Imagem = z.object({
+  para: Para,
+  mensagem_id: z.string().uuid().describe("O id da imagem guardada ([imagem id=...]), inclusive uma que o dono mandou na conversa com ele mesmo."),
+  legenda: z.string().max(1000).optional(),
+});
+
+export const enviar_imagem_whatsapp: ToolDef<typeof Imagem> = {
+  name: "enviar_imagem_whatsapp",
+  domain: "whatsapp",
+  description: "Propõe mandar uma IMAGEM no WhatsApp: uma que chegou numa conversa ou que o dono mandou na conversa com ele mesmo ('manda essa foto pra Maria'). Não envia direto: o dono aprova.",
+  risk: "efeito_externo",
+  keywords: ["whatsapp", "zap", "foto", "imagem", "mandar", "encaminhar"],
+  requires: { whatsappPessoal: true },
+  inputSchema: Imagem,
+  summarize: ({ para, legenda }) => `Mandar imagem no WhatsApp para ${para}` + (legenda ? `: "${legenda.slice(0, 300)}"` : ""),
+  authorize: conferirDestino,
+  run: async ({ para, mensagem_id, legenda }, { userId }) => {
+    const r = await enviarImagem(userId, await destino(userId, para), mensagem_id, legenda ?? null, { aprovacaoHumana: true });
+    return `Imagem enviada (id ${r.id}).`;
+  },
+};
+
+registerTools([whatsapp_conversas_recentes, ler_whatsapp, buscar_whatsapp, ver_imagem_whatsapp, enviar_whatsapp, responder_whatsapp, enviar_audio_whatsapp, enviar_imagem_whatsapp]);

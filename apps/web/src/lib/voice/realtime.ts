@@ -5,6 +5,12 @@ export interface SessaoRealtime {
   start(): Promise<void>;
   stop(): void;
   readonly active: boolean;
+  /**
+   * Conta à sessão algo que aconteceu FORA dela (a proposta aprovada pela fala
+   * do dono) para a Órbita confirmar em voz alta. O texto é nosso, nunca de
+   * terceiro.
+   */
+  avisar?(texto: string): void;
 }
 
 export interface RealtimeCallbacks {
@@ -210,6 +216,12 @@ export class RealtimeSession implements SessaoRealtime {
     this.cb.onState?.("closed");
   }
 
+  avisar(texto: string): void {
+    if (this.dc?.readyState !== "open") return;
+    this.dc.send(JSON.stringify({ type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: texto }] } }));
+    this.dc.send(JSON.stringify({ type: "response.create" }));
+  }
+
   get active(): boolean {
     return this.pc !== null;
   }
@@ -235,6 +247,9 @@ export function criarSessaoRealtime(cb: RealtimeCallbacks = {}): SessaoRealtime 
     stop() {
       interna?.stop();
       interna = null;
+    },
+    avisar(texto: string) {
+      interna?.avisar?.(texto);
     },
     get active() {
       return interna?.active ?? false;

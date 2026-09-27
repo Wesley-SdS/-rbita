@@ -36,6 +36,8 @@ const NOME_DO_FLUXO: Record<string, string> = {
   financas: "Finanças",
   casa: "Casa",
   acompanhamento: "Acompanhar tarefa",
+  whatsapp: "WhatsApp (conversa com você)",
+  whatsapp_automatico: "WhatsApp (resposta automática)",
 };
 
 const NOME_DA_UNIDADE: Record<string, string> = {

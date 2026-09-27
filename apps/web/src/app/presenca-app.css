@@ -1217,3 +1217,13 @@ img.fin-pastilha { object-fit: cover; background: var(--color-surface-soft); }
   .proposta-campo { grid-template-columns: 1fr; }
   .proposta-campo dt { padding-top: 0; }
 }
+
+/* WhatsApp pessoal (components/whatsapp-pessoal.tsx) */
+.whatsapp-qr { display: grid; justify-items: center; gap: 8px; margin: 12px 0; }
+.whatsapp-qr img { width: min(240px, 100%); height: auto; background: #fff; padding: 8px; border-radius: 12px; }
+.whatsapp-contatos { display: grid; gap: 10px; margin-top: 14px; }
+.whatsapp-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 360px; overflow-y: auto; }
+.whatsapp-lista li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line, rgba(127, 127, 127, 0.2)); min-width: 0; }
+.whatsapp-lista li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.whatsapp-acoes { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.whatsapp-toggle { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }

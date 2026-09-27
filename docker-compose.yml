@@ -56,6 +56,23 @@ services:
       timeout: 5s
       retries: 10
 
+  # WhatsApp PESSOAL (PRD-WHATSAPP): o GOWA é REST sobre o whatsmeow e guarda a
+  # sessão do número no volume. A sessão é a conta inteira do dono, então a
+  # porta fica presa no 127.0.0.1 (nunca 0.0.0.0) e a senha vem do .env. 3011 e
+  # não 3001: nesta máquina a 3001 já é usada. Versão FIXADA: mudança de
+  # protocolo do WhatsApp quebra a ponte, e atualizar tem de ser deliberado.
+  gowa:
+    image: aldinokemal2104/go-whatsapp-web-multidevice:v9.5.0
+    container_name: orbita-gowa
+    restart: unless-stopped
+    command: rest --port=3000 --basic-auth=${GOWA_BASIC_AUTH:-admin:admin}
+    ports:
+      - "127.0.0.1:3011:3000"
+    volumes:
+      - gowa-sessao:/app/storages
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   # one-shot: aplica as migrações Drizzle e encerra
   migrate:
     build:
@@ -120,3 +137,4 @@ volumes:
   pgdata:
   whisper-models:
   perception-models:
+  gowa-sessao:

@@ -6,7 +6,7 @@ import { db } from "@orbita/db";
 import { profile } from "@orbita/db/profile-schema";
 import { skill } from "@orbita/db/extension-schema";
 import { buildMcpTools } from "../mcp/client";
-import { buildToolSet } from "../tools/index";
+import { buildToolSet, type ActionCanal } from "../tools/index";
 
 /**
  * Ferramentas que a Órbita pode chamar (compartilhadas entre chat e rotinas).
@@ -16,8 +16,8 @@ import { buildToolSet } from "../tools/index";
  * humano é derivado do risco pelo registro (CLAUDE.md §5.7). Aqui só resta a
  * montagem do ToolSet do turno, com seleção por relevância ao pedido.
  */
-export async function buildTools(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"], dominios?: readonly string[]): Promise<ToolSet> {
-  return buildToolSet(userId, query, requester, origin, voiceRef, dominios);
+export async function buildTools(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"], dominios?: readonly string[], canal: ActionCanal = "tela"): Promise<ToolSet> {
+  return buildToolSet(userId, query, requester, origin, voiceRef, dominios, canal);
 }
 
 /** Contexto temporal: injeta a data/hora atual (combate alucinação de "hoje/atual"). */
@@ -119,14 +119,15 @@ export async function buildAllTools(
   requester?: ToolContext["requester"],
   origin?: ToolContext["origin"],
   voiceRef?: ToolContext["voiceRef"],
-  opts: { dominios?: readonly string[] } = {},
+  /** `canal`: de onde o pedido veio; é por ele que "manda" aprova sem tela (PRD-WHATSAPP W6) */
+  opts: { dominios?: readonly string[]; canal?: ActionCanal } = {},
 ): Promise<{ tools: ToolSet; cleanup: () => Promise<void>; skillInstructions: string }> {
   // caminho rápido (comando da casa): só as tools do domínio, sem MCP nem skills
   if (opts.dominios?.length) {
-    return { tools: await buildTools(userId, query, requester, origin, voiceRef, opts.dominios), cleanup: async () => {}, skillInstructions: "" };
+    return { tools: await buildTools(userId, query, requester, origin, voiceRef, opts.dominios, opts.canal), cleanup: async () => {}, skillInstructions: "" };
   }
   const [base, mcp, skillInstructions] = await Promise.all([
-    buildTools(userId, query, requester, origin, voiceRef),
+    buildTools(userId, query, requester, origin, voiceRef, undefined, opts.canal),
     buildMcpTools(userId),
     getSkillInstructions(userId, query),
   ]);

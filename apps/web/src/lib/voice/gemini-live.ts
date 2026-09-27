@@ -379,6 +379,12 @@ export class GeminiLiveSession implements SessaoRealtime {
     this.cb.onState?.("closed");
   }
 
+  /** Ver SessaoRealtime.avisar: um turno de texto nosso, para ela confirmar falando. */
+  avisar(texto: string): void {
+    if (this.ws?.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({ clientContent: { turns: [{ role: "user", parts: [{ text: `[aviso do sistema, não é fala do dono] ${texto}` }] }], turnComplete: true } }));
+  }
+
   get active(): boolean {
     return this.ws !== null;
   }

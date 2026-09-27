@@ -32,6 +32,8 @@ export const FLUXO = {
   financas: "financas",
   casa: "casa",
   acompanhamento: "acompanhamento",
+  whatsapp: "whatsapp",
+  whatsappAutomatico: "whatsapp_automatico",
 } as const;
 
 export interface RegistroDeUso {

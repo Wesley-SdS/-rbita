@@ -23,6 +23,11 @@ import { onJobEnqueued, purgeJobs, recoverZombies } from "@orbita/core/jobs/queu
 import { drainJobs, jobsEmExecucao } from "@orbita/core/jobs/runner";
 import { closeIdleMcpConnections } from "@orbita/core/mcp/client";
 import { rotularVetoresLegados } from "@orbita/core/rag/modelo-dos-vetores";
+import { instalarRoteadorDoWhatsapp } from "@orbita/core/whatsapp/rotear";
+import { processarPendentes, purgarEventosBrutos } from "@orbita/core/whatsapp/processar";
+import { conferirSaude, usuariosComSessao } from "@orbita/core/whatsapp/sessao";
+import { purgarMensagens } from "@orbita/core/whatsapp/store";
+import { apagarMidias } from "@orbita/core/whatsapp/midia";
 // registra os trabalhos pesados (como os domínios de tool): ninguém os chama pelo nome
 import "@orbita/core/jobs/handlers";
 import { randomUUID } from "node:crypto";
@@ -100,6 +105,8 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     // rosto e gesto reagem a `camera.detected` (com freio por câmera), em vez de
     // a ingestão chamar biometria direto (NV.1 + rajada do Frigate)
     installCameraIdentityListener();
+    // WhatsApp: o que for guardado passa pelo roteador (conversa "Eu", automático)
+    instalarRoteadorDoWhatsapp();
 
     // fila de trabalho pesado: recupera o que um processo anterior deixou no
     // meio, e passa a acordar na hora em que alguém enfileira
@@ -140,6 +147,15 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     // acompanhar tarefa (PRD §5.4): a volta é metade do intervalo configurado,
     // para a olhada cair perto da hora sem o laço ficar acordando à toa
     this.loop("guided", () => settings.get("guided.intervalSeconds").then((s) => Math.max(5, Math.floor(s / 2)) * 1000), () => tickGuidedTasks());
+    // WhatsApp pessoal: saúde da sessão, rede de segurança do webhook e retenção
+    this.loop("whatsapp-saude", () => settings.get("whatsapp.saudeSegundos").then((s) => s * 1000), async () => {
+      for (const userId of await usuariosComSessao()) await conferirSaude(userId);
+    });
+    this.loop("whatsapp-pendentes", async () => 15_000, () => processarPendentes());
+    this.loop("whatsapp-retencao", pruneEvery, async () => {
+      await apagarMidias(await purgarMensagens(await settings.get("whatsapp.retencaoDias")));
+      await purgarEventosBrutos(await settings.get("events.retentionDays"));
+    });
     log.info("scheduler.up", { loops: this.loops.map((l) => l.name) });
   }
 

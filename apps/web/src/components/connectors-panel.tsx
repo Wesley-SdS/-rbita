@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { invalidar, useRecurso } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
+import { BlocoWhatsappPessoal } from "@/components/whatsapp-pessoal";
 
 interface Conta {
   id: string;
@@ -152,6 +153,7 @@ export function ConnectorsPanel() {
             </article>
           ))}
 
+          <BlocoWhatsappPessoal />
           <BlocoWhatsapp />
         </div>
       )}
@@ -206,8 +208,8 @@ function BlocoWhatsapp() {
           {erro ? "Não consegui verificar" : estado?.configured ? "Configurado" : "Não configurado"}
         </span>
       </div>
-      <h3>WhatsApp</h3>
-      <p>Token e ID do número do seu app da Meta (WhatsApp Business Cloud API).</p>
+      <h3>WhatsApp Business (Cloud API)</h3>
+      <p>Token e ID do número do seu app da Meta. Só envia texto; para ler conversas, use o WhatsApp pessoal.</p>
 
       {estado?.configured ? (
         <>

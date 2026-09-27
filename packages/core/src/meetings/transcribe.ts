@@ -31,6 +31,8 @@ export interface TranscreverOpcoes {
   sourceRef?: string | null;
   /** o que está sendo transcrito, para a linha da conta dizer algo */
   referencia?: string | null;
+  /** ver SttOptions.permitirNuvem: ausente, vale a config das reuniões */
+  permitirNuvem?: boolean;
 }
 
 export async function transcribeRecording(userId: string, audio: Uint8Array, mime: string, opts: TranscreverOpcoes, progresso?: Progresso): Promise<TranscricaoResultado> {
@@ -40,7 +42,7 @@ export async function transcribeRecording(userId: string, audio: Uint8Array, mim
   const started = Date.now();
   // cópia para um ArrayBuffer próprio: o File não aceita visão sobre buffer compartilhado
   const file = new File([new Uint8Array(audio)], "gravacao", { type: mime });
-  const result = await transcribeAudio(file, { diarize, expectedSpeakers: opts.expectedSpeakers, userId, referencia: opts.referencia ?? null });
+  const result = await transcribeAudio(file, { diarize, expectedSpeakers: opts.expectedSpeakers, userId, referencia: opts.referencia ?? null, permitirNuvem: opts.permitirNuvem });
   log.info("stt", { userId, provider: result.provider, diarize, speakers: result.speakers ?? 0, bytes: audio.length, ms: Date.now() - started });
 
   // Quem é quem PELO QUE FOI DITO. Não depende do serviço de percepção nem de

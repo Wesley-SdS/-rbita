@@ -21,7 +21,9 @@ export async function garantirContato(userId: string, jid: string, dados: { nome
         // o nome do WhatsApp só é gravado quando vem; um evento sem nome não apaga o que havia
         ...(dados.nome ? { nome: dados.nome } : {}),
         ...(dados.escreveu ? { escreveuAlgumaVez: true } : {}),
-        ...(dados.em ? { ultimaMensagemEm: sql`greatest(${waContato.ultimaMensagemEm}, ${dados.em})` } : {}),
+        // ISO + cast, NUNCA a Date crua: dentro do sql`` ela vira o toString() do
+        // JavaScript e o Postgres recusa (CLAUDE.md §9; o smoke pegou isto aqui)
+        ...(dados.em ? { ultimaMensagemEm: sql`greatest(${waContato.ultimaMensagemEm}, ${dados.em.toISOString()}::timestamp)` } : {}),
       },
     })
     .returning();
@@ -78,8 +80,10 @@ export async function mensagemPorExternalId(userId: string, externalId: string):
   return m ?? null;
 }
 
-export async function atualizarMensagem(userId: string, externalId: string, patch: Partial<Pick<WaMensagem, "texto" | "editada" | "apagada" | "reacao" | "transcricao" | "descricaoImagem" | "midiaCaminho" | "midiaSha256" | "midiaMime">>): Promise<void> {
-  await db.update(waMensagem).set(patch).where(and(eq(waMensagem.userId, userId), eq(waMensagem.externalId, externalId)));
+/** Devolve quantas linhas mudaram: zero é "a mensagem ainda não chegou". */
+export async function atualizarMensagem(userId: string, externalId: string, patch: Partial<Pick<WaMensagem, "texto" | "editada" | "apagada" | "reacao" | "transcricao" | "descricaoImagem" | "midiaCaminho" | "midiaSha256" | "midiaMime">>): Promise<number> {
+  const r = await db.update(waMensagem).set(patch).where(and(eq(waMensagem.userId, userId), eq(waMensagem.externalId, externalId))).returning({ id: waMensagem.id });
+  return r.length;
 }
 
 export async function atualizarMensagemPorId(userId: string, id: string, patch: Partial<Pick<WaMensagem, "transcricao" | "descricaoImagem" | "midiaCaminho" | "midiaSha256" | "midiaMime" | "externalId">>): Promise<void> {
@@ -235,4 +239,9 @@ export async function purgarMensagens(dias: number): Promise<string[]> {
     (await db.select({ caminho: waMensagem.midiaCaminho }).from(waMensagem).where(inArray(waMensagem.midiaCaminho, caminhos))).map((r) => r.caminho),
   );
   return [...new Set(caminhos)].filter((c) => !aindaUsados.has(c));
+}
+
+/** O que saiu sozinho, para a tela mostrar (W7: tudo que a Órbita mandou sem aprovação fica visível). */
+export async function automaticasRecentes(userId: string, limite: number): Promise<WaMensagem[]> {
+  return db.select().from(waMensagem).where(and(eq(waMensagem.userId, userId), eq(waMensagem.automatica, true))).orderBy(desc(waMensagem.em)).limit(limite);
 }

@@ -5,7 +5,7 @@ import { actionQueue } from "@orbita/db/action-schema";
 import { toolConfig } from "@orbita/db/tool-schema";
 import { connectedProviders } from "../connectors/store";
 import { getHaConnection } from "../home/connection";
-import { whatsappConfigured } from "../connectors/whatsapp";
+import { provedorAtivo } from "../whatsapp/enviar";
 import { settings } from "../settings";
 import {
   availableFor, effectiveRisk, requesterNote, type ToolContext, getTool, isEnabled, isToolRisk, listRegisteredTools, needsApproval, selectRelevant, summaryFor, toToolSet,
@@ -34,6 +34,24 @@ import "./domains/identidade";
 import "./domains/acompanhamento";
 
 export * from "./registry";
+
+/**
+ * O que o WhatsApp permite agora: mandar (qualquer provedor) e ler (só o
+ * número pessoal). Fail-soft: sem banco ou sem ponte, as tools somem do turno
+ * em vez de derrubá-lo.
+ */
+async function estadoDoWhatsapp(userId: string): Promise<{ whatsappConnected: boolean; whatsappPessoal: boolean }> {
+  const p = await provedorAtivo(userId).catch(() => null);
+  return { whatsappConnected: p !== null, whatsappPessoal: p === "pessoal" };
+}
+
+/** Prazo para aprovar FALANDO (frase ou voz). Proposta da tela não vence. */
+async function expiraPara(canal: ActionCanal): Promise<Date | null> {
+  if (canal === "tela") return null;
+  const min = await settings.get("whatsapp.aprovacaoValidadeMin").catch(() => 30);
+  return new Date(Date.now() + min * 60_000);
+}
+export type ActionCanal = "tela" | "whatsapp" | "voz";
 
 // ── configuração por tool (tela do catálogo) ────────────────────────────────
 // Cache curto por processo, igual ao das settings: mudou na tela, vale em segundos.
@@ -71,8 +89,8 @@ export async function setToolOverride(name: string, patch: { enabled?: boolean; 
 
 /** Catálogo para a tela: tudo que existe, com risco declarado, efetivo e estado. */
 export async function toolCatalog(userId: string) {
-  const [overrides, connected, haConn, waConnected] = await Promise.all([
-    loadToolOverrides(), connectedProviders(userId), getHaConnection(userId), whatsappConfigured(userId),
+  const [overrides, connected, haConn, wa] = await Promise.all([
+    loadToolOverrides(), connectedProviders(userId), getHaConnection(userId), estadoDoWhatsapp(userId),
   ]);
   const haConnected = haConn !== null;
   return listRegisteredTools().map((d) => ({
@@ -83,8 +101,8 @@ export async function toolCatalog(userId: string) {
     riskOverride: overrides.get(d.name)?.riskOverride ?? null,
     effectiveRisk: effectiveRisk(d, overrides),
     enabled: isEnabled(d, overrides),
-    requires: d.requires?.connector ?? (d.requires?.homeAssistant ? "home_assistant" : d.requires?.whatsapp ? "whatsapp" : d.requires?.available ? "env" : null),
-    available: availableFor([d], { connected, haConnected, whatsappConnected: waConnected, overrides }).length === 1,
+    requires: d.requires?.connector ?? (d.requires?.homeAssistant ? "home_assistant" : d.requires?.whatsapp || d.requires?.whatsappPessoal ? "whatsapp" : d.requires?.available ? "env" : null),
+    available: availableFor([d], { connected, haConnected, ...wa, overrides }).length === 1,
   }));
 }
 
@@ -93,11 +111,11 @@ export async function toolCatalog(userId: string) {
  * Enfileira a PROPOSTA em action_queue (o LLM nunca executa efeito externo).
  * `kind` é o nome da tool: POST /api/actions resolve pelo registro e chama o `run`.
  */
-export function enqueueFor(userId: string): Enqueue {
+export function enqueueFor(userId: string, canal: ActionCanal = "tela"): Enqueue {
   return async (def, input, summary) => {
     const [row] = await db
       .insert(actionQueue)
-      .values({ userId, kind: def.name, summary, payload: (input ?? {}) as Record<string, unknown> })
+      .values({ userId, kind: def.name, summary, payload: (input ?? {}) as Record<string, unknown>, canal, expiraEm: await expiraPara(canal) })
       .returning({ id: actionQueue.id });
     return { proposta_enfileirada: true, aguardando_aprovacao: true, id: row?.id, resumo: summary };
   };
@@ -107,14 +125,14 @@ export function enqueueFor(userId: string): Enqueue {
  * ToolSet do turno: tools ligadas, com exigências atendidas para este usuário,
  * selecionadas por relevância ao pedido, com o gate derivado do risco efetivo.
  */
-export async function buildToolSet(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"], dominios?: readonly string[]): Promise<ToolSet> {
-  const [overrides, connected, max, haConn, waConnected] = await Promise.all([
-    loadToolOverrides(), connectedProviders(userId), settings.get("tools.maxPerTurn"), getHaConnection(userId), whatsappConfigured(userId),
+export async function buildToolSet(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"], dominios?: readonly string[], canal: ActionCanal = "tela"): Promise<ToolSet> {
+  const [overrides, connected, max, haConn, wa] = await Promise.all([
+    loadToolOverrides(), connectedProviders(userId), settings.get("tools.maxPerTurn"), getHaConnection(userId), estadoDoWhatsapp(userId),
   ]);
-  const usable = availableFor(listRegisteredTools(), { connected, haConnected: haConn !== null, whatsappConnected: waConnected, overrides });
+  const usable = availableFor(listRegisteredTools(), { connected, haConnected: haConn !== null, ...wa, overrides });
   const doDominio = dominios?.length ? usable.filter((d) => dominios.includes(d.domain)) : usable;
   const chosen = selectRelevant(doDominio, query, max);
-  return toToolSet(chosen, { userId, requester, origin, voiceRef }, { overrides, enqueue: enqueueFor(userId) });
+  return toToolSet(chosen, { userId, requester, origin, voiceRef }, { overrides, enqueue: enqueueFor(userId, canal) });
 }
 
 /**
@@ -132,10 +150,10 @@ export async function buildToolSet(userId: string, query = "", requester?: ToolC
  * mesmas coisas, sem diferença.
  */
 export async function toolDefsForRealtime(userId: string) {
-  const [overrides, connected, haConn, waConnected] = await Promise.all([
-    loadToolOverrides(), connectedProviders(userId), getHaConnection(userId), whatsappConfigured(userId),
+  const [overrides, connected, haConn, wa] = await Promise.all([
+    loadToolOverrides(), connectedProviders(userId), getHaConnection(userId), estadoDoWhatsapp(userId),
   ]);
-  return availableFor(listRegisteredTools(), { connected, haConnected: haConn !== null, whatsappConnected: waConnected, overrides });
+  return availableFor(listRegisteredTools(), { connected, haConnected: haConn !== null, ...wa, overrides });
 }
 
 /**
@@ -151,10 +169,10 @@ export async function runRealtimeTool(userId: string, name: string, rawInput: un
   const def = getTool(name);
   if (!def) return { erro: `Ferramenta "${name}" não existe.` };
 
-  const [overrides, connected, haConn, waConnected] = await Promise.all([
-    loadToolOverrides(), connectedProviders(userId), getHaConnection(userId), whatsappConfigured(userId),
+  const [overrides, connected, haConn, wa] = await Promise.all([
+    loadToolOverrides(), connectedProviders(userId), getHaConnection(userId), estadoDoWhatsapp(userId),
   ]);
-  const usable = availableFor([def], { connected, haConnected: haConn !== null, whatsappConnected: waConnected, overrides });
+  const usable = availableFor([def], { connected, haConnected: haConn !== null, ...wa, overrides });
   if (usable.length === 0) return { erro: `Ferramenta "${name}" não está disponível agora.` };
 
   const parsed = def.inputSchema.safeParse(rawInput ?? {});
@@ -167,7 +185,8 @@ export async function runRealtimeTool(userId: string, name: string, rawInput: un
   if (needsApproval(risk)) {
     const quem = requester ? await requester().catch(() => null) : null;
     const resumo = summaryFor(def, parsed.data);
-    const proposta = await enqueueFor(userId)(def, parsed.data, resumo + requesterNote(quem));
+    // canal "voz": a proposta pode ser aprovada dizendo "manda" na mesma sessão (W6)
+    const proposta = await enqueueFor(userId, "voz")(def, parsed.data, resumo + requesterNote(quem));
     return { ...proposta, resumo };
   }
   return def.run(parsed.data, ctx);

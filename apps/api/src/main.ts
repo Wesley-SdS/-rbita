@@ -27,7 +27,17 @@ async function bootstrap() {
   app.set("trust proxy", true);
   // O chat aceita imagem em data URL dentro do JSON (até 8 MB, validado por
   // zod na rota): o limite padrão de 100 kB do body-parser cortaria isso.
-  app.useBodyParser("json", { limit: process.env.API_JSON_LIMIT ?? "12mb" });
+  // O webhook do WhatsApp assina os BYTES do corpo (HMAC): reserializar o JSON
+  // muda espaço e ordem das chaves e a assinatura nunca bate. Só nessa rota o
+  // corpo cru é guardado, para não dobrar a memória de um chat com imagem.
+  // (`verify` é opção do body-parser, que o Nest repassa inteira; só o tipo
+  // dele não a declara, daí o objeto à parte)
+  const guardarCru = {
+    verify: (req: { originalUrl?: string; rawBody?: Buffer }, _res: unknown, buf: Buffer) => {
+      if (req.originalUrl?.startsWith("/api/whatsapp/webhook/")) req.rawBody = Buffer.from(buf);
+    },
+  } as object;
+  app.useBodyParser("json", { limit: process.env.API_JSON_LIMIT ?? "12mb", ...guardarCru });
   // Compressão do JSON dos controllers do Nest. As rotas migradas já são
   // comprimidas na ponte (`sendWebResponse`); isto cobre as seis que respondem
   // pelo Express direto, entre elas a listagem de Ajustes, com 60 kB.

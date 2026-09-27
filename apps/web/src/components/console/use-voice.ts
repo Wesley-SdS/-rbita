@@ -281,12 +281,30 @@ export function useVoice(p: Params) {
     // não mistura com o wake word local
     if (wakeRef.current?.active) { wakeRef.current.stop(); wakeRef.current = null; setWakeOn(false); }
     stopSpeaking();
+    // Houve proposta nesta sessão: a próxima fala do dono pode ser "manda".
+    // Quem decide se é aprovação é o servidor (POST /api/actions/falada); daqui
+    // só sai a transcrição da fala DO DONO, nunca o que o modelo disse.
+    let temProposta = false;
     const rt = criarSessaoRealtime({
       onState: (s) => p.setMode(s === "speaking" ? "speaking" : s === "connecting" ? "connecting" : s === "listening" ? "listening" : "standby"),
       onError: () => { p.setError("Falha no modo tempo real."); rt.stop(); rtRef.current = null; setRealtimeOn(false); },
-      onTranscript: (role, text) => p.setMessages((m) => [...m, { role, content: text }]),
+      onTranscript: (role, text) => {
+        p.setMessages((m) => [...m, { role, content: text }]);
+        if (role !== "user" || !temProposta) return;
+        void fetch("/api/actions/falada", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto: text.slice(0, 500) }) })
+          .then((r) => r.json())
+          .then((d: { tratado?: boolean; resposta?: string }) => {
+            if (!d.tratado || !d.resposta) return;
+            p.setMessages((m) => [...m, { role: "assistant", content: d.resposta! }]);
+            rt.avisar?.(`O dono respondeu à proposta falando, e o resultado foi: "${d.resposta}". Diga isso a ele em uma frase curta.`);
+          })
+          .catch(() => undefined);
+      },
       // B7.2: mostra no log que a voz acionou uma ferramenta (mesmo gate do chat de texto).
-      onToolCall: (name) => p.setMessages((m) => [...m, { role: "assistant", content: `⚙ ${name}`, steps: [{ name, done: true }] }]),
+      onToolCall: (name, result) => {
+        if (result && typeof result === "object" && (result as { aguardando_aprovacao?: boolean }).aguardando_aprovacao) temProposta = true;
+        p.setMessages((m) => [...m, { role: "assistant", content: `⚙ ${name}`, steps: [{ name, done: true }] }]);
+      },
     });
     try {
       setRealtimeOn(true);

@@ -865,7 +865,7 @@ export const SETTING_DEFS = {
       { value: "cloud", label: "Cloud API da Meta" },
     ],
   ),
-  "whatsapp.ponteUrl": text("whatsapp", "Endereço da ponte", "Onde o GOWA roda nesta casa. Só aceita endereço local: a ponte carrega a conta inteira do WhatsApp.", "http://127.0.0.1:3001"),
+  "whatsapp.ponteUrl": text("whatsapp", "Endereço da ponte", "Onde o GOWA roda nesta casa. Só aceita endereço local: a ponte carrega a conta inteira do WhatsApp.", "http://127.0.0.1:3011"),
   "whatsapp.webhookBase": text("whatsapp", "Endereço da Órbita visto pela ponte", "Por onde o GOWA alcança o apps/api para entregar as mensagens. Com o GOWA no Docker, é o host do Docker.", "http://host.docker.internal:3010"),
   "whatsapp.ponteTimeoutMs": num("whatsapp", "Tempo para a ponte responder", "Quanto esperar o GOWA numa chamada comum. Envio de mídia usa quatro vezes isto.", 15000, 2000, 120000, { unit: "ms" }),
   "whatsapp.saudeSegundos": num("whatsapp", "Conferir a conexão a cada", "De quanto em quanto tempo o processo persistente pergunta ao GOWA se o número continua conectado.", 60, 10, 3600, { unit: "s" }),

@@ -58,6 +58,7 @@ import * as jobs from "./jobs";
 import * as meetingTranscribe from "./meeting-transcribe";
 import * as devices from "./devices";
 import * as channelsWhatsapp from "./channels-whatsapp";
+import * as whatsapp from "./whatsapp";
 import * as cameras from "./cameras";
 import * as cameraEvents from "./camera-events";
 import * as cameraIngest from "./camera-ingest";
@@ -118,6 +119,13 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/meeting/transcribe", meetingTranscribe),
   webRoute("api/devices", devices),
   webRoute("api/channels/whatsapp", channelsWhatsapp),
+  // WhatsApp pessoal pela ponte GOWA: o webhook autentica por HMAC, o resto é tela do dono
+  webRoute("api/whatsapp/webhook/:deviceId", { POST: whatsapp.WEBHOOK }),
+  webRoute("api/whatsapp/sessao", { GET: whatsapp.GET_SESSAO }),
+  webRoute("api/whatsapp/parear", { POST: whatsapp.POST_PAREAR }),
+  webRoute("api/whatsapp/desconectar", { POST: whatsapp.POST_DESCONECTAR }),
+  webRoute("api/whatsapp/contatos", { GET: whatsapp.GET_CONTATOS }),
+  webRoute("api/whatsapp/contatos/:id", { PATCH: whatsapp.PATCH_CONTATO }),
   webRoute("api/cameras", cameras),
   webRoute("api/cameras/events", cameraEvents),
   webRoute("api/cameras/ingest", cameraIngest),
@@ -148,6 +156,7 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/routines", routines),
   webRoute("api/routines/run", routinesRun),
   webRoute("api/notifications", notifications),
+  webRoute("api/actions/falada", { POST: actions.POST_FALADA }),
   webRoute("api/actions", actions),
   webRoute("api/push/subscribe", pushSubscribe),
   webRoute("api/push/test", pushTest),

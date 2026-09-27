@@ -34,7 +34,12 @@ export function toWebRequest(req: ExpressRequest, res?: ExpressResponse): Reques
   const hasBody = req.method !== "GET" && req.method !== "HEAD";
   const init: RequestInit & { duplex?: "half" } = { method: req.method, headers, signal: ac.signal };
   if (hasBody) {
-    if (req.readableEnded) {
+    const cru = (req as ExpressRequest & { rawBody?: Buffer }).rawBody;
+    if (cru) {
+      // rota que confere assinatura sobre os bytes (webhook do WhatsApp): o
+      // corpo segue exatamente como chegou
+      init.body = new Uint8Array(cru);
+    } else if (req.readableEnded) {
       // o body-parser do Nest já consumiu o stream (JSON): reserializa
       init.body = typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? {});
     } else {

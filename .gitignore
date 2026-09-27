@@ -62,3 +62,6 @@ bench/perguntas.json
 # (silero_vad.onnx) é versionado; o runtime, não.
 apps/web/public/modelos/ort-*.wasm
 apps/web/public/modelos/ort-*.mjs
+
+# mídia do WhatsApp pessoal (dado de terceiros, fica em casa): whatsapp.midiaDir
+**/data/whatsapp/

@@ -248,6 +248,46 @@ async def tts(req: TTSRequest) -> Response:
     return Response(content=audio, media_type="audio/wav")
 
 
+def _to_ogg_opus(data: bytes) -> bytes:
+    """Qualquer áudio (MP3 do Edge, WAV do Piper) -> OGG/Opus mono 48 kHz.
+
+    É o formato da NOTA DE VOZ do WhatsApp: mandado em MP3, o áudio chega como
+    arquivo anexo, sem a forma de onda. O PyAV já vem com o faster-whisper e
+    traz o libopus embutido, então não há ffmpeg para instalar na máquina.
+    """
+    import av
+
+    out = io.BytesIO()
+    with av.open(io.BytesIO(data)) as src, av.open(out, mode="w", format="ogg") as dst:
+        stream = dst.add_stream("libopus", rate=48000, layout="mono")
+        stream.bit_rate = 32000
+        resampler = av.AudioResampler(format="s16", layout="mono", rate=48000)
+        for frame in src.decode(audio=0):
+            for f in resampler.resample(frame):
+                for pkt in stream.encode(f):
+                    dst.mux(pkt)
+        for f in resampler.resample(None):
+            for pkt in stream.encode(f):
+                dst.mux(pkt)
+        for pkt in stream.encode(None):
+            dst.mux(pkt)
+    return out.getvalue()
+
+
+@app.post("/converter/ogg")
+async def converter_ogg(file: UploadFile = File(...)) -> Response:
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Áudio vazio.")
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Áudio grande demais para virar nota de voz.")
+    try:
+        ogg = await asyncio.to_thread(_to_ogg_opus, data)
+    except Exception as e:  # formato que o PyAV não abre
+        raise HTTPException(status_code=422, detail=f"Não consegui converter o áudio: {e}") from e
+    return Response(content=ogg, media_type="audio/ogg; codecs=opus")
+
+
 @app.websocket("/ws/wake")
 async def ws_wake(ws: WebSocket):
     """Detecção de "Ei Órbita" / "Órbita" em streaming.

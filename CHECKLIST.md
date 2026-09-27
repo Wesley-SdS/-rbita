@@ -132,7 +132,7 @@ Levantamento do que ainda está aberto no PRD + melhorias de código/performance
 - [~] **S1. Headers de segurança** → ✅ headers seguros no `next.config` (X-Content-Type-Options nosniff, X-Frame-Options SAMEORIGIN, Referrer-Policy, X-DNS-Prefetch-Control). **Verificado** (curl). **CSP e HSTS FEITOS** (`apps/web/src/lib/security/headers.ts`, com teste que trava `blob:` fora do `script-src`). _(Verificado 23/09/2026.)_ Origin nas rotas mutantes já coberto pelo Better Auth (trustedOrigins) + cookie SameSite.
 
 **🔌 P6 — Conectores / integrações (dependem de chaves)**
-- [~] **I1. Plugar OAuth** → o CÓDIGO está pronto para Google, Microsoft (Outlook+Teams), Jira, Notion e Slack, com multi-conta. Falta só a CREDENCIAL: os cinco aparecem `configured=false`. Cada um acende sozinho quando o par `*_CLIENT_ID`/`*_CLIENT_SECRET` entra no `.env` (ver `.env.example`). WhatsApp por usuário continua dependendo do Embedded Signup da Meta. `RESEND_API_KEY` para magic link continua pendente.
+- [~] **I1. Plugar OAuth** → o CÓDIGO está pronto para Google, Microsoft (Outlook+Teams), Jira, Notion e Slack, com multi-conta. Falta só a CREDENCIAL: os cinco aparecem `configured=false`. Cada um acende sozinho quando o par `*_CLIENT_ID`/`*_CLIENT_SECRET` entra no `.env` (ver `.env.example`). WhatsApp deixou de depender do Embedded Signup: o número PESSOAL entra pela ponte local GOWA (PRD-WHATSAPP.md), e falta só parear um celular em Conectores para a sondagem final (PRD §10). `RESEND_API_KEY` para magic link continua pendente.
 - [ ] **I2. Mobile OAuth social nativo** (deep-link p/ capturar a sessão no app).
 
 **☁️ P7 — Deploy na nuvem** (guia completo em [`DEPLOY.md`](./DEPLOY.md))

@@ -1,4 +1,4 @@
-import { generateText, stepCountIs, type ToolSet } from "ai";
+import { generateText, stepCountIs, type ModelMessage, type ToolSet } from "ai";
 import { buildModelChain, recordProviderResult, resolveModel, statusDoErro, fallbackModelKey, cadeiaDaCasa, SEM_MODELO } from "@orbita/llm";
 import { log } from "../observability/logger";
 import { registrarUso } from "../usage/registrar";
@@ -30,6 +30,12 @@ export interface PedidoDeTexto {
   referencia?: string | null;
   system?: string;
   prompt: string;
+  /**
+   * Conversa com histórico, quando o fluxo tem um (a conversa "Eu" do
+   * WhatsApp). Presente, substitui o `prompt`; o `prompt` continua obrigatório
+   * para os ~25 fluxos que só mandam um pedido.
+   */
+  messages?: ModelMessage[];
   tools?: ToolSet;
   maxSteps?: number;
   /** modelo que este fluxo prefere; vazio usa a política da casa */
@@ -83,7 +89,7 @@ export async function gerarTexto(p: PedidoDeTexto): Promise<TextoGerado> {
       const r = await generateText({
         model: resolveModel(modelKey),
         ...(p.system ? { system: p.system } : {}),
-        prompt: p.prompt,
+        ...(p.messages?.length ? { messages: p.messages } : { prompt: p.prompt }),
         ...(p.tools ? { tools: p.tools } : {}),
         ...(p.maxSteps ? { stopWhen: stepCountIs(p.maxSteps) } : {}),
       });

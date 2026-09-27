@@ -410,3 +410,46 @@ E as da Órbita:
 4. Teste automatizado: mensagem de terceiro não aprova proposta, não alcança tool de finanças no
    modo automático e não dispara turno quando o contato está em `aprovar`.
 5. Smoke manual de voz (§7.5 do CLAUDE.md): pedir e aprovar por voz.
+
+---
+
+## 10. Estado da implementação (2026-09-27)
+
+W1 a W8 implementados. Typecheck limpo nos dois apps; testes novos em `whatsapp/*.test.ts`,
+`actions/*.test.ts`, `tools/domains/whatsapp-tools.test.ts` e `voice/sintetizar.test.ts`.
+
+### Verificado no app real, contra o GOWA v9.5.0 de verdade
+
+- Pareamento por QR pela rota da Órbita, duas vezes seguidas (idempotente), QR em data URL.
+- O contêiner alcança o `apps/api` em `host.docker.internal:3010` com o Nest preso no 127.0.0.1
+  (W0 item 1: **sim**, no Docker Desktop).
+- Webhook assinado passando por Nest → ponte → rota: assinatura certa 200, errada 401,
+  dispositivo desconhecido 401, reentrega sem duplicar.
+- Mensagem de terceiro guardada como dado; conversa "Eu" reconhecida; turno do dono respondido
+  pelo modelo da assinatura em ~4 s, com histórico na conversa "WhatsApp" do app.
+- Pedido "responde a Maria…" na conversa "Eu" → o modelo propôs `responder_whatsapp` sozinho →
+  proposta com `canal: whatsapp`, validade de 30 min e o texto inteiro no resumo → "Manda!"
+  aprovou pelo código → o envio chegou ao GOWA (que recusou por não haver celular pareado, com a
+  mensagem certa).
+- `POST /converter/ogg` do `apps/voice`: WAV vira OGG/Opus válido (400 para vazio, 422 para lixo).
+
+### Desvios do PRD, e por quê
+
+| Item | PRD dizia | Ficou | Por quê |
+|---|---|---|---|
+| W2 | processar pela fila `jobs/` | tabela `wa_evento_bruto` como fila, em série no processo, laço `whatsapp-pendentes` | uma linha de trabalho por mensagem enterraria os trabalhos do dono na tela |
+| W5 | extrair o turno de `routes/chat.ts` | turno próprio em `whatsapp/turno.ts` com as MESMAS peças, sem stream | mexer no caminho crítico do chat por um canal novo não compensava o risco |
+| W7 | tools `ler`/`responder` presas ao chat | turno SEM NENHUMA tool; quem envia é o código | superfície zero é mais forte que superfície presa |
+| W4 | `enviar_imagem` de câmera ou arquivo | imagem guardada no WhatsApp (recebida ou mandada na conversa "Eu") | é o caso real ("manda essa foto pra Maria"); câmera fica para quando houver pedido |
+| W1 | porta 3001 | 127.0.0.1:3011 | a 3001 desta máquina é do GOWA do `whatsapp-workspace` |
+
+### Ainda depende de um celular pareado (sondagem W0 restante)
+
+1. Formato real da conversa "Eu" (`chat_id` igual ao JID do dono? chega como LID?). Se chegar
+   como `@lid`, `rotear` não reconhece e a conversa "Eu" fica muda: ajustar `normalizarJid`.
+2. A nota de voz OGG/Opus toca como nota de voz (com forma de onda) no celular.
+3. Download de mídia recebida: caminho local do payload e `/message/{id}/download`.
+4. O eco de áudio e de imagem casa pelo hash (`audio:` vazio e `imagem:<legenda>`).
+
+Para rodar: `docker compose up -d gowa`, gerar `GOWA_BASIC_AUTH` no `.env`, reiniciar o `apps/api`
+e o `apps/voice` (o endpoint de conversão é novo), e parear em Conectores → WhatsApp pessoal.

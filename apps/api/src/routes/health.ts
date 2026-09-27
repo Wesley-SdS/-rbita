@@ -6,6 +6,7 @@ import { settings } from "@orbita/core/settings/index";
 import { deveDescobrirLocal, embedProvider, localAvailable, readPolicy } from "@orbita/llm";
 import { temChaveDeNuvem } from "@orbita/core/ocr/visao";
 import { estadoDoServico, ollamaEmUso, vozLocalEmUso } from "@orbita/core/saude/servicos-locais";
+import { waSessao } from "@orbita/db/whatsapp-schema";
 
 async function ping(url: string, ms: number): Promise<boolean> {
   try {
@@ -60,6 +61,11 @@ export async function GET(_req: Request, _ctx: RouteCtx) {
   // derruba o health (o resto da Órbita funciona), mas precisa aparecer.
   const percepcao = await settings.get("identity.perceptionUrl");
   checks.perception = (await ping(percepcao.replace(/\/+$/, "") + "/health", pingMs)) ? "up" : "down";
+
+  // WhatsApp pessoal: o estado que o laço de saúde gravou (não pinga a ponte
+  // aqui: o health é público e não deve tocar na sessão do dono)
+  const sessoes = await db.select({ status: waSessao.status }).from(waSessao).catch(() => []);
+  checks.whatsapp = estadoDoServico(sessoes.length > 0, sessoes.some((x) => x.status === "conectado"));
 
   const status = checks.db === "up" ? "ok" : "error";
   return Response.json(

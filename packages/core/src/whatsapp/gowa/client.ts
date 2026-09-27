@@ -49,8 +49,9 @@ async function base(): Promise<{ url: string; timeoutMs: number }> {
 }
 
 function autorizacao(): string {
-  // `admin:admin` é o padrão do compose de exemplo; o .env de verdade gera outro
-  return "Basic " + Buffer.from(process.env.GOWA_BASIC_AUTH ?? "admin:admin").toString("base64");
+  // `||` e não `??`: com a linha vazia no .env o compose cai no padrão
+  // `admin:admin`, e aqui tem de cair no mesmo, senão a senha não bate
+  return "Basic " + Buffer.from(process.env.GOWA_BASIC_AUTH || "admin:admin").toString("base64");
 }
 
 /** "Não pareado" tem TRÊS formas no GOWA; as três significam a mesma coisa. */
@@ -120,8 +121,12 @@ export async function criarDispositivo(deviceId: string, webhookUrl: string, web
   try {
     await json({ method: "POST", path: "/devices", body: { device_id: deviceId, webhook_url: webhookUrl, webhook_secret: webhookSegredo, webhook_events: EVENTOS_DO_WEBHOOK } });
   } catch (e) {
-    // o slot já existir (reinício da Órbita com o GOWA de pé) não é erro
-    if (!(e instanceof PonteError && e.status === 409)) throw e;
+    // O slot já existir (segundo pareamento, reinício da Órbita com o GOWA de
+    // pé) não é erro. O GOWA v9.5 responde isso com 500 genérico e o motivo só
+    // na mensagem ("device X already exists", medido em 27/09/2026), então a
+    // prova é perguntar pelo dispositivo: se ele responde, está lá.
+    if (!(e instanceof PonteError) || e.motivo === "fora_do_ar" || e.motivo === "nao_local") throw e;
+    await json({ method: "GET", path: `/devices/${enc(deviceId)}` });
   }
 }
 

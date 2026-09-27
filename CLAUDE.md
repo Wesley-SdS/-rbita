@@ -112,12 +112,22 @@ Failover só troca de modelo **antes do primeiro token**. Depois disso, erro é 
 ### 5.1 Ações com efeito colateral passam por gate humano
 
 O LLM **nunca** envia e-mail, cria evento ou posta mensagem. As tools apenas **enfileiram uma
-proposta** em `action_queue`; a execução só acontece em `POST /api/actions`, com aprovação do
-usuário, via `lib/connectors/execute.ts`.
+proposta** em `action_queue`; a execução só acontece com aprovação do usuário, sempre por
+`core/actions/aprovar.ts` (o botão em `POST /api/actions`, e a FRASE "manda" do dono, ver abaixo).
 
 É defesa **estrutural** contra prompt-injection — não uma convenção de prompt. **Nunca** criar
 uma tool que execute efeito colateral direto. Ao adicionar comandos de casa, classificar por
 **risco por domínio**: luz/música direto; fechadura/alarme/portão pelo gate.
+
+**Aprovar falando** (`core/actions/por-frase.ts`): o dono diz "manda" na conversa "Eu" do WhatsApp
+ou na voz, e a proposta DAQUELE canal (`action_queue.canal`) sai. Quem decide é o código lendo a
+fala do DONO; **nunca exista uma tool que aprove**, senão uma mensagem de terceiro convence o
+modelo a chamá-la. Proposta vencida (`expiraEm`) só sai pela tela.
+
+**A única exceção ao gate** é a resposta automática do WhatsApp (`whatsapp/automatico.ts`), e ela
+é segura por construção: contato marcado pelo dono, nunca grupo, turno **sem nenhuma tool** (nem
+de leitura), sem RAG nem persona, destino fixado pelo código no chat de origem, teto por hora e
+detector de robô. Não amplie isso sem essas mesmas travas.
 
 ### 5.2 Conteúdo externo é DADO, nunca instrução
 
@@ -301,6 +311,13 @@ Antes de considerar qualquer tarefa concluída:
 | Outlook (e-mail e agenda) e Jira | `packages/core/src/connectors/microsoft.ts` · `connectors/jira.ts` · `tools/domains/{outlook,jira}.ts` |
 | Conta da sessão de voz (o navegador relata) | `packages/core/src/usage/sessao.ts` · rota `routes/usage-session.ts` |
 | Plano do Jarvis | `BRIEFING-JARVIS.md` · Fase 2: `PRD-FASE2-IDENTIDADE-PERCEPCAO.md` |
+| WhatsApp pessoal: ponte GOWA (cliente, eventos, HMAC) | `packages/core/src/whatsapp/gowa/` · serviço `gowa` no `docker-compose.yml` (127.0.0.1:3011) · PRD `PRD-WHATSAPP.md` |
+| WhatsApp: entrada (webhook grava, processa em série, mídia, transcrição) | rota `apps/api/src/routes/whatsapp.ts` · `whatsapp/processar.ts` · `whatsapp/midia.ts` · tabelas `wa_*` em `packages/db/src/whatsapp-schema.ts` |
+| WhatsApp: quem responde o quê (conversa "Eu", automático, dono assumiu) | `whatsapp/rotear.ts` · `whatsapp/turno.ts` · `whatsapp/automatico.ts` · regras puras em `whatsapp/regras.ts` |
+| WhatsApp: TODA saída (antibanimento, eco, provedor pessoal ou Cloud API) | `packages/core/src/whatsapp/enviar.ts` |
+| Tools de WhatsApp (8) | `packages/core/src/tools/domains/whatsapp.ts` |
+| Aprovar (botão, frase "manda" no WhatsApp e na voz) | `packages/core/src/actions/aprovar.ts` · `actions/por-frase.ts` · rota `POST /api/actions/falada` |
+| Fala da Órbita (Edge → Gemini → Piper) e nota de voz OGG/Opus | `packages/core/src/voice/sintetizar.ts` · `apps/voice` `POST /converter/ogg` |
 | Backlog pré-existente | `CHECKLIST.md` |
 
 ---
@@ -451,6 +468,23 @@ Antes de considerar qualquer tarefa concluída:
   de a voz nunca ter funcionado no celular e, quase certamente, do "no iPhone não
   consigo criar conta". `contexto-seguro.ts` existe para a falha ser DITA;
   `npm run dev:rede` sobe o Next em HTTPS. App nativo NÃO tem essa regra.
+- **O eco do WhatsApp.** O que a Órbita manda volta pelo webhook como mensagem `deMim`, e na
+  conversa "Eu" isso seria o dono pedindo de novo: ela responderia a si mesma em laço. A saída é
+  gravada ANTES do envio com o hash do conteúdo (`registrarSaida`), e a volta é casada por ele
+  (`casarEco`). Todo envio passa por `whatsapp/enviar.ts` justamente para isso valer sempre.
+- **GOWA v9.5 responde "já existe" com 500**, não 409, e o motivo só vem na mensagem. Por isso
+  `criarDispositivo` confere perguntando pelo dispositivo, em vez de olhar o status. O contêiner
+  alcança o `apps/api` em `host.docker.internal:3010` mesmo com o Nest preso no 127.0.0.1
+  (Docker Desktop, medido em 27/09/2026). A porta 3001 desta máquina é do GOWA do
+  `whatsapp-workspace`, que pode ter número pareado: não mexa nele.
+- **O webhook do WhatsApp confere HMAC sobre os BYTES.** O body-parser do Nest consome o JSON e a
+  ponte reserializaria (outra ordem de chaves, a assinatura nunca bate). O `main.ts` guarda o
+  corpo cru SÓ nessa rota (`verify`) e `toWebRequest` o repassa intacto.
+- **Mensagem de WhatsApp não usa a fila de trabalhos.** Uma linha por mensagem enterraria os
+  trabalhos do dono na tela. A tabela `wa_evento_bruto` é a fila durável (gravar antes de
+  processar), processada em série no processo, com o laço `whatsapp-pendentes` retomando o que
+  falhou. Edição, apagada e reação de mensagem ainda não guardada FALHAM de propósito para voltar
+  depois, em vez de se perderem.
 - **`apps/mobile` é fácil de esquecer.** Está fora do workspace pnpm, tem npm
   próprio, e ficou quebrado contra o servidor por meses sem ninguém ver (o chat
   virou NDJSON e ele lia bytes crus). Agora `apps/mobile/lib` roda no `vitest`.
