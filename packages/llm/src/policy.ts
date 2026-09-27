@@ -74,7 +74,17 @@ export function policySnapshot(): ModelPolicy {
   return { ...current };
 }
 
-/** Modelo reserva efetivo: o da config, ou o de bootstrap. */
+/**
+ * Modelo reserva efetivo: o da config, ou o de bootstrap.
+ *
+ * ATENÇÃO ao que isto NÃO é: não é "o modelo que resumo, memória e rotinas
+ * devem usar". Ele é o ÚLTIMO recurso, e usá-lo como primeira escolha foi um
+ * bug real: o bootstrap é `local/qwen2.5:7b`, então toda tarefa da casa ia
+ * para o modelo local mesmo com a ordem do dono em "assinatura primeiro".
+ * Medido em 27/09/2026: resumo de reunião em 123 s e extração de memória em
+ * 87 s na CPU, afogando a máquina. Quem escolhe o modelo da casa é
+ * `modeloDaCasa`, pela ordem da política. Ver `llm/gerar.ts`.
+ */
 export async function fallbackModelKey(): Promise<string> {
   const p = await readPolicy();
   return p.fallbackModel.trim() || BOOTSTRAP_MODEL_KEY;

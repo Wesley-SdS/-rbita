@@ -143,11 +143,28 @@ export function resolveModel(key: string): LanguageModel {
  * havendo chave configurada. `preferLocal` é a mesma ideia vinda da config do
  * dono (ler documento só em casa).
  */
-export type VisionCloudProvider = "auto" | "openai" | "gemini" | "gateway";
+export type VisionCloudProvider = "auto" | "assinatura" | "openai" | "gemini" | "gateway";
 
-/** Qual provedor de nuvem atende a visão, dada a preferência e as chaves. Puro. */
-export function escolherProvedorDeVisao(preferencia: VisionCloudProvider, chaves: { openai: boolean; gemini: boolean; gateway: boolean }): "openai" | "gemini" | "gateway" | null {
+/** As chaves que existem para ler imagem. `assinatura` é o Claude do dono. */
+export interface ChavesDeVisao {
+  assinatura?: boolean;
+  openai: boolean;
+  gemini: boolean;
+  gateway: boolean;
+}
+
+export type ProvedorDeVisao = "assinatura" | "openai" | "gemini" | "gateway";
+
+/**
+ * Qual provedor de nuvem atende a visão, dada a preferência e as chaves. Puro.
+ *
+ * No automático a ASSINATURA vem primeiro: ela enxerga imagem e não custa nada
+ * a mais para quem já a paga. Quem escolheu assinatura escolheu para tudo que
+ * é IA de uso geral, e não só para o chat.
+ */
+export function escolherProvedorDeVisao(preferencia: VisionCloudProvider, chaves: ChavesDeVisao): ProvedorDeVisao | null {
   if (preferencia !== "auto") return chaves[preferencia] ? preferencia : null;
+  if (chaves.assinatura) return "assinatura";
   if (chaves.openai) return "openai";
   if (chaves.gemini) return "gemini";
   if (chaves.gateway) return "gateway";
@@ -168,9 +185,14 @@ export function escolherProvedorDeVisao(preferencia: VisionCloudProvider, chaves
  */
 export function provedoresDeVisaoEmOrdem(
   preferencia: VisionCloudProvider,
-  chaves: { openai: boolean; gemini: boolean; gateway: boolean },
-): ("openai" | "gemini" | "gateway")[] {
-  const todos: ("openai" | "gemini" | "gateway")[] = ["openai", "gemini", "gateway"];
+  chaves: ChavesDeVisao,
+): ProvedorDeVisao[] {
+  // ASSINATURA PRIMEIRO, e não por elegância: o Claude enxerga imagem e, para
+  // quem paga a assinatura, cada leitura custa ZERO a mais. Ela ficou de fora
+  // desta lista por meses, então "ver pela câmera" ia para um provedor pago
+  // tendo a assinatura ali do lado. Quem escolheu assinatura escolheu para
+  // TUDO que é IA de uso geral, não só para o chat.
+  const todos: ProvedorDeVisao[] = ["assinatura", "openai", "gemini", "gateway"];
   const disponiveis = todos.filter((p) => chaves[p]);
   if (preferencia === "auto") return disponiveis;
   // a escolha explícita abre a fila, mas os outros continuam como reserva:
@@ -184,11 +206,20 @@ export function resolveVisionModel(opts: { localOnly?: boolean; preferLocal?: bo
     opts.localOnly || opts.preferLocal
       ? null
       : escolherProvedorDeVisao(opts.cloudProvider ?? "auto", {
+          assinatura: Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN),
           openai: Boolean(process.env.OPENAI_API_KEY),
           gemini: Boolean(gemini),
           gateway: Boolean(process.env.AI_GATEWAY_API_KEY),
         });
   const modeloPedido = opts.cloud?.trim();
+
+  if (escolhido === "assinatura") {
+    // reusa o `resolveModel`, que já resolve o OAuth da assinatura, os headers
+    // que a API exige e o cache de prompt. Reimplementar aqui seria manter a
+    // mesma dança em dois lugares.
+    const pedido = modeloPedido && /claude/i.test(modeloPedido) ? modeloPedido : "";
+    return resolveModel(pedido || process.env.VISION_MODEL_CLAUDE || "claude/claude-opus-5");
+  }
 
   if (escolhido === "openai") {
     const openai = createOpenAICompatible({ name: "openai", baseURL: "https://api.openai.com/v1", apiKey: process.env.OPENAI_API_KEY! });

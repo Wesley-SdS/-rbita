@@ -13,6 +13,18 @@ import { settings } from "../settings";
  * padrão (decisão do dono): só roda quando alguém pergunta "o que está
  * acontecendo" ou uma regra pede explicitamente, nunca a cada evento.
  */
+/**
+ * O recado de quando a privacidade da câmera força o modelo local.
+ *
+ * Sem isto a regra era INVISÍVEL: o dono ligava "identificar pessoas", a
+ * leitura passava a levar um minuto na CPU e parecia que a câmera não tinha
+ * funcionado. A regra continua valendo (decisão 9.6, imagem de câmera que
+ * identifica gente nunca vai para a nuvem); o que muda é ela ser dita, com a
+ * saída à mão.
+ */
+export const AVISO_SO_LOCAL =
+  "Esta câmera identifica pessoas, então só o modelo local pode olhar, e ele leva cerca de um minuto nesta máquina. Para respostas rápidas, desligue a identificação de pessoas nesta câmera, em Câmeras.";
+
 export async function narrateSnapshot(snapshot: string, question = "O que está acontecendo nesta cena? Descreva em uma ou duas frases.", opts: { localOnly?: boolean; userId?: string } = {}): Promise<string> {
   const cfg = await settings.getMany(["vision.localModel", "vision.cloudModel", "vision.cloudProvider"]);
 
@@ -23,6 +35,9 @@ export async function narrateSnapshot(snapshot: string, question = "O que está 
   const nuvem = opts.localOnly
     ? []
     : provedoresDeVisaoEmOrdem(cfg["vision.cloudProvider"], {
+        // a assinatura enxerga imagem e não custa nada a mais: quando o dono
+        // escolheu assinatura, ela atende a visão como atende o chat
+        assinatura: Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN),
         openai: Boolean(process.env.OPENAI_API_KEY),
         gemini: Boolean(process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY),
         gateway: Boolean(process.env.AI_GATEWAY_API_KEY),

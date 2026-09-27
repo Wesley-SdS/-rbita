@@ -51,6 +51,10 @@ vi.mock("@orbita/llm", () => ({
   resolveModel: () => ({}),
   fallbackModelKey: async () => "local/x",
   buildModelChain: (k: string) => [k],
+  // `modeloDaCasa` passou a consultar a ORDEM DO DONO quando ninguém pede um
+  // modelo. Aqui o catálogo descoberto está vazio (é um teste puro), então ela
+  // devolve vazio e o caminho cai no reserva, que é o que este teste exercita.
+  cadeiaDaCasa: () => [],
 }));
 // o registro de consumo é best-effort e não deve exigir banco no teste do resumo
 vi.mock("../usage/registrar", () => ({ registrarUso: () => {}, FLUXO: { resumoConversa: "resumo_conversa" } }));

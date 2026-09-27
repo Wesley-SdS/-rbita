@@ -1,5 +1,5 @@
 import { generateText, stepCountIs, type ToolSet } from "ai";
-import { buildModelChain, recordProviderResult, resolveModel, statusDoErro, fallbackModelKey } from "@orbita/llm";
+import { buildModelChain, recordProviderResult, resolveModel, statusDoErro, fallbackModelKey, cadeiaDaCasa } from "@orbita/llm";
 import { log } from "../observability/logger";
 import { registrarUso } from "../usage/registrar";
 
@@ -170,8 +170,25 @@ export async function gerarEstruturado<T>(
  * escolhido). Quem puder usar `gerarTexto` tem os dois e deve preferi-lo.
  */
 export async function modeloDaCasa(modeloPreferido?: string): Promise<{ model: ReturnType<typeof resolveModel>; modelKey: string }> {
-  const preferido = modeloPreferido?.trim() || (await fallbackModelKey());
-  const modelKey = buildModelChain(preferido)[0];
+  const pedido = modeloPreferido?.trim();
+  if (pedido) {
+    // o fluxo pediu um modelo por nome (config própria dele): respeita
+    const modelKey = buildModelChain(pedido)[0];
+    if (!modelKey) throw new Error("Nenhum modelo disponível para atender este pedido.");
+    return { model: resolveModel(modelKey), modelKey };
+  }
+
+  // SEM pedido explícito: quem manda é a ORDEM DO DONO, não o modelo reserva.
+  //
+  // Isto era `buildModelChain(await fallbackModelKey())[0]`, e o reserva é o
+  // bootstrap `local/qwen2.5:7b`. Como o `buildModelChain` põe o modelo pedido
+  // em PRIMEIRO lugar, toda tarefa da casa (resumo de reunião, extração de
+  // memória, rotinas) ia para o modelo local mesmo com a política em
+  // "assinatura primeiro". Medido em 27/09/2026 nesta máquina: resumo em 123 s
+  // e memória em 87 s na CPU, com a máquina inteira afogada, enquanto a
+  // assinatura do Claude estava ali, de graça e em segundos.
+  // o reserva só entra quando a descoberta não achou NADA (primeiro boot)
+  const modelKey = cadeiaDaCasa()[0] ?? buildModelChain(await fallbackModelKey())[0];
   if (!modelKey) throw new Error("Nenhum modelo disponível para atender este pedido.");
   return { model: resolveModel(modelKey), modelKey };
 }

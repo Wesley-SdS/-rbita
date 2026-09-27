@@ -32,6 +32,9 @@ vi.mock("../../cameras/query", () => ({
   listCameras: async () => cameras,
 }));
 vi.mock("../../cameras/narrate", () => ({
+  // a tool devolve este aviso quando a câmera identifica pessoas: é o que
+  // explica ao dono por que a leitura leva um minuto (decisão 9.6)
+  AVISO_SO_LOCAL: "só local",
   narrateSnapshot: async (_snapshot: string, pergunta?: string, opts?: { localOnly?: boolean }) => {
     narradas.push({ pergunta, opts });
     return "uma pessoa na cozinha";

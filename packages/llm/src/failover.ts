@@ -175,6 +175,33 @@ export function ordenarAlternativas(modelos: ModelInfo[], ordem: FailoverOrder):
  * encontrou. Instalar um modelo novo no Ollama ou ligar uma chave já entra aqui,
  * sem tocar em código.
  */
+/**
+ * A cadeia para uma tarefa DA CASA (resumo, memória, rotina), quando o fluxo
+ * não pediu modelo nenhum.
+ *
+ * Diferente do `buildModelChain`: lá o modelo pedido entra em PRIMEIRO lugar,
+ * porque alguém o pediu. Aqui ninguém pediu, então quem manda é a ordem do
+ * dono (`llm.failoverOrder`) e nada mais.
+ *
+ * Era isto que faltava, e o efeito era grande: sem um pedido, o código usava o
+ * MODELO RESERVA como se fosse escolha, e o reserva é o bootstrap local. Toda
+ * tarefa da casa ia para o `local/qwen2.5:7b` mesmo com a ordem em "assinatura
+ * primeiro" — 123 s por resumo de reunião nesta máquina, contra segundos na
+ * assinatura que estava ali, de graça.
+ */
+export function cadeiaDaCasa(): string[] {
+  const candidatos = umPorProvedor([]);
+  if (!candidatos.length) return [];
+  const ordenados = ordenarAlternativas(candidatos, policySnapshot().failoverOrder).map((m) => m.key);
+  // mesma regra do `buildModelChain`: pular quem está em cooldown, mas não
+  // ficar sem resposta se todos estiverem abertos
+  const saudaveis = ordenados.filter((k) => {
+    const p = getModelInfo(k)?.provider;
+    return p ? !circuitOpen(p) : false;
+  });
+  return saudaveis.length ? saudaveis : ordenados;
+}
+
 export function buildModelChain(requestedKey: string, _env?: ProviderFlags): string[] {
   const chain: string[] = [];
   if (getModelInfo(requestedKey)) chain.push(requestedKey);

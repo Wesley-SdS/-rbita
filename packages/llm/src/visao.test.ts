@@ -42,3 +42,42 @@ describe("provedores de visão em ordem", () => {
     expect(escolherProvedorDeVisao("openai", { openai: false, gemini: true, gateway: false })).toBeNull();
   });
 });
+
+/**
+ * A ASSINATURA entrando na visão.
+ *
+ * Relatado pelo dono em 27/09/2026: "estou usando assinatura, e assinatura usa
+ * o Opus, e Opus é visão". Estava certo, e a assinatura não estava na lista:
+ * "ver pela câmera" ia para um provedor PAGO tendo a assinatura ao lado, de
+ * graça. Quem escolhe assinatura escolhe para tudo que é IA de uso geral, não
+ * só para o chat.
+ */
+describe("a assinatura na visão", () => {
+  const COM_TUDO = { assinatura: true, openai: true, gemini: true, gateway: true };
+
+  it("no automático, a assinatura vem PRIMEIRO", () => {
+    expect(provedoresDeVisaoEmOrdem("auto", COM_TUDO)[0]).toBe("assinatura");
+    expect(escolherProvedorDeVisao("auto", COM_TUDO)).toBe("assinatura");
+  });
+
+  it("sem assinatura, a ordem antiga continua valendo", () => {
+    const sem = { assinatura: false, openai: true, gemini: true, gateway: true };
+    expect(provedoresDeVisaoEmOrdem("auto", sem)).toEqual(["openai", "gemini", "gateway"]);
+  });
+
+  it("escolher a assinatura na tela abre a fila, e os pagos ficam de reserva", () => {
+    // ficar sem visão porque a assinatura bateu no limite é pior do que usar
+    // uma chave paga que existe
+    expect(provedoresDeVisaoEmOrdem("assinatura", COM_TUDO)).toEqual(["assinatura", "openai", "gemini", "gateway"]);
+  });
+
+  it("escolher um provedor pago NÃO coloca a assinatura na frente", () => {
+    // o dono pediu aquele: respeitar o pedido é mais importante que economizar
+    expect(provedoresDeVisaoEmOrdem("gemini", COM_TUDO)[0]).toBe("gemini");
+  });
+
+  it("só a assinatura configurada basta para ter visão", () => {
+    const so = { assinatura: true, openai: false, gemini: false, gateway: false };
+    expect(provedoresDeVisaoEmOrdem("auto", so)).toEqual(["assinatura"]);
+  });
+});

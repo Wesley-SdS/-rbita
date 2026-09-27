@@ -661,10 +661,11 @@ export const SETTING_DEFS = {
   "vision.cloudProvider": sel(
     "vision",
     "Quem lê a imagem na nuvem",
-    "No automático tenta o que estiver configurado, na ordem. Escolher um não exclui os outros: eles continuam como reserva, porque ficar sem visão porque UMA conta zerou é pior do que usar a que existe.",
+    "No automático a ASSINATURA vem primeiro (ela enxerga imagem e não custa nada a mais), depois o que estiver configurado. Escolher um não exclui os outros: eles continuam como reserva, porque ficar sem visão porque UMA conta zerou é pior do que usar a que existe.",
     "auto",
     [
-      { value: "auto", label: "Automático" },
+      { value: "auto", label: "Automático (assinatura primeiro)" },
+      { value: "assinatura", label: "Assinatura (Claude)" },
       { value: "gemini", label: "Google Gemini" },
       { value: "openai", label: "OpenAI" },
       { value: "gateway", label: "Gateway" },

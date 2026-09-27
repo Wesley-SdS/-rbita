@@ -20,7 +20,31 @@ export interface MeetingCapture {
   stream: MediaStream;
   /** Conseguiu capturar o áudio do sistema além do microfone? */
   hasSystemAudio: boolean;
+  /** O microfone foi aberto com o tratamento de chamada ligado? (a UI explica) */
+  micProcessado: boolean;
   stop(): void;
+}
+
+/** Como o navegador deve tratar o microfone. Espelha `meetings.processarMicrofone`. */
+export type ModoDeMicrofone = "auto" | "sempre" | "nunca";
+
+/**
+ * O navegador trata o microfone para CHAMADA, não para reunião gravada:
+ * cancelamento de eco, redução de ruído e ganho automático são afinados para UMA
+ * voz perto do aparelho.
+ *
+ * Numa reunião com duas pessoas na MESMA SALA isso trabalha contra a gente, e
+ * de dois jeitos: o ganho automático nivela as vozes (e a diarização separa
+ * justamente pela diferença entre elas) e a redução de ruído come a fala de
+ * quem está mais longe do aparelho. Medido em 26/09/2026: 22s de conversa entre
+ * duas pessoas na sala voltaram com UM locutor só e falas truncadas.
+ *
+ * Com áudio da tela, o tratamento volta a ser necessário: a voz dos outros sai
+ * pela caixa de som e entraria duas vezes (pelo mic e pela captura da tela).
+ */
+export function restricoesDoMicrofone(modo: ModoDeMicrofone, comAudioDeTela: boolean): MediaTrackConstraints {
+  const tratar = modo === "sempre" ? true : modo === "nunca" ? false : comAudioDeTela;
+  return { echoCancellation: tratar, noiseSuppression: tratar, autoGainControl: tratar };
 }
 
 /** Mistura N streams de áudio num só (Web Audio). */
@@ -39,17 +63,19 @@ function mix(ctx: AudioContext, streams: MediaStream[]): MediaStream {
  * marcar, seguimos só com o microfone e devolvemos `hasSystemAudio: false` para
  * a UI avisar (em vez de gravar meia reunião em silêncio sem ninguém notar).
  */
-export async function startMeetingCapture(opts: { systemAudio: boolean }): Promise<MeetingCapture> {
-  const mic = await navigator.mediaDevices.getUserMedia({
-    // Com o áudio do sistema saindo pela caixa de som, o cancelamento de eco
-    // evita que a fala dos outros entre DUAS vezes (pelo mic e pela captura).
-    audio: { echoCancellation: true, noiseSuppression: true },
-  });
+export async function startMeetingCapture(opts: { systemAudio: boolean; microfone?: ModoDeMicrofone }): Promise<MeetingCapture> {
+  // O tratamento é decidido pela INTENÇÃO de capturar a tela, que é o que se
+  // sabe antes de abrir o microfone. Pedir a tela primeiro daria a resposta
+  // exata, mas jogaria o diálogo de compartilhamento na frente do de microfone.
+  const audio = restricoesDoMicrofone(opts.microfone ?? "auto", opts.systemAudio);
+  const micProcessado = audio.echoCancellation === true;
+  const mic = await navigator.mediaDevices.getUserMedia({ audio });
 
   if (!opts.systemAudio) {
     return {
       stream: mic,
       hasSystemAudio: false,
+      micProcessado,
       stop: () => mic.getTracks().forEach((t) => t.stop()),
     };
   }
@@ -73,6 +99,7 @@ export async function startMeetingCapture(opts: { systemAudio: boolean }): Promi
     return {
       stream: mic,
       hasSystemAudio: false,
+      micProcessado,
       stop: () => mic.getTracks().forEach((t) => t.stop()),
     };
   }
@@ -84,6 +111,7 @@ export async function startMeetingCapture(opts: { systemAudio: boolean }): Promi
   return {
     stream: mixed,
     hasSystemAudio: true,
+    micProcessado,
     stop: () => {
       mic.getTracks().forEach((t) => t.stop());
       sys.getTracks().forEach((t) => t.stop());
@@ -111,11 +139,20 @@ export class ContinuousRecorder {
   private startedAt = 0;
   private mime = "audio/webm";
 
-  start(stream: MediaStream): void {
+  /**
+   * `bitrate` em bits por segundo; 0 (ou ausente) deixa o navegador escolher.
+   * Escolher vale a pena: o padrão do Chrome para áudio é afinado para voz de
+   * chamada, e a diarização depende de ouvir a diferença entre duas vozes.
+   */
+  start(stream: MediaStream, bitrate = 0): void {
     const mimeType = pickMimeType();
     this.mime = mimeType ?? "audio/webm";
     this.chunks = [];
-    const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    const opcoes: MediaRecorderOptions = {
+      ...(mimeType ? { mimeType } : {}),
+      ...(bitrate > 0 ? { audioBitsPerSecond: bitrate } : {}),
+    };
+    const rec = new MediaRecorder(stream, opcoes);
     rec.ondataavailable = (e) => {
       if (e.data.size) this.chunks.push(e.data);
     };
