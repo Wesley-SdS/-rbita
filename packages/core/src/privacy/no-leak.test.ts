@@ -69,6 +69,10 @@ const PASTAS_NUVEM = [
   "packages/core/src/rag",
   "packages/core/src/meetings",
   "packages/core/src/voice",
+  // WhatsApp fala com a nuvem (modelo, transcrição) e mexe com a fala de terceiros:
+  // um "quem está falando neste áudio" importando biometria tem de reprovar aqui
+  "packages/core/src/whatsapp",
+  "packages/core/src/actions",
   "packages/core/src/tools",
   // fila de trabalho: dispara resumo e leitura de cupom (LLM e visão)
   "packages/core/src/jobs",

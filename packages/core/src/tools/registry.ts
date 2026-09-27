@@ -78,6 +78,14 @@ export interface ToolDef<I extends z.ZodTypeAny = z.ZodTypeAny> {
    * executar e antes de enfileirar. Devolve a mensagem de recusa ou null.
    */
   authorize?: (input: z.infer<I>, ctx: ToolContext) => Promise<string | null>;
+  /**
+   * Fixa a entrada ANTES de enfileirar ou executar (depois do `authorize`).
+   * Existe para o que o dono aprova ser exatamente o que roda: "a Maria" vira
+   * o JID dela na hora de propor, e o resumo da fila mostra nome e número. Sem
+   * isso, o destino era resolvido de novo na hora de executar, e um contato
+   * novo chamado "Maria" entre propor e aprovar mudava para quem ia.
+   */
+  preparar?: (input: z.infer<I>, ctx: ToolContext) => Promise<z.infer<I>>;
 }
 
 /** "(pedido por voz: Anna, 91%)" para a fila de aprovação mostrar quem pediu. Puro. */
@@ -243,10 +251,11 @@ export function toToolSet(defs: AnyToolDef[], ctx: ToolContext, opts: { override
       execute: async (input: unknown) => {
         const negado = d.authorize ? await d.authorize(input, ctx) : null;
         if (negado) return { permitido: false, erro: negado };
-        if (!needsApproval(risk)) return d.run(input, ctx);
+        const fixo = d.preparar ? await d.preparar(input, ctx) : input;
+        if (!needsApproval(risk)) return d.run(fixo, ctx);
         const quem = ctx.requester ? await ctx.requester().catch(() => null) : null;
-        const resumo = summaryFor(d, input);
-        const proposta = await opts.enqueue(d, input, resumo + requesterNote(quem));
+        const resumo = summaryFor(d, fixo);
+        const proposta = await opts.enqueue(d, fixo, resumo + requesterNote(quem));
         // quem pediu fica na fila de aprovação (tela do dono), não volta ao modelo
         return proposta && typeof proposta === "object" && "resumo" in proposta ? { ...proposta, resumo } : proposta;
       },

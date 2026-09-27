@@ -53,6 +53,13 @@ export async function aprovarAcao(userId: string, id: string, editado?: Record<s
     return { ok: true, resultado };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "falha";
+    // envio que PODE ter saído não é "falhou": o dono tentaria de novo e a
+    // pessoa receberia duas vezes (whatsapp/enviar.ts, EnvioIncerto)
+    if (e instanceof Error && e.name === "EnvioIncerto") {
+      await db.update(actionQueue).set({ result: msg }).where(eq(actionQueue.id, id));
+      log.warn("action.incerta", { userId, kind: acao.kind });
+      return { ok: true, resultado: msg };
+    }
     await db.update(actionQueue).set({ status: "failed", result: msg }).where(eq(actionQueue.id, id));
     log.error("action.failed", { userId, kind: acao.kind, error: msg });
     return { ok: false, status: 502, erro: msg };

@@ -59,10 +59,14 @@ export function casarContato<T extends { nome: string | null; apelido: string | 
   if (!t) return [];
   const digitos = termo.replace(/\D/g, "");
   if (digitos.length >= 8) return contatos.filter((c) => c.jid.startsWith(digitos) || c.jid.split("@")[0].endsWith(digitos));
+  // Só o APELIDO (dado pelo dono) vence sozinho. O nome do WhatsApp é o
+  // contato quem escolhe: um desconhecido chamado exatamente "Maria" não pode
+  // ganhar da "Maria Souza" de verdade. Por nome, todo mundo que casa entra na
+  // lista, e mais de um é pergunta.
+  const apelidoExato = contatos.filter((c) => c.apelido && normalizarFrase(c.apelido) === t);
+  if (apelidoExato.length) return apelidoExato;
   const nomes = (c: T) => [c.apelido, c.nome].filter((x): x is string => Boolean(x)).map(normalizarFrase);
-  const exatos = contatos.filter((c) => nomes(c).includes(t));
-  if (exatos.length) return exatos;
-  return contatos.filter((c) => nomes(c).some((n) => n.split(" ").includes(t) || n.includes(t)));
+  return contatos.filter((c) => nomes(c).some((n) => n === t || n.split(" ").includes(t) || n.includes(t)));
 }
 
 // ── mensagens ──
@@ -227,18 +231,39 @@ export async function enviadasDesde(userId: string, desde: Date, contatoId?: str
 
 // ── retenção ──
 
-/** Apaga mensagens mais velhas que `dias`; devolve os caminhos de mídia para quem apaga os arquivos. */
+const LOTE = 500;
+
+/**
+ * Apaga mensagens mais velhas que `dias`, em LOTES (ligar a retenção depois de
+ * meses de acúmulo não pode virar uma consulta com dezenas de milhares de
+ * parâmetros). Devolve os caminhos de mídia que ficaram órfãos na hora.
+ */
 export async function purgarMensagens(dias: number): Promise<string[]> {
   if (dias <= 0) return [];
   const corte = new Date(Date.now() - dias * 86_400_000);
-  const rows = await db.delete(waMensagem).where(lt(waMensagem.em, corte)).returning({ caminho: waMensagem.midiaCaminho, sha: waMensagem.midiaSha256 });
-  const caminhos = rows.map((r) => r.caminho).filter((c): c is string => Boolean(c));
-  if (!caminhos.length) return [];
-  // a mídia é deduplicada por sha256: só some o arquivo que nenhuma mensagem restante usa
-  const aindaUsados = new Set(
-    (await db.select({ caminho: waMensagem.midiaCaminho }).from(waMensagem).where(inArray(waMensagem.midiaCaminho, caminhos))).map((r) => r.caminho),
-  );
-  return [...new Set(caminhos)].filter((c) => !aindaUsados.has(c));
+  const caminhos = new Set<string>();
+  for (;;) {
+    const ids = (await db.select({ id: waMensagem.id }).from(waMensagem).where(lt(waMensagem.em, corte)).limit(LOTE)).map((r) => r.id);
+    if (!ids.length) break;
+    for (const r of await db.delete(waMensagem).where(inArray(waMensagem.id, ids)).returning({ caminho: waMensagem.midiaCaminho })) if (r.caminho) caminhos.add(r.caminho);
+    if (ids.length < LOTE) break;
+  }
+  return caminhosSemUso([...caminhos]);
+}
+
+/**
+ * Dos caminhos, os que nenhuma mensagem usa AGORA. A mídia é deduplicada por
+ * sha256: o mesmo meme pode ter chegado de novo entre apagar a mensagem velha e
+ * apagar o arquivo, e quem apaga chama isto de novo logo antes do `rm`.
+ */
+export async function caminhosSemUso(caminhos: readonly string[]): Promise<string[]> {
+  const livres: string[] = [];
+  for (let i = 0; i < caminhos.length; i += LOTE) {
+    const lote = caminhos.slice(i, i + LOTE);
+    const usados = new Set((await db.select({ caminho: waMensagem.midiaCaminho }).from(waMensagem).where(inArray(waMensagem.midiaCaminho, lote))).map((r) => r.caminho));
+    livres.push(...lote.filter((c) => !usados.has(c)));
+  }
+  return livres;
 }
 
 /** O que saiu sozinho, para a tela mostrar (W7: tudo que a Órbita mandou sem aprovação fica visível). */

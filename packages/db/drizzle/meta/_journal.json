@@ -302,6 +302,13 @@
       "when": 1790508567238,
       "tag": "0042_whatsapp_pessoal",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1790511166391,
+      "tag": "0043_whatsapp_roteada",
+      "breakpoints": true
     }
   ]
 }

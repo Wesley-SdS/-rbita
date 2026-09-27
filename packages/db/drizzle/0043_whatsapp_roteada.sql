@@ -1,0 +1,2 @@
+ALTER TABLE "wa_mensagem" ADD COLUMN "roteada_em" timestamp;--> statement-breakpoint
+CREATE INDEX "wa_evento_bruto_pendente_idx" ON "wa_evento_bruto" USING btree ("recebido_em") WHERE "wa_evento_bruto"."processado_em" is null;

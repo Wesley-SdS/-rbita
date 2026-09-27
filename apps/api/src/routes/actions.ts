@@ -3,7 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@orbita/db";
 import { actionQueue } from "@orbita/db/action-schema";
-import { aprovarAcao } from "@orbita/core/actions/aprovar";
+import { aprovarAcao, cancelarAcao } from "@orbita/core/actions/aprovar";
 import { aprovarPorFrase } from "@orbita/core/actions/por-frase";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
@@ -50,10 +50,9 @@ export async function DELETE(req: Request, ctx: RouteCtx) {
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const id = z.string().uuid().safeParse(new URL(req.url).searchParams.get("id")).data;
   if (!id) return Response.json({ error: "id obrigatório" }, { status: 400 });
-  await db
-    .update(actionQueue)
-    .set({ status: "cancelled" })
-    .where(and(eq(actionQueue.id, id), eq(actionQueue.userId, session.user.id)));
+  // só o que ainda está pendente: cancelar algo em execução ou já enviado
+  // deixava a trilha dizendo "cancelado" sobre uma mensagem que saiu
+  await cancelarAcao(session.user.id, id);
   return Response.json({ ok: true });
 }
 
@@ -70,6 +69,8 @@ export async function POST_FALADA(req: Request, ctx: RouteCtx) {
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const parsed = Falada.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "texto obrigatório" }, { status: 400 });
-  const resposta = await aprovarPorFrase(session.user.id, "voz", parsed.data.texto);
-  return Response.json({ tratado: resposta !== null, resposta });
+  // na voz, "a proposta que acabou de ser feita" é a dos últimos minutos: uma
+  // proposta de outra sessão, esquecida na fila, não sai por um "manda" de hoje
+  const r = await aprovarPorFrase(session.user.id, "voz", parsed.data.texto, new Date(Date.now() - 5 * 60_000));
+  return Response.json({ tratado: r !== null, estado: r?.estado ?? null, resposta: r?.texto ?? null });
 }

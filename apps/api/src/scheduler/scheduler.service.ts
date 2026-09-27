@@ -26,7 +26,7 @@ import { rotularVetoresLegados } from "@orbita/core/rag/modelo-dos-vetores";
 import { instalarRoteadorDoWhatsapp } from "@orbita/core/whatsapp/rotear";
 import { processarPendentes, purgarEventosBrutos } from "@orbita/core/whatsapp/processar";
 import { conferirSaude, usuariosComSessao } from "@orbita/core/whatsapp/sessao";
-import { purgarMensagens } from "@orbita/core/whatsapp/store";
+import { caminhosSemUso, purgarMensagens } from "@orbita/core/whatsapp/store";
 import { apagarMidias } from "@orbita/core/whatsapp/midia";
 // registra os trabalhos pesados (como os domínios de tool): ninguém os chama pelo nome
 import "@orbita/core/jobs/handlers";
@@ -153,7 +153,8 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     });
     this.loop("whatsapp-pendentes", async () => 15_000, () => processarPendentes());
     this.loop("whatsapp-retencao", pruneEvery, async () => {
-      await apagarMidias(await purgarMensagens(await settings.get("whatsapp.retencaoDias")));
+      // reconfere logo antes do rm: a mesma mídia pode ter chegado de novo no meio
+      await apagarMidias(await caminhosSemUso(await purgarMensagens(await settings.get("whatsapp.retencaoDias"))));
       await purgarEventosBrutos(await settings.get("events.retentionDays"));
     });
     log.info("scheduler.up", { loops: this.loops.map((l) => l.name) });

@@ -76,12 +76,21 @@ export async function turnoDoDono(userId: string, meuJid: string, m: WaMensagem)
   if (!pedido) return;
   const recebidoEmAudio = m.tipo === "audio";
 
-  const aprovacao = await aprovarPorFrase(userId, "whatsapp", pedido);
-  if (aprovacao) return responder(userId, meuJid, aprovacao, recebidoEmAudio);
+  const convId = await conversaDoCanal(userId);
+  // "manda" responde ao que foi proposto DEPOIS da fala anterior do dono, não
+  // a qualquer proposta pendente da última meia hora
+  const [anterior] = await db.select({ em: message.createdAt }).from(message).where(and(eq(message.conversationId, convId), eq(message.role, "user"))).orderBy(desc(message.createdAt)).limit(1);
+  const aprovacao = await aprovarPorFrase(userId, "whatsapp", pedido, anterior?.em ?? null);
+  if (aprovacao) {
+    await db.insert(message).values([
+      { conversationId: convId, role: "user", content: pedido },
+      { conversationId: convId, role: "assistant", content: aprovacao.texto },
+    ]);
+    return responder(userId, meuJid, aprovacao.texto, recebidoEmAudio);
+  }
 
   const cfg = await settings.getMany(["whatsapp.historicoConversa", "chat.maxSteps", "chat.ragTimeoutMs", "rag.topK"]);
   await applyLlmSettings();
-  const convId = await conversaDoCanal(userId);
   const historico = cfg["whatsapp.historicoConversa"]
     ? (await db.select({ role: message.role, content: message.content }).from(message).where(eq(message.conversationId, convId)).orderBy(desc(message.createdAt)).limit(cfg["whatsapp.historicoConversa"])).reverse()
     : [];
@@ -116,14 +125,23 @@ export async function turnoDoDono(userId: string, meuJid: string, m: WaMensagem)
     await ferramentas.cleanup().catch(() => undefined);
   }
 
-  // A instrução de como aprovar é do CÓDIGO, não do modelo: se o turno deixou
-  // proposta para este canal, o dono sempre sabe o que responder.
-  const [nova] = await db
-    .select({ id: actionQueue.id })
+  // A instrução de como aprovar e O QUE vai sair são do CÓDIGO, não do
+  // modelo: o dono aprova o resumo gravado na fila (destino resolvido e texto
+  // inteiro), nunca a paráfrase. Um texto injetado numa mensagem lida podia
+  // fazer o modelo dizer "vou responder ok à Maria" enquanto a proposta real
+  // ia para outro número, com outro texto.
+  const novas = await db
+    .select({ resumo: actionQueue.summary })
     .from(actionQueue)
     .where(and(eq(actionQueue.userId, userId), eq(actionQueue.status, "pending"), eq(actionQueue.canal, "whatsapp"), gte(actionQueue.createdAt, inicio)))
-    .limit(1);
-  if (nova && !/\bmanda\b/i.test(texto)) texto += "\n\nPara enviar, responda *manda*. Para desistir, *cancela*.";
+    .orderBy(asc(actionQueue.createdAt));
+  if (novas.length) {
+    const varias = novas.length > 1;
+    const lista = novas.map((n, i) => (varias ? `${i + 1}. ` : "") + n.resumo).join("\n");
+    // o resumo real vai SEMPRE; a instrução, só se o modelo não a deu (repetir cansa)
+    const instrucao = /\bmanda\b/i.test(texto) && !varias ? "" : `\n\nPara enviar, responda *manda*${varias ? " 1, *manda* 2…" : ""}. Para desistir, *cancela*.`;
+    texto += `\n\n${varias ? "Propostas" : "Proposta"}:\n${lista}${instrucao}`;
+  }
 
   await db.insert(message).values({ conversationId: convId, role: "assistant", content: texto });
   await db.update(conversation).set({ updatedAt: new Date() }).where(eq(conversation.id, convId));

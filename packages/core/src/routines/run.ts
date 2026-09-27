@@ -38,10 +38,10 @@ export async function runPromptForUser(
   userId: string,
   prompt: string,
   systemSuffix = "",
-  opts: { fluxo?: string; referencia?: string | null } = {},
+  opts: { fluxo?: string; referencia?: string | null; soLeitura?: boolean } = {},
 ): Promise<string> {
   const [{ tools, cleanup, skillInstructions }, cfg] = await Promise.all([
-    buildAllTools(userId),
+    buildAllTools(userId, "", undefined, undefined, undefined, { soLeitura: opts.soLeitura }),
     settings.getMany(["routines.model", "chat.maxSteps"]),
     applyLlmSettings(),
   ]);

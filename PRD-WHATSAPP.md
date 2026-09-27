@@ -99,11 +99,11 @@ Ao portar: tirar `organizationId`, Prisma, BullMQ e MinIO. Persistência vira Dr
 ## 4. Arquitetura
 
 ```
- celular do dono ──(WhatsApp)── GOWA (Docker, 127.0.0.1:3001, sessão em volume)
+ celular do dono ──(WhatsApp)── GOWA (Docker, 127.0.0.1:3011, sessão em volume)
                                    │ webhook assinado (HMAC por sessão)
                                    ▼
  apps/api  POST /api/whatsapp/webhook ── verifica ── grava bruto ── 200
-                                   │ enqueueJob("whatsapp.processar")
+                                   │ fila própria em wa_evento_bruto (série por chat)
                                    ▼
  jobs: traduz ─ baixa mídia ─ transcreve áudio ─ grava wa_mensagem ─ emite whatsapp.mensagem_recebida
                                    │
@@ -149,13 +149,13 @@ contra um número pareado. Antes de W1, com um número de teste pareado, medir e
 
 ### W1. Infra, provedor e pareamento
 
-- **Docker:** serviço `gowa` no `docker-compose.yml`, porta `127.0.0.1:3001:3000` (nunca
+- **Docker:** serviço `gowa` no `docker-compose.yml`, porta `127.0.0.1:3011:3000` (nunca
   `0.0.0.0`), volume próprio para `/app/storages`, `restart: unless-stopped`, tag fixada em W0.
-  Credencial Basic em `GOWA_BASIC_AUTH` no `.env` (gerada; `admin:admin` só no exemplo).
+  Credencial Basic em `GOWA_BASIC_AUTH` no `.env` DA RAIZ (gerada; sem padrão: sem ela a ponte não sobe e a Órbita não a chama).
 - **Config** (`defs.ts`, com tela):
   - `whatsapp.provedor`: `pessoal` · `cloud` (padrão `pessoal` se houver sessão pareada, senão `cloud`
     se houver token, senão nenhum)
-  - `whatsapp.ponteUrl`: padrão `http://127.0.0.1:3001`, validado com `isLocalUrl` como a percepção.
+  - `whatsapp.ponteUrl`: padrão `http://127.0.0.1:3011`, validado com `isLocalUrl` como a percepção.
     A ponte carrega a conta inteira do dono: **nunca** aceitar URL fora de casa.
 - **Tabela `wa_sessao`**: `userId` (único, cascade), `deviceId`, `webhookSegredoEnc` (AES-GCM,
   `randomBytes(32)`, por sessão como no workspace), `jid`, `status`
@@ -185,7 +185,7 @@ de novo e ver a sessão voltar sem novo QR.
     responde 200 **antes** de qualquer processamento. O GOWA reenvia se o 200 demora, então nada de
     baixar mídia ou chamar IA aqui dentro;
   - evento desconhecido: log e 200.
-- **Job `whatsapp.processar`** (`JobDef` em `jobs/handlers.ts`), com retry. Erro de payload que não
+- **Processamento** (ver §10: a fila é a própria `wa_evento_bruto`, em série por chat, com retentativa que dobra a espera). Erro de payload que não
   valida vira `JobPermanentError`.
   1. Traduz (`traduzir.ts`): texto, imagem, áudio, vídeo, documento, figurinha, localização,
      contato. Reação, edição e mensagem apagada atualizam a mensagem existente (apagada guarda o
@@ -453,3 +453,33 @@ W1 a W8 implementados. Typecheck limpo nos dois apps; testes novos em `whatsapp/
 
 Para rodar: `docker compose up -d gowa`, gerar `GOWA_BASIC_AUTH` no `.env`, reiniciar o `apps/api`
 e o `apps/voice` (o endpoint de conversão é novo), e parear em Conectores → WhatsApp pessoal.
+
+## 11. Auditoria de 2026-09-27 (três revisores, todos os achados corrigidos)
+
+| Área | Achado | Correção |
+|---|---|---|
+| Aprovar falando | "sim"/"pode"/"não" nas frases padrão aprovavam ou cancelavam respondendo a OUTRA pergunta; na voz, qualquer fala seguinte ia para a aprovação, inclusive de ação **perigosa** (portão) | frases padrão estritas ("manda", "cancela"…); só vale a proposta nascida depois da fala anterior do dono (voz: só a PRÓXIMA fala, e só dos últimos minutos); risco `perigoso` nunca sai por frase |
+| Aprovar falando | o dono aprovava a paráfrase do modelo, não o que estava na fila | o CÓDIGO anexa o resumo gravado (destino resolvido e texto inteiro); na voz, a tela mostra o resumo real e a sessão só recebe texto nosso |
+| Destino | "a Maria" era resolvida de novo ao executar, e um desconhecido com push name exato "Maria" ganhava da Maria Souza | gancho `preparar` no registro fixa o JID ao propor; só o APELIDO dado pelo dono vence sozinho |
+| Regras | ação `prompt` disparada por mensagem de terceiro rodava com tools de escrita | evento de terceiro (`whatsapp.*`, `gmail.*`) roda o prompt só com tools de leitura |
+| Envio | timeout depois de a ponte aceitar apagava a linha (eco virava pedido novo) e marcava "falhou" (dono mandava de novo) | `EnvioIncerto`: a linha fica, a ação fica "talvez tenha saído" |
+| Failover | recomeçar em outro modelo depois de uma tool rodava a tool de novo | `gerarTexto` não troca de modelo depois de um passo com tool |
+| Automático | rajada de N mensagens gerava N respostas; o push name do contato ia para o system prompt | só a mensagem mais nova responde; o nome vai limpo e curto, dentro do embrulho de dado |
+| Entrada | queda entre gravar e rotear perdia o pedido (a retentativa via "reentrega" e parava) | marca `roteada_em`: reentrega não roteada continua |
+| Entrada | edição/reação de mensagem nunca guardada (grupo ignorado) falhava em loop; edição sem corpo apagava o texto; reação trocada era descartada | desiste depois de 10 min e respeita o filtro; só grava texto se vier; emoji e hora entram na chave |
+| Entrada | mídia enorme entrava inteira na memória antes do teto; transcrição local segurava todos os chats | leitura com teto em stream; fila em série POR CHAT |
+| Sessão | logout que falhava virava "desconectado" na tela e a saúde reconectava sozinha; um soluço da ponte virava "caiu/voltou" | logout falho sobe erro (502); N conferências seguidas antes de "caiu"; queda da ponte não conta reconexão |
+| Sessão | mudar `whatsapp.webhookBase` só valia depois de parear de novo; endereço não era conferido | a saúde reaponta quando muda; só endereço local |
+| Segurança da ponte | senha padrão `admin:admin`, e a variável nunca chegava ao compose | sem padrão: o compose recusa subir e o cliente recusa chamar; a variável mora no `.env` da raiz (lido pelos dois) |
+| Privacidade | apagar a conta deixava áudios e fotos de terceiros no disco e o número vinculado na ponte | `whatsapp/apagar.ts` desvincula, remove o slot e apaga a mídia órfã |
+| Retenção | uma consulta só com todos os caminhos (estoura o limite de parâmetros); corrida com mídia recém-chegada | lotes de 500 e reconferência logo antes do `rm` |
+| Voz (apps/voice) | conversão sem limite de tamanho antes de ler, sem teto de duração, sem limite de concorrência | 413 antes de ler, corte em 10 min, no máximo 2 ao mesmo tempo, erro sem detalhe interno |
+| Diversos | cancelar na tela marcava "cancelado" ação já enviada; push do automático abria rota inexistente; barge-in no Piper virava 503; número do dono no log | todos corrigidos, com teste |
+
+### Limite conhecido de deploy
+
+O `docker-compose.yml` não tem serviço do `apps/api` (só `web`), então num deploy só por compose
+ninguém recebe o webhook nem roda os laços. Enquanto isso, o WhatsApp funciona com o `apps/api`
+rodando no host (o jeito desta casa). Quando o `apps/api` virar contêiner: `whatsapp.ponteUrl` =
+`http://gowa:3000`, `whatsapp.webhookBase` = `http://api:3010`, `GOWA_BASIC_AUTH` no ambiente dele e
+um volume para `ORBITA_DATA_DIR` (senão a mídia some a cada recriação).

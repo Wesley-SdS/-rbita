@@ -291,19 +291,36 @@ export function useVoice(p: Params) {
       onTranscript: (role, text) => {
         p.setMessages((m) => [...m, { role, content: text }]);
         if (role !== "user" || !temProposta) return;
+        // Só a PRÓXIMA fala do dono responde à proposta: depois dela, qualquer
+        // "manda" é conversa, até a Órbita propor de novo.
+        temProposta = false;
         void fetch("/api/actions/falada", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto: text.slice(0, 500) }) })
           .then((r) => r.json())
-          .then((d: { tratado?: boolean; resposta?: string }) => {
+          .then((d: { tratado?: boolean; estado?: string; resposta?: string }) => {
             if (!d.tratado || !d.resposta) return;
+            // a tela mostra tudo; a sessão recebe só texto NOSSO (o resumo das
+            // propostas tem texto do modelo, e não entra como mensagem de sistema)
             p.setMessages((m) => [...m, { role: "assistant", content: d.resposta! }]);
-            rt.avisar?.(`O dono respondeu à proposta falando, e o resultado foi: "${d.resposta}". Diga isso a ele em uma frase curta.`);
+            const aviso: Record<string, string> = {
+              enviado: "A proposta foi aprovada pelo dono e enviada.",
+              cancelado: "O dono cancelou a proposta; nada foi enviado.",
+              lista: "Há mais de uma proposta pendente; a lista está na tela. Peça ao dono para dizer o número, como \"manda 1\".",
+              falhou: "O dono aprovou, mas o envio falhou; o motivo está na tela.",
+            };
+            if (d.estado && aviso[d.estado]) {
+              if (d.estado === "lista") temProposta = true;
+              rt.avisar?.(aviso[d.estado] + " Diga isso a ele em uma frase curta.");
+            }
           })
           .catch(() => undefined);
       },
       // B7.2: mostra no log que a voz acionou uma ferramenta (mesmo gate do chat de texto).
       onToolCall: (name, result) => {
-        if (result && typeof result === "object" && (result as { aguardando_aprovacao?: boolean }).aguardando_aprovacao) temProposta = true;
-        p.setMessages((m) => [...m, { role: "assistant", content: `⚙ ${name}`, steps: [{ name, done: true }] }]);
+        const proposta = result && typeof result === "object" && (result as { aguardando_aprovacao?: boolean }).aguardando_aprovacao ? (result as { resumo?: string }) : null;
+        if (proposta) temProposta = true;
+        // proposta: a tela mostra o resumo GRAVADO na fila (destino e texto reais),
+        // não só o que o modelo falou sobre ela
+        p.setMessages((m) => [...m, { role: "assistant", content: proposta?.resumo ? `⚙ Proposta: ${proposta.resumo}. Diga "manda" ou "cancela".` : `⚙ ${name}`, steps: [{ name, done: true }] }]);
       },
     });
     try {

@@ -123,6 +123,11 @@ function ownedWhere(t: OwnedTable, userId: string): SQL {
  */
 export async function eraseAccount(userId: string): Promise<{ limpezaExplicita: string[] }> {
   const semCascade = userOwnedTables().filter((t) => !erasedByCascade(t) && !ORPHAN_BY_DESIGN.has(t.name));
+  // O que mora fora do banco (mídia do WhatsApp em disco, número vinculado na
+  // ponte) não vai no cascade. Import dinâmico: este módulo é carregado pelo
+  // teste de schema, que não precisa da ponte nem do disco.
+  const whatsapp = await import("../whatsapp/apagar");
+  const midias = await whatsapp.antesDeApagarConta(userId).catch(() => [] as string[]);
   await db.transaction(async (tx) => {
     // filhas antes dos pais: a subconsulta da filha precisa do pai ainda lá
     for (const t of [...semCascade].reverse()) await tx.delete(t.table).where(ownedWhere(t, userId));
@@ -130,6 +135,7 @@ export async function eraseAccount(userId: string): Promise<{ limpezaExplicita: 
   });
   // a linha do usuário já foi embora: o evento fica SEM dono, e sem nada que
   // identifique quem era (é o resto de trilha que "apagar é apagar" permite)
+  await whatsapp.depoisDeApagarConta(midias).catch(() => undefined);
   await events.emit("account.erased", { tabelas: semCascade.map((t) => t.name) }, { userId: null }).catch(() => undefined);
   return { limpezaExplicita: semCascade.map((t) => t.name) };
 }

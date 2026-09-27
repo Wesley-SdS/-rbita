@@ -68,8 +68,18 @@ describe("eventos do webhook", () => {
     expect(gowaEventExternalId(env("message.revoked", { revoked_message_id: "R1" }))).toBe("R1");
     expect(gowaEventExternalId(env("message.edited", { id: "E1", original_message_id: "O1" }))).toBe("E1");
     // quem reagiu entra na chave: duas pessoas reagindo não são reentrega
-    expect(gowaEventExternalId(env("message.reaction", { reacted_message_id: "M1", from: "a", emoji: "👍" }))).toBe("M1:a");
+    const reacao = (emoji: string, timestamp?: string) => gowaEventExternalId(env("message.reaction", { reacted_message_id: "M1", from: "a", emoji, timestamp }));
+    expect(reacao("👍")).toBe("M1:a:👍:");
+    // trocar ou remover a reação é evento NOVO, não reentrega
+    expect(reacao("❤️")).not.toBe(reacao("👍"));
+    expect(reacao("")).not.toBe(reacao("👍"));
+    expect(reacao("👍", "2026-09-27T10:00:00Z")).not.toBe(reacao("👍", "2026-09-27T10:05:00Z"));
     expect(gowaEventExternalId(env("chat_presence", { chat_id: "x", state: "composing" }))).toBeNull();
+  });
+
+  it("mensagem torta (sem id) não vira a chave \"undefined\"", () => {
+    const torta = gowaEventSchema.parse({ event: "message", payload: { body: "sem chat_id nem id" } });
+    expect(gowaEventExternalId(torta)).toBeNull();
   });
 
   it("evento desconhecido cai no envelope genérico e não derruba", () => {

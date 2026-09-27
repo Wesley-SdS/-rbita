@@ -6,8 +6,11 @@ import { defineConfig } from "drizzle-kit";
 // O `.env` canônico continua em apps/web (o Next só lê de lá). Os demais
 // processos (drizzle-kit, apps/api) apontam para o mesmo arquivo, para não
 // haver dois lugares de segredo. Um `.env` na raiz, se existir, tem prioridade.
+// Todos, em ordem: o dotenv não sobrescreve, então a raiz vence por variável
+// sem apagar o resto (um .env na raiz só com a senha da ponte do WhatsApp
+// deixava o DATABASE_URL de fora).
 for (const p of [resolve(process.cwd(), ".env"), resolve(process.cwd(), "../../.env"), resolve(process.cwd(), "../../apps/web/.env")]) {
-  if (existsSync(p)) { loadEnv({ path: p }); break; }
+  if (existsSync(p)) loadEnv({ path: p, quiet: true });
 }
 
 export default defineConfig({

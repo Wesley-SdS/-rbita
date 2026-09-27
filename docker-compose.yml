@@ -65,7 +65,17 @@ services:
     image: aldinokemal2104/go-whatsapp-web-multidevice:v9.5.0
     container_name: orbita-gowa
     restart: unless-stopped
-    command: rest --port=3000 --basic-auth=${GOWA_BASIC_AUTH:-admin:admin}
+    # Sem senha a ponte NÃO sobe: com a padrão (admin:admin), qualquer processo
+    # da máquina teria a conta inteira do dono. O compose só lê o .env da RAIZ
+    # (o apps/api também o lê), por isso a variável mora lá.
+    environment:
+      APP_BASIC_AUTH: ${GOWA_BASIC_AUTH:-}
+    entrypoint: ["/bin/sh", "-c", "[ -n \"$$APP_BASIC_AUTH\" ] || { echo 'GOWA_BASIC_AUTH vazio: defina no .env da raiz do repo'; exit 1; }; exec /entrypoint.sh rest --port=3000 --basic-auth=\"$$APP_BASIC_AUTH\""]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null \"http://$$APP_BASIC_AUTH@127.0.0.1:3000/devices\" || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
     ports:
       - "127.0.0.1:3011:3000"
     volumes:

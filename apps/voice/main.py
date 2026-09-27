@@ -248,6 +248,16 @@ async def tts(req: TTSRequest) -> Response:
     return Response(content=audio, media_type="audio/wav")
 
 
+# Nota de voz tem minutos, não horas: acima disto a conversão para (e o que
+# passou é cortado). É o que limita o trabalho de uma requisição, já que a
+# thread do to_thread não pode ser cancelada quando o cliente desiste.
+OGG_MAX_SEGUNDOS = int(os.environ.get("VOICE_OGG_MAX_SEGUNDOS", "600"))
+OGG_MAX_BYTES = 25 * 1024 * 1024
+# CPU desta máquina é compartilhada com o modelo local (CLAUDE.md §9): no
+# máximo duas conversões ao mesmo tempo, o resto espera a vez
+_ogg_vagas = asyncio.Semaphore(2)
+
+
 def _to_ogg_opus(data: bytes) -> bytes:
     """Qualquer áudio (MP3 do Edge, WAV do Piper) -> OGG/Opus mono 48 kHz.
 
@@ -263,6 +273,8 @@ def _to_ogg_opus(data: bytes) -> bytes:
         stream.bit_rate = 32000
         resampler = av.AudioResampler(format="s16", layout="mono", rate=48000)
         for frame in src.decode(audio=0):
+            if frame.time is not None and frame.time > OGG_MAX_SEGUNDOS:
+                break
             for f in resampler.resample(frame):
                 for pkt in stream.encode(f):
                     dst.mux(pkt)
@@ -276,15 +288,21 @@ def _to_ogg_opus(data: bytes) -> bytes:
 
 @app.post("/converter/ogg")
 async def converter_ogg(file: UploadFile = File(...)) -> Response:
-    data = await file.read()
+    # o tamanho declarado é conferido ANTES de ler o corpo para a memória
+    if file.size is not None and file.size > OGG_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Áudio grande demais para virar nota de voz.")
+    data = await file.read(OGG_MAX_BYTES + 1)
     if not data:
         raise HTTPException(status_code=400, detail="Áudio vazio.")
-    if len(data) > 25 * 1024 * 1024:
+    if len(data) > OGG_MAX_BYTES:
         raise HTTPException(status_code=413, detail="Áudio grande demais para virar nota de voz.")
-    try:
-        ogg = await asyncio.to_thread(_to_ogg_opus, data)
-    except Exception as e:  # formato que o PyAV não abre
-        raise HTTPException(status_code=422, detail=f"Não consegui converter o áudio: {e}") from e
+    async with _ogg_vagas:
+        try:
+            ogg = await asyncio.to_thread(_to_ogg_opus, data)
+        except Exception as e:  # formato que o PyAV não abre
+            # o detalhe fica no log do serviço, não na resposta
+            print(json.dumps({"level": "warn", "msg": f"converter/ogg falhou: {e!r}"}))
+            raise HTTPException(status_code=422, detail="Não consegui converter o áudio.") from e
     return Response(content=ogg, media_type="audio/ogg; codecs=opus")
 
 

@@ -85,6 +85,10 @@ export async function gerarTexto(p: PedidoDeTexto): Promise<TextoGerado> {
   let ultimoErro: unknown = null;
   for (const modelKey of candidatos) {
     const comecou = Date.now();
+    // Tool que já rodou não roda de novo: recomeçar o turno em outro modelo
+    // depois de um passo com tool registraria o gasto duas vezes ou deixaria
+    // duas propostas na fila. Aí o erro sobe, como o chat faz depois do 1º token.
+    let rodouTool = false;
     try {
       const r = await generateText({
         model: resolveModel(modelKey),
@@ -92,6 +96,9 @@ export async function gerarTexto(p: PedidoDeTexto): Promise<TextoGerado> {
         ...(p.messages?.length ? { messages: p.messages } : { prompt: p.prompt }),
         ...(p.tools ? { tools: p.tools } : {}),
         ...(p.maxSteps ? { stopWhen: stepCountIs(p.maxSteps) } : {}),
+        onStepFinish: (passo) => {
+          if (passo.toolCalls?.length) rodouTool = true;
+        },
       });
       recordProviderResult(modelKey, true);
       registrarUso({
@@ -125,7 +132,8 @@ export async function gerarTexto(p: PedidoDeTexto): Promise<TextoGerado> {
         duracaoMs: Date.now() - comecou,
         erro: (status ? `${status}: ` : "") + (e instanceof Error ? e.message : String(e)).slice(0, 200),
       });
-      log.warn("gerar.tentativa_falhou", { fluxo: p.fluxo, modelKey, status });
+      log.warn("gerar.tentativa_falhou", { fluxo: p.fluxo, modelKey, status, rodouTool });
+      if (rodouTool) break;
     }
   }
   throw ultimoErro instanceof Error ? ultimoErro : new Error("Todos os modelos falharam.");

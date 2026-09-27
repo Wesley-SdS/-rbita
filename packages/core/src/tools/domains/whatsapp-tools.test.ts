@@ -48,7 +48,16 @@ vi.mock("../../whatsapp/enviar", () => ({
 vi.mock("../../whatsapp/sessao", () => ({ sessaoDe: async () => ({ jid: "5511900000000@s.whatsapp.net" }) }));
 vi.mock("../../whatsapp/midia", () => ({ lerMidia: async () => new Uint8Array([1, 2, 3]) }));
 vi.mock("../../cameras/narrate", () => ({ narrateSnapshot: narrate }));
-vi.mock("../../settings", () => ({ settings: { get: async () => 30 } }));
+// por chave: um mock que devolve o mesmo número para tudo esconderia chave errada
+const cfg: Record<string, number> = { "whatsapp.leituraMax": 30 };
+vi.mock("../../settings", () => ({
+  settings: {
+    get: async (k: string) => {
+      if (!(k in cfg)) throw new Error(`chave inesperada: ${k}`);
+      return cfg[k];
+    },
+  },
+}));
 vi.mock("@orbita/db", () => ({ db: {} }));
 
 const t = await import("./whatsapp");
@@ -103,9 +112,31 @@ describe("envio", () => {
     expect(await t.responder_whatsapp.authorize!({ para: "mãe", texto: "oi" }, ctx)).toBeNull();
   });
 
-  it("o resumo da fila mostra o texto INTEIRO que vai sair", () => {
+  it("o resumo da fila mostra o destino RESOLVIDO e o texto INTEIRO", () => {
     const longo = "a".repeat(500);
-    expect(t.responder_whatsapp.summarize!({ para: "mãe", texto: longo })).toContain(longo);
+    const r = t.responder_whatsapp.summarize!({ para: contatos[1].jid, para_nome: "mãe", texto: longo });
+    expect(r).toContain("mãe (5511922222222)");
+    expect(r).toContain(longo);
+  });
+
+  it("o destino é FIXADO ao propor: aprovado, vai para aquele JID", async () => {
+    const fixo = await t.responder_whatsapp.preparar!({ para: "mãe", texto: "oi" }, ctx);
+    expect(fixo).toEqual({ para: contatos[1].jid, para_nome: "mãe", texto: "oi" });
+  });
+
+  it("desconhecido com nome IGUAL ao pedido não ganha do contato de verdade", async () => {
+    contatos.push({ id: "c9", jid: "5511988887777@s.whatsapp.net", nome: "Maria", apelido: null, grupo: false });
+    try {
+      expect(await t.responder_whatsapp.authorize!({ para: "Maria", texto: "oi" }, ctx)).toContain("mais de um contato");
+    } finally {
+      contatos.pop();
+    }
+  });
+
+  it("destinoLegivel", () => {
+    expect(t.destinoLegivel("5511922222222@s.whatsapp.net", "Maria")).toBe("Maria (5511922222222)");
+    expect(t.destinoLegivel("120363@g.us", "Família")).toBe("grupo Família");
+    expect(t.destinoLegivel("5511922222222", null)).toBe("5511922222222");
   });
 
   it("depois de aprovado, responder envia para o chat certo com aprovação humana", async () => {

@@ -125,12 +125,12 @@ export function enqueueFor(userId: string, canal: ActionCanal = "tela"): Enqueue
  * ToolSet do turno: tools ligadas, com exigências atendidas para este usuário,
  * selecionadas por relevância ao pedido, com o gate derivado do risco efetivo.
  */
-export async function buildToolSet(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"], dominios?: readonly string[], canal: ActionCanal = "tela"): Promise<ToolSet> {
+export async function buildToolSet(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"], dominios?: readonly string[], canal: ActionCanal = "tela", soLeitura = false): Promise<ToolSet> {
   const [overrides, connected, max, haConn, wa] = await Promise.all([
     loadToolOverrides(), connectedProviders(userId), settings.get("tools.maxPerTurn"), getHaConnection(userId), estadoDoWhatsapp(userId),
   ]);
   const usable = availableFor(listRegisteredTools(), { connected, haConnected: haConn !== null, ...wa, overrides });
-  const doDominio = dominios?.length ? usable.filter((d) => dominios.includes(d.domain)) : usable;
+  const doDominio = (dominios?.length ? usable.filter((d) => dominios.includes(d.domain)) : usable).filter((d) => !soLeitura || effectiveRisk(d, overrides) === "leitura");
   const chosen = selectRelevant(doDominio, query, max);
   return toToolSet(chosen, { userId, requester, origin, voiceRef }, { overrides, enqueue: enqueueFor(userId, canal) });
 }
@@ -181,13 +181,14 @@ export async function runRealtimeTool(userId: string, name: string, rawInput: un
   const ctx: ToolContext = { userId, requester, origin };
   const negado = def.authorize ? await def.authorize(parsed.data, ctx) : null;
   if (negado) return { permitido: false, erro: negado };
+  const entrada = def.preparar ? await def.preparar(parsed.data, ctx) : parsed.data;
   const risk = effectiveRisk(def, overrides);
   if (needsApproval(risk)) {
     const quem = requester ? await requester().catch(() => null) : null;
-    const resumo = summaryFor(def, parsed.data);
+    const resumo = summaryFor(def, entrada);
     // canal "voz": a proposta pode ser aprovada dizendo "manda" na mesma sessão (W6)
-    const proposta = await enqueueFor(userId, "voz")(def, parsed.data, resumo + requesterNote(quem));
+    const proposta = await enqueueFor(userId, "voz")(def, entrada, resumo + requesterNote(quem));
     return { ...proposta, resumo };
   }
-  return def.run(parsed.data, ctx);
+  return def.run(entrada, ctx);
 }

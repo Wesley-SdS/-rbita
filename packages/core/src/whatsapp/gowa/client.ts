@@ -22,7 +22,7 @@ export class PonteError extends Error {
   constructor(
     message: string,
     /** `sem_sessao` não adianta retentar; `fora_do_ar` e `instavel` sim */
-    public readonly motivo: "sem_sessao" | "fora_do_ar" | "instavel" | "recusado" | "nao_local",
+    public readonly motivo: "sem_sessao" | "fora_do_ar" | "tempo" | "instavel" | "recusado" | "nao_local" | "nao_configurada",
     public readonly status?: number,
   ) {
     super(message);
@@ -48,10 +48,16 @@ async function base(): Promise<{ url: string; timeoutMs: number }> {
   return { url, timeoutMs: cfg["whatsapp.ponteTimeoutMs"] };
 }
 
+/** A ponte tem senha? Sem ela, nada é chamado (e a saúde diz "mal configurado"). */
+export function ponteConfigurada(): boolean {
+  return Boolean(process.env.GOWA_BASIC_AUTH?.includes(":"));
+}
+
 function autorizacao(): string {
-  // `||` e não `??`: com a linha vazia no .env o compose cai no padrão
-  // `admin:admin`, e aqui tem de cair no mesmo, senão a senha não bate
-  return "Basic " + Buffer.from(process.env.GOWA_BASIC_AUTH || "admin:admin").toString("base64");
+  // Sem padrão de propósito: com `admin:admin` a conta inteira do dono ficaria
+  // atrás de uma senha que todo mundo conhece. O compose também recusa subir sem.
+  if (!ponteConfigurada()) throw new PonteError("Falta GOWA_BASIC_AUTH (usuário:senha da ponte) no .env da raiz.", "nao_configurada");
+  return "Basic " + Buffer.from(process.env.GOWA_BASIC_AUTH!).toString("base64");
 }
 
 /** "Não pareado" tem TRÊS formas no GOWA; as três significam a mesma coisa. */
@@ -61,13 +67,14 @@ export function semSessao(detalhe: string): boolean {
 
 async function executar(r: Requisicao): Promise<Response> {
   const { url, timeoutMs } = await base();
+  const auth = autorizacao();
   const inicio = Date.now();
   let res: Response;
   try {
     res = await fetch(url + r.path, {
       method: r.method,
       headers: {
-        Authorization: autorizacao(),
+        Authorization: auth,
         ...(r.form ? {} : { "Content-Type": "application/json" }),
         ...(r.deviceId ? { "X-Device-Id": r.deviceId } : {}),
       },
@@ -77,18 +84,23 @@ async function executar(r: Requisicao): Promise<Response> {
     });
   } catch (e) {
     const abortou = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
-    log.warn("whatsapp.ponte_rede", { path: r.path, ms: Date.now() - inicio, timeout: abortou });
-    throw new PonteError(abortou ? "A ponte do WhatsApp demorou para responder." : "A ponte do WhatsApp está fora do ar.", "fora_do_ar");
+    log.warn("whatsapp.ponte_rede", { path: semConsulta(r.path), ms: Date.now() - inicio, timeout: abortou });
+    // `tempo` é diferente de fora do ar: num ENVIO, a ponte pode ter aceitado e
+    // mandado a mensagem antes de o prazo acabar (ver EnvioIncerto)
+    throw new PonteError(abortou ? "A ponte do WhatsApp demorou para responder." : "A ponte do WhatsApp está fora do ar.", abortou ? "tempo" : "fora_do_ar");
   }
   if (!res.ok) {
     const detalhe = await res.text().catch(() => "");
     // o corpo do erro fica no log, nunca na resposta ao usuário
-    log.warn("whatsapp.ponte_erro", { path: r.path, status: res.status, detalhe: detalhe.slice(0, 300) });
+    log.warn("whatsapp.ponte_erro", { path: semConsulta(r.path), status: res.status, detalhe: detalhe.slice(0, 300) });
     if (semSessao(detalhe)) throw new PonteError("O WhatsApp não está pareado. Conecte o número em Conectores.", "sem_sessao", res.status);
     throw new PonteError(res.status >= 500 ? "A ponte do WhatsApp está instável. Tente de novo em instantes." : "O WhatsApp recusou a operação.", res.status >= 500 ? "instavel" : "recusado", res.status);
   }
   return res;
 }
+
+/** O caminho sem a query: `login/code?phone=` levaria o número do dono para o log. */
+const semConsulta = (path: string) => path.split("?")[0];
 
 async function json<T>(r: Requisicao): Promise<T> {
   return (await (await executar(r)).json()) as T;
@@ -186,6 +198,11 @@ export async function desconectar(deviceId: string): Promise<void> {
   await json({ method: "POST", path: `/devices/${enc(deviceId)}/logout` });
 }
 
+/** Tira o slot da ponte (apagar a conta): sem ele, a ponte não guarda mais nada do número. */
+export async function removerDispositivo(deviceId: string): Promise<void> {
+  await json({ method: "DELETE", path: `/devices/${enc(deviceId)}` });
+}
+
 export async function reconectar(deviceId: string): Promise<void> {
   await json({ method: "POST", path: `/devices/${enc(deviceId)}/reconnect` });
 }
@@ -223,19 +240,60 @@ export async function enviarMidia(deviceId: string, paraJid: string, tipo: TipoD
  * faz o GOWA buscar e decifrar (a chave da mídia vive na sessão dele). O
  * workspace mediu o primeiro falhando entre versões; o segundo é o documentado.
  */
-export async function baixarMidia(deviceId: string, ref: { path: string | null; externalId: string; mime: string | null }): Promise<{ bytes: Uint8Array; mime: string }> {
+export async function baixarMidia(deviceId: string, ref: { path: string | null; externalId: string; mime: string | null }, maxBytes: number): Promise<{ bytes: Uint8Array; mime: string }> {
   if (ref.path) {
     try {
       const caminho = ref.path.startsWith("http") ? new URL(ref.path).pathname : `/${ref.path.replace(/^\/+/, "")}`;
       const res = await executar({ method: "GET", path: caminho, deviceId });
-      const bytes = new Uint8Array(await res.arrayBuffer());
+      const bytes = await lerComTeto(res, maxBytes);
       if (bytes.length) return { bytes, mime: ref.mime || res.headers.get("content-type") || "application/octet-stream" };
     } catch (e) {
+      if (e instanceof MidiaGrandeDemais) throw e;
       log.info("whatsapp.midia_caminho_local_falhou", { erro: e instanceof Error ? e.message : String(e) });
     }
   }
   const res = await executar({ method: "GET", path: `/message/${enc(ref.externalId)}/download`, deviceId });
-  return { bytes: new Uint8Array(await res.arrayBuffer()), mime: ref.mime || res.headers.get("content-type") || "application/octet-stream" };
+  return { bytes: await lerComTeto(res, maxBytes), mime: ref.mime || res.headers.get("content-type") || "application/octet-stream" };
+}
+
+export class MidiaGrandeDemais extends Error {
+  constructor(public readonly bytes: number | null) {
+    super("Mídia maior que o tamanho máximo configurado");
+    this.name = "MidiaGrandeDemais";
+  }
+}
+
+/**
+ * Lê o corpo parando no teto. Conferir só DEPOIS de `arrayBuffer()` deixava um
+ * vídeo de 900 MB entrar inteiro na memória do processo antes de ser recusado.
+ */
+export async function lerComTeto(res: Response, maxBytes: number): Promise<Uint8Array> {
+  const declarado = Number(res.headers.get("content-length") ?? NaN);
+  if (Number.isFinite(declarado) && declarado > maxBytes) {
+    await res.body?.cancel().catch(() => undefined);
+    throw new MidiaGrandeDemais(declarado);
+  }
+  if (!res.body) return new Uint8Array(await res.arrayBuffer());
+  const partes: Uint8Array[] = [];
+  let total = 0;
+  const leitor = res.body.getReader();
+  for (;;) {
+    const { done, value } = await leitor.read();
+    if (done) break;
+    total += value.length;
+    if (total > maxBytes) {
+      await leitor.cancel().catch(() => undefined);
+      throw new MidiaGrandeDemais(null);
+    }
+    partes.push(value);
+  }
+  const out = new Uint8Array(total);
+  let pos = 0;
+  for (const p of partes) {
+    out.set(p, pos);
+    pos += p.length;
+  }
+  return out;
 }
 
 export async function marcarLida(deviceId: string, chatJid: string, externalId: string): Promise<void> {

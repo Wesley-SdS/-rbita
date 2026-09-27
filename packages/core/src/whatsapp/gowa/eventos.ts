@@ -85,7 +85,7 @@ export const gowaEditedEventSchema = envelopeSchema.extend({
 /** Reação. `emoji` vazio é REMOÇÃO: é assim que o WhatsApp desfaz uma reação. */
 export const gowaReactionEventSchema = envelopeSchema.extend({
   event: z.literal("message.reaction"),
-  payload: z.object({ chat_id: z.string().optional(), from: z.string().optional(), reacted_message_id: z.string(), emoji: z.string().default("") }),
+  payload: z.object({ chat_id: z.string().optional(), from: z.string().optional(), reacted_message_id: z.string(), emoji: z.string().default(""), timestamp: ts }),
 });
 
 /** Ordem importa: os específicos primeiro, o envelope genérico por último. */
@@ -98,17 +98,24 @@ export type GowaEvent = z.infer<typeof gowaEventSchema>;
  */
 export function gowaEventExternalId(ev: GowaEvent): string | null {
   const p = ev.payload as Record<string, unknown>;
+  // id que não é texto vira nulo, nunca "undefined": uma chave "undefined"
+  // faria todo evento torto seguinte colidir com o primeiro e sumir calado
+  const txt = (v: unknown) => (typeof v === "string" && v ? v : null);
   switch (ev.event) {
     case "message":
-      return String(p.id);
-    case "message.revoked":
-      return String(p.revoked_message_id);
     case "message.edited":
-      return String(p.id);
-    case "message.reaction":
-      // quem reagiu entra na chave: duas pessoas reagindo à mesma mensagem são
-      // dois eventos, não uma reentrega
-      return `${String(p.reacted_message_id)}:${typeof p.from === "string" ? p.from : ""}`;
+      return txt(p.id);
+    case "message.revoked":
+      return txt(p.revoked_message_id);
+    case "message.reaction": {
+      const alvo = txt(p.reacted_message_id);
+      if (!alvo) return null;
+      // Quem reagiu, COM QUAL emoji e QUANDO entram na chave: trocar 👍 por ❤️
+      // ou remover (emoji vazio) é evento novo, não reentrega. Sem isso a
+      // reação ficava presa na primeira para sempre.
+      const quando = txt(String(p.timestamp ?? ev.timestamp ?? "")) ?? "";
+      return `${alvo}:${txt(p.from) ?? ""}:${typeof p.emoji === "string" ? p.emoji : ""}:${quando}`;
+    }
     default:
       return null;
   }

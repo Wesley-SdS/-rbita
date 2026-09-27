@@ -7,6 +7,7 @@ import { deveDescobrirLocal, embedProvider, localAvailable, readPolicy } from "@
 import { temChaveDeNuvem } from "@orbita/core/ocr/visao";
 import { estadoDoServico, ollamaEmUso, vozLocalEmUso } from "@orbita/core/saude/servicos-locais";
 import { waSessao } from "@orbita/db/whatsapp-schema";
+import { ponteConfigurada } from "@orbita/core/whatsapp/gowa/client";
 
 async function ping(url: string, ms: number): Promise<boolean> {
   try {
@@ -65,7 +66,7 @@ export async function GET(_req: Request, _ctx: RouteCtx) {
   // WhatsApp pessoal: o estado que o laço de saúde gravou (não pinga a ponte
   // aqui: o health é público e não deve tocar na sessão do dono)
   const sessoes = await db.select({ status: waSessao.status }).from(waSessao).catch(() => []);
-  checks.whatsapp = estadoDoServico(sessoes.length > 0, sessoes.some((x) => x.status === "conectado"));
+  checks.whatsapp = sessoes.length > 0 && !ponteConfigurada() ? "mal_configurado" : estadoDoServico(sessoes.length > 0, sessoes.some((x) => x.status === "conectado"));
 
   const status = checks.db === "up" ? "ok" : "error";
   return Response.json(

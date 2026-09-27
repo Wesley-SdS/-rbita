@@ -92,6 +92,8 @@ export async function sintetizarFala(texto: string, opts: { userId?: string; sig
       signal: opts.signal,
     });
   } catch {
+    // barge-in no Piper é interrupção, não serviço fora (nem linha de falha na conta)
+    if (abortado()) throw new FalaError("interrompida", 499);
     registrarFala(opts.userId, "piper", texto, comecou, "piper_indisponivel");
     throw new FalaError("Serviço de voz indisponível", 503);
   }

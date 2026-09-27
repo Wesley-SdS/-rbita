@@ -156,8 +156,25 @@ export const ver_imagem_whatsapp: ToolDef<typeof VerImagem> = {
 
 const Para = z.string().min(1).max(200).describe("Para quem: o chat (jid) devolvido pela leitura, de preferência; ou o número com DDI; ou o nome como aparece no WhatsApp.");
 
-/** Resumo da proposta com o TEXTO INTEIRO: o dono aprova exatamente o que vai sair. */
-const resumoDe = (acao: string, para: string, texto: string) => `${acao} para ${para}: "${texto.slice(0, 1000)}"`;
+/** Quem recebe, legível: "Maria Souza (5511999998888)". PURA. */
+export function destinoLegivel(para: string, nome?: string | null): string {
+  const numero = para.includes("@") ? para.split("@")[0] : para;
+  const grupo = para.endsWith("@g.us");
+  if (nome) return grupo ? `grupo ${nome}` : `${nome} (${numero})`;
+  return grupo ? `grupo ${numero}` : numero;
+}
+
+/** Resumo da proposta com o destino RESOLVIDO e o TEXTO INTEIRO: o dono aprova exatamente o que vai sair. */
+const resumoDe = (acao: string, i: { para: string; para_nome?: string | null }, texto: string) => `${acao} para ${destinoLegivel(i.para, i.para_nome)}: "${texto.slice(0, 1000)}"`;
+
+/**
+ * Fixa o destino na hora de PROPOR: "a Maria" vira o JID dela, e é para esse
+ * JID que a mensagem vai depois da aprovação, sem resolver de novo.
+ */
+async function fixarDestino<T extends { para: string; para_nome?: string | null }>(input: T, ctx: { userId: string }): Promise<T> {
+  const alvo = await resolverChat(ctx.userId, input.para);
+  return alvo.ok ? { ...input, para: alvo.jid, para_nome: alvo.nome ?? input.para_nome ?? null } : input;
+}
 
 async function destino(userId: string, para: string): Promise<string> {
   const alvo = await resolverChat(userId, para);
@@ -171,7 +188,7 @@ const conferirDestino = async (input: { para: string }, ctx: { userId: string })
   return alvo.ok ? null : alvo.erro;
 };
 
-const EnviarTexto = z.object({ para: z.string().min(1).max(200), texto: z.string().min(1).max(4000) });
+const EnviarTexto = z.object({ para: z.string().min(1).max(200), texto: z.string().min(1).max(4000), para_nome: z.string().max(200).nullish() });
 
 export const enviar_whatsapp: ToolDef<typeof EnviarTexto> = {
   name: "enviar_whatsapp",
@@ -181,8 +198,9 @@ export const enviar_whatsapp: ToolDef<typeof EnviarTexto> = {
   keywords: ["whatsapp", "zap", "mensagem", "mandar", "avisar"],
   requires: { whatsapp: true },
   inputSchema: EnviarTexto,
-  summarize: ({ para, texto }) => resumoDe("Enviar WhatsApp", para, texto),
+  summarize: (i) => resumoDe("Enviar WhatsApp", i, i.texto),
   authorize: conferirDestino,
+  preparar: fixarDestino,
   run: async ({ para, texto }, { userId }) => {
     const r = await enviarTexto(userId, await destino(userId, para), texto, { aprovacaoHumana: true });
     return `WhatsApp enviado (id ${r.id}).`;
@@ -191,6 +209,7 @@ export const enviar_whatsapp: ToolDef<typeof EnviarTexto> = {
 
 const Responder = z.object({
   para: Para,
+  para_nome: z.string().max(200).nullish().describe("Preenchido pela Órbita; não informe."),
   texto: z.string().min(1).max(4000).describe("O texto exato da resposta."),
   citar_mensagem_id: z.string().max(200).optional().describe("Id no WhatsApp da mensagem a citar (opcional)."),
 });
@@ -203,15 +222,20 @@ export const responder_whatsapp: ToolDef<typeof Responder> = {
   keywords: ["whatsapp", "zap", "responder", "resposta", "mandar", "dizer"],
   requires: { whatsappPessoal: true },
   inputSchema: Responder,
-  summarize: ({ para, texto }) => resumoDe("Responder no WhatsApp", para, texto),
+  summarize: (i) => resumoDe("Responder no WhatsApp", i, i.texto),
   authorize: conferirDestino,
+  preparar: fixarDestino,
   run: async ({ para, texto, citar_mensagem_id }, { userId }) => {
     const r = await enviarTexto(userId, await destino(userId, para), texto, { aprovacaoHumana: true, citando: citar_mensagem_id ?? null });
     return `Resposta enviada (id ${r.id}).`;
   },
 };
 
-const Audio = z.object({ para: Para, texto: z.string().min(1).max(2000).describe("O que a Órbita vai FALAR na nota de voz.") });
+const Audio = z.object({
+  para: Para,
+  para_nome: z.string().max(200).nullish().describe("Preenchido pela Órbita; não informe."),
+  texto: z.string().min(1).max(2000).describe("O que a Órbita vai FALAR na nota de voz."),
+});
 
 export const enviar_audio_whatsapp: ToolDef<typeof Audio> = {
   name: "enviar_audio_whatsapp",
@@ -221,8 +245,9 @@ export const enviar_audio_whatsapp: ToolDef<typeof Audio> = {
   keywords: ["whatsapp", "zap", "audio", "voz", "falar", "nota"],
   requires: { whatsappPessoal: true },
   inputSchema: Audio,
-  summarize: ({ para, texto }) => resumoDe("Mandar áudio no WhatsApp", para, texto),
+  summarize: (i) => resumoDe("Mandar áudio no WhatsApp", i, i.texto),
   authorize: conferirDestino,
+  preparar: fixarDestino,
   run: async ({ para, texto }, { userId }) => {
     const r = await enviarAudio(userId, await destino(userId, para), texto, { aprovacaoHumana: true });
     return `Áudio enviado (id ${r.id}).`;
@@ -231,6 +256,7 @@ export const enviar_audio_whatsapp: ToolDef<typeof Audio> = {
 
 const Imagem = z.object({
   para: Para,
+  para_nome: z.string().max(200).nullish().describe("Preenchido pela Órbita; não informe."),
   mensagem_id: z.string().uuid().describe("O id da imagem guardada ([imagem id=...]), inclusive uma que o dono mandou na conversa com ele mesmo."),
   legenda: z.string().max(1000).optional(),
 });
@@ -243,8 +269,9 @@ export const enviar_imagem_whatsapp: ToolDef<typeof Imagem> = {
   keywords: ["whatsapp", "zap", "foto", "imagem", "mandar", "encaminhar"],
   requires: { whatsappPessoal: true },
   inputSchema: Imagem,
-  summarize: ({ para, legenda }) => `Mandar imagem no WhatsApp para ${para}` + (legenda ? `: "${legenda.slice(0, 300)}"` : ""),
+  summarize: (i) => `Mandar imagem no WhatsApp para ${destinoLegivel(i.para, i.para_nome)}` + (i.legenda ? `: "${i.legenda.slice(0, 300)}"` : ""),
   authorize: conferirDestino,
+  preparar: fixarDestino,
   run: async ({ para, mensagem_id, legenda }, { userId }) => {
     const r = await enviarImagem(userId, await destino(userId, para), mensagem_id, legenda ?? null, { aprovacaoHumana: true });
     return `Imagem enviada (id ${r.id}).`;

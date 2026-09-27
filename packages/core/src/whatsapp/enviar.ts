@@ -18,6 +18,27 @@ import * as store from "./store";
 
 export type Provedor = "pessoal" | "cloud";
 
+/**
+ * A ponte não respondeu a tempo DEPOIS de receber o envio: a mensagem pode ter
+ * saído. Tratar como falha levava o dono a mandar de novo (duas mensagens), e
+ * apagar a linha da saída fazia o eco voltar como mensagem nova do dono (na
+ * conversa "Eu", a Órbita respondendo a si mesma). A linha fica; o eco, se
+ * vier, casa com ela.
+ */
+export class EnvioIncerto extends Error {
+  constructor() {
+    super("Talvez tenha saído: o WhatsApp demorou a confirmar o envio. Confira a conversa antes de mandar de novo.");
+    this.name = "EnvioIncerto";
+  }
+}
+
+/** Falha do envio: incerta mantém a linha (o eco ainda pode chegar), as outras desfazem. */
+async function falhouAoEnviar(userId: string, linha: string, e: unknown): Promise<never> {
+  if (e instanceof ponte.PonteError && e.motivo === "tempo") throw new EnvioIncerto();
+  await store.desfazerSaida(userId, linha);
+  throw e;
+}
+
 export class EnvioRecusado extends Error {
   constructor(message: string) {
     super(message);
@@ -107,8 +128,7 @@ export async function enviarTexto(userId: string, destino: string, texto: string
     await store.confirmarSaida(userId, linha, id);
     return { provedor, id, para: paraJid };
   } catch (e) {
-    await store.desfazerSaida(userId, linha);
-    throw e;
+    return falhouAoEnviar(userId, linha, e);
   }
 }
 
@@ -135,8 +155,7 @@ export async function enviarAudio(userId: string, destino: string, texto: string
     await store.confirmarSaida(userId, linha, id);
     return { provedor: "pessoal", id, para: paraJid };
   } catch (e) {
-    await store.desfazerSaida(userId, linha);
-    throw e;
+    return falhouAoEnviar(userId, linha, e);
   }
 }
 
@@ -155,7 +174,6 @@ export async function enviarImagem(userId: string, destino: string, mensagemId: 
     await store.confirmarSaida(userId, linha, id);
     return { provedor: "pessoal", id, para: paraJid };
   } catch (e) {
-    await store.desfazerSaida(userId, linha);
-    throw e;
+    return falhouAoEnviar(userId, linha, e);
   }
 }

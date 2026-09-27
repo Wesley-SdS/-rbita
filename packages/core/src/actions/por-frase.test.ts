@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Aprovar FALANDO (PRD-WHATSAPP W6). Quem aprova é o código lendo a frase do
- * dono, e só a proposta do MESMO canal: um "manda" no WhatsApp não aprova o
- * que foi pedido na voz, e vice-versa.
+ * dono, e com três travas: só proposta do MESMO canal, só a que nasceu depois
+ * da fala anterior do dono, e NUNCA risco perigoso (decisão 9.5).
  */
 
-type Pendente = { id: string; summary: string; createdAt: Date; expiraEm: Date | null; canal: string };
+type Pendente = { id: string; kind: string; summary: string; createdAt: Date; expiraEm: Date | null; canal: string };
 let pendentes: Pendente[] = [];
 const aprovarAcao = vi.fn(async (..._a: unknown[]) => ({ ok: true as const, resultado: "ok" }));
 const cancelarAcao = vi.fn(async (..._a: unknown[]) => undefined);
@@ -18,14 +18,20 @@ vi.mock("./aprovar", () => ({
 }));
 vi.mock("../settings", () => ({
   settings: {
-    getMany: async () => ({ "whatsapp.frasesConfirmar": ["manda", "pode mandar", "sim"], "whatsapp.frasesCancelar": ["cancela", "não"] }),
+    getMany: async () => ({ "whatsapp.frasesConfirmar": ["manda", "pode mandar"], "whatsapp.frasesCancelar": ["cancela", "não manda"] }),
   },
+}));
+const riscos: Record<string, string> = { responder_whatsapp: "efeito_externo", casa_acionar_com_aprovacao: "perigoso" };
+vi.mock("../tools/index", () => ({
+  getTool: (k: string) => (riscos[k] ? { name: k, risk: riscos[k] } : undefined),
+  effectiveRisk: (d: { risk: string }) => d.risk,
+  loadToolOverrides: async () => new Map(),
 }));
 
 const { aprovarPorFrase } = await import("./por-frase");
 
 const daqui = (min: number) => new Date(Date.now() + min * 60_000);
-const p = (id: string, canal = "whatsapp", expira = 20, criada = -1): Pendente => ({ id, summary: `Responder ${id}`, createdAt: daqui(criada), expiraEm: daqui(expira), canal });
+const p = (id: string, canal = "whatsapp", expira = 20, criada = -1, kind = "responder_whatsapp"): Pendente => ({ id, kind, summary: `Responder ${id}`, createdAt: daqui(criada), expiraEm: daqui(expira), canal });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -35,13 +41,13 @@ beforeEach(() => {
 describe("aprovar por frase", () => {
   it("'manda' com uma proposta do canal aprova ela", async () => {
     pendentes = [p("a")];
-    expect(await aprovarPorFrase("u1", "whatsapp", "Manda!")).toBe("Enviado.");
+    expect(await aprovarPorFrase("u1", "whatsapp", "Manda!")).toEqual({ estado: "enviado", texto: "Enviado." });
     expect(aprovarAcao).toHaveBeenCalledWith("u1", "a");
   });
 
   it("'cancela' cancela", async () => {
     pendentes = [p("a")];
-    expect(await aprovarPorFrase("u1", "whatsapp", "cancela")).toBe("Cancelado, não mandei.");
+    expect(await aprovarPorFrase("u1", "whatsapp", "cancela")).toEqual({ estado: "cancelado", texto: "Cancelado, não mandei." });
     expect(cancelarAcao).toHaveBeenCalledWith("u1", "a");
     expect(aprovarAcao).not.toHaveBeenCalled();
   });
@@ -52,21 +58,41 @@ describe("aprovar por frase", () => {
     expect(aprovarAcao).not.toHaveBeenCalled();
   });
 
-  it("'sim' sem proposta é conversa, não aprovação", async () => {
+  it("risco PERIGOSO nunca sai por frase (portão, fechadura, alarme): só pela tela", async () => {
+    pendentes = [p("portao", "voz", 20, -1, "casa_acionar_com_aprovacao")];
+    expect(await aprovarPorFrase("u1", "voz", "manda")).toBeNull();
+    expect(aprovarAcao).not.toHaveBeenCalled();
+  });
+
+  it("só responde ao que foi proposto DEPOIS da fala anterior do dono", async () => {
+    // proposta de 10 min atrás; o dono falou de outra coisa há 5 min
+    pendentes = [p("velha", "whatsapp", 20, -10)];
+    expect(await aprovarPorFrase("u1", "whatsapp", "manda", daqui(-5))).toBeNull();
+    expect(aprovarAcao).not.toHaveBeenCalled();
+    // a mesma proposta, se foi feita depois da fala anterior, sai
+    expect(await aprovarPorFrase("u1", "whatsapp", "manda", daqui(-15))).toMatchObject({ estado: "enviado" });
+  });
+
+  it("palavra genérica não aprova nada (não está nas frases padrão)", async () => {
+    pendentes = [p("a")];
     expect(await aprovarPorFrase("u1", "whatsapp", "sim")).toBeNull();
+    expect(await aprovarPorFrase("u1", "whatsapp", "não")).toBeNull();
+    expect(aprovarAcao).not.toHaveBeenCalled();
+    expect(cancelarAcao).not.toHaveBeenCalled();
   });
 
   it("só vencidas: a frase segue como pedido (e não vira aviso eterno)", async () => {
     pendentes = [p("velha", "whatsapp", -60, -90)];
-    expect(await aprovarPorFrase("u1", "whatsapp", "sim")).toBeNull();
+    expect(await aprovarPorFrase("u1", "whatsapp", "manda")).toBeNull();
     expect(aprovarAcao).not.toHaveBeenCalled();
   });
 
   it("duas válidas: devolve a lista numerada; 'manda 2' escolhe", async () => {
     pendentes = [p("a", "whatsapp", 20, -5), p("b", "whatsapp", 20, -1)];
     const lista = await aprovarPorFrase("u1", "whatsapp", "manda");
-    expect(lista).toContain("1. Responder a");
-    expect(lista).toContain("2. Responder b");
+    expect(lista?.estado).toBe("lista");
+    expect(lista?.texto).toContain("1. Responder a");
+    expect(lista?.texto).toContain("2. Responder b");
     expect(aprovarAcao).not.toHaveBeenCalled();
     await aprovarPorFrase("u1", "whatsapp", "manda 2");
     expect(aprovarAcao).toHaveBeenCalledWith("u1", "b");
@@ -78,11 +104,11 @@ describe("aprovar por frase", () => {
     expect(aprovarAcao).not.toHaveBeenCalled();
   });
 
-  it("falha do envio volta como recado", async () => {
-    pendentes = [p("a")];
-    aprovarAcao.mockResolvedValueOnce({ ok: false, status: 502, erro: "ponte fora do ar" } as never);
-    expect(await aprovarPorFrase("u1", "voz", "manda")).toBeNull(); // canal errado: nem tenta
+  it("falha do envio volta como recado; envio incerto não vira 'Enviado.'", async () => {
     pendentes = [p("a", "voz")];
-    expect(await aprovarPorFrase("u1", "voz", "manda")).toBe("Não consegui enviar: ponte fora do ar");
+    aprovarAcao.mockResolvedValueOnce({ ok: false, status: 502, erro: "ponte fora do ar" } as never);
+    expect(await aprovarPorFrase("u1", "voz", "manda")).toEqual({ estado: "falhou", texto: "Não consegui enviar: ponte fora do ar" });
+    aprovarAcao.mockResolvedValueOnce({ ok: true, resultado: "Talvez tenha saído: confira" } as never);
+    expect((await aprovarPorFrase("u1", "voz", "manda"))?.texto).toBe("Talvez tenha saído: confira");
   });
 });

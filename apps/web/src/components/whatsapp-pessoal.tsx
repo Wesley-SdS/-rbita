@@ -42,16 +42,20 @@ const ROTULO: Record<Sessao["status"], string> = {
 
 export function BlocoWhatsappPessoal() {
   const { dado: sessao, erro } = useRecurso<Sessao>("/api/whatsapp/sessao");
-  const [pareamento, setPareamento] = useState<{ qr: string | null; codigo: string | null } | null>(null);
+  const [pareamento, setPareamento] = useState<{ qr: string | null; codigo: string | null; expiraEm: number } | null>(null);
   const [telefone, setTelefone] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [falha, setFalha] = useState<string | null>(null);
 
   // enquanto o QR está na tela, o estado é conferido de novo a cada poucos
   // segundos: é assim que "Conectado" aparece sozinho depois da leitura
+  // (com margem além da validade do QR; vencido, o dono gera outro)
   useEffect(() => {
     if (!pareamento) return;
-    const t = setInterval(() => invalidar("/api/whatsapp/sessao"), 4000);
+    const t = setInterval(() => {
+      if (Date.now() > pareamento.expiraEm + 30_000) return clearInterval(t);
+      invalidar("/api/whatsapp/sessao");
+    }, 4000);
     return () => clearInterval(t);
   }, [pareamento]);
   useEffect(() => {
@@ -61,23 +65,36 @@ export function BlocoWhatsappPessoal() {
   async function parear(modo: "qr" | "codigo") {
     setOcupado(true);
     setFalha(null);
-    const r = await fetch("/api/whatsapp/parear", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(modo === "codigo" ? { modo, telefone } : { modo }),
-    });
-    const d = await r.json().catch(() => ({}));
-    setOcupado(false);
-    if (!r.ok) return setFalha(d.error ?? "Não consegui falar com a ponte do WhatsApp.");
-    setPareamento({ qr: d.qr ?? null, codigo: d.codigo ?? null });
-    invalidar("/api/whatsapp/sessao");
+    try {
+      const r = await fetch("/api/whatsapp/parear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(modo === "codigo" ? { modo, telefone } : { modo }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return setFalha(d.error ?? "Não consegui falar com a ponte do WhatsApp.");
+      setPareamento({ qr: d.qr ?? null, codigo: d.codigo ?? null, expiraEm: Date.parse(d.expiraEm) || Date.now() + 60_000 });
+      invalidar("/api/whatsapp/sessao");
+    } catch {
+      setFalha("Sem conexão com a Órbita. Tente de novo.");
+    } finally {
+      setOcupado(false);
+    }
   }
 
   async function desconectar() {
     setOcupado(true);
-    await fetch("/api/whatsapp/desconectar", { method: "POST" });
-    setOcupado(false);
-    invalidar("/api/whatsapp/sessao");
+    setFalha(null);
+    try {
+      const r = await fetch("/api/whatsapp/desconectar", { method: "POST" });
+      // falhou em desligar na ponte: o número CONTINUA conectado, e a tela diz isso
+      if (!r.ok) setFalha(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Não consegui desconectar. O número continua conectado.");
+      invalidar("/api/whatsapp/sessao");
+    } catch {
+      setFalha("Sem conexão com a Órbita. O número continua conectado.");
+    } finally {
+      setOcupado(false);
+    }
   }
 
   const status = sessao?.status ?? "sem_sessao";
@@ -143,15 +160,21 @@ function ContatosDoWhatsapp() {
   const { dado } = useRecurso<Contatos>("/api/whatsapp/contatos");
   const [aberto, setAberto] = useState(false);
   const [filtro, setFiltro] = useState("");
+  const [editando, setEditando] = useState<{ id: string; apelido: string } | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
 
   async function mudar(id: string, patch: { modo?: Contato["modo"]; apelido?: string | null; retomar?: boolean }) {
-    const r = await fetch(`/api/whatsapp/contatos/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
-    if (!r.ok) {
-      const d = await r.json().catch(() => ({}));
-      alert(d.error ?? "Não consegui salvar.");
+    setErro(null);
+    try {
+      const r = await fetch(`/api/whatsapp/contatos/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+      if (!r.ok) setErro(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Não consegui salvar.");
+    } catch {
+      setErro("Sem conexão com a Órbita.");
     }
     invalidar("/api/whatsapp/contatos");
   }
+
+  const nomePorJid = new Map((dado?.contatos ?? []).map((c) => [c.jid, c.apelido ?? c.nome ?? c.jid.split("@")[0]]));
 
   const f = filtro.trim().toLowerCase();
   const pessoas = (dado?.contatos ?? []).filter((c) => !c.grupo && (!f || `${c.apelido ?? ""} ${c.nome ?? ""} ${c.jid}`.toLowerCase().includes(f)));
@@ -168,6 +191,7 @@ function ContatosDoWhatsapp() {
             Marcado, a Órbita responde aquele contato sem pedir sua aprovação. Nesse modo ela não enxerga nada seu (agenda, finanças, e-mail,
             casa), só aquela conversa. Grupo nunca é respondido sozinho. Se você escrever à mão na conversa, ela para por um tempo.
           </p>
+          {erro && <p className="notice">{erro}</p>}
           <label className="field">
             Procurar
             <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="nome ou número" autoComplete="off" />
@@ -183,15 +207,32 @@ function ContatosDoWhatsapp() {
                     {pausado ? " · pausado" : ""}
                   </span>
                   <span className="whatsapp-acoes">
-                    <button
-                      className="button compacto"
-                      onClick={() => {
-                        const novo = prompt("Como você chama esta pessoa? (ex.: mãe)", c.apelido ?? "");
-                        if (novo !== null) void mudar(c.id, { apelido: novo.trim() || null });
-                      }}
-                    >
-                      <Icone nome="edit" />
-                    </button>
+                    {editando?.id === c.id ? (
+                      <form
+                        className="whatsapp-acoes"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void mudar(c.id, { apelido: editando.apelido.trim() || null });
+                          setEditando(null);
+                        }}
+                      >
+                        <input
+                          aria-label={`Como você chama ${c.nome ?? "este contato"}`}
+                          value={editando.apelido}
+                          onChange={(e) => setEditando({ id: c.id, apelido: e.target.value })}
+                          placeholder="ex.: mãe"
+                          maxLength={80}
+                          autoFocus
+                        />
+                        <button type="submit" className="button compacto" aria-label="Salvar apelido">
+                          <Icone nome="check" />
+                        </button>
+                      </form>
+                    ) : (
+                      <button className="button compacto" aria-label={`Editar apelido de ${c.apelido ?? c.nome ?? "contato"}`} onClick={() => setEditando({ id: c.id, apelido: c.apelido ?? "" })}>
+                        <Icone nome="edit" />
+                      </button>
+                    )}
                     {pausado && (
                       <button className="button compacto" onClick={() => mudar(c.id, { retomar: true })}>
                         Retomar
@@ -214,7 +255,7 @@ function ContatosDoWhatsapp() {
                   <li key={m.id}>
                     <span>
                       {new Date(m.em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · para{" "}
-                      {dado.contatos.find((c) => c.jid === m.chatJid)?.apelido ?? dado.contatos.find((c) => c.jid === m.chatJid)?.nome ?? m.chatJid.split("@")[0]}: {m.texto}
+                      {nomePorJid.get(m.chatJid) ?? m.chatJid.split("@")[0]}: {m.texto}
                     </span>
                   </li>
                 ))}

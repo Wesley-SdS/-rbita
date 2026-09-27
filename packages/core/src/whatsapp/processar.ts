@@ -1,14 +1,14 @@
-import { and, asc, eq, isNull, lt, lte } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@orbita/db";
-import { waEventoBruto, type WaMensagem } from "@orbita/db/whatsapp-schema";
+import { waEventoBruto, waMensagem, type WaMensagem } from "@orbita/db/whatsapp-schema";
 import { settings } from "../settings";
 import { events } from "../events/index";
 import { log } from "../observability/logger";
 import { transcribeRecording } from "../meetings/transcribe";
 import * as ponte from "./gowa/client";
 import { gowaEventExternalId, gowaEventSchema, gowaEditedEventSchema, gowaMessageEventSchema, gowaReactionEventSchema, gowaRevokedEventSchema, type GowaEvent } from "./gowa/eventos";
-import { normalizarJid, traduzirMensagem } from "./traduzir";
-import { sessaoDoDispositivo } from "./sessao";
+import { normalizarJid, traduzirMensagem, type MensagemTraduzida } from "./traduzir";
+import { conferirSaude, sessaoDe } from "./sessao";
 import { salvarMidia } from "./midia";
 import * as store from "./store";
 
@@ -17,13 +17,18 @@ import * as store from "./store";
  *
  * O webhook só grava em `wa_evento_bruto` e responde 200: o GOWA reenvia se o
  * 200 demora, então nada de baixar mídia ou transcrever dentro da requisição.
- * Quem processa é este módulo, no MESMO processo, em série.
+ * Quem processa é este módulo, no MESMO processo.
  *
  * Por que não a fila de trabalhos (`jobs/`): cada mensagem recebida viraria um
  * trabalho na tela "Trabalhos", e um grupo animado enterraria o resumo de
  * reunião do dono debaixo de centenas de linhas. A tabela bruta já é a fila
  * durável (gravar antes de processar); o laço do SchedulerService é a rede de
- * segurança para o que ficou para trás num reinício.
+ * segurança para o que falhou ou ficou para trás num reinício.
+ *
+ * Em série POR CHAT, não global: a ordem importa dentro de uma conversa (a
+ * conversa "Eu" relê o histórico, a edição vem depois da original), mas um
+ * áudio de três minutos transcrito no whisper local não pode segurar a
+ * conversa "Eu" enquanto isso.
  */
 
 /** Chamado depois que uma mensagem nova foi guardada: o roteamento (turno, automático). */
@@ -34,51 +39,77 @@ export function quandoGuardar(fn: AoGuardar): void {
   aoGuardar = fn;
 }
 
-// ── entrada (chamada pela rota do webhook) ──
+/** Edição, apagada ou reação de uma original que não chegou nisso vira abandono, não erro. */
+const ESPERA_PELA_ORIGINAL_MS = 10 * 60_000;
 
-export type ResultadoDaEntrada = { ok: true; eventoId: string | null } | { ok: false; status: 400 | 401 | 404; erro: string };
+// ── entrada (chamada pela rota do webhook, já autenticada pelo HMAC) ──
+
+export type ResultadoDaEntrada = { ok: true; eventoId: string | null } | { ok: false; status: 400; erro: string };
+
+const chatDo = (corpo: unknown): string => {
+  const p = (corpo as { payload?: Record<string, unknown> } | null)?.payload;
+  const c = p?.chat_id ?? p?.revoked_chat;
+  return typeof c === "string" && c ? normalizarJid(c) : "_";
+};
 
 /** Grava o evento bruto (idempotente) e agenda o processamento. Nunca processa aqui. */
-export async function receberEvento(deviceId: string, corpo: unknown): Promise<ResultadoDaEntrada> {
-  const sessao = await sessaoDoDispositivo(deviceId);
-  if (!sessao) return { ok: false, status: 404, erro: "Dispositivo desconhecido" };
+export async function receberEvento(userId: string, deviceId: string, corpo: unknown): Promise<ResultadoDaEntrada> {
   const ev = gowaEventSchema.safeParse(corpo);
   if (!ev.success) return { ok: false, status: 400, erro: "Evento inválido" };
   const externalId = gowaEventExternalId(ev.data);
-  if (!externalId) return { ok: true, eventoId: null }; // efêmero: nada a guardar
+  if (!externalId) {
+    // efêmero (presença) é esperado; mensagem sem id é formato novo do GOWA, e precisa aparecer
+    if (ev.data.event.startsWith("message")) log.warn("whatsapp.evento_sem_id", { tipo: ev.data.event });
+    return { ok: true, eventoId: null };
+  }
   const [r] = await db
     .insert(waEventoBruto)
-    .values({ userId: sessao.sessao.userId, deviceId, tipo: ev.data.event, externalId, corpo: ev.data as unknown as Record<string, unknown> })
+    .values({ userId, deviceId, tipo: ev.data.event, externalId, corpo: ev.data as unknown as Record<string, unknown> })
     .onConflictDoNothing({ target: [waEventoBruto.deviceId, waEventoBruto.tipo, waEventoBruto.externalId] })
     .returning({ id: waEventoBruto.id });
-  if (r) agendar(r.id);
+  if (r) agendar(r.id, chatDo(ev.data));
   return { ok: true, eventoId: r?.id ?? null };
 }
 
-// ── processamento em série ──
+// ── processamento em série por chat ──
 
-let cadeia: Promise<unknown> = Promise.resolve();
+const filas = new Map<string, Promise<unknown>>();
 const emAndamento = new Set<string>();
 
-function agendar(id: string): void {
+function agendar(id: string, chat: string): void {
   if (emAndamento.has(id)) return;
   emAndamento.add(id);
-  // em série: a ordem das mensagens importa (a conversa "Eu" relê o histórico)
-  cadeia = cadeia
+  const proxima = (filas.get(chat) ?? Promise.resolve())
     .then(() => processarEvento(id))
-    .catch((e) => log.error("whatsapp.processar_falhou", { id, erro: e instanceof Error ? e.message : String(e) }))
-    .finally(() => emAndamento.delete(id));
+    // a falha já está gravada na linha; o laço de pendentes refaz com espera
+    .catch((e) => log.warn("whatsapp.processar_falhou", { erro: e instanceof Error ? e.message : String(e) }))
+    .finally(() => {
+      emAndamento.delete(id);
+      if (filas.get(chat) === proxima) filas.delete(chat);
+    });
+  filas.set(chat, proxima);
 }
 
-/** Laço de segurança: retoma o que não foi processado (reinício, falha passageira). */
-export async function processarPendentes(maxFalhas = 5): Promise<number> {
+/**
+ * Laço de segurança: retoma o que não foi processado. A espera DOBRA a cada
+ * falha (5 s, 10 s, 20 s…): uma original que ainda está na fila tem tempo de
+ * chegar antes de a edição dela desistir.
+ */
+export async function processarPendentes(maxFalhas = 6): Promise<number> {
   const rows = await db
-    .select({ id: waEventoBruto.id })
+    .select({ id: waEventoBruto.id, corpo: waEventoBruto.corpo })
     .from(waEventoBruto)
-    .where(and(isNull(waEventoBruto.processadoEm), lt(waEventoBruto.falhas, maxFalhas), lte(waEventoBruto.recebidoEm, new Date(Date.now() - 5_000))))
+    .where(
+      and(
+        isNull(waEventoBruto.processadoEm),
+        lt(waEventoBruto.falhas, maxFalhas),
+        // sem Date crua no sql`` (CLAUDE.md §9): a conta é toda do Postgres
+        sql`${waEventoBruto.recebidoEm} <= now() - interval '5 seconds' * power(2, ${waEventoBruto.falhas})`,
+      ),
+    )
     .orderBy(asc(waEventoBruto.recebidoEm))
     .limit(100);
-  for (const r of rows) agendar(r.id);
+  for (const r of rows) agendar(r.id, chatDo(r.corpo));
   return rows.length;
 }
 
@@ -87,7 +118,7 @@ export async function processarEvento(id: string): Promise<void> {
   if (!bruto || bruto.processadoEm) return;
   try {
     const ev = gowaEventSchema.parse(bruto.corpo);
-    await aplicar(bruto.userId, bruto.deviceId, ev);
+    await aplicarEvento(bruto.userId, bruto.deviceId, ev, bruto.recebidoEm);
     await db.update(waEventoBruto).set({ processadoEm: new Date(), ultimoErro: null }).where(eq(waEventoBruto.id, id));
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -96,41 +127,62 @@ export async function processarEvento(id: string): Promise<void> {
   }
 }
 
-async function aplicar(userId: string, deviceId: string, ev: GowaEvent): Promise<void> {
-  const msg = gowaMessageEventSchema.safeParse(ev);
-  if (msg.success) return guardarMensagem(userId, deviceId, msg.data.payload);
+/** Chat que a config manda ignorar (grupo, status). PURA. */
+export function chatIgnorado(chatJid: string, cfg: { grupos: string; status: string }): boolean {
+  if (chatJid === "status@broadcast") return cfg.status === "ignorar";
+  return chatJid.endsWith("@g.us") && cfg.grupos === "ignorar";
+}
 
-  // Edição, apagada e reação mexem numa mensagem que PRECISA já estar
-  // guardada. Se ela ainda não está (a original falhou e está na fila de novo,
-  // medido no smoke de 27/09), o evento falha de propósito e o laço de
-  // pendentes o refaz depois, em vez de a edição se perder em silêncio.
-  const exigir = async (n: Promise<number>) => {
-    if ((await n) === 0) throw new Error("a mensagem original ainda não foi guardada");
+/** Aplica um evento já validado (exportado para os testes; quem chama é `processarEvento`). */
+export async function aplicarEvento(userId: string, deviceId: string, ev: GowaEvent, recebidoEm: Date): Promise<void> {
+  const cfg = await settings.getMany(["whatsapp.grupos", "whatsapp.status"]);
+  const filtro = { grupos: cfg["whatsapp.grupos"], status: cfg["whatsapp.status"] };
+
+  const msg = gowaMessageEventSchema.safeParse(ev);
+  if (msg.success) return guardarMensagem(userId, deviceId, traduzirMensagem(msg.data.payload), filtro);
+
+  // Edição, apagada e reação mexem numa mensagem que PRECISA já estar guardada.
+  // Se ela ainda não está (a original falhou e voltou para a fila, medido no
+  // smoke de 27/09), o evento falha de propósito e o laço o refaz depois. Se
+  // ela NUNCA vai estar (grupo ignorado, anterior ao pareamento, fora da
+  // retenção), a espera acaba e o evento é encerrado sem barulho.
+  const aplicarNaOriginal = async (chat: string | undefined, externalId: string, patch: Parameters<typeof store.atualizarMensagem>[2]) => {
+    if (chat && chatIgnorado(normalizarJid(chat), filtro)) return;
+    if ((await store.atualizarMensagem(userId, externalId, patch)) > 0) return;
+    if (Date.now() - recebidoEm.getTime() < ESPERA_PELA_ORIGINAL_MS) throw new Error("a mensagem original ainda não foi guardada");
+    log.info("whatsapp.original_ausente", { tipo: ev.event });
   };
 
   const apagada = gowaRevokedEventSchema.safeParse(ev);
   // apagada GUARDA o texto original: é o que a pessoa escreveu, e o dono já podia ter lido
-  if (apagada.success) return exigir(store.atualizarMensagem(userId, apagada.data.payload.revoked_message_id, { apagada: true }));
+  if (apagada.success) return aplicarNaOriginal(apagada.data.payload.chat_id, apagada.data.payload.revoked_message_id, { apagada: true });
 
   const editada = gowaEditedEventSchema.safeParse(ev);
-  if (editada.success) return exigir(store.atualizarMensagem(userId, editada.data.payload.original_message_id, { texto: editada.data.payload.body ?? null, editada: true }));
+  if (editada.success) {
+    const { body, chat_id, original_message_id } = editada.data.payload;
+    // edição sem corpo (legenda de mídia, formato novo) não pode APAGAR o texto que havia
+    return aplicarNaOriginal(chat_id, original_message_id, body === undefined ? { editada: true } : { texto: body, editada: true });
+  }
 
   const reacao = gowaReactionEventSchema.safeParse(ev);
-  if (reacao.success) return exigir(store.atualizarMensagem(userId, reacao.data.payload.reacted_message_id, { reacao: reacao.data.payload.emoji || null }));
+  if (reacao.success) return aplicarNaOriginal(reacao.data.payload.chat_id, reacao.data.payload.reacted_message_id, { reacao: reacao.data.payload.emoji || null });
 }
 
-async function guardarMensagem(userId: string, deviceId: string, payload: Parameters<typeof traduzirMensagem>[0]): Promise<void> {
-  const t = traduzirMensagem(payload);
-  const cfg = await settings.getMany(["whatsapp.grupos", "whatsapp.status", "whatsapp.midiaMaxMb", "whatsapp.transcricao", "meetings.sttCloud"]);
-  if (t.status && cfg["whatsapp.status"] === "ignorar") return;
-  if (t.grupo && cfg["whatsapp.grupos"] === "ignorar") return;
+async function guardarMensagem(userId: string, deviceId: string, t: MensagemTraduzida, filtro: { grupos: string; status: string }): Promise<void> {
+  if (chatIgnorado(t.chatJid, filtro)) return;
 
   // A VOLTA do que a Órbita mandou. Sem isto, a resposta dela na conversa "Eu"
   // chegaria como mensagem nova do dono e ela responderia a si mesma, em laço.
   if (t.deMim && (await store.casarEco(userId, t.chatJid, t.tipo, t.texto, t.externalId))) return;
 
-  const sessao = await sessaoDoDispositivo(deviceId);
-  const meuJid = sessao?.sessao.jid ? normalizarJid(sessao.sessao.jid) : null;
+  // Sem o JID do dono ainda (logo depois de parear, antes da primeira volta
+  // da saúde), a conversa "Eu" passaria por chat comum e o pedido ficaria mudo.
+  let sessao = await sessaoDe(userId);
+  if (sessao && !sessao.jid) {
+    await conferirSaude(userId).catch(() => null);
+    sessao = await sessaoDe(userId);
+  }
+  const meuJid = sessao?.jid ? normalizarJid(sessao.jid) : null;
   const conversaEu = Boolean(meuJid && t.chatJid === meuJid);
 
   const contato = await store.garantirContato(userId, t.chatJid, {
@@ -141,50 +193,53 @@ async function guardarMensagem(userId: string, deviceId: string, payload: Parame
     em: t.em,
   });
 
-  const m = await store.inserirMensagem({
-    userId,
-    contatoId: contato.id,
-    chatJid: t.chatJid,
-    autorJid: t.autorJid,
-    autorNome: t.deMim ? null : t.autorNome,
-    externalId: t.externalId,
-    deMim: t.deMim,
-    tipo: t.tipo,
-    texto: t.texto,
-    respondeA: t.respondeA,
-    em: t.em,
-    // o que o dono mesmo escreveu (em qualquer chat) ele já leu
-    lidaEm: t.deMim ? new Date() : null,
-  });
-  if (!m) return; // reentrega
+  // Reentrega NÃO é o fim: se a tentativa anterior caiu depois de gravar e
+  // antes de rotear, é a linha existente que segue (mídia, aviso, roteamento).
+  const m =
+    (await store.inserirMensagem({
+      userId,
+      contatoId: contato.id,
+      chatJid: t.chatJid,
+      autorJid: t.autorJid,
+      autorNome: t.deMim ? null : t.autorNome,
+      externalId: t.externalId,
+      deMim: t.deMim,
+      tipo: t.tipo,
+      texto: t.texto,
+      respondeA: t.respondeA,
+      em: t.em,
+      // o que o dono mesmo escreveu (em qualquer chat) ele já leu
+      lidaEm: t.deMim ? new Date() : null,
+    })) ?? (await store.mensagemPorExternalId(userId, t.externalId));
+  if (!m || m.roteadaEm) return;
 
   let final: WaMensagem = m;
-  if (t.midia) {
-    try {
-      const baixada = await ponte.baixarMidia(deviceId, { path: t.midia.path, externalId: t.externalId, mime: t.midia.mimeType });
-      if (baixada.bytes.length > cfg["whatsapp.midiaMaxMb"] * 1024 * 1024) {
-        log.info("whatsapp.midia_grande_demais", { bytes: baixada.bytes.length });
-      } else {
-        const { caminho, sha256 } = await salvarMidia(baixada.bytes, baixada.mime);
-        const patch: Partial<WaMensagem> = { midiaCaminho: caminho, midiaSha256: sha256, midiaMime: baixada.mime };
-        if (t.tipo === "audio") {
-          const transcricao = await transcrever(userId, baixada.bytes, baixada.mime, cfg["whatsapp.transcricao"], cfg["meetings.sttCloud"]);
-          if (transcricao) patch.transcricao = transcricao;
-        }
-        await store.atualizarMensagemPorId(userId, m.id, patch);
-        final = { ...m, ...patch };
-      }
-    } catch (e) {
-      // sem mídia a mensagem continua valendo (o texto, a legenda, o fato de ter chegado)
-      log.warn("whatsapp.midia_falhou", { tipo: t.tipo, erro: e instanceof Error ? e.message : String(e) });
-    }
-  }
+  if (t.midia && !m.midiaCaminho) final = await baixarETranscrever(userId, deviceId, t, m);
 
   // o TEXTO não vai no evento: uma regra que o usasse num prompt o receberia
   // fora do embrulho de dado externo. Quem precisa do texto lê pela tool.
   await events.emit("whatsapp.mensagem_recebida", { mensagemId: m.id, contatoId: contato.id, chatJid: t.chatJid, tipo: t.tipo, deMim: t.deMim, grupo: t.grupo, conversaEu, contato: contato.apelido ?? contato.nome ?? null }, { userId });
-
   if (aoGuardar) await aoGuardar(userId, final, { conversaEu }).catch((e) => log.error("whatsapp.rotear_falhou", { erro: e instanceof Error ? e.message : String(e) }));
+  await db.update(waMensagem).set({ roteadaEm: new Date() }).where(eq(waMensagem.id, m.id));
+}
+
+async function baixarETranscrever(userId: string, deviceId: string, t: MensagemTraduzida, m: WaMensagem): Promise<WaMensagem> {
+  const cfg = await settings.getMany(["whatsapp.midiaMaxMb", "whatsapp.transcricao", "meetings.sttCloud"]);
+  try {
+    const baixada = await ponte.baixarMidia(deviceId, { path: t.midia!.path, externalId: t.externalId, mime: t.midia!.mimeType }, cfg["whatsapp.midiaMaxMb"] * 1024 * 1024);
+    const { caminho, sha256 } = await salvarMidia(baixada.bytes, baixada.mime);
+    const patch: Partial<WaMensagem> = { midiaCaminho: caminho, midiaSha256: sha256, midiaMime: baixada.mime };
+    if (t.tipo === "audio") {
+      const transcricao = await transcrever(userId, baixada.bytes, baixada.mime, cfg["whatsapp.transcricao"], cfg["meetings.sttCloud"]);
+      if (transcricao) patch.transcricao = transcricao;
+    }
+    await store.atualizarMensagemPorId(userId, m.id, patch);
+    return { ...m, ...patch };
+  } catch (e) {
+    // sem mídia a mensagem continua valendo (o texto, a legenda, o fato de ter chegado)
+    log.warn("whatsapp.midia_falhou", { tipo: t.tipo, erro: e instanceof Error ? e.message : String(e) });
+    return m;
+  }
 }
 
 /** Escolha de onde transcrever, PURA: `nunca` desliga, `igual_reunioes` segue a config das reuniões. */
@@ -207,7 +262,11 @@ async function transcrever(userId: string, bytes: Uint8Array, mime: string, esco
   }
 }
 
-/** Evento bruto já processado não serve para nada depois de uns dias: some com a retenção de eventos. */
+/**
+ * Evento bruto não serve para nada depois de uns dias. Some junto também o que
+ * desistiu (`falhas` no teto): o diagnóstico em `ultimoErro` vive o mesmo que a
+ * retenção de eventos, que é quanto a casa decidiu guardar trilha.
+ */
 export async function purgarEventosBrutos(dias: number): Promise<void> {
-  await db.delete(waEventoBruto).where(and(lt(waEventoBruto.recebidoEm, new Date(Date.now() - dias * 86_400_000))));
+  await db.delete(waEventoBruto).where(sql`${waEventoBruto.recebidoEm} < now() - make_interval(days => ${dias})`);
 }

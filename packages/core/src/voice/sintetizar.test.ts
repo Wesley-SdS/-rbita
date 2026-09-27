@@ -53,6 +53,25 @@ describe("sintetizarFala", () => {
     expect(gemini).not.toHaveBeenCalled();
   });
 
+  it("interrompida DURANTE o Piper é 499, não 'serviço fora'", async () => {
+    edgeOk = geminiOk = false;
+    const ac = new AbortController();
+    globalThis.fetch = vi.fn(async () => {
+      ac.abort();
+      throw Object.assign(new Error("aborted"), { name: "AbortError" });
+    }) as typeof fetch;
+    await expect(sintetizarFala("oi", { signal: ac.signal })).rejects.toMatchObject({ status: 499 });
+  });
+
+  it("length_scale chega ao Piper", async () => {
+    edgeOk = geminiOk = false;
+    globalThis.fetch = vi.fn(async (_u: RequestInfo | URL, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ text: "oi", length_scale: 1.2 });
+      return new Response(new Uint8Array([1]), { status: 200 });
+    }) as typeof fetch;
+    await sintetizarFala("oi", { lengthScale: 1.2 });
+  });
+
   it("provedor fixado que falha não tenta os outros", async () => {
     process.env.TTS_PROVIDER = "edge";
     edge.mockRejectedValueOnce(new Error("edge fora"));

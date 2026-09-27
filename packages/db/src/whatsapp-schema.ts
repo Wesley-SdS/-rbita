@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
@@ -98,6 +99,12 @@ export const waMensagem = pgTable(
     /** hash do conteúdo que a Órbita mandou: é como o eco do webhook é reconhecido */
     conteudoHash: text("conteudo_hash"),
     lidaEm: timestamp("lida_em"),
+    /**
+     * Quando a mensagem já foi avisada (evento) e entregue ao roteador. Sem
+     * esta marca, uma queda entre gravar e rotear fazia a nova tentativa ver a
+     * linha como "reentrega" e parar: o pedido do dono sumia em silêncio.
+     */
+    roteadaEm: timestamp("roteada_em"),
     em: timestamp("em").notNull(),
     criadoEm: timestamp("criado_em").defaultNow().notNull(),
   },
@@ -129,7 +136,13 @@ export const waEventoBruto = pgTable(
     falhas: integer("falhas").notNull().default(0),
     ultimoErro: text("ultimo_erro"),
   },
-  (t) => [unique("wa_evento_bruto_chave").on(t.deviceId, t.tipo, t.externalId), index("wa_evento_bruto_recebido_idx").on(t.recebidoEm)],
+  (t) => [
+    unique("wa_evento_bruto_chave").on(t.deviceId, t.tipo, t.externalId),
+    index("wa_evento_bruto_recebido_idx").on(t.recebidoEm),
+    // o laço de pendentes roda a cada 15 s: sem o parcial, ele percorreria a
+    // tabela retida inteira atrás das poucas linhas ainda não processadas
+    index("wa_evento_bruto_pendente_idx").on(t.recebidoEm).where(sql`${t.processadoEm} is null`),
+  ],
 );
 
 export type WaSessao = typeof waSessao.$inferSelect;

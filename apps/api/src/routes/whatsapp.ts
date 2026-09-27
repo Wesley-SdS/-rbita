@@ -19,7 +19,7 @@ import { ownerOf } from "../http/owner-route";
  */
 
 const ponteErro = (e: unknown) => {
-  if (e instanceof PonteError) return Response.json({ error: e.message, motivo: e.motivo }, { status: e.motivo === "nao_local" ? 400 : 502 });
+  if (e instanceof PonteError) return Response.json({ error: e.message, motivo: e.motivo }, { status: e.motivo === "nao_local" ? 400 : e.motivo === "nao_configurada" ? 503 : 502 });
   throw e;
 };
 
@@ -46,14 +46,16 @@ export async function WEBHOOK(req: Request, ctx: RouteCtx) {
   } catch {
     return Response.json({ error: "JSON inválido" }, { status: 400 });
   }
-  const r = await receberEvento(deviceId.data, corpo);
+  const r = await receberEvento(sessao.sessao.userId, deviceId.data, corpo);
   // evento que não reconhecemos ainda é 200: devolver erro faria o GOWA
-  // reenviar para sempre algo que nunca vai passar
-  if (!r.ok && r.status === 400) {
-    log.info("whatsapp.webhook_evento_ignorado", {});
+  // reenviar para sempre algo que nunca vai passar. O TIPO vai para o log (não
+  // o conteúdo, que é mensagem de alguém)
+  if (!r.ok) {
+    const tipo = typeof (corpo as { event?: unknown })?.event === "string" ? String((corpo as { event: string }).event).slice(0, 60) : null;
+    log.info("whatsapp.webhook_evento_ignorado", { tipo });
     return Response.json({ ok: true, ignorado: true });
   }
-  return r.ok ? Response.json({ ok: true }) : Response.json({ error: r.erro }, { status: r.status });
+  return Response.json({ ok: true });
 }
 
 /** GET /api/whatsapp/sessao — o estado do número pessoal e qual provedor está valendo. */
@@ -94,7 +96,11 @@ export async function POST_PAREAR(req: Request, ctx: RouteCtx) {
 export async function POST_DESCONECTAR(_req: Request, ctx: RouteCtx) {
   const dono = await ownerOf(ctx);
   if (dono instanceof Response) return dono;
-  await desconectarSessao(dono.userId);
+  try {
+    await desconectarSessao(dono.userId);
+  } catch (e) {
+    return ponteErro(e);
+  }
   return Response.json({ ok: true });
 }
 
