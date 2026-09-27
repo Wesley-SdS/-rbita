@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { discoverModels, discoveredSnapshot, invalidateDiscovery, discoveryAgeMs, versaoDe, EMPTY_DISCOVERY_RETRY_MS } from "./discovery";
+import { discoverModels, discoveredSnapshot, invalidateDiscovery, discoveryAgeMs, versaoDe, EMPTY_DISCOVERY_RETRY_MS, descobrirLocalSobDemanda } from "./discovery";
 import { resetModelPolicyForTests } from "./policy";
 
 /**
@@ -29,7 +29,8 @@ beforeEach(() => {
     delete process.env[k];
   }
   invalidateDiscovery();
-  resetModelPolicyForTests();
+  // estes testes simulam o Ollama: a descoberta precisa perguntar a ele
+  resetModelPolicyForTests({ descobrirLocal: "sempre" });
 });
 
 afterEach(() => {
@@ -53,7 +54,7 @@ describe("descoberta de modelos", () => {
   });
 
   it("cache vencido devolve a lista antiga na hora e renova em segundo plano (RV.3)", async () => {
-    resetModelPolicyForTests({ discoveryTtlMs: 1000 });
+    resetModelPolicyForTests({ discoveryTtlMs: 1000, descobrirLocal: "sempre" });
     vi.stubGlobal("fetch", ollamaCom(["qwen2.5:3b"]));
     await discoverModels();
 
@@ -126,6 +127,33 @@ describe("descoberta: bordas da revisão", () => {
     liberar();
     await emVoo;
     expect(discoveredSnapshot().map((m) => m.key)).toEqual(["local/modelo-novo:3b"]);
+  });
+});
+
+describe("descoberta: o Ollama só é perguntado quando o local pode ser escolhido (E3)", () => {
+  it("dono em assinatura, descobrir em auto: nenhuma ida ao :11434", async () => {
+    resetModelPolicyForTests({ descobrirLocal: "auto", failoverOrder: "assinatura_paga_local" });
+    const f = ollamaCom(["qwen2.5:3b"]);
+    vi.stubGlobal("fetch", f);
+    expect(await discoverModels()).toEqual([]);
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("ordem com o local antes da nuvem paga continua perguntando", async () => {
+    resetModelPolicyForTests({ descobrirLocal: "auto", failoverOrder: "assinatura_local_paga" });
+    vi.stubGlobal("fetch", ollamaCom(["qwen2.5:3b"]));
+    expect((await discoverModels()).map((m) => m.key)).toEqual(["local/qwen2.5:3b"]);
+  });
+
+  it("modo privacidade pergunta na hora mesmo em auto, mas não em nunca", async () => {
+    resetModelPolicyForTests({ descobrirLocal: "auto", failoverOrder: "assinatura_paga_local" });
+    vi.stubGlobal("fetch", ollamaCom(["qwen2.5:3b"]));
+    expect((await descobrirLocalSobDemanda()).map((m) => m.key)).toEqual(["local/qwen2.5:3b"]);
+    // e não suja o cache: a cadeia normal continua sem o local
+    expect(discoveredSnapshot()).toEqual([]);
+
+    resetModelPolicyForTests({ descobrirLocal: "nunca" });
+    expect(await descobrirLocalSobDemanda()).toEqual([]);
   });
 });
 

@@ -102,8 +102,14 @@ describe("modelo pré-selecionado", () => {
 });
 
 describe("política de modelos", () => {
-  it("sem fonte, vale o bootstrap", async () => {
+  it("sem fonte, vale o bootstrap, que é vazio: a ordem do dono decide (E1)", async () => {
     expect(await fallbackModelKey()).toBe(BOOTSTRAP_MODEL_KEY);
+    // o bootstrap já foi local/qwen2.5:7b, um reserva que não existe sem Ollama
+    if (!process.env.ORBITA_FALLBACK_MODEL) expect(BOOTSTRAP_MODEL_KEY).toBe("");
+  });
+
+  it("o padrão da ordem põe o local no fim (PRD-SEM-OLLAMA)", () => {
+    expect(policySnapshot().failoverOrder).toBe("assinatura_paga_local");
   });
 
   it("lê as fontes e atualiza o snapshot", async () => {

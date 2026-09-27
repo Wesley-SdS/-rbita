@@ -59,7 +59,11 @@ const KEEP_ALIVE = process.env.OLLAMA_EMBED_KEEP_ALIVE || "60m";
  * diferentes vivem em espaços vetoriais distintos, e a similaridade entre eles
  * não significa nada. Ao migrar um corpus existente, é preciso REINDEXAR.
  */
-export type EmbedPreference = "auto" | "local" | "cloud";
+// `gemini` e `openai` existem porque "nuvem" sozinho escondia uma surpresa: a
+// ASSINATURA do Claude não serve para embedding (a Anthropic não tem endpoint
+// de embeddings). Na casa que pôs tudo na assinatura, o embedding de nuvem é
+// sempre de OUTRO provedor, e o dono precisa poder dizer qual.
+export type EmbedPreference = "auto" | "local" | "cloud" | "gemini" | "openai";
 // Preferência vem da config (`embeddings.provider`); "auto" mantém o comportamento
 // antigo (nuvem se houver chave). "local" é o caminho de privacidade: nada sai de casa.
 // A preferência é um GETTER (assíncrono) avaliado a cada embed, não um valor
@@ -105,34 +109,77 @@ async function resolvePreference(): Promise<EmbedPreference> {
   }
 }
 
-function cloudConfig(): { baseURL: string; apiKey: string; model: string; dimensions?: number } | null {
-  const gemini = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
-  if (gemini) {
-    return {
-      baseURL: process.env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta/openai/",
-      apiKey: gemini,
-      model: process.env.EMBED_MODEL_CLOUD ?? "gemini-embedding-2",
-      dimensions: EMBED_DIMS, // 3072 por padrão; truncamos p/ bater com a coluna
-    };
-  }
-  const openai = process.env.OPENAI_API_KEY;
-  if (openai) {
-    return {
-      baseURL: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
-      apiKey: openai,
-      model: process.env.EMBED_MODEL_CLOUD ?? "text-embedding-3-small",
-      dimensions: EMBED_DIMS,
-    };
-  }
-  return null;
+type Env = Record<string, string | undefined>;
+interface CloudConfig { provedor: "google" | "openai"; baseURL: string; apiKey: string; model: string; dimensions?: number }
+
+function gemini(env: Env): CloudConfig | null {
+  const apiKey = env.GEMINI_API_KEY ?? env.GOOGLE_API_KEY;
+  if (!apiKey) return null;
+  return {
+    provedor: "google",
+    baseURL: env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta/openai/",
+    apiKey,
+    model: env.EMBED_MODEL_CLOUD ?? "gemini-embedding-2",
+    dimensions: EMBED_DIMS, // 3072 por padrão; truncamos p/ bater com a coluna
+  };
 }
 
-/** Qual caminho de embedding está ativo (diagnóstico / health). */
+function openai(env: Env): CloudConfig | null {
+  const apiKey = env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  return {
+    provedor: "openai",
+    baseURL: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+    apiKey,
+    model: env.EMBED_MODEL_CLOUD ?? "text-embedding-3-small",
+    dimensions: EMBED_DIMS,
+  };
+}
+
+/** A nuvem que atende esta preferência, ou nulo (local, ou sem chave). Puro. */
+function cloudConfig(pref: EmbedPreference, env: Env = process.env): CloudConfig | null {
+  if (pref === "local") return null;
+  if (pref === "gemini") return gemini(env);
+  if (pref === "openai") return openai(env);
+  return gemini(env) ?? openai(env);
+}
+
+/**
+ * Onde e com qual modelo o embedding roda. Puro, para teste.
+ *
+ * A `chave` (`google/gemini-embedding-2`, `local/nomic-embed-text-v2-moe`) é
+ * gravada ao lado de cada vetor (`embed_model`): vetores de modelos diferentes
+ * vivem em espaços diferentes, e sem saber quem gerou cada um a busca
+ * compararia os dois em silêncio (E2 do PRD-SEM-OLLAMA).
+ */
+export function resolverEmbedding(
+  pref: EmbedPreference,
+  localModel: string,
+  env: Env = process.env,
+): { onde: "cloud"; chave: string; cfg: CloudConfig } | { onde: "local"; chave: string; modelo: string } {
+  const cfg = cloudConfig(pref, env);
+  if (cfg) return { onde: "cloud", chave: `${cfg.provedor}/${cfg.model}`, cfg };
+  if (pref !== "auto" && pref !== "local") {
+    const qual = pref === "gemini" ? "GEMINI_API_KEY" : pref === "openai" ? "OPENAI_API_KEY" : "GEMINI_API_KEY ou OPENAI_API_KEY";
+    // a assinatura do Claude não entra aqui de propósito: não existe embedding nela
+    throw new Error(`Embedding configurado para a nuvem, mas falta ${qual}. A assinatura do Claude não gera embeddings.`);
+  }
+  return { onde: "local", chave: `local/${localModel}`, modelo: localModel };
+}
+
+/** Qual caminho de embedding o automático usaria (diagnóstico / health): só olha as chaves. */
 export function embedProvider(): "cloud" | "local" {
-  return cloudConfig() ? "cloud" : "local";
+  return cloudConfig("auto") ? "cloud" : "local";
 }
 
-// Cache LRU em memória: query/doc idênticos = 0 chamadas ao modelo.
+/** Chave do modelo de embedding ativo agora (a que vai para `embed_model`). Lança se a config pede nuvem sem chave. */
+export async function modeloDeEmbedding(): Promise<string> {
+  return resolverEmbedding(await resolvePreference(), await resolveLocalModel()).chave;
+}
+
+// Cache LRU em memória: query/doc idênticos = 0 chamadas ao modelo. A chave
+// leva o MODELO: sem ele, trocar de provedor devolvia do cache o vetor do
+// modelo antigo, e a busca comparava espaços diferentes justo depois da troca.
 const cache = new Map<string, number[]>();
 const CACHE_MAX = 1000;
 function cacheGet(k: string): number[] | undefined {
@@ -157,7 +204,7 @@ async function ollamaEmbed(inputs: string[], modelo: string): Promise<number[][]
   return j.embeddings;
 }
 
-async function cloudEmbed(inputs: string[], cfg: NonNullable<ReturnType<typeof cloudConfig>>): Promise<number[][]> {
+async function cloudEmbed(inputs: string[], cfg: CloudConfig): Promise<number[][]> {
   const url = cfg.baseURL.replace(/\/+$/, "") + "/embeddings";
   const r = await fetch(url, {
     method: "POST",
@@ -174,38 +221,55 @@ async function cloudEmbed(inputs: string[], cfg: NonNullable<ReturnType<typeof c
   return [...j.data].sort((a, b) => a.index - b.index).map((d) => d.embedding);
 }
 
-/** Roteia conforme a preferência: local (Ollama), nuvem (quando há chave) ou auto. */
-async function embed(inputs: string[], kind: EmbedKind, ctx?: ContextoDeEmbedding): Promise<number[][]> {
+type Rota = ReturnType<typeof resolverEmbedding>;
+
+async function rotaAtual(): Promise<Rota> {
+  return resolverEmbedding(await resolvePreference(), await resolveLocalModel());
+}
+
+/** Roteia conforme a preferência: local (Ollama), uma nuvem específica, ou auto. */
+async function embed(inputs: string[], kind: EmbedKind, rota: Rota, ctx?: ContextoDeEmbedding): Promise<number[][]> {
   const comecou = Date.now();
   const caracteres = inputs.reduce((n, t) => n + t.length, 0);
-  const pref = await resolvePreference();
-  const cfg = pref === "local" ? null : cloudConfig();
-  if (pref === "cloud" && !cfg) throw new Error("embeddings.provider = nuvem, mas não há chave de embedding (GEMINI_API_KEY ou OPENAI_API_KEY)");
-  if (cfg) {
-    const r = await cloudEmbed(inputs, cfg); // nuvem: sem prefixo de tarefa
-    relatarEmbedding?.({ provider: "cloud", modelo: cfg.model, itens: inputs.length, caracteres, duracaoMs: Date.now() - comecou, ...ctx });
+  if (rota.onde === "cloud") {
+    const r = await cloudEmbed(inputs, rota.cfg); // nuvem: sem prefixo de tarefa
+    relatarEmbedding?.({ provider: "cloud", modelo: rota.cfg.model, itens: inputs.length, caracteres, duracaoMs: Date.now() - comecou, ...ctx });
     return r;
   }
-  const modelo = await resolveLocalModel();
   // só a família nomic usa prefixo de tarefa; mandar "search_query: " para um
   // modelo que não o espera é texto lixo dentro da consulta
-  const r = await ollamaEmbed(usaPrefixoDeTarefa(modelo) ? inputs.map((v) => PREFIX[kind] + v) : inputs, modelo);
-  relatarEmbedding?.({ provider: "local", modelo, itens: inputs.length, caracteres, duracaoMs: Date.now() - comecou, ...ctx });
+  const r = await ollamaEmbed(usaPrefixoDeTarefa(rota.modelo) ? inputs.map((v) => PREFIX[kind] + v) : inputs, rota.modelo);
+  relatarEmbedding?.({ provider: "local", modelo: rota.modelo, itens: inputs.length, caracteres, duracaoMs: Date.now() - comecou, ...ctx });
   return r;
 }
 
-export async function embedText(value: string, kind: EmbedKind = "query", ctx?: ContextoDeEmbedding): Promise<number[]> {
-  const key = `${kind}:${value}`;
+/**
+ * Vetor E o modelo que o gerou. Quem grava vetor usa esta forma e grava o
+ * modelo junto; quem compara filtra pelo modelo do vetor da pergunta.
+ */
+export async function embedTextComModelo(value: string, kind: EmbedKind = "query", ctx?: ContextoDeEmbedding): Promise<{ vetor: number[]; modelo: string }> {
+  const rota = await rotaAtual();
+  const key = `${rota.chave}:${kind}:${value}`;
   const hit = cacheGet(key);
-  if (hit) return hit; // acerto de cache não custa nada e por isso não entra na conta
-  const [emb] = await embed([value], kind, ctx);
-  cacheSet(key, emb);
-  return emb;
+  if (hit) return { vetor: hit, modelo: rota.chave }; // acerto de cache não custa nada e por isso não entra na conta
+  const [emb] = await embed([value], kind, rota, ctx);
+  cacheSet(key, emb!);
+  return { vetor: emb!, modelo: rota.chave };
+}
+
+export async function embedTextsComModelo(values: string[], kind: EmbedKind = "document", ctx?: ContextoDeEmbedding): Promise<{ vetores: number[][]; modelo: string }> {
+  // lista vazia não chama ninguém, então não pode falhar por config
+  if (!values.length) return { vetores: [], modelo: (await rotaAtual().catch(() => null))?.chave ?? "" };
+  const rota = await rotaAtual();
+  return { vetores: await embed(values, kind, rota, ctx), modelo: rota.chave };
+}
+
+export async function embedText(value: string, kind: EmbedKind = "query", ctx?: ContextoDeEmbedding): Promise<number[]> {
+  return (await embedTextComModelo(value, kind, ctx)).vetor;
 }
 
 export async function embedTexts(values: string[], kind: EmbedKind = "document", ctx?: ContextoDeEmbedding): Promise<number[][]> {
-  if (!values.length) return [];
-  return embed(values, kind, ctx);
+  return (await embedTextsComModelo(values, kind, ctx)).vetores;
 }
 
 /** Aquece o modelo de embedding (chamar no boot evita o cold-start no 1º uso).

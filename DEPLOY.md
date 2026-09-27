@@ -6,13 +6,30 @@ Este guia leva a Órbita do "roda na minha máquina" para "roda na nuvem, acesso
 >
 > | Recurso | Local | Na nuvem |
 > |---|---|---|
-> | Modelos de IA | Ollama (grátis) | provedores de nuvem (Groq/Gemini/OpenAI) |
-> | Embedding do RAG | Ollama (nomic) | **precisa de código novo (item R1)** ⚠️ |
+> | Modelos de IA | assinatura, nuvem ou Ollama | assinatura ou provedores de nuvem (Groq/Gemini/OpenAI) |
+> | Embedding do RAG | Gemini/OpenAI (ou Ollama, se escolhido) | Gemini ou OpenAI (`GEMINI_API_KEY`/`OPENAI_API_KEY`) |
 > | Voz / wake word | serviço Python local | host à parte, ou desligado |
 > | Claude Max | token OAuth pessoal | **não pode** em servidor público (use outro provedor) |
 > | Banco | Postgres no Docker | Postgres gerenciado (Neon/Supabase) |
 >
-> Traduzindo: o **chat, auth, finanças, tarefas, conversas e conectores** sobem e funcionam já. O **RAG (busca nos seus documentos)** só funciona na nuvem depois do ajuste R1. A **voz** precisa de um passo extra.
+> Traduzindo: o **chat, auth, finanças, tarefas, conversas, conectores e o RAG** sobem e funcionam já, desde que haja uma chave de nuvem. A **voz** e a **percepção** precisam de host próprio. Detalhe item por item em "O que muda na nuvem", logo abaixo.
+
+## O que muda na nuvem (PRD-SEM-OLLAMA)
+
+A Órbita funciona sem Ollama: ele é uma opção de quem quer privacidade total, nunca uma dependência. Esta tabela separa o que **precisa de um host próprio** do que **simplesmente não existe** na nuvem.
+
+| Peça | Na nuvem | O que fazer |
+|---|---|---|
+| **Ollama** (modelo local, embedding local, visão local) | **não existe** | Nada. Em `llm.descobrirLocal` use "Nunca" (ou deixe no automático: a Render, a Vercel, o Fly e o Cloud Run são reconhecidos e o local some das cadeias). Ollama numa máquina sua com endereço público continua valendo via `OLLAMA_BASE_URL`. |
+| Chat, rotinas, regras, resumo, memória, comprovante | provedor de nuvem | Uma chave basta. Sem nenhuma, a Órbita diz "Nenhum modelo disponível: configure uma chave em Ajustes, Modelos" em vez de tentar um modelo que não existe. |
+| **Embedding do RAG** | Gemini ou OpenAI | `GEMINI_API_KEY` (grátis) ou `OPENAI_API_KEY`. A **assinatura do Claude não gera embedding**. Cada vetor guarda o modelo que o gerou; ao trocar, a tela de Memória mostra quantos ficaram fora da busca e oferece "Reindexar". |
+| Leitura de página escaneada (visão) | nuvem ou assinatura | Com `ocr.visionProvider` em "Sempre na nuvem" e sem chave, a página fica só com o OCR e o motivo é registrado. |
+| Reordenação do RAG (`rag.rerank` "local") | funciona | É ONNX dentro do próprio `apps/api`, não Ollama. |
+| OCR (tesseract.js) | funciona | Roda em CPU no `apps/api`. |
+| **`apps/voice`** (Piper, Vosk, whisper local) | **host próprio** | Render/Fly/Railway (Etapa 5). Sem ele: TTS pelo Edge/Gemini, wake word pelo navegador, transcrição pela AssemblyAI. Com `TTS_PROVIDER` fixo em `edge`/`gemini`, wake no navegador e AssemblyAI, o `/api/health` mostra a voz como `nao_usado`. |
+| **`apps/perception`** (rosto, voz, gestos) | **host de casa** | Biometria nunca sai de casa (§5.4.1): o guard do `apps/api` recusa destino que não seja local. Na nuvem, identificação por rosto e voz fica desligada. |
+| AssemblyAI | nuvem | É a IA dela mesma; `ASSEMBLYAI_API_KEY`. |
+| Saúde (`/api/health`) | responde `ok` | Serviço que nenhum caminho usa aparece como `nao_usado`, não como `down`. |
 
 A arquitetura na nuvem fica assim:
 
@@ -107,11 +124,11 @@ Depois de mudar variáveis, faça um **Redeploy** na Vercel.
 
 ---
 
-## Etapa 4 — RAG na nuvem (precisa de um ajuste de código) ⚠️
+## Etapa 4 — RAG na nuvem
 
-Hoje a busca nos seus documentos (RAG) usa o embedding local do Ollama, que **não existe na Vercel**. Para o RAG funcionar na nuvem, é preciso o item **R1**: trocar o embedding para uma API de nuvem (Gemini `text-embedding-004` ou OpenAI, ambos 768 dimensões, que batem com a coluna do banco) e reindexar o corpus.
+Com `GEMINI_API_KEY` (grátis) ou `OPENAI_API_KEY`, a busca nos seus documentos e memórias funciona na nuvem sem nada a mais: o embedding padrão já prefere a nuvem quando há chave (`gemini-embedding-2` ou `text-embedding-3-small`, ambos cortados para as 768 dimensões da coluna). Para fixar um provedor, use **Ajustes → Onde gerar embeddings**.
 
-**Enquanto R1 não estiver feito:** o chat e as ferramentas funcionam, mas a busca em documentos/memória fica desligada na nuvem. Me peça o R1 quando quiser o RAG na nuvem (é um ajuste focado, condicional à `GEMINI_API_KEY`/`OPENAI_API_KEY`).
+Se o acervo veio de uma instalação que usava o Ollama, a tela **Memória → Manutenção do acervo** mostra quantos trechos são de outro modelo (ficam fora da busca, porque vetores de modelos diferentes não se comparam). Use **Reindexar acervo** uma vez.
 
 ---
 
@@ -168,8 +185,8 @@ O app nativo **não** vai pra Vercel; ele aponta para a sua URL da Vercel e é d
 |---|---|---|
 | **Mínimo** | Vercel + Neon + Groq | chat, auth, finanças, tarefas, conversas, LGPD |
 | **+ Extras** | + AssemblyAI, VAPID, OAuth | transcrição, push, login social, conectores |
-| **+ RAG** | + item R1 (código) | busca nos seus documentos/memória |
+| **+ RAG** | + `GEMINI_API_KEY` ou `OPENAI_API_KEY` | busca nos seus documentos/memória |
 | **+ Voz** | + apps/voice no Render/Fly | STT/TTS/wake word |
 | **+ Mobile** | + EAS build | app nas lojas |
 
-**Comece pelo Mínimo** (30 min, tudo grátis). Depois vá ligando os extras. Me chame para o **R1** (RAG na nuvem) e para o **provedor Anthropic por API key** quando quiser esses dois.
+**Comece pelo Mínimo** (30 min, tudo grátis). Depois vá ligando os extras. Me chame para o **provedor Anthropic por API key** quando quiser Claude na nuvem sem o Gateway.

@@ -43,4 +43,6 @@ configureModelPolicy({
   fallbackModel: () => settings.get("llm.fallbackModel"),
   discoveryTtlMs: () => settings.get("llm.discoveryTtlMinutes").then((m) => m * 60_000),
   discoveryTimeoutMs: () => settings.get("llm.discoveryTimeoutMs"),
+  descobrirLocal: () => settings.get("llm.descobrirLocal"),
+  localDisponivel: () => settings.get("llm.localDisponivel"),
 });

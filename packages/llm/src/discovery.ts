@@ -1,5 +1,5 @@
 import type { ProviderId } from "./catalog";
-import { policySnapshot, readPolicy } from "./policy";
+import { deveDescobrirLocal, localAvailable, policySnapshot, readPolicy } from "./policy";
 
 /**
  * DESCOBERTA DE MODELOS — zero hardcode.
@@ -320,8 +320,12 @@ function descobrirAgora(): Promise<DiscoveredModel[]> {
   if (emVoo) return emVoo;
   const minha = geracao;
   const promessa: Promise<DiscoveredModel[]> = (async () => {
+    // o Ollama só é perguntado quando o local pode ser escolhido (E3 do
+    // PRD-SEM-OLLAMA): com ele desligado, cada renovação pagava o timeout
+    // inteiro para achar um modelo que a ordem do dono nunca usaria
+    const perguntarAoOllama = deveDescobrirLocal(policySnapshot(), process.env);
     const groups = await Promise.all([
-      safe("ollama", discoverOllama),
+      perguntarAoOllama ? safe("ollama", discoverOllama) : Promise.resolve([]),
       safe("anthropic", discoverAnthropicOAuth),
       safe("gateway", discoverGateway),
       discoverOpenAICompatible(), // já é safe por provedor
@@ -365,6 +369,20 @@ export async function discoverModels(opts?: { force?: boolean }): Promise<Discov
   const ttl = cache.models.length ? discoveryTtlMs : Math.min(discoveryTtlMs, EMPTY_DISCOVERY_RETRY_MS);
   if (Date.now() - cache.at >= ttl) void descobrirAgora().catch(() => undefined);
   return cache.models;
+}
+
+/**
+ * Modelos locais AGORA, para quem pediu o local pelo nome (modo privacidade).
+ *
+ * Não passa pelo cache nem pela regra do `auto`: a descoberta normal deixa de
+ * perguntar ao Ollama quando a ordem do dono não usa o local, mas o modo
+ * privacidade é justamente "só o local", e sem isto ele respondia "nenhum
+ * modelo local" com o Ollama de pé. Só `nunca` e Ollama inalcançável barram.
+ */
+export async function descobrirLocalSobDemanda(): Promise<DiscoveredModel[]> {
+  const p = await readPolicy();
+  if (p.descobrirLocal === "nunca" || !localAvailable()) return [];
+  return safe("ollama", discoverOllama);
 }
 
 /** Idade do cache em ms (Infinity sem cache): o scheduler aquece quando passa do TTL. */

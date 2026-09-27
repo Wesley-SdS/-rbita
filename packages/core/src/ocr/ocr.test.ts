@@ -14,7 +14,7 @@ vi.mock("unpdf", () => ({
 import { confiancaDaPagina } from "./tesseract";
 import { lerPdf, temCamadaDeTexto } from "./pdf";
 import { precisaDeVisao } from "./index";
-import { ondeLer } from "./visao";
+import { motivoSemVisao, ondeLer } from "./visao";
 import { agruparEmLinhas, detectarTabelas, paraMarkdown, textoComTabelas } from "./tabela";
 
 describe("confiança da página", () => {
@@ -96,8 +96,16 @@ describe("onde a página é lida (privacidade)", () => {
     expect(ondeLer("local", true)).toBe("local");
   });
 
-  it("'nuvem' sem chave nenhuma cai para o local, não falha calado", () => {
-    expect(ondeLer("nuvem", false)).toBe("local");
+  it("'nuvem' sem chave NÃO cai para o local: diz o motivo (E5 do PRD-SEM-OLLAMA)", () => {
+    // antes caía para o local, que numa casa sem Ollama não existe, e a
+    // página ficava só com o OCR sem ninguém saber por quê
+    expect(ondeLer("nuvem", false)).toBeNull();
+    expect(motivoSemVisao("nuvem", false)).toMatch(/não há chave/);
+  });
+
+  it("'nunca' é escolha, não problema: sem motivo a relatar", () => {
+    expect(motivoSemVisao("nunca", false)).toBeNull();
+    expect(motivoSemVisao("nuvem", true)).toBeNull();
   });
 
   it("'auto' usa a nuvem quando existe chave", () => {

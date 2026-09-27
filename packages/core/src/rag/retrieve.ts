@@ -1,5 +1,5 @@
 import { and, cosineDistance, desc, eq, gt, sql } from "drizzle-orm";
-import { embedText } from "@orbita/llm";
+import { embedTextComModelo } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { chunk, document, memory } from "@orbita/db/knowledge-schema";
 import { settings } from "../settings";
@@ -85,13 +85,17 @@ export function fundirRRF(listas: { itens: Candidato[]; peso: number }[], k: num
 const CHAVE_MEMORIA = (id: string) => `m:${id}`;
 const CHAVE_TRECHO = (id: string) => `c:${id}`;
 
-async function vetorEmTrechos(userId: string, q: number[], minSim: number, limite: number): Promise<Candidato[]> {
+// Os dois lados vetoriais filtram pelo MODELO do vetor da pergunta: vetor de
+// outro modelo vive em outro espaço, e a similaridade com ele é um número sem
+// significado que ainda assim passaria no corte. Resultado errado é pior que
+// resultado a menos; o que ficou de fora aparece na tela do acervo para reindexar.
+async function vetorEmTrechos(userId: string, q: number[], modelo: string, minSim: number, limite: number): Promise<Candidato[]> {
   const sim = sql<number>`1 - (${cosineDistance(chunk.embedding, q)})`;
   const linhas = await db
     .select({ id: chunk.id, content: chunk.content, title: document.title, documentId: document.id, pageStart: chunk.pageStart, pageEnd: chunk.pageEnd, sim })
     .from(chunk)
     .innerJoin(document, eq(chunk.documentId, document.id))
-    .where(and(eq(chunk.userId, userId), gt(sim, minSim)))
+    .where(and(eq(chunk.userId, userId), eq(chunk.embedModel, modelo), gt(sim, minSim)))
     .orderBy(desc(sim))
     .limit(limite);
   return linhas.map((l) => ({
@@ -151,12 +155,12 @@ async function textoEmTrechos(userId: string, consulta: string, minRank: number,
   }));
 }
 
-async function vetorEmMemoria(userId: string, q: number[], minSim: number, limite: number): Promise<Candidato[]> {
+async function vetorEmMemoria(userId: string, q: number[], modelo: string, minSim: number, limite: number): Promise<Candidato[]> {
   const sim = sql<number>`1 - (${cosineDistance(memory.embedding, q)})`;
   const linhas = await db
     .select({ id: memory.id, content: memory.content, sim })
     .from(memory)
-    .where(and(eq(memory.userId, userId), gt(sim, minSim)))
+    .where(and(eq(memory.userId, userId), eq(memory.embedModel, modelo), gt(sim, minSim)))
     .orderBy(desc(sim))
     .limit(limite);
   return linhas.map((l) => ({ chave: CHAVE_MEMORIA(l.id), content: l.content, source: "memória", sim: Number(l.sim), via: "vetor" as const }));
@@ -198,16 +202,22 @@ export async function retrieveContext(userId: string, query: string, k = 4): Pro
   if (cached) return cached;
 
   const candidatos = Math.max(k, cfg["rag.candidates"]);
-  const q = await embedText(query, "query");
-
   const vazio = (motivo: string) => (e: unknown) => {
     log.error("rag.busca", { lado: motivo, error: e instanceof Error ? e.message : String(e) });
     return [] as Candidato[];
   };
 
+  // embedding fora do ar (Ollama desligado, chave inválida) derrubava a busca
+  // INTEIRA, inclusive o lado textual, que não precisa de embedding nenhum
+  const emb = await embedTextComModelo(query, "query").catch((e: unknown) => {
+    vazio("embedding")(e);
+    return null;
+  });
+  const semVetor = Promise.resolve([] as Candidato[]);
+
   const [chunksVetor, memVetor, chunksTexto, memTexto] = await Promise.all([
-    vetorEmTrechos(userId, q, cfg["rag.chunkMinSim"], candidatos).catch(vazio("vetor.trechos")),
-    vetorEmMemoria(userId, q, cfg["rag.memoryMinSim"], Math.max(k, Math.ceil(candidatos / 2))).catch(vazio("vetor.memoria")),
+    emb ? vetorEmTrechos(userId, emb.vetor, emb.modelo, cfg["rag.chunkMinSim"], candidatos).catch(vazio("vetor.trechos")) : semVetor,
+    emb ? vetorEmMemoria(userId, emb.vetor, emb.modelo, cfg["rag.memoryMinSim"], Math.max(k, Math.ceil(candidatos / 2))).catch(vazio("vetor.memoria")) : semVetor,
     cfg["rag.hybrid"] ? textoEmTrechos(userId, query, cfg["rag.textMinRank"], candidatos, cfg["rag.textMode"]).catch(vazio("texto.trechos")) : Promise.resolve([] as Candidato[]),
     cfg["rag.hybrid"] ? textoEmMemoria(userId, query, cfg["rag.textMinRank"], Math.max(k, Math.ceil(candidatos / 2)), cfg["rag.textMode"]).catch(vazio("texto.memoria")) : Promise.resolve([] as Candidato[]),
   ]);

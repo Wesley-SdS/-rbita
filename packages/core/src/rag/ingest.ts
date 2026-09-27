@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { embedTexts } from "@orbita/llm";
+import { embedTextsComModelo } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { document, chunk } from "@orbita/db/knowledge-schema";
 import { chunkPaginas, juntarPaginas, type Trecho } from "./chunk";
@@ -68,7 +68,8 @@ export async function ingestPaginas(
   if (!trechos.length) return { documentId: null, chunks: 0, paginas: paginas.length };
 
   await progresso?.(0, 2, `gerando embeddings de ${trechos.length} trecho${trechos.length === 1 ? "" : "s"}`);
-  const embeddings = await embedTexts(trechos.map((t) => t.content));
+  // o modelo vai junto de cada vetor: a busca só compara vetores do mesmo modelo
+  const { vetores: embeddings, modelo } = await embedTextsComModelo(trechos.map((t) => t.content));
   // consistência: um embedding por chunk (senão inseriríamos vetor undefined/corrompido)
   if (embeddings.length !== trechos.length) {
     throw new Error(`Embeddings inconsistentes: ${embeddings.length} para ${trechos.length} chunks`);
@@ -99,6 +100,7 @@ export async function ingestPaginas(
         content: t.content,
         idx: i,
         embedding: embeddings[i]!,
+        embedModel: modelo,
         pageStart: t.pageStart,
         pageEnd: t.pageEnd,
         charStart: t.charStart,

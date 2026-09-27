@@ -98,14 +98,14 @@ export const AUTO_MODEL: ModelInfo = {
 };
 
 /**
- * Último recurso quando NADA foi descoberto ainda. Não é um catálogo: é o palpite
- * mínimo para o app não nascer com um modelo vazio no primeiro boot. O valor
- * efetivo vem de `llm.fallbackModel` (tela de Ajustes) via `fallbackModelKey()`;
- * isto é só o bootstrap, mantido exportado para quem ainda o importa.
+ * Modelo que a tela mostra quando nada foi descoberto: "auto". Foi o bootstrap
+ * local, e numa casa sem Ollama a tela nascia com um modelo que não existe.
+ * "auto" pelo menos diz a verdade: a Órbita escolhe, e se não houver o que
+ * escolher, o chat explica (`SEM_MODELO`).
  */
-export const DEFAULT_MODEL_KEY = BOOTSTRAP_MODEL_KEY;
+export const DEFAULT_MODEL_KEY = BOOTSTRAP_MODEL_KEY || "auto";
 
-/** Modelo reserva já resolvido, sem ir ao banco (valor do último `readPolicy`). */
+/** Modelo reserva já resolvido, sem ir ao banco (valor do último `readPolicy`). Pode ser vazio. */
 function fallbackSync(): string {
   return policySnapshot().fallbackModel.trim() || BOOTSTRAP_MODEL_KEY;
 }
@@ -138,16 +138,9 @@ export function getModelInfo(key: string): ModelInfo | undefined {
   };
 }
 
-/**
- * O Ollama local é alcançável? Em serverless (Vercel) com `OLLAMA_BASE_URL`
- * apontando para localhost não existe Ollama nenhum, então os modelos locais
- * seriam escolhas quebradas: escondemos. Self-host (ou Ollama remoto) mantém.
- */
-export function localAvailable(): boolean {
-  const base = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1";
-  const pointsToLocalhost = /localhost|127\.0\.0\.1|host\.docker\.internal/.test(base);
-  return !(process.env.VERCEL && pointsToLocalhost);
-}
+// mora na política (a descoberta também precisa, e importar o catálogo de lá
+// fecharia um ciclo); reexportado porque failover e testes o pegam daqui
+export { localAvailable } from "./policy";
 
 /** Modelos disponíveis agora (vai à rede na primeira vez; depois, cache). */
 export async function availableModels(_env?: ProviderEnv): Promise<ModelInfo[]> {
@@ -213,7 +206,7 @@ export function escolherPadrao(lista: ModelInfo[], preferencia: DefaultPreferenc
 
 export async function defaultModelKey(_env?: ProviderEnv): Promise<string> {
   const [lista, policy] = await Promise.all([availableModels(), readPolicy()]);
-  return escolherPadrao(lista, policy.defaultPreference, policy.failoverOrder)?.key ?? (policy.fallbackModel.trim() || BOOTSTRAP_MODEL_KEY);
+  return escolherPadrao(lista, policy.defaultPreference, policy.failoverOrder)?.key ?? (policy.fallbackModel.trim() || DEFAULT_MODEL_KEY);
 }
 
 /**

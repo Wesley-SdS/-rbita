@@ -9,6 +9,7 @@ import { sessionOf } from "../http/web-route";
 import { rateLimit, tooMany } from "@orbita/core/ratelimit";
 import { enqueueJob } from "@orbita/core/jobs/queue";
 import { tamanhoDoAcervo } from "@orbita/core/rag/reindex";
+import { estadoDosVetores } from "@orbita/core/rag/modelo-dos-vetores";
 import { jobAccepted } from "../http/job-response";
 
 const Body = z.object({
@@ -20,7 +21,10 @@ const Body = z.object({
 export async function GET(_req: Request, ctx: RouteCtx) {
   const session = sessionOf(ctx);
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
-  return Response.json(await tamanhoDoAcervo(session.user.id));
+  // o estado por modelo é o que torna "trocar o embedding" visível: sem ele,
+  // a busca ficava cega para o acervo antigo e a tela não dizia nada
+  const [tamanho, vetores] = await Promise.all([tamanhoDoAcervo(session.user.id), estadoDosVetores(session.user.id)]);
+  return Response.json({ ...tamanho, vetores });
 }
 
 export async function POST(req: Request, ctx: RouteCtx) {

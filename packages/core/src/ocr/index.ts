@@ -30,6 +30,8 @@ export interface PaginaLida {
   /** 0 a 1 quando passou pelo OCR; nulo quando o texto era nativo */
   confianca: number | null;
   tabelas: number;
+  /** a página precisava do modelo de visão e não teve: por quê (config ou falha) */
+  aviso?: string;
 }
 
 export interface DocumentoLido {
@@ -98,11 +100,13 @@ export async function lerDocumento(bytes: Buffer, opcoes: Opcoes): Promise<Docum
     const r = cfg["ocr.enabled"] ? await ocrImagem(bytes, { idiomas: cfg["ocr.languages"] }).catch(() => null) : null;
     let texto = r?.texto?.trim() ?? "";
     let origem: OrigemDaPagina = r ? "ocr" : "imagem";
+    let aviso: string | undefined;
     const decisao = precisaDeVisao({ texto, confianca: r?.confianca ?? 0, fracaoRuim: r?.fracaoRuim ?? 1 }, limites);
     if (decisao.precisa) {
       await opcoes.progresso?.(1, 2, "olhando a imagem com o modelo de visão");
       const visao = await lerComVisao(bytes, opcoes.mime, opcoes.userId).catch((e) => {
-        log.error("ocr.visao.falhou", { error: e instanceof Error ? e.message : String(e) });
+        aviso = e instanceof Error ? e.message : String(e);
+        log.error("ocr.visao.falhou", { error: aviso });
         return null;
       });
       if (visao && visao.texto.length > texto.length) {
@@ -111,7 +115,7 @@ export async function lerDocumento(bytes: Buffer, opcoes: Opcoes): Promise<Docum
       }
     }
     if (!texto) throw new DocumentoIlegivelError("Não consegui ler texto nesta imagem.");
-    paginas.push({ numero: 1, texto, origem, confianca: r?.confianca ?? null, tabelas: 0 });
+    paginas.push({ numero: 1, texto, origem, confianca: r?.confianca ?? null, tabelas: 0, ...(aviso ? { aviso } : {}) });
     return {
       paginas,
       textos: [texto],
@@ -159,13 +163,15 @@ export async function lerDocumento(bytes: Buffer, opcoes: Opcoes): Promise<Docum
     });
     let texto = r?.texto?.trim() ?? "";
     let origem: OrigemDaPagina = "ocr";
+    let aviso: string | undefined;
     if (r) confiancas.push(r.confianca);
 
     const decisao = precisaDeVisao({ texto, confianca: r?.confianca ?? 0, fracaoRuim: r?.fracaoRuim ?? 1 }, limites);
     if (decisao.precisa) {
       await opcoes.progresso?.(i, total, `página ${pagina.numero}: lendo com o modelo de visão`);
       const visao = await lerComVisao(imagem, "image/png", opcoes.userId).catch((e) => {
-        log.error("ocr.visao.falhou", { pagina: pagina.numero, error: e instanceof Error ? e.message : String(e) });
+        aviso = e instanceof Error ? e.message : String(e);
+        log.error("ocr.visao.falhou", { pagina: pagina.numero, error: aviso });
         return null;
       });
       if (visao && visao.texto.length > texto.length) {
@@ -174,7 +180,7 @@ export async function lerDocumento(bytes: Buffer, opcoes: Opcoes): Promise<Docum
       }
       log.info("ocr.fallback", { pagina: pagina.numero, motivo: decisao.motivo, usou: origem });
     }
-    paginas.push({ numero: pagina.numero, texto, origem, confianca: r?.confianca ?? null, tabelas: 0 });
+    paginas.push({ numero: pagina.numero, texto, origem, confianca: r?.confianca ?? null, tabelas: 0, ...(aviso ? { aviso } : {}) });
   }
 
   const textos = paginas.map((p) => p.texto);

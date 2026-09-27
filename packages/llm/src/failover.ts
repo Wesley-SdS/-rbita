@@ -202,9 +202,19 @@ export function cadeiaDaCasa(): string[] {
   return saudaveis.length ? saudaveis : ordenados;
 }
 
+/**
+ * A chave pode entrar na cadeia? Modelo local sem Ollama alcançável não pode,
+ * nem pedido pelo nome nem fixado como reserva: na Render, `local/…` aponta
+ * para um localhost vazio, e tentar custa o timeout para falhar do mesmo jeito.
+ */
+function podeTentar(key: string): boolean {
+  const info = getModelInfo(key);
+  return Boolean(info) && !(info!.local && !localAvailable());
+}
+
 export function buildModelChain(requestedKey: string, _env?: ProviderFlags): string[] {
   const chain: string[] = [];
-  if (getModelInfo(requestedKey)) chain.push(requestedKey);
+  if (podeTentar(requestedKey)) chain.push(requestedKey);
 
   const policy = policySnapshot();
   // o provedor do modelo pedido sai da lista de alternativas: ele já é a
@@ -212,8 +222,11 @@ export function buildModelChain(requestedKey: string, _env?: ProviderFlags): str
   const jaNaCadeia = chain.map((k) => getModelInfo(k)?.provider).filter((p): p is ProviderId => Boolean(p));
   for (const m of ordenarAlternativas(umPorProvedor(jaNaCadeia), policy.failoverOrder)) if (!chain.includes(m.key)) chain.push(m.key);
 
-  // nada descoberto ainda (primeiro boot, cache frio): o palpite mínimo.
-  if (!chain.length) chain.push(policy.fallbackModel.trim() || BOOTSTRAP_MODEL_KEY);
+  // nada descoberto ainda (primeiro boot, cache frio): só o reserva que o dono
+  // FIXOU. Sem reserva, a cadeia fica vazia e quem chama diz o que fazer
+  // (`SEM_MODELO`); inventar uma chave aqui era tentar um modelo inexistente.
+  const reserva = policy.fallbackModel.trim() || BOOTSTRAP_MODEL_KEY;
+  if (!chain.length && reserva && podeTentar(reserva)) chain.push(reserva);
 
   // pula provedores em cooldown; se todos abertos, mantém a cadeia completa
   // (melhor tentar um "aberto" do que ficar sem resposta).

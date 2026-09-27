@@ -3,6 +3,9 @@ import { sql } from "drizzle-orm";
 import { db } from "@orbita/db";
 import type { RouteCtx } from "../http/web";
 import { settings } from "@orbita/core/settings/index";
+import { deveDescobrirLocal, embedProvider, localAvailable, readPolicy } from "@orbita/llm";
+import { temChaveDeNuvem } from "@orbita/core/ocr/visao";
+import { estadoDoServico, ollamaEmUso, vozLocalEmUso } from "@orbita/core/saude/servicos-locais";
 
 async function ping(url: string, ms: number): Promise<boolean> {
   try {
@@ -26,12 +29,32 @@ export async function GET(_req: Request, _ctx: RouteCtx) {
   }
 
   // a config é fail-soft: sem banco, vale o default e o health continua respondendo
-  const pingMs = await settings.get("resilience.healthPingMs");
-  const voiceUrl = process.env.VOICE_URL ?? "http://localhost:8001";
-  checks.voice = (await ping(voiceUrl + "/health", pingMs)) ? "up" : "down";
+  const [cfg, politica] = await Promise.all([
+    settings.getMany(["resilience.healthPingMs", "embeddings.provider", "ocr.visionProvider", "voice.wakeEngine"]),
+    readPolicy(),
+  ]);
+  const pingMs = cfg["resilience.healthPingMs"];
 
+  // serviço que nenhum caminho usa sai como "nao_usado" e nem é pingado:
+  // "down" num serviço que a casa escolheu não usar ensina a ignorar o painel
+  const vozEmUso = vozLocalEmUso({
+    ttsProvider: process.env.TTS_PROVIDER ?? "auto",
+    wakeEngine: cfg["voice.wakeEngine"],
+    temChaveDeTranscricao: Boolean(process.env.ASSEMBLYAI_API_KEY),
+  });
+  const voiceUrl = process.env.VOICE_URL ?? "http://localhost:8001";
+  checks.voice = estadoDoServico(vozEmUso, vozEmUso && (await ping(voiceUrl + "/health", pingMs)));
+
+  const ollamaUsado = ollamaEmUso({
+    politicaUsaLocal: deveDescobrirLocal(politica, process.env),
+    alcancavel: localAvailable(),
+    embeddingsProvider: cfg["embeddings.provider"],
+    temChaveDeEmbedding: embedProvider() === "cloud",
+    ocrVisionProvider: cfg["ocr.visionProvider"],
+    temChaveDeNuvem: temChaveDeNuvem(),
+  });
   const ollama = (process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1").replace(/\/v1\/?$/, "");
-  checks.ollama = (await ping(ollama + "/api/tags", pingMs)) ? "up" : "down";
+  checks.ollama = estadoDoServico(ollamaUsado, ollamaUsado && (await ping(ollama + "/api/tags", pingMs)));
 
   // percepção (Fase 2): sem ela, voz e rosto simplesmente não identificam. Não
   // derruba o health (o resto da Órbita funciona), mas precisa aparecer.

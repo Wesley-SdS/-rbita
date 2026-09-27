@@ -1,7 +1,7 @@
-import { eq, sql } from "drizzle-orm";
-import { embedTexts } from "@orbita/llm";
+import { and, eq, sql } from "drizzle-orm";
+import { embedTextsComModelo } from "@orbita/llm";
 import { db } from "@orbita/db";
-import { chunk, document, memory } from "@orbita/db/knowledge-schema";
+import { chunk, document, memory, memoryCandidate } from "@orbita/db/knowledge-schema";
 import { chunkPaginas, separarPaginas } from "./chunk";
 import { settings } from "../settings";
 import { limparCacheDeBusca } from "./retrieve";
@@ -33,6 +33,8 @@ export interface ResultadoReindex {
   documentos: number;
   trechos: number;
   memorias: number;
+  /** candidatos a memória ainda pendentes: a busca de "já perguntei isso?" também compara vetores */
+  candidatos: number;
   recortados: number;
   semTextoOriginal: number;
 }
@@ -41,14 +43,14 @@ const LOTE = 32;
 
 async function reembedar<T extends { id: string; content: string }>(
   linhas: T[],
-  atualizar: (id: string, emb: number[]) => Promise<unknown>,
+  atualizar: (id: string, emb: number[], modelo: string) => Promise<unknown>,
 ): Promise<number> {
   let feitos = 0;
   for (let i = 0; i < linhas.length; i += LOTE) {
     const lote = linhas.slice(i, i + LOTE);
-    const vetores = await embedTexts(lote.map((l) => l.content), "document");
+    const { vetores, modelo } = await embedTextsComModelo(lote.map((l) => l.content), "document");
     if (vetores.length !== lote.length) throw new Error(`Embeddings inconsistentes: ${vetores.length} para ${lote.length}`);
-    await Promise.all(lote.map((l, j) => atualizar(l.id, vetores[j]!)));
+    await Promise.all(lote.map((l, j) => atualizar(l.id, vetores[j]!, modelo)));
     feitos += lote.length;
   }
   return feitos;
@@ -61,9 +63,13 @@ export async function reindexarTudo(userId: string, modo: ModoReindex = "recorta
     .from(document)
     .where(eq(document.userId, userId));
   const mems = await db.select({ id: memory.id, content: memory.content }).from(memory).where(eq(memory.userId, userId));
+  const cands = await db
+    .select({ id: memoryCandidate.id, content: memoryCandidate.content })
+    .from(memoryCandidate)
+    .where(and(eq(memoryCandidate.userId, userId), eq(memoryCandidate.status, "pendente")));
 
   const total = docs.length + 1;
-  const resultado: ResultadoReindex = { documentos: docs.length, trechos: 0, memorias: 0, recortados: 0, semTextoOriginal: 0 };
+  const resultado: ResultadoReindex = { documentos: docs.length, trechos: 0, memorias: 0, candidatos: 0, recortados: 0, semTextoOriginal: 0 };
 
   for (const [i, doc] of docs.entries()) {
     await progresso?.(i, total, `reindexando "${doc.title}" (${i + 1} de ${docs.length})`);
@@ -72,7 +78,7 @@ export async function reindexarTudo(userId: string, modo: ModoReindex = "recorta
     if (!podeRecortar) {
       if (modo === "recortar") resultado.semTextoOriginal++;
       const trechos = await db.select({ id: chunk.id, content: chunk.content }).from(chunk).where(eq(chunk.documentId, doc.id));
-      resultado.trechos += await reembedar(trechos, (id, emb) => db.update(chunk).set({ embedding: emb }).where(eq(chunk.id, id)));
+      resultado.trechos += await reembedar(trechos, (id, emb, modelo) => db.update(chunk).set({ embedding: emb, embedModel: modelo }).where(eq(chunk.id, id)));
       continue;
     }
 
@@ -84,11 +90,14 @@ export async function reindexarTudo(userId: string, modo: ModoReindex = "recorta
     });
     if (!novos.length) continue;
     const vetores: number[][] = [];
+    const modelos: string[] = [];
     for (let j = 0; j < novos.length; j += LOTE) {
       const lote = novos.slice(j, j + LOTE);
-      const parte = await embedTexts(lote.map((t) => t.content), "document");
+      const { vetores: parte, modelo } = await embedTextsComModelo(lote.map((t) => t.content), "document");
       if (parte.length !== lote.length) throw new Error(`Embeddings inconsistentes: ${parte.length} para ${lote.length}`);
       vetores.push(...parte);
+      // por lote, não um só: se a config mudar no meio, cada vetor leva o modelo que de fato o gerou
+      modelos.push(...parte.map(() => modelo));
     }
 
     // troca atômica: o documento nunca fica sem trechos (uma busca no meio do
@@ -102,6 +111,7 @@ export async function reindexarTudo(userId: string, modo: ModoReindex = "recorta
           content: t.content,
           idx,
           embedding: vetores[idx]!,
+          embedModel: modelos[idx]!,
           pageStart: t.pageStart,
           pageEnd: t.pageEnd,
           charStart: t.charStart,
@@ -114,7 +124,10 @@ export async function reindexarTudo(userId: string, modo: ModoReindex = "recorta
   }
 
   await progresso?.(docs.length, total, "reindexando a memória");
-  resultado.memorias = await reembedar(mems, (id, emb) => db.update(memory).set({ embedding: emb }).where(eq(memory.id, id)));
+  resultado.memorias = await reembedar(mems, (id, emb, modelo) => db.update(memory).set({ embedding: emb, embedModel: modelo }).where(eq(memory.id, id)));
+  resultado.candidatos = await reembedar(cands, (id, emb, modelo) =>
+    db.update(memoryCandidate).set({ embedding: emb, embedModel: modelo }).where(eq(memoryCandidate.id, id)),
+  );
 
   limparCacheDeBusca();
   log.info("rag.reindex", { userId, modo, ...resultado });

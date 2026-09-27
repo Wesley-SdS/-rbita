@@ -34,22 +34,56 @@ const CATALOGO: ModelInfo[] = [
   m("local/qwen2.5:7b", { provider: "local", billing: "free", local: true, tier: "small" }),
 ];
 
+// o que o teste pode mexer: o que foi descoberto e se há Ollama alcançável
+const cena = { catalogo: CATALOGO, alcancavel: true };
+
 vi.mock("./catalog", async (original) => {
   const real = await original<typeof import("./catalog")>();
   return {
     ...real,
-    availableModelsSync: () => CATALOGO,
-    localAvailable: () => true,
-    getModelInfo: (key: string) => CATALOGO.find((x) => x.key === key),
+    availableModelsSync: () => cena.catalogo,
+    localAvailable: () => cena.alcancavel,
+    // chave bem formada fora da descoberta ainda tem info (como o catálogo real)
+    getModelInfo: (key: string) =>
+      cena.catalogo.find((x) => x.key === key) ?? (key.startsWith("local/") ? m(key, { provider: "local", billing: "free", local: true }) : undefined),
   };
 });
 
 const { buildModelChain, recordProviderResult, circuitOpen, statusDoErro, configureFailover, resetBreakersForTests } = await import("./failover");
+const { resetModelPolicyForTests } = await import("./policy");
 
 // o disjuntor é estado de módulo: sem zerar, um teste abre o provedor do
 // seguinte e a cadeia devolve tudo (o fallback de "todos abertos")
 beforeEach(() => resetBreakersForTests());
-afterEach(() => configureFailover({ threshold: 3, cooldownMs: 30_000 }));
+afterEach(() => {
+  configureFailover({ threshold: 3, cooldownMs: 30_000 });
+  cena.catalogo = CATALOGO;
+  cena.alcancavel = true;
+  resetModelPolicyForTests();
+});
+
+describe("cadeia sem Ollama (PRD-SEM-OLLAMA)", () => {
+  it("nada descoberto e nenhum reserva fixado: cadeia vazia, em vez de uma chave local quebrada (E1)", () => {
+    cena.catalogo = [];
+    expect(buildModelChain("auto")).toEqual([]);
+    expect(buildModelChain("")).toEqual([]);
+  });
+
+  it("reserva fixado pelo dono ainda vale quando nada foi descoberto", () => {
+    cena.catalogo = [];
+    resetModelPolicyForTests({ fallbackModel: "local/qwen2.5:3b" });
+    expect(buildModelChain("")).toEqual(["local/qwen2.5:3b"]);
+  });
+
+  it("sem Ollama alcançável, local não entra nem pedido, nem descoberto, nem como reserva (E4)", () => {
+    cena.alcancavel = false;
+    expect(buildModelChain("local/qwen2.5:7b").some((k) => k.startsWith("local/"))).toBe(false);
+
+    cena.catalogo = [];
+    resetModelPolicyForTests({ fallbackModel: "local/qwen2.5:3b" });
+    expect(buildModelChain("")).toEqual([]);
+  });
+});
 
 describe("cadeia de failover", () => {
   it("NÃO oferece outro modelo da mesma casa do que foi pedido", () => {

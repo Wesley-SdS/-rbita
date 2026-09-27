@@ -33,22 +33,46 @@ export interface ResultadoVisao {
   onde: "local" | "nuvem";
 }
 
-function temChaveDeNuvem(): boolean {
+/** Alguma nuvem que enxerga imagem está configurada? A assinatura conta. */
+export function temChaveDeNuvem(): boolean {
   return Boolean(process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.AI_GATEWAY_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_CODE_OAUTH_TOKEN);
 }
 
-/** Decide onde a página vai ser lida. Puro: é a regra de privacidade do dono. */
+/**
+ * Decide onde a página vai ser lida. Puro: é a regra de privacidade do dono.
+ *
+ * "nuvem" sem chave NÃO cai para o local (E5 do PRD-SEM-OLLAMA). Caía, e
+ * numa casa sem Ollama isso era uma queda silenciosa para um caminho que não
+ * existe: a página ficava só com o que o tesseract leu e ninguém sabia por quê.
+ * O dono pediu nuvem; sem nuvem, a resposta é "não li", dita (`motivoSemVisao`).
+ */
 export function ondeLer(provider: VisaoProvider, temChave: boolean): "local" | "nuvem" | null {
   if (provider === "nunca") return null;
   if (provider === "local") return "local";
-  if (provider === "nuvem") return temChave ? "nuvem" : "local";
+  if (provider === "nuvem") return temChave ? "nuvem" : null;
   return temChave ? "nuvem" : "local";
+}
+
+/** Por que a página não foi relida, quando o motivo é configuração e não escolha. Puro. */
+export function motivoSemVisao(provider: VisaoProvider, temChave: boolean): string | null {
+  if (provider === "nuvem" && !temChave) {
+    return "Leitura por visão configurada como \"Sempre na nuvem\", mas não há chave de nuvem nem assinatura. A página ficou só com o que o OCR leu.";
+  }
+  return null;
 }
 
 export async function lerComVisao(imagem: Buffer, mime = "image/png", userId?: string): Promise<ResultadoVisao | null> {
   const cfg = await settings.getMany(["ocr.visionProvider", "vision.localModel", "vision.cloudModel", "ocr.visionMaxTokens"]);
-  const onde = ondeLer(cfg["ocr.visionProvider"] as VisaoProvider, temChaveDeNuvem());
-  if (!onde) return null;
+  const provider = cfg["ocr.visionProvider"] as VisaoProvider;
+  const temChave = temChaveDeNuvem();
+  const onde = ondeLer(provider, temChave);
+  if (!onde) {
+    // "nunca" é escolha e volta nulo calado; nuvem sem chave é problema, e
+    // quem chama registra o motivo na página em vez de engolir
+    const motivo = motivoSemVisao(provider, temChave);
+    if (motivo) throw new Error(motivo);
+    return null;
+  }
 
   const dataUrl = `data:${mime};base64,${imagem.toString("base64")}`;
   const model = resolveVisionModel(

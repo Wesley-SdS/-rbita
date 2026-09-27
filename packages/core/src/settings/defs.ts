@@ -66,6 +66,7 @@ export const SETTING_GROUPS = {
   jobs: { label: "Trabalhos em segundo plano", order: 65.5 },
   events: { label: "Eventos", order: 65 },
   connectors: { label: "Conectores", order: 70 },
+  whatsapp: { label: "WhatsApp", order: 71 },
   finance: { label: "Finanças", order: 75 },
   limits: { label: "Limites", order: 80 },
   graph: { label: "Grafo de conhecimento", order: 85 },
@@ -191,11 +192,11 @@ export const SETTING_DEFS = {
   "rag.rerank": sel(
     "rag",
     "Reordenar os candidatos",
-    "Depois da busca, um modelo lê a pergunta junto com cada trecho e decide a ordem. É o que mais melhora o acerto, e é o que mais custa tempo.",
+    "Depois da busca, um modelo lê a pergunta junto com cada trecho e decide a ordem. É o que mais melhora o acerto, e é o que mais custa tempo. Aqui \"local\" NÃO é o Ollama: é um modelo pequeno (ONNX) que roda dentro da própria Órbita, funciona sem Ollama e também na nuvem.",
     "nenhum",
     [
       { value: "nenhum", label: "Não reordenar (mais rápido)" },
-      { value: "local", label: "Modelo local em CPU (nada sai de casa)" },
+      { value: "local", label: "Modelo em CPU dentro da Órbita (ONNX, não precisa de Ollama; nada sai de casa)" },
       { value: "cohere", label: "Cohere (precisa de COHERE_API_KEY; o trecho sai de casa)" },
     ],
   ),
@@ -222,9 +223,9 @@ export const SETTING_DEFS = {
     "Documento pessoal (extrato, imposto de renda, receita médica, contrato) pode sair de casa? Nesta casa a escolha é do dono.",
     "auto",
     [
-      { value: "auto", label: "Nuvem quando houver chave, senão local" },
-      { value: "nuvem", label: "Sempre na nuvem (mais rápido e melhor em tabela)" },
-      { value: "local", label: "Sempre local (nada sai de casa; minutos por página em CPU)" },
+      { value: "auto", label: "Nuvem quando houver chave, senão local (Ollama)" },
+      { value: "nuvem", label: "Sempre na nuvem (mais rápido e melhor em tabela; sem chave, a página fica só com o OCR e o motivo é registrado)" },
+      { value: "local", label: "Sempre local (depende do Ollama; nada sai de casa; minutos por página em CPU)" },
       { value: "nunca", label: "Não usar modelo de visão (fica só o que o OCR leu)" },
     ],
     "No plano gratuito do Gemini o conteúdo enviado é usado para melhorar os produtos do Google. Para documento pessoal, use uma chave paga ou a opção local.",
@@ -251,14 +252,16 @@ export const SETTING_DEFS = {
   "embeddings.provider": sel(
     "embeddings",
     "Onde gerar embeddings",
-    "Local mantém tudo em casa (Ollama). Nuvem usa Gemini ou OpenAI se houver chave. Automático prefere a nuvem quando há chave.",
+    "Embedding é o que permite buscar nos seus documentos e memórias pelo sentido. A assinatura do Claude NÃO gera embedding (a Anthropic não oferece), então na nuvem ele é sempre do Gemini ou da OpenAI. Local mantém tudo em casa, mas depende do Ollama.",
     "auto",
     [
-      { value: "auto", label: "Automático (nuvem se houver chave)" },
-      { value: "local", label: "Sempre local (Ollama)" },
-      { value: "cloud", label: "Sempre nuvem" },
+      { value: "auto", label: "Automático (Gemini ou OpenAI se houver chave, senão local)" },
+      { value: "gemini", label: "Google Gemini (gemini-embedding-2; grátis no plano gratuito)" },
+      { value: "openai", label: "OpenAI (text-embedding-3-small)" },
+      { value: "cloud", label: "Qualquer nuvem com chave (Gemini primeiro)" },
+      { value: "local", label: "Sempre local (Ollama; nada sai de casa)" },
     ],
-    "Trocar o provedor de embedding invalida os vetores já gravados. Depois de mudar, use \"Reindexar\" na conta.",
+    "Cada vetor guarda o modelo que o gerou, e a busca só compara vetores do modelo ativo. Depois de trocar, o que foi indexado com o modelo antigo some da busca até você usar \"Reindexar\" na conta, que mostra quantos faltam.",
   ),
 
   "embeddings.localModel": text(
@@ -273,8 +276,10 @@ export const SETTING_DEFS = {
   "llm.failoverOrder": sel(
     "models",
     "Ordem do failover",
-    "Quando o modelo escolhido falha antes de começar a responder, a Órbita tenta outro nesta ordem. Nuvem que não informa preço fica sempre depois da nuvem com preço.",
-    "assinatura_local_paga",
+    "Quando o modelo escolhido falha antes de começar a responder, a Órbita tenta outro nesta ordem. Nuvem que não informa preço fica sempre depois da nuvem com preço. Com o local no fim da fila, a Órbita nem procura modelos no Ollama (veja \"Procurar modelos locais\").",
+    // era assinatura → local → paga; sem GPU o local leva minutos por resposta
+    // e na nuvem ele não existe (PRD-SEM-OLLAMA), então ele fecha a fila
+    "assinatura_paga_local",
     FAILOVER_OPTIONS,
   ),
   "llm.defaultPreference": sel(
@@ -304,9 +309,31 @@ export const SETTING_DEFS = {
     ],
   ),
 
-  "llm.fallbackModel": text("models", "Modelo reserva", "Chave do modelo (ex.: local/qwen2.5:3b) usada quando nada foi descoberto e por resumos, extratos e rotinas sem modelo definido. Vazio usa o padrão de instalação.", ""),
+  "llm.fallbackModel": text("models", "Modelo reserva", "Chave de um modelo (ex.: claude/claude-sonnet-5) tentada só quando nenhum provedor respondeu a lista de modelos. Vazio significa que a ordem do failover decide, e sem nenhum provedor a Órbita avisa em vez de tentar um modelo que talvez não exista.", ""),
   "llm.discoveryTtlMinutes": num("models", "Renovar a lista de modelos a cada", "A lista vencida continua valendo e é renovada em segundo plano, sem atrasar a resposta.", 5, 1, 1440, { unit: "min" }),
   "llm.discoveryTimeoutMs": num("models", "Timeout por provedor na descoberta", "Quanto esperar cada provedor responder a lista de modelos.", 4000, 500, 30000, { unit: "ms" }),
+  "llm.descobrirLocal": sel(
+    "models",
+    "Procurar modelos locais (Ollama)",
+    "Perguntar ao Ollama quais modelos ele tem custa um timeout toda vez que ele está desligado. No automático, a Órbita só pergunta quando o local pode ser escolhido: preferido no chat ou antes de alguma nuvem na ordem do failover. O modo privacidade pergunta na hora, a menos que esteja em \"Nunca\".",
+    "auto",
+    [
+      { value: "auto", label: "Automático (só quando a ordem usa o local)" },
+      { value: "sempre", label: "Sempre" },
+      { value: "nunca", label: "Nunca (instalação sem Ollama, ou na nuvem)" },
+    ],
+  ),
+  "llm.localDisponivel": sel(
+    "models",
+    "Existe Ollama alcançável daqui",
+    "Na Vercel, na Render e em serviços parecidos, \"localhost\" é o próprio servidor, sem Ollama nenhum, e um modelo local seria uma escolha quebrada. O automático percebe esses ambientes; Ollama numa outra máquina (endereço que não é localhost) continua valendo.",
+    "auto",
+    [
+      { value: "auto", label: "Automático (pelo ambiente)" },
+      { value: "sim", label: "Sim" },
+      { value: "nao", label: "Não" },
+    ],
+  ),
 
   // ── resiliência (packages/llm/src/failover.ts) ──
   "resilience.cbThreshold": num("resilience", "Falhas para abrir o disjuntor", "Falhas seguidas de um provedor antes de pulá-lo por um tempo.", 3, 1, 20),
@@ -341,6 +368,14 @@ export const SETTING_DEFS = {
   // este tempo, a Órbita prefere pedir um quadro novo a descrever a cozinha de
   // três horas atrás como se fosse o presente.
   "cameras.imagemFrescaSegundos": num("cameras", "Imagem vale como “agora” por", "Depois disso a Órbita não usa a imagem guardada: ela pede um quadro novo, ou diz que não consegue ver.", 120, 5, 3600, { unit: "s" }),
+  // O quadro que a própria Órbita mandou capturar vale MUITO menos tempo do que
+  // um evento de detector: ele é o retrato do instante da pergunta, não notícia
+  // do mundo. Sem esta separação, cinco perguntas em 92 segundos receberam a
+  // MESMA foto cinco vezes (medido em 27/09/2026, um evento e cinco chamadas de
+  // visão com 486 tokens de entrada idênticos). Curto o bastante para a próxima
+  // pergunta render um quadro novo, longo o bastante para duas tools do MESMO
+  // turno não acenderem a webcam duas vezes.
+  "cameras.imagemFrescaPedidaSegundos": num("cameras", "Quadro capturado a pedido vale por", "Quando a Órbita mesma pediu o quadro (webcam deste aparelho), ele conta como “agora” só por este tempo. Passado isso, perguntar de novo captura de novo, em vez de descrever a foto anterior. Não vale para câmera que empurra evento, como o Frigate.", 10, 0, 600, { unit: "s" }),
   "cameras.capturaAoFalarMs": num("cameras", "Espera pelo quadro ao falar", "Com a Órbita autorizada a olhar quando precisar, ela captura um quadro junto da sua mensagem. Este é o tempo máximo que ela espera por ele antes de mandar a mensagem assim mesmo.", 1500, 200, 8000, { unit: "ms" }),
 
   // ── a câmera do próprio aparelho ──
@@ -351,6 +386,14 @@ export const SETTING_DEFS = {
   "cameras.deviceIntervalSeconds": num("cameras", "Aparelho: olhar a cada", "De quanto em quanto tempo a câmera deste aparelho manda um quadro enquanto estiver ligada. Cada quadro é um evento, então intervalo curto enche o histórico depressa.", 20, 2, 600, { unit: "s" }),
   "cameras.deviceMaxWidth": num("cameras", "Aparelho: largura do quadro", "O quadro é reduzido para esta largura antes de subir. Maior enxerga mais detalhe e pesa mais no banco.", 640, 160, 1920, { unit: "px" }),
   "cameras.deviceQuality": num("cameras", "Aparelho: qualidade do quadro", "Compressão JPEG do quadro enviado. Abaixo de 0,5 o modelo de visão começa a errar detalhe.", 0.7, 0.3, 1, { step: 0.05 }),
+
+  // A câmera acender sem a pessoa ver nada é o pior dos mundos: a luz pisca,
+  // algo é enviado, e ela fica sem saber o quê. A prévia é a contrapartida de
+  // ter autorizado o olhar. Só a prévia mantém a câmera aberta por um instante
+  // a mais, e só quando há alguém de fato mostrando o vídeo.
+  "cameras.previaAoOlhar": bool("cameras", "Mostrar o que a Órbita está olhando", "Quando a Órbita abre a webcam deste aparelho, um quadradinho aparece no canto com o vídeo ao vivo e depois com a foto que foi enviada.", true),
+  "cameras.previaMs": num("cameras", "Prévia: vídeo ao vivo por", "Quanto tempo a webcam fica aberta a mais só para você ver o vídeo. Zero captura e fecha na hora (a prévia mostra só a foto enviada).", 2000, 0, 10000, { unit: "ms" }),
+  "cameras.previaSegundos": num("cameras", "Prévia: foto enviada fica por", "Depois de fechar a câmera, a foto que a Órbita recebeu continua no canto por este tempo.", 5, 1, 60, { unit: "s" }),
 
   "cameras.ingestRateLimitPerMinute": num("cameras", "Eventos por minuto (por câmera)", "Acima disso, o webhook de ingestão recusa novos eventos da mesma câmera. Protege o banco e evita disparar regra automática em excesso (cada evento pode virar uma chamada de modelo).", 60, 5, 600, { unit: "/min" }),
 
@@ -384,6 +427,14 @@ export const SETTING_DEFS = {
   "finance.statementBlockChars": num("finance", "Tamanho do bloco do extrato", "Extrato em PDF é lido pelo modelo em blocos deste tamanho.", 6000, 1000, 50000, { unit: "chars" }),
   "finance.statementMaxBlocks": num("finance", "Blocos máximos por extrato", "Teto de segurança: acima disso o resto do extrato é ignorado, para um PDF enorme não virar dezenas de chamadas de modelo.", 12, 1, 200),
   "finance.billDueHour": num("finance", "Hora do aviso de contas", "Hora local em que o aviso diário é gerado.", 8, 0, 23, { unit: "h" }),
+  // ── finanças (o painel "posso gastar hoje") ──
+  "finance.diasPerto": num("finance", "Conta perto de vencer", "Conta em aberto que vence em até tantos dias ganha o aviso âmbar no painel.", 7, 0, 60, { unit: "dias" }),
+  "finance.diasJanela": num("finance", "Janela do a pagar e a receber", "Horizonte de \"a pagar\", \"a receber\" e \"sobra\" no painel e em Contas.", 30, 1, 365, { unit: "dias" }),
+  "finance.diasFimDoMes": num("finance", "Reta final do mês", "Faltando até tantos dias, o painel mostra o que ainda cabe até o fim do mês em vez do valor por dia.", 5, 0, 31, { unit: "dias" }),
+  "finance.mesesMedia": num("finance", "Meses na média de gasto livre", "Meses completos usados para projetar o saldo na previsão.", 3, 1, 24, { unit: "meses" }),
+  "finance.mesesSemeados": num("finance", "Contas fixas criadas à frente", "Contas que repetem todo mês ficam cadastradas em aberto até tantos meses à frente.", 2, 0, 24, { unit: "meses" }),
+  "finance.mesesPrevisao": num("finance", "Meses na previsão", "Quantos meses à frente a tela de previsão projeta.", 12, 1, 60, { unit: "meses" }),
+  "finance.repeticoesAtalho": num("finance", "Repetições para sugerir atalho", "Um gasto que se repete tantas vezes vira sugestão de atalho de um toque.", 3, 2, 50, { unit: "vezes" }),
 
   // ── limites de entrada ──
   "limits.uploadMaxMb": num("limits", "Arquivo máximo enviado", "Tamanho máximo de arquivo para indexar, comprovante e extrato. O arquivo fica guardado até o trabalho terminar, e é apagado em seguida.", 25, 1, 200, { unit: "MB" }),
@@ -426,14 +477,6 @@ export const SETTING_DEFS = {
   // aqui (e não numa constante no front) porque quem sabe se a reunião é na
   // mesma sala ou por chamada é o dono, não o código.
   "meetings.processarMicrofone": sel(
-  // ── finanças (o painel "posso gastar hoje") ──
-  "finance.diasPerto": num("finance", "Conta perto de vencer", "Conta em aberto que vence em até tantos dias ganha o aviso âmbar no painel.", 7, 0, 60, { unit: "dias" }),
-  "finance.diasJanela": num("finance", "Janela do a pagar e a receber", "Horizonte de \"a pagar\", \"a receber\" e \"sobra\" no painel e em Contas.", 30, 1, 365, { unit: "dias" }),
-  "finance.diasFimDoMes": num("finance", "Reta final do mês", "Faltando até tantos dias, o painel mostra o que ainda cabe até o fim do mês em vez do valor por dia.", 5, 0, 31, { unit: "dias" }),
-  "finance.mesesMedia": num("finance", "Meses na média de gasto livre", "Meses completos usados para projetar o saldo na previsão.", 3, 1, 24, { unit: "meses" }),
-  "finance.mesesSemeados": num("finance", "Contas fixas criadas à frente", "Contas que repetem todo mês ficam cadastradas em aberto até tantos meses à frente.", 2, 0, 24, { unit: "meses" }),
-  "finance.mesesPrevisao": num("finance", "Meses na previsão", "Quantos meses à frente a tela de previsão projeta.", 12, 1, 60, { unit: "meses" }),
-  "finance.repeticoesAtalho": num("finance", "Repetições para sugerir atalho", "Um gasto que se repete tantas vezes vira sugestão de atalho de um toque.", 3, 2, 50, { unit: "vezes" }),
     "meetings",
     "Tratamento do microfone na reunião",
     "O navegador trata o microfone para CHAMADA: cancela eco, corta ruído e nivela o volume, tudo afinado para uma voz só. Com duas pessoas na mesma sala isso atrapalha a separação de quem falou, porque é justamente a diferença entre as vozes que a separa. No automático, o microfone vai cru quando a reunião é na sala e tratado quando você captura o áudio da tela (aí o eco existe de verdade).",
@@ -808,6 +851,72 @@ export const SETTING_DEFS = {
       { value: "conta", label: "Como a conta logada (padrão)" },
       { value: "restrito", label: "Como visitante (mais restrito)" },
     ],
+  ),
+
+  // ── WhatsApp pessoal pela ponte local GOWA (PRD-WHATSAPP.md) ──
+  "whatsapp.provedor": sel(
+    "whatsapp",
+    "Provedor do WhatsApp",
+    "Automático usa o número pessoal quando ele está pareado, senão a Cloud API da Meta (se houver token). Fixar um provedor faz a Órbita nunca usar o outro.",
+    "auto",
+    [
+      { value: "auto", label: "Automático" },
+      { value: "pessoal", label: "Número pessoal (ponte local)" },
+      { value: "cloud", label: "Cloud API da Meta" },
+    ],
+  ),
+  "whatsapp.ponteUrl": text("whatsapp", "Endereço da ponte", "Onde o GOWA roda nesta casa. Só aceita endereço local: a ponte carrega a conta inteira do WhatsApp.", "http://127.0.0.1:3001"),
+  "whatsapp.webhookBase": text("whatsapp", "Endereço da Órbita visto pela ponte", "Por onde o GOWA alcança o apps/api para entregar as mensagens. Com o GOWA no Docker, é o host do Docker.", "http://host.docker.internal:3010"),
+  "whatsapp.ponteTimeoutMs": num("whatsapp", "Tempo para a ponte responder", "Quanto esperar o GOWA numa chamada comum. Envio de mídia usa quatro vezes isto.", 15000, 2000, 120000, { unit: "ms" }),
+  "whatsapp.saudeSegundos": num("whatsapp", "Conferir a conexão a cada", "De quanto em quanto tempo o processo persistente pergunta ao GOWA se o número continua conectado.", 60, 10, 3600, { unit: "s" }),
+  "whatsapp.webhookPorMinuto": num("whatsapp", "Mensagens recebidas por minuto (teto)", "Proteção contra rajada na entrada. Acima disto o webhook responde 429 e o GOWA reenvia depois.", 600, 30, 10000),
+  "whatsapp.midiaDir": text("whatsapp", "Pasta da mídia", "Onde áudios, fotos e documentos recebidos ficam guardados. Vazio usa data/whatsapp dentro da Órbita.", "", 500),
+  "whatsapp.midiaMaxMb": num("whatsapp", "Tamanho máximo de mídia", "Arquivo maior que isto não é baixado (a mensagem fica, sem o anexo).", 64, 1, 512, { unit: "MB" }),
+  "whatsapp.transcricao": sel(
+    "whatsapp",
+    "Transcrever áudio recebido",
+    "O áudio de outra pessoa é dado pessoal DELA. Por isso a escolha é separada da de reuniões.",
+    "igual_reunioes",
+    [
+      { value: "igual_reunioes", label: "Como as reuniões" },
+      { value: "local", label: "Só nesta casa (whisper local)" },
+      { value: "nuvem", label: "Na nuvem quando houver chave" },
+      { value: "nunca", label: "Não transcrever" },
+    ],
+  ),
+  "whatsapp.grupos": sel("whatsapp", "Mensagens de grupo", "Guardar deixa a Órbita responder \"o que falaram no grupo da família?\". Grupo NUNCA recebe resposta automática.", "guardar", [
+    { value: "guardar", label: "Guardar" },
+    { value: "ignorar", label: "Ignorar" },
+  ]),
+  "whatsapp.status": sel("whatsapp", "Status (stories)", "Atualizações de status dos contatos.", "ignorar", [
+    { value: "ignorar", label: "Ignorar" },
+    { value: "guardar", label: "Guardar" },
+  ]),
+  "whatsapp.retencaoDias": num("whatsapp", "Guardar mensagens por", "Mensagens e mídia mais velhas que isto são apagadas. Zero guarda para sempre.", 0, 0, 3650, { unit: "dias" }),
+  "whatsapp.leituraMax": num("whatsapp", "Mensagens por leitura", "Quantas mensagens uma consulta ao WhatsApp traz de uma vez para a Órbita ler.", 30, 5, 200),
+  "whatsapp.envioPorMinuto": num("whatsapp", "Envios por minuto (antibanimento)", "Teto de mensagens que a Órbita manda por minuto, somando tudo.", 20, 1, 120),
+  "whatsapp.envioPorDia": num("whatsapp", "Envios por dia (antibanimento)", "Teto diário. Número pessoal antigo aguenta mais; número novo, bem menos.", 300, 10, 5000),
+  "whatsapp.aprovacaoValidadeMin": num("whatsapp", "Validade da proposta para aprovar falando", "Depois disto, dizer \"manda\" não aprova mais nada: a proposta só sai pela tela.", 30, 1, 1440, { unit: "min" }),
+  "whatsapp.conversaComigo": bool("whatsapp", "Falar com a Órbita pela conversa \"Eu\"", "Mensagem que você manda para você mesmo vira pedido à Órbita, e ela responde ali.", true),
+  "whatsapp.respostaFormato": sel("whatsapp", "Formato da resposta na conversa \"Eu\"", "Espelhar responde áudio com áudio e texto com texto.", "espelhar", [
+    { value: "espelhar", label: "Espelhar" },
+    { value: "texto", label: "Sempre texto" },
+    { value: "audio", label: "Sempre áudio" },
+  ]),
+  "whatsapp.historicoConversa": num("whatsapp", "Histórico da conversa \"Eu\"", "Quantas mensagens anteriores a Órbita relê a cada pedido pelo WhatsApp.", 16, 0, 100),
+  "whatsapp.frasesConfirmar": list("whatsapp", "Frases que aprovam", "Dita logo depois de uma proposta, qualquer uma destas envia. Vale só para a SUA fala.", ["manda", "pode mandar", "envia", "pode enviar", "sim", "confirmo", "pode"]),
+  "whatsapp.frasesCancelar": list("whatsapp", "Frases que cancelam", "Dita logo depois de uma proposta, cancela.", ["cancela", "não", "deixa", "esquece", "não manda"]),
+  "whatsapp.automaticoPorHora": num("whatsapp", "Respostas automáticas por hora (por contato)", "Acima disto o automático daquele contato pausa e você é avisado.", 10, 1, 120),
+  "whatsapp.automaticoSeguidas": num("whatsapp", "Trocas instantâneas seguidas", "Se o contato responde à Órbita em segundos, tantas vezes seguidas, é provável que do outro lado também seja um robô: o automático pausa.", 4, 1, 50),
+  "whatsapp.roboSegundos": num("whatsapp", "O que conta como resposta instantânea", "Resposta do contato mais rápida que isto, logo depois de uma resposta automática, conta como troca de robô.", 8, 1, 120, { unit: "s" }),
+  "whatsapp.pausaAoAssumirMin": num("whatsapp", "Pausa quando você assume", "Se você escreve à mão numa conversa com automático, ele para por este tempo.", 60, 1, 1440, { unit: "min" }),
+  "whatsapp.promptAutomatico": text(
+    "whatsapp",
+    "Instrução da resposta automática",
+    "Como a Órbita se comporta ao responder sozinha. Ela não enxerga nada seu nesse modo, só a conversa.",
+    "Você é a Órbita, assistente do dono deste WhatsApp, respondendo por ele a um contato de confiança. Seja breve, cordial e natural. Você NÃO tem acesso a agenda, finanças, e-mail nem a nada pessoal do dono: se pedirem algo assim, ou algo que você não sabe, diga que vai avisá-lo.",
+    2000,
+    true,
   ),
 
   // ── acesso ──
