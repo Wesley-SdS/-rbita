@@ -17,6 +17,12 @@ interface Acervo {
   trechos: number;
   memorias: number;
   semPagina: number;
+  /** de qual modelo de embedding é cada vetor (calculado no servidor, rag/modelo-dos-vetores.ts) */
+  vetores?: {
+    ativo: string | null;
+    porModelo: { modelo: string | null; trechos: number; memorias: number }[];
+    faltamReindexar: number;
+  };
 }
 interface Memoria {
   id: string;
@@ -173,7 +179,13 @@ export function KnowledgePanel() {
         <article className="panel stat-card">
           <span>Trechos indexados</span>
           <div className="stat-value">{contagens.chunks.toLocaleString("pt-BR")}</div>
-          <small>{acervo && acervo.semPagina > 0 ? `${acervo.semPagina} ainda sem página de origem` : "Cada um sabe de onde veio"}</small>
+          <small>
+            {acervo?.vetores && acervo.vetores.faltamReindexar > 0
+              ? `${acervo.vetores.faltamReindexar} fora da busca até reindexar`
+              : acervo && acervo.semPagina > 0
+                ? `${acervo.semPagina} ainda sem página de origem`
+                : "Cada um sabe de onde veio"}
+          </small>
         </article>
         <article className="panel stat-card">
           <span>Memórias</span>
@@ -327,6 +339,23 @@ export function KnowledgePanel() {
                 <span>Trechos sem página</span>
                 <b className={acervo.semPagina > 0 ? "" : "bom"}>{acervo.semPagina}</b>
               </div>
+              {acervo.vetores?.porModelo.map((v) => (
+                <div className="stat-row" key={v.modelo ?? "sem-modelo"}>
+                  <span>
+                    {v.modelo ?? "Modelo desconhecido"}
+                    {v.modelo === acervo.vetores?.ativo ? " (em uso)" : " (fora da busca)"}
+                  </span>
+                  <b className={v.modelo === acervo.vetores?.ativo ? "bom" : ""}>
+                    {v.trechos} trecho(s), {v.memorias} memória(s)
+                  </b>
+                </div>
+              ))}
+              {acervo.vetores && acervo.vetores.faltamReindexar > 0 && (
+                <p className="description" style={{ marginTop: 8 }}>
+                  A busca só compara vetores do modelo em uso. Reindexe para que os{" "}
+                  {acervo.vetores.faltamReindexar} de outro modelo voltem a ser encontrados.
+                </p>
+              )}
             </>
           )}
           <button className="button secondary full-width" onClick={reindexar} disabled={ocupado} style={{ marginTop: 16 }}>

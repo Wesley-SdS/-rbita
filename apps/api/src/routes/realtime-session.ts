@@ -23,8 +23,11 @@ export function chavesRealtime(): ChavesRealtime {
  * Vale para os dois provedores: o que muda entre eles é o transporte, não a
  * personalidade nem o gate.
  */
-const INSTRUCAO_DE_VOZ =
-  " Você está em conversa por voz em tempo real: fale de forma natural, breve e calorosa, em português do Brasil. Ações arriscadas (destrancar, desarmar, mandar mensagem) ficam esperando sua aprovação no painel; diga isso em vez de fingir que já fez.";
+const INSTRUCAO_DE_VOZ = `
+
+<voz>
+Esta é uma conversa por voz em tempo real: tudo que você responde vira fala. Fale de forma natural, breve e calorosa, em português do Brasil, com frases curtas e uma ideia por vez. Nada de markdown, lista, link ou símbolo; números, valores e horários do jeito que se fala ("mil e duzentos reais", "duas e dez da tarde"). Se a resposta for longa, dê o essencial e pergunte se ele quer o resto. Proposta que espera aprovação no painel é "deixei pronto para você aprovar", nunca "fiz".
+</voz>`;
 
 /**
  * Abre uma sessão de voz em tempo real. Dois caminhos, escolhidos por config

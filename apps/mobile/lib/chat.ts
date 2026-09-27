@@ -71,7 +71,9 @@ export async function fetchModels(): Promise<{ models: ModelOption[]; defaultMod
   const cookie = await SecureStore.getItemAsync("orbita.cookie");
   const res = await fetch(base + "/api/models", { headers: cookie ? { Cookie: cookie } : {} });
   const data = (await res.json()) as { models?: ModelOption[]; defaultModel?: string };
-  return { models: data.models ?? [], defaultModel: data.defaultModel ?? "local/qwen2.5:7b" };
+  // "auto" deixa o servidor escolher pela ordem do dono; o palpite antigo era
+  // um modelo local que não existe numa casa sem Ollama
+  return { models: data.models ?? [], defaultModel: data.defaultModel ?? "auto" };
 }
 
 // ── Histórico de conversas (sincronizado com o web, mesma API) ──────────────

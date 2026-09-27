@@ -62,6 +62,8 @@ export const haEntity = pgTable(
     friendlyName: text("friendly_name").notNull(),
     roomId: uuid("room_id").references(() => room.id, { onDelete: "set null" }),
     embedding: vector("embedding", { dimensions: 768 }),
+    /** modelo que gerou o vetor; diferente do ativo, a sincronização reembeda */
+    embedModel: text("embed_model"),
     lastState: jsonb("last_state"), // { state, attributes } — cache, não fonte de verdade
     lastChangedAt: timestamp("last_changed_at"),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

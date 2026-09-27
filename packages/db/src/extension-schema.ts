@@ -16,6 +16,8 @@ export const skill = pgTable("skill", {
   keywords: text("keywords"), // CSV — usado no roteamento por palavra-chave
   // vetor da skill (nome+keywords+instruções) p/ roteamento semântico por cosseno.
   embedding: vector("embedding", { dimensions: 768 }),
+  // modelo que gerou o vetor; diferente do ativo, o roteamento reembeda a skill
+  embedModel: text("embed_model"),
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 },

@@ -1,7 +1,7 @@
 // Migrada do Next em paridade (apps/web/src/app/api/memory/route.ts).
 import { z } from "zod";
 import { and, desc, eq, gt, sql, cosineDistance } from "drizzle-orm";
-import { embedText } from "@orbita/llm";
+import { embedTextComModelo } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { memory } from "@orbita/db/knowledge-schema";
 import type { RouteCtx } from "../http/web";
@@ -34,21 +34,22 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const parsed = Body.safeParse(body);
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message }, { status: 400 });
 
-  const embedding = await embedText(parsed.data.content, "document");
+  const { vetor: embedding, modelo } = await embedTextComModelo(parsed.data.content, "document");
   // dedup: não grava memória quase idêntica a uma existente (limiar configurável pela tela)
   const dedupSim = await settings.get("memory.dedupSim");
   const sim = sql<number>`1 - (${cosineDistance(memory.embedding, embedding)})`;
   const [dup] = await db
     .select({ id: memory.id, sim })
     .from(memory)
-    .where(and(eq(memory.userId, session.user.id), gt(sim, dedupSim)))
+    // só entre vetores do mesmo modelo: de outro, a similaridade não significa nada
+    .where(and(eq(memory.userId, session.user.id), eq(memory.embedModel, modelo), gt(sim, dedupSim)))
     .orderBy(desc(sim))
     .limit(1);
   if (dup) return Response.json({ id: dup.id, deduped: true });
 
   const [row] = await db
     .insert(memory)
-    .values({ userId: session.user.id, content: parsed.data.content, embedding })
+    .values({ userId: session.user.id, content: parsed.data.content, embedding, embedModel: modelo })
     .returning({ id: memory.id });
   return Response.json({ id: row?.id });
 }

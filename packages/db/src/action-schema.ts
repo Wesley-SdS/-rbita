@@ -18,6 +18,14 @@ export const actionQueue = pgTable("action_queue", {
   payload: jsonb("payload").notNull(), // argumentos da ação
   status: text("status", { enum: ["pending", "done", "cancelled", "failed"] }).notNull().default("pending"),
   result: text("result"),
+  /**
+   * De onde a proposta nasceu (PRD-WHATSAPP W6). A aprovação sem tela (dizer
+   * "manda" na conversa "Eu" ou por voz) só vale para proposta do MESMO canal:
+   * um "manda" no WhatsApp não aprova o que foi pedido no chat do app.
+   */
+  canal: text("canal", { enum: ["tela", "whatsapp", "voz"] }).notNull().default("tela"),
+  /** depois disto, aprovar por frase não vale mais (só pela tela) */
+  expiraEm: timestamp("expira_em"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 },
 // a fila de aprovação abre em "o que está pendente meu", nessa ordem

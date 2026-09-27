@@ -22,6 +22,7 @@ import { purgeOldGuidedTasks } from "@orbita/core/guided/task";
 import { onJobEnqueued, purgeJobs, recoverZombies } from "@orbita/core/jobs/queue";
 import { drainJobs, jobsEmExecucao } from "@orbita/core/jobs/runner";
 import { closeIdleMcpConnections } from "@orbita/core/mcp/client";
+import { rotularVetoresLegados } from "@orbita/core/rag/modelo-dos-vetores";
 // registra os trabalhos pesados (como os domínios de tool): ninguém os chama pelo nome
 import "@orbita/core/jobs/handlers";
 import { randomUUID } from "node:crypto";
@@ -92,6 +93,10 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       void fireRulesForEvent(ev).catch((e) => log.error("rules.evento_falhou", { type: ev.type, error: String(e) }));
     });
     await ensureBuiltinRules().catch((e) => log.warn("rules.builtin_falhou", { error: String(e) }));
+    // vetores gravados antes de `embed_model` existir ganham o modelo ativo, uma
+    // vez (ver o porquê em rag/modelo-dos-vetores.ts); sem isto a busca, que
+    // agora filtra por modelo, ficaria cega para o acervo antigo
+    void rotularVetoresLegados().catch((e) => log.warn("rag.rotular_legados_falhou", { error: String(e) }));
     // rosto e gesto reagem a `camera.detected` (com freio por câmera), em vez de
     // a ingestão chamar biometria direto (NV.1 + rajada do Frigate)
     installCameraIdentityListener();

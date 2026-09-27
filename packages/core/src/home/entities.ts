@@ -1,5 +1,5 @@
 import { and, cosineDistance, eq, gt, sql } from "drizzle-orm";
-import { embedText, embedTexts } from "@orbita/llm";
+import { embedTextComModelo, embedTextsComModelo, modeloDeEmbedding } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { haEntity } from "@orbita/db/home-schema";
 import { listStates, type HaState } from "./client";
@@ -23,17 +23,21 @@ export async function syncEntities(userId: string, baseUrl: string, token: strin
   const existing = await db.select().from(haEntity).where(eq(haEntity.userId, userId));
   const byEntityId = new Map(existing.map((e) => [e.entityId, e]));
 
+  // vetor de outro modelo também reembeda: senão, depois de trocar o provedor
+  // de embedding, "a luz da sala" nunca mais acharia entidade nenhuma (a busca
+  // filtra pelo modelo). São nomes de dispositivo, baratos e sem dado pessoal.
+  const ativo = await modeloDeEmbedding().catch(() => null);
   let reembedded = 0;
   const toEmbed: { state: HaState; text: string }[] = [];
   for (const s of states) {
     const prev = byEntityId.get(s.entity_id);
     const name = s.attributes.friendly_name ?? s.entity_id;
-    if (!prev || prev.friendlyName !== name || !prev.embedding) {
+    if (!prev || prev.friendlyName !== name || !prev.embedding || (ativo && prev.embedModel !== ativo)) {
       toEmbed.push({ state: s, text: embedTextFor(s) });
     }
   }
 
-  const embeddings = toEmbed.length ? await embedTexts(toEmbed.map((t) => t.text)) : [];
+  const { vetores: embeddings, modelo } = toEmbed.length ? await embedTextsComModelo(toEmbed.map((t) => t.text)) : { vetores: [], modelo: "" };
   const embeddingByEntityId = new Map(toEmbed.map((t, i) => [t.state.entity_id, embeddings[i]]));
 
   for (const s of states) {
@@ -46,7 +50,7 @@ export async function syncEntities(userId: string, baseUrl: string, token: strin
       lastState: { state: s.state, attributes: s.attributes },
       lastChangedAt: s.last_changed ? new Date(s.last_changed) : null,
       updatedAt: new Date(),
-      ...(embedding ? { embedding } : {}),
+      ...(embedding ? { embedding, embedModel: modelo } : {}),
     };
     await db
       .insert(haEntity)
@@ -72,12 +76,13 @@ export interface EntityHit {
 export async function findEntities(userId: string, query: string, k?: number): Promise<EntityHit[]> {
   const cfg = await settings.getMany(["home.entityTopK", "home.entityMinSim"]);
   const limit = k ?? cfg["home.entityTopK"];
-  const q = await embedText(query, "query");
+  const { vetor: q, modelo } = await embedTextComModelo(query, "query");
   const sim = sql<number>`1 - (${cosineDistance(haEntity.embedding, q)})`;
   const rows = await db
     .select({ entityId: haEntity.entityId, domain: haEntity.domain, friendlyName: haEntity.friendlyName, roomId: haEntity.roomId, lastState: haEntity.lastState, sim })
     .from(haEntity)
-    .where(and(eq(haEntity.userId, userId), gt(sim, cfg["home.entityMinSim"])))
+    // entidade de outro modelo acertaria "a luz da sala" por sorteio, e aqui o erro liga o aparelho errado
+    .where(and(eq(haEntity.userId, userId), eq(haEntity.embedModel, modelo), gt(sim, cfg["home.entityMinSim"])))
     .orderBy(sql`${sim} desc`)
     .limit(limit);
   return rows.map((r) => ({

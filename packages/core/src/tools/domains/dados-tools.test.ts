@@ -56,7 +56,10 @@ vi.mock("@orbita/db", () => ({
   },
 }));
 
-vi.mock("@orbita/llm", () => ({ embedText: async () => new Array(768).fill(0.1) }));
+vi.mock("@orbita/llm", () => ({
+  embedText: async () => new Array(768).fill(0.1),
+  embedTextComModelo: async () => ({ vetor: new Array(768).fill(0.1), modelo: "google/teste" }),
+}));
 vi.mock("../../rag/retrieve", () => ({ retrieveContext: async () => ({ trechos: [{ texto: "achado" }] }) }));
 vi.mock("../../events/index", () => ({ events: { emit: async () => {} } }));
 vi.mock("../../settings", () => ({ settings: { get: async () => 0.7, getMany: async () => ({}) } }));

@@ -282,6 +282,7 @@ Antes de considerar qualquer tarefa concluída:
 | Calendar watch (aviso pré-reunião, polling) | `packages/core/src/meetings/calendar-watch.ts` |
 | Gmail watch (e-mail importante, polling) | `packages/core/src/meetings/gmail-watch.ts` |
 | Nomear locutor pós-reunião | `apps/api/src/routes/meeting-speakers.ts` · `document.speakers` |
+| Quem é cada voz PELO QUE FOI DITO ("eu me chamo Lucas", "William, te mandei…") | `packages/core/src/meetings/nomes-na-conversa.ts` |
 | Schemas Drizzle + migrações | `packages/db/src/` · `packages/db/drizzle/` |
 | Dono da instância (quem altera config global) | `packages/core/src/owner.ts` · `apps/api/src/auth/owner.guard.ts` · tabela `instance_owner` |
 | Apagar/exportar conta (derivado do schema) | `packages/core/src/account/data.ts` |
@@ -335,8 +336,20 @@ Antes de considerar qualquer tarefa concluída:
   mesma sala, o ganho automático nivela as vozes (e a diarização separa justamente pela diferença
   entre elas) e a redução de ruído come quem está mais longe. 22s de conversa entre duas pessoas
   voltaram com UM locutor e falas truncadas. Quem decide é `meetings.processarMicrofone`: cru na
-  sala, tratado quando há áudio de tela (aí o eco é real). E mandar `speakers_expected` muda muito —
-  a tela pergunta quantas pessoas vão falar.
+  sala, tratado quando há áudio de tela (aí o eco é real).
+- **`applyConstraints` NÃO desliga o processamento de áudio.** Foi a primeira tentativa de corrigir
+  o item acima e falhou em silêncio: o Chrome aceita a chamada, não lança nada, e `getSettings()`
+  continua com os valores antigos — a cadeia de processamento é montada quando a TRILHA NASCE. A
+  única forma é chamar `getUserMedia` de novo e parar a trilha velha (não repede permissão). Só
+  apareceu porque a medição vai para o log: `comAudioDeTela: false` com `echoCancellation: true` na
+  mesma linha. Por isso `meeting.captura` existe — o que o microfone fez é medido, nunca suposto.
+- **`speakers_expected` é DICA e é ignorado; o piso é `speaker_options.min_speakers_expected`.**
+  Com `speakers_expected: 2`, duas pessoas na mesma sala voltaram num locutor só, com pergunta e
+  resposta na MESMA fala. A doc da AssemblyAI desaconselha o `speakers_expected` ("only set when you
+  are certain of the exact speaker count") e aponta o min/max, que é limite duro e ainda liga a
+  `advanced_speaker_segmentation`. Conta que não conhecer `speaker_options` devolve 400, e aí o
+  pedido é refeito sem o piso — separar sem piso é melhor que cair para o whisper local, que não
+  separa nada.
 - **"Locutor A" não é nome de ninguém, e isso quebrava as tarefas.** O rótulo de diarização ia para
   o modelo, que extraía compromisso com responsável "Locutor A"; `ehMeu` recusa rótulo, então o que
   o dono ficou de fazer não virava tarefa dele. A transcrição que vai ao resumo leva o NOME de quem
@@ -368,8 +381,18 @@ Antes de considerar qualquer tarefa concluída:
   isso (`stream-compress.test.ts`): três linhas NDJSON têm de sair em TRÊS escritas.
 - **Embeddings só vão para a nuvem se a config deixar.** A armadilha antiga (nuvem sempre que
   houvesse `GEMINI_API_KEY`) foi fechada na Onda 1: quem manda é `embeddings.provider`
-  (auto · sempre local · sempre nuvem), aplicado por requisição em `packages/llm/src/embeddings.ts`.
-  Trocar de provedor invalida os vetores já gravados: a tela avisa para reindexar.
+  (auto · gemini · openai · qualquer nuvem · local), aplicado por requisição em `packages/llm/src/embeddings.ts`.
+  Trocar de provedor invalida os vetores já gravados: a tela de Memória diz quantos e reindexa.
+- **Vetor sem `embed_model` some da busca.** Toda tabela com `vector(768)` tem a coluna
+  `embed_model`, e toda consulta por cosseno filtra pelo modelo do vetor da pergunta (vetores de
+  modelos diferentes não se comparam; PRD-SEM-OLLAMA E2). Quem grava vetor usa
+  `embedTextComModelo`/`embedTextsComModelo` e grava o `modelo` junto; quem compara filtra
+  `eq(tabela.embedModel, modelo)`. A assinatura do Claude NÃO gera embedding: na nuvem é Gemini ou
+  OpenAI. Contagem por modelo e rótulo dos legados: `packages/core/src/rag/modelo-dos-vetores.ts`.
+- **Não existe modelo reserva implícito.** `BOOTSTRAP_MODEL_KEY` é vazio: sem nada descoberto e sem
+  `llm.fallbackModel`, a cadeia volta vazia e quem chama responde `SEM_MODELO`. A descoberta só
+  pergunta ao Ollama quando a ordem do dono usa o local (`llm.descobrirLocal`), e na Render/Vercel/Fly
+  o local some das cadeias (`llm.localDisponivel`). O modo privacidade pergunta ao Ollama na hora.
 - **Rotinas e regras rodam no `apps/api`** (SchedulerService). Se ele não estiver de pé, nada proativo acontece; o navegador não agenda mais nada.
 - **`next.config` rewrite `fallback` quebra as rotas do app router** (404 em tudo). Use `beforeFiles` com a regex `API_KEPT_IN_NEXT`.
 - **O proxy do Next em dev derruba upstream lento**: um chat com 116 s até o primeiro token (modelo local de 1B na CPU) voltou `ECONNRESET`. Com modelo razoável (2 s de TTFT) o streaming NDJSON flui token a token. Em produção o Caddy tem timeout configurável.
@@ -382,6 +405,17 @@ Antes de considerar qualquer tarefa concluída:
   tem poucas pessoas, então o casamento roda em memória (`identity/match.ts`), só com quem consentiu
   e só do modelo ativo. Isso vale para dezenas de assinaturas; se um dia virar milhares, aí sim é
   caso de índice por modelo.
+- **A voz realtime recebe TODAS as tools**, sem teto e sem seleção por relevância (decisão do dono,
+  27/09/2026: voz e texto fazem as mesmas coisas). A sessão abre antes de o dono falar, então não
+  há pedido para escolher; cortar em `tools.maxPerTurn` por ordem de registro deixava casa, câmera,
+  identidade e metade das finanças fora da voz sem ninguém perceber. O teto vale só para o chat.
+- **Dinheiro é centavo inteiro e data de negócio é texto.** O financeiro guarda `bigint` em centavos
+  e `date` "YYYY-MM-DD"; o motor soma meses em texto (`finance/calendario.ts`). Com `Date`, 31/01
+  mais um mês vira 03/03, e o fuso empurra o lançamento para o dia anterior. A tabela antiga
+  `expense` só existe para a primeira abertura copiar o que o dono tinha (`garantirInicio`).
+- **Número de dinheiro só sai do motor.** Painel, chat e voz leem de `finance/visoes.ts`; somar
+  gasto num SQL por fora (como o antigo `analytics`) dá número diferente do painel, porque
+  transferência, estorno, parcela e quitação têm regra (PRD §5).
 - **Tool antiga pode furar regra nova.** `casa_ver_camera` (Onda 5) e `ver_camera` (Fase 2) fazem a
   mesma coisa, e o modelo escolhe entre as duas: quando uma regra nova entra (permissão por cômodo,
   "só modelo local"), ela precisa entrar nas DUAS, senão a escolha do modelo vira o buraco.
@@ -405,17 +439,6 @@ Antes de considerar qualquer tarefa concluída:
   "e se houver duas contas?".
 - **Leitura de conector varre TODAS as contas; escrita usa UMA** (`connectors/multi.ts`).
   Pedido ambíguo devolve a lista e pergunta: mandar e-mail pela conta errada não
-- **A voz realtime recebe TODAS as tools**, sem teto e sem seleção por relevância (decisão do dono,
-  27/09/2026: voz e texto fazem as mesmas coisas). A sessão abre antes de o dono falar, então não
-  há pedido para escolher; cortar em `tools.maxPerTurn` por ordem de registro deixava casa, câmera,
-  identidade e metade das finanças fora da voz sem ninguém perceber. O teto vale só para o chat.
-- **Dinheiro é centavo inteiro e data de negócio é texto.** O financeiro guarda `bigint` em centavos
-  e `date` "YYYY-MM-DD"; o motor soma meses em texto (`finance/calendario.ts`). Com `Date`, 31/01
-  mais um mês vira 03/03, e o fuso empurra o lançamento para o dia anterior. A tabela antiga
-  `expense` só existe para a primeira abertura copiar o que o dono tinha (`garantirInicio`).
-- **Número de dinheiro só sai do motor.** Painel, chat e voz leem de `finance/visoes.ts`; somar
-  gasto num SQL por fora (como o antigo `analytics`) dá número diferente do painel, porque
-  transferência, estorno, parcela e quitação têm regra (PRD §5).
   se desfaz.
 - **`prompt=select_account` é obrigatório** no Google e na Microsoft, senão o
   provedor reusa a conta já logada no navegador e a segunda conta nunca entra.

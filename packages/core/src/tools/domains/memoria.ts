@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { and, cosineDistance, desc, eq, gt, sql } from "drizzle-orm";
-import { embedText } from "@orbita/llm";
+import { embedTextComModelo } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { memory } from "@orbita/db/knowledge-schema";
 import { settings } from "../../settings";
@@ -18,17 +18,18 @@ export const salvar_memoria: ToolDef<z.ZodObject<{ fato: z.ZodString }>> = {
   keywords: ["lembrar", "memorizar", "anotar", "guardar", "preferência", "gosto"],
   inputSchema: z.object({ fato: z.string().describe("o fato a memorizar") }),
   run: async ({ fato }, { userId }) => {
-    const [embedding, dedupSim] = await Promise.all([embedText(fato, "document"), settings.get("memory.dedupSim")]);
+    const [{ vetor: embedding, modelo }, dedupSim] = await Promise.all([embedTextComModelo(fato, "document"), settings.get("memory.dedupSim")]);
     // dedup: se já existe memória quase idêntica (sim > memory.dedupSim), não duplica.
+    // Só entre vetores do mesmo modelo: de outro modelo, a similaridade não significa nada.
     const sim = sql<number>`1 - (${cosineDistance(memory.embedding, embedding)})`;
     const [dup] = await db
       .select({ id: memory.id, sim })
       .from(memory)
-      .where(and(eq(memory.userId, userId), gt(sim, dedupSim)))
+      .where(and(eq(memory.userId, userId), eq(memory.embedModel, modelo), gt(sim, dedupSim)))
       .orderBy(desc(sim))
       .limit(1);
     if (dup) return { salvo: false, motivo: "já memorizado", fato };
-    await db.insert(memory).values({ userId, content: fato, embedding });
+    await db.insert(memory).values({ userId, content: fato, embedding, embedModel: modelo });
     void events.emit("memory.saved", { fato }, { userId }).catch(() => {});
     return { salvo: true, fato };
   },
@@ -42,12 +43,13 @@ export const esquecer_memoria: ToolDef<z.ZodObject<{ descricao: z.ZodString }>> 
   keywords: ["esquecer", "apagar", "remover", "memória"],
   inputSchema: z.object({ descricao: z.string() }),
   run: async ({ descricao }, { userId }) => {
-    const [q, minSim] = await Promise.all([embedText(descricao), settings.get("memory.forgetMinSim")]);
+    const [{ vetor: q, modelo }, minSim] = await Promise.all([embedTextComModelo(descricao), settings.get("memory.forgetMinSim")]);
     const sim = sql<number>`1 - (${cosineDistance(memory.embedding, q)})`;
+    // de outro modelo, "a mais parecida" seria sorteio, e o que se apaga não volta
     const [hit] = await db
       .select({ id: memory.id, content: memory.content, sim })
       .from(memory)
-      .where(and(eq(memory.userId, userId), gt(sim, minSim)))
+      .where(and(eq(memory.userId, userId), eq(memory.embedModel, modelo), gt(sim, minSim)))
       .orderBy(desc(sim))
       .limit(1);
     if (!hit) return { esquecido: false, motivo: "nenhuma memória parecida encontrada" };

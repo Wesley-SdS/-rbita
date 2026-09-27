@@ -1,7 +1,7 @@
 // Migrada do Next em paridade (apps/web/src/app/api/skills/route.ts).
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
-import { embedText } from "@orbita/llm";
+import { embedTextComModelo } from "@orbita/llm";
 import { db } from "@orbita/db";
 import { skill } from "@orbita/db/extension-schema";
 import type { RouteCtx } from "../http/web";
@@ -9,12 +9,13 @@ import { leituraCacheavel } from "../http/cacheable";
 import { sessionOf } from "../http/web-route";
 import { ownerOf } from "../http/owner-route";
 
-/** Vetor da skill p/ roteamento semântico (nome + palavras-chave + instruções). */
-async function skillEmbedding(name: string, keywords: string | undefined, instructions: string): Promise<number[] | null> {
+/** Vetor da skill p/ roteamento semântico (nome + palavras-chave + instruções), com o modelo que o gerou. */
+async function skillEmbedding(name: string, keywords: string | undefined, instructions: string): Promise<{ embedding: number[] | null; embedModel: string | null }> {
   try {
-    return await embedText(`${name}. ${keywords ?? ""}. ${instructions}`.slice(0, 1500), "document");
+    const { vetor, modelo } = await embedTextComModelo(`${name}. ${keywords ?? ""}. ${instructions}`.slice(0, 1500), "document");
+    return { embedding: vetor, embedModel: modelo };
   } catch {
-    return null; // embedding é best-effort; roteamento cai para keyword se faltar
+    return { embedding: null, embedModel: null }; // embedding é best-effort; roteamento cai para keyword se faltar
   }
 }
 
@@ -32,8 +33,8 @@ export async function POST(req: Request, ctx: RouteCtx) {
   if (dono instanceof Response) return dono;
   const p = Body.safeParse(await req.json().catch(() => null));
   if (!p.success) return Response.json({ error: p.error.issues[0]?.message }, { status: 400 });
-  const embedding = await skillEmbedding(p.data.name, p.data.keywords, p.data.instructions);
-  const [row] = await db.insert(skill).values({ userId: dono.userId, ...p.data, embedding }).returning({ id: skill.id });
+  const vetor = await skillEmbedding(p.data.name, p.data.keywords, p.data.instructions);
+  const [row] = await db.insert(skill).values({ userId: dono.userId, ...p.data, ...vetor }).returning({ id: skill.id });
   return Response.json({ id: row?.id });
 }
 

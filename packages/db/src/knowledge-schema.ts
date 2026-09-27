@@ -91,6 +91,10 @@ export const chunk = pgTable(
     content: text("content").notNull(),
     idx: integer("idx").notNull(),
     embedding: vector("embedding", { dimensions: 768 }).notNull(),
+    // Qual modelo gerou o vetor ("google/gemini-embedding-2"). Vetores de
+    // modelos diferentes não se comparam, e a busca só usa os do modelo ativo.
+    // Nulo só em linha anterior a esta coluna, até o boot rotular (rag/modelo-dos-vetores.ts).
+    embedModel: text("embed_model"),
     // Onde este trecho está no documento de origem. A resposta cita "página 4"
     // e a tela abre o trecho exato em vez de mandar o dono procurar. Nulo nos
     // trechos indexados antes disso existir (reindexar preenche).
@@ -120,6 +124,8 @@ export const memory = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
     embedding: vector("embedding", { dimensions: 768 }).notNull(),
+    /** modelo que gerou o vetor (ver `chunk.embedModel`) */
+    embedModel: text("embed_model"),
     /** De onde veio: o dono digitou, a tool salvou, ou saiu de uma conversa. */
     source: text("source").notNull().default("manual"),
     /** Assunto (saude, dinheiro, terceiros, relacionamento, geral): decide o que sempre pergunta. */
@@ -168,6 +174,8 @@ export const memoryCandidate = pgTable(
     /** memória criada a partir deste candidato (permite desfazer o salvamento automático) */
     memoryId: uuid("memory_id").references(() => memory.id, { onDelete: "set null" }),
     embedding: vector("embedding", { dimensions: 768 }).notNull(),
+    /** modelo que gerou o vetor (ver `chunk.embedModel`) */
+    embedModel: text("embed_model"),
     decidedAt: timestamp("decided_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

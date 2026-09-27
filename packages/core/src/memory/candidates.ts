@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { and, asc, cosineDistance, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
-import { embedText } from "@orbita/llm";
+import { embedTextComModelo } from "@orbita/llm";
 import { gerarEstruturado } from "../llm/gerar";
 import { FLUXO } from "../usage/registrar";
 import { db } from "@orbita/db";
@@ -144,12 +144,14 @@ export async function extrairDaConversa(userId: string, conversationId: string, 
       continue;
     }
 
-    const vetor = await embedText(fato.fato, "document");
+    // a comparação e a gravação usam o modelo deste vetor: memória de outro
+    // modelo não serve para dizer "já sei isso" (a similaridade seria sorteio)
+    const { vetor, modelo } = await embedTextComModelo(fato.fato, "document");
     const sim = sql<number>`1 - (${cosineDistance(memory.embedding, vetor)})`;
     const [parecida] = await db
       .select({ id: memory.id, content: memory.content, sim })
       .from(memory)
-      .where(and(eq(memory.userId, userId), gt(sim, cfg["memory.similarSim"])))
+      .where(and(eq(memory.userId, userId), eq(memory.embedModel, modelo), gt(sim, cfg["memory.similarSim"])))
       .orderBy(desc(sim))
       .limit(1);
 
@@ -164,7 +166,7 @@ export async function extrairDaConversa(userId: string, conversationId: string, 
     const [jaPendente] = await db
       .select({ id: memoryCandidate.id })
       .from(memoryCandidate)
-      .where(and(eq(memoryCandidate.userId, userId), eq(memoryCandidate.status, "pendente"), gt(simCand, cfg["memory.similarSim"])))
+      .where(and(eq(memoryCandidate.userId, userId), eq(memoryCandidate.status, "pendente"), eq(memoryCandidate.embedModel, modelo), gt(simCand, cfg["memory.similarSim"])))
       .limit(1);
     if (jaPendente) {
       resultado.duplicados++;
@@ -172,7 +174,7 @@ export async function extrairDaConversa(userId: string, conversationId: string, 
     }
 
     if (destino === "salvar") {
-      const salvo = await salvarMemoria(userId, fato, vetor, parecida?.id ?? null);
+      const salvo = await salvarMemoria(userId, fato, vetor, modelo, parecida?.id ?? null);
       await db.insert(memoryCandidate).values({
         userId,
         conversationId,
@@ -185,6 +187,7 @@ export async function extrairDaConversa(userId: string, conversationId: string, 
         similarTo: parecida?.id ?? null,
         memoryId: salvo,
         embedding: vetor,
+        embedModel: modelo,
         decidedAt: new Date(),
       });
       resultado.salvos++;
@@ -203,6 +206,7 @@ export async function extrairDaConversa(userId: string, conversationId: string, 
       reason: motivo,
       similarTo: parecida?.id ?? null,
       embedding: vetor,
+      embedModel: modelo,
     });
     resultado.pendentes++;
     void events.emit("memory.candidate", { fato: fato.fato, categoria: fato.categoria, motivo }, { userId }).catch(() => {});
@@ -214,18 +218,18 @@ export async function extrairDaConversa(userId: string, conversationId: string, 
 }
 
 /** Cria (ou atualiza, quando é evolução de uma memória parecida) a memória. */
-async function salvarMemoria(userId: string, fato: Candidato, vetor: number[], atualiza: string | null): Promise<string | null> {
+async function salvarMemoria(userId: string, fato: Candidato, vetor: number[], modelo: string, atualiza: string | null): Promise<string | null> {
   if (atualiza) {
     await db
       .update(memory)
-      .set({ content: fato.fato, embedding: vetor, category: fato.categoria || null, source: "conversa" })
+      .set({ content: fato.fato, embedding: vetor, embedModel: modelo, category: fato.categoria || null, source: "conversa" })
       .where(and(eq(memory.id, atualiza), eq(memory.userId, userId)));
     limparCacheDeBusca();
     return atualiza;
   }
   const [linha] = await db
     .insert(memory)
-    .values({ userId, content: fato.fato, embedding: vetor, category: fato.categoria || null, source: "conversa" })
+    .values({ userId, content: fato.fato, embedding: vetor, embedModel: modelo, category: fato.categoria || null, source: "conversa" })
     .returning({ id: memory.id });
   limparCacheDeBusca();
   return linha?.id ?? null;
@@ -312,8 +316,10 @@ export async function decidir(userId: string, id: string, decisao: Decisao, text
   const fato = (textoEditado ?? cand.content).trim();
   if (!fato) return { ok: false, motivo: "fato vazio" };
   // texto editado pelo dono muda o significado: o vetor tem que acompanhar
-  const vetor = fato === cand.content ? cand.embedding : await embedText(fato, "document");
-  const memoriaId = await salvarMemoria(userId, { fato, categoria: cand.category, confianca: cand.confidence, evidencia: cand.evidence ?? "" }, vetor, cand.similarTo);
+  // o vetor do candidato só serve se o texto não mudou E se sabemos de qual modelo ele é
+  const { vetor, modelo } =
+    fato === cand.content && cand.embedModel ? { vetor: cand.embedding, modelo: cand.embedModel } : await embedTextComModelo(fato, "document");
+  const memoriaId = await salvarMemoria(userId, { fato, categoria: cand.category, confianca: cand.confidence, evidencia: cand.evidence ?? "" }, vetor, modelo, cand.similarTo);
   await db.update(memoryCandidate).set({ status: "salvo", memoryId: memoriaId, content: fato, decidedAt: new Date() }).where(eq(memoryCandidate.id, id));
   void events.emit("memory.saved", { fato }, { userId }).catch(() => {});
   return { ok: true, memoriaId };

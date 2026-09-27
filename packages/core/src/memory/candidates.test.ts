@@ -13,6 +13,8 @@ vi.mock("@orbita/llm", async (original) => ({
   ...(await original<typeof import("@orbita/llm")>()),
   embedText: async () => [0.1, 0.2, 0.3],
   embedTexts: async (t: string[]) => t.map(() => [0.1, 0.2, 0.3]),
+  embedTextComModelo: async () => ({ vetor: [0.1, 0.2, 0.3], modelo: "google/teste" }),
+  embedTextsComModelo: async (t: string[]) => ({ vetores: t.map(() => [0.1, 0.2, 0.3]), modelo: "google/teste" }),
   resolveModel: () => ({}),
   fallbackModelKey: async () => "local/teste",
 }));
