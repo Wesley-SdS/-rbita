@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { waContato, waMensagem, type WaContato, type WaMensagem } from "@orbita/db/whatsapp-schema";
 import type { TipoMensagem } from "./traduzir";
@@ -128,7 +128,14 @@ export async function desfazerSaida(userId: string, id: string): Promise<void> {
  * hash com uma saída ainda sem id dos últimos `janelaMs`, no mesmo chat, e
  * grava o id nela. Devolve true se era eco.
  */
-export async function casarEco(userId: string, chatJid: string, tipo: TipoMensagem, texto: string | null, externalId: string, janelaMs = 120_000): Promise<boolean> {
+/**
+ * A janela é medida a partir do HORÁRIO DA MENSAGEM (`referencia`, o que o
+ * WhatsApp carimbou), não de quando o evento foi processado. Medida pelo
+ * relógio do processamento, uma conversa "Eu" ocupada (áudio longo sendo
+ * transcrito) atrasava a volta de um aviso além da janela, e o aviso, que pode
+ * trazer texto de fora, virava PEDIDO do dono com todas as ferramentas.
+ */
+export async function casarEco(userId: string, chatJid: string, tipo: TipoMensagem, texto: string | null, externalId: string, referencia: Date = new Date(), janelaMs = 10 * 60_000): Promise<boolean> {
   const [pendente] = await db
     .select({ id: waMensagem.id })
     .from(waMensagem)
@@ -139,7 +146,8 @@ export async function casarEco(userId: string, chatJid: string, tipo: TipoMensag
         eq(waMensagem.enviadaPelaOrbita, true),
         isNull(waMensagem.externalId),
         eq(waMensagem.conteudoHash, hashDoConteudo(tipo, texto)),
-        gte(waMensagem.em, new Date(Date.now() - janelaMs)),
+        gte(waMensagem.em, new Date(referencia.getTime() - janelaMs)),
+        lte(waMensagem.em, new Date(referencia.getTime() + janelaMs)),
       ),
     )
     .orderBy(asc(waMensagem.em))

@@ -62,3 +62,12 @@ export async function lerMidia(relativo: string): Promise<Uint8Array> {
 export async function apagarMidias(relativos: readonly string[]): Promise<void> {
   for (const r of relativos) await rm(await caminhoAbsoluto(r), { force: true }).catch(() => undefined);
 }
+
+/** Tamanho em bytes sem ler o arquivo (para conferir teto antes de carregar na memória); null se sumiu. */
+export async function tamanhoDaMidia(relativo: string): Promise<number | null> {
+  try {
+    return (await stat(await caminhoAbsoluto(relativo))).size;
+  } catch {
+    return null;
+  }
+}

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Aviso pela conversa "Eu". O que fica travado: respeita "nenhum", o silêncio
@@ -26,7 +26,30 @@ beforeEach(() => {
   sessao = { status: "conectado", jid: "5511900000000:4@s.whatsapp.net" };
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("avisarNoWhatsapp", () => {
+  it("rajada SIMULTÂNEA respeita o teto (a vaga é reservada antes do envio)", async () => {
+    // os envios ficam pendurados, como numa ponte lenta: é quando a rajada passava
+    enviarTexto.mockImplementation(() => new Promise(() => undefined));
+    const resultados: string[] = [];
+    for (const [t, c] of [["a", "1"], ["b", "2"], ["c", "3"], ["d", "4"]]) void avisarNoWhatsapp("u1", t, c).then((r) => resultados.push(r));
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(resultados).toEqual(["teto", "teto"]);
+    expect(enviarTexto).toHaveBeenCalledTimes(2);
+    enviarTexto.mockReset();
+    enviarTexto.mockImplementation(async () => ({}));
+  });
+
+  it("envio que falha devolve a vaga", async () => {
+    enviarTexto.mockRejectedValueOnce(new Error("ponte fora"));
+    expect(await avisarNoWhatsapp("u1", "t", "c")).toBe("falhou");
+    await avisarNoWhatsapp("u1", "a", "1");
+    expect(await avisarNoWhatsapp("u1", "b", "2")).toBe("enviado");
+  });
+
   it("manda na conversa 'Eu' com o título em negrito e guarda no histórico", async () => {
     expect(await avisarNoWhatsapp("u1", "Contas a vencer (1)", "Internet R$ 99,90 amanhã")).toBe("enviado");
     expect(enviarTexto).toHaveBeenCalledWith("u1", "5511900000000@s.whatsapp.net", "*Contas a vencer (1)*\nInternet R$ 99,90 amanhã", { aprovacaoHumana: true });

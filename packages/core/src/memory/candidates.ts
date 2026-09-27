@@ -89,6 +89,16 @@ export interface ResultadoExtracao {
 
 export type Progresso = (feito: number, total: number | null, passo: string) => Promise<void>;
 
+/**
+ * Conteúdo de TERCEIRO (dentro de <dado_externo>: aviso com trecho de e-mail,
+ * descrição de imagem, começo de um áudio encaminhado) não é fato sobre o dono.
+ * Sem este corte, um print dizendo "meu PIX é X" virava memória do dono, com
+ * gravação automática acima da confiança mínima. PURA.
+ */
+export function semDadoExterno(texto: string): string {
+  return texto.replace(/<dado_externo[^>]*>[\s\S]*?<\/dado_externo>/g, "[conteúdo externo omitido]");
+}
+
 /** Lê as últimas mensagens da conversa e propõe candidatos a memória. */
 export async function extrairDaConversa(userId: string, conversationId: string, progresso?: Progresso): Promise<ResultadoExtracao> {
   const cfg = await settings.getMany([
@@ -109,6 +119,9 @@ export async function extrairDaConversa(userId: string, conversationId: string, 
 
   const texto = mensagens
     .reverse()
+    .map((m) => ({ ...m, content: semDadoExterno(m.content) }))
+    // aviso que a Órbita mandou sozinha, depois de tirar o que era de fora, não sobra nada a aprender
+    .filter((m) => m.content.trim() && !/^\((aviso|briefing) que a Órbita mandou/.test(m.content))
     .map((m) => `${m.role === "user" ? "Dono" : "Assistente"}: ${m.content}`)
     .join("\n")
     .slice(-cfg["memory.extractMaxChars"]);

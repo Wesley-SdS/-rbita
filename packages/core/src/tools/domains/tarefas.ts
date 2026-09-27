@@ -2,6 +2,7 @@ import { z } from "zod";
 import { criarTarefa, editarTarefa, listarTarefas, removerTarefa } from "../../tarefas/store";
 import { registerTools, type ToolDef } from "../registry";
 import { settings } from "../../settings";
+import { instanteLocal } from "../../fuso";
 
 const LEMBRAR_EM = z
   .string()
@@ -9,6 +10,13 @@ const LEMBRAR_EM = z
   .nullable()
   .optional()
   .describe("Quando AVISAR o dono (com hora), AAAA-MM-DDTHH:MM no horário local da casa; converta 'às 15h', 'amanhã cedo' (08:00), 'daqui a 20 minutos' a partir da data e hora do contexto. null tira o lembrete.");
+
+/** Lembrete para um horário que já passou (com 1 min de folga): engano, não pedido. */
+function lembreteNoPassado(valor: string | null | undefined, fuso: string): boolean {
+  if (!valor) return false;
+  const quando = instanteLocal(valor, fuso);
+  return quando !== null && quando.getTime() < Date.now() - 60_000;
+}
 
 /** Lembrete legível para devolver ao modelo: "27/09 15:00". */
 function lembreteLegivel(d: Date | null, fuso: string): string | null {
@@ -64,6 +72,7 @@ export const adicionar_tarefa: ToolDef<
   }),
   run: async ({ texto, vencimento, anotacoes, para_quem, origem, lembrar_em }, { userId }) => {
     const fuso = await settings.get("connectors.fusoHorario");
+    if (lembreteNoPassado(lembrar_em, fuso)) return { adicionada: false, erro: "Esse horário já passou. Pergunte para quando é o lembrete." };
     const row = await criarTarefa(userId, {
       texto,
       vencimento,
@@ -131,6 +140,7 @@ export const editar_tarefa: ToolDef<
   }),
   run: async ({ id, texto, vencimento, anotacoes, para_quem, lembrar_em }, { userId }) => {
     const fuso = await settings.get("connectors.fusoHorario");
+    if (lembreteNoPassado(lembrar_em, fuso)) return { erro: "Esse horário já passou. Pergunte para quando é o lembrete." };
     const row = await editarTarefa(userId, id, { texto, vencimento, anotacoes, paraQuem: para_quem, lembrarEm: lembrar_em, fuso });
     if (!row) return { erro: "Não achei essa tarefa." };
     return { editada: true, texto: row.text, vencimento: row.dueDate?.toISOString().slice(0, 10) ?? null, lembrete: lembreteLegivel(row.lembrarEm && !row.lembradoEm ? row.lembrarEm : null, fuso) };

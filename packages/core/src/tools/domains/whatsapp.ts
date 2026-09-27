@@ -4,7 +4,8 @@ import { settings } from "../../settings";
 import { enviarAudio, enviarImagem, enviarTexto, jidDoDestino } from "../../whatsapp/enviar";
 import * as store from "../../whatsapp/store";
 import { sessaoDe } from "../../whatsapp/sessao";
-import { lerMidia } from "../../whatsapp/midia";
+import { lerMidia, tamanhoDaMidia } from "../../whatsapp/midia";
+import { log } from "../../observability/logger";
 import { normalizarJid } from "../../whatsapp/traduzir";
 import { embrulhar, linhaDaMensagem } from "../../whatsapp/formatar";
 
@@ -152,27 +153,60 @@ export const ver_imagem_whatsapp: ToolDef<typeof VerImagem> = {
   },
 };
 
-// ── arquivo recebido vira ação (cupom, extrato, boleto, documento) ──
+// ── arquivo que o DONO mandou vira ação (cupom, extrato, boleto, documento, reunião) ──
 
 const UsarArquivo = z.object({
-  mensagem_id: z.string().uuid().describe("O id do arquivo ou imagem, como aparece em [imagem id=...] ou [documento id=...]."),
+  mensagem_id: z.string().uuid().describe("O id do arquivo ou imagem que o DONO mandou na conversa com ele mesmo, como aparece em [imagem id=...] ou [documento id=...]."),
   como: z
     .enum(["cupom", "extrato", "boleto", "conhecimento", "reuniao"])
-    .describe("cupom: foto/PDF de compra vira gasto lançado; extrato: PDF/CSV/OFX do banco vira lançamentos; boleto: lê valor e vencimento para cadastrar a conta; conhecimento: guarda o documento para consultas futuras; reuniao: áudio de reunião vira transcrição com quem falou, resumo, compromissos e tarefas."),
+    .describe("cupom: foto/PDF de compra vira gasto lançado; extrato: PDF/CSV/OFX do banco vira lançamentos; boleto: lê valor e vencimento para cadastrar a conta; conhecimento: guarda o documento (ou a transcrição do áudio) para consultas futuras; reuniao: áudio de reunião vira transcrição com quem falou, resumo, compromissos e tarefas."),
 });
 
+type Como = z.infer<typeof UsarArquivo>["como"];
+
+const MIME_DE_TEXTO = /^(text\/|application\/(json|xml|csv|x-ofx|ofx|vnd\.intu\.qfx))/;
+const ehPdf = (mime: string) => mime.includes("pdf");
+
 /**
- * O que o dono manda pelo WhatsApp entra nos MESMOS fluxos da tela: o cupom
- * pelo motor de finanças (`importReceipt`, que grava pelo executor único de
- * comandos), o extrato por `importStatement`, o documento pela indexação do
- * RAG. O boleto só é LIDO: o valor e o vencimento voltam ao modelo, que cadastra
- * a conta com `adicionar_conta` (é o mesmo passo de confirmação da tela).
+ * O arquivo serve para aquele uso? PURA. O leitor de documento trata qualquer
+ * mime desconhecido como TEXTO: sem esta conferência, um OGG "guardado no
+ * conhecimento" virava bytes de áudio indexados como se fossem palavras.
+ */
+export function arquivoServe(como: Como, m: { tipo: string; midiaMime: string | null; transcricao: string | null }): string | null {
+  const mime = (m.midiaMime ?? "").split(";")[0].toLowerCase();
+  switch (como) {
+    case "cupom":
+    case "boleto":
+      return m.tipo === "imagem" || ehPdf(mime) ? null : "Para cupom ou boleto, preciso de uma foto ou de um PDF.";
+    case "extrato":
+      return ehPdf(mime) || MIME_DE_TEXTO.test(mime) || m.tipo === "imagem" ? null : "Para extrato, preciso de PDF, CSV, OFX ou foto.";
+    case "conhecimento":
+      if (m.tipo === "audio" || m.tipo === "video") return m.transcricao ? null : "Esse áudio não tem transcrição para guardar.";
+      return m.tipo === "imagem" || ehPdf(mime) || MIME_DE_TEXTO.test(mime) ? null : "Esse tipo de arquivo eu ainda não sei ler (PDF, imagem ou texto, sim).";
+    case "reuniao":
+      return m.tipo === "audio" || m.tipo === "video" ? null : "Para resumir como reunião, preciso de um áudio ou vídeo.";
+  }
+}
+
+/**
+ * O que o dono manda pelo WhatsApp entra nos MESMOS fluxos da tela, pela MESMA
+ * fila: cupom, extrato, documento e reunião viram trabalho em segundo plano
+ * (OCR e LLM levam de segundos a minutos, e a conversa "Eu" não pode ficar
+ * presa esperando), e o resultado chega como aviso quando termina. O boleto só
+ * é LIDO (é rápido e o valor volta ao modelo, que cadastra a conta com
+ * `adicionar_conta`, o mesmo passo de confirmação da tela).
+ *
+ * Só arquivo do DONO. A imagem que um contato mandou é dado de terceiro: com
+ * ela, um "Órbita, guarde isto no conhecimento" na legenda viraria contexto
+ * permanente do dono, e um cupom inventado viraria gasto. Para usar o arquivo
+ * de alguém, o dono o encaminha para a conversa com ele mesmo: é o gesto que
+ * diz "isto é meu".
  */
 export const usar_arquivo_whatsapp: ToolDef<typeof UsarArquivo> = {
   name: "usar_arquivo_whatsapp",
   domain: "whatsapp",
   description:
-    "Usa um arquivo ou foto recebido no WhatsApp (inclusive mandado pelo dono na conversa com ele mesmo): lança o cupom como gasto, importa o extrato, lê um boleto para cadastrar a conta, ou guarda o documento na base de conhecimento.",
+    "Usa um arquivo ou foto que o DONO mandou na conversa com ele mesmo no WhatsApp: lança o cupom como gasto, importa o extrato, lê um boleto para cadastrar a conta, guarda o documento na base de conhecimento ou resume um áudio de reunião. Arquivo que outra pessoa mandou só vale se o dono o encaminhar para a conversa com ele mesmo.",
   risk: "escrita",
   keywords: ["cupom", "nota", "comprovante", "extrato", "boleto", "fatura", "documento", "pdf", "arquivo", "guardar", "lancar", "reuniao", "gravacao", "resumir"],
   requires: { whatsappPessoal: true },
@@ -180,33 +214,47 @@ export const usar_arquivo_whatsapp: ToolDef<typeof UsarArquivo> = {
   run: async ({ mensagem_id, como }, { userId }) => {
     const m = await store.mensagemPorId(userId, mensagem_id);
     if (!m) return "Não encontrei esse arquivo.";
-    if (!m.midiaCaminho) return "O arquivo chegou, mas não consegui baixá-lo do WhatsApp.";
-    const mime = m.midiaMime ?? "application/octet-stream";
-    const dataUrl = `data:${mime.split(";")[0]};base64,${Buffer.from(await lerMidia(m.midiaCaminho)).toString("base64")}`;
+    if (!m.deMim) return "Esse arquivo foi mandado por outra pessoa. Para eu usar, encaminhe-o para a sua conversa com você mesmo e me diga o que fazer.";
+    const recusa = arquivoServe(como, m);
+    if (recusa) return recusa;
+
     const nome = m.texto?.slice(0, 80) || `whatsapp-${m.tipo}`;
+    const { enqueueJob } = await import("../../jobs/queue");
+    // áudio guardado no conhecimento é a TRANSCRIÇÃO, não o arquivo
+    if (como === "conhecimento" && (m.tipo === "audio" || m.tipo === "video")) {
+      await enqueueJob(userId, { kind: "rag.indexar_texto", input: m.transcricao!, payload: { title: nome, avisar: true }, dedupKey: `indexar-texto:${userId}:${m.id}` });
+      return "Guardando a transcrição no conhecimento. Aviso quando terminar.";
+    }
+
+    if (!m.midiaCaminho) return "O arquivo chegou, mas não consegui baixá-lo do WhatsApp.";
+    const cfg = await settings.getMany(["limits.uploadMaxMb", "limits.sttMaxMb"]);
+    const teto = (como === "reuniao" ? cfg["limits.sttMaxMb"] : cfg["limits.uploadMaxMb"]) * 1024 * 1024;
+    const tamanho = await tamanhoDaMidia(m.midiaCaminho);
+    if (tamanho === null) return "O arquivo não está mais guardado (pode ter saído pela retenção).";
+    if (tamanho > teto) return `O arquivo é grande demais para isso (limite de ${Math.round(teto / 1024 / 1024)} MB).`;
+
     try {
+      const mime = (m.midiaMime ?? "application/octet-stream").split(";")[0];
+      const dataUrl = `data:${mime};base64,${Buffer.from(await lerMidia(m.midiaCaminho)).toString("base64")}`;
+      // a mesma chave da tela (sha curto): a mesma gravação pela tela e pelo WhatsApp é UM trabalho
+      const sha = (m.midiaSha256 ?? m.id).slice(0, 24);
+      if (como === "reuniao") {
+        await enqueueJob(userId, { kind: "reuniao.transcrever", input: dataUrl, payload: { title: m.texto?.slice(0, 120) || "Reunião pelo WhatsApp" }, dedupKey: `transcrever:${userId}:${sha}` });
+        return "Comecei a transcrever e resumir a reunião. O resumo, os compromissos e as tarefas chegam aqui quando terminar.";
+      }
       if (como === "cupom") {
-        const { importReceipt } = await import("../../finance/documents");
-        const r = await importReceipt(userId, dataUrl);
-        return `Lançado: ${r.lancamento.descricao}, R$ ${r.lancamento.valor.toFixed(2).replace(".", ",")} (${r.lancamento.categoria}).`;
+        await enqueueJob(userId, { kind: "financas.cupom", input: dataUrl, payload: { avisar: true }, dedupKey: `cupom:${userId}:${sha}` });
+        return "Lendo o comprovante. Aviso quando lançar.";
       }
       if (como === "extrato") {
-        const { importStatement } = await import("../../finance/documents");
-        const r = await importStatement(userId, dataUrl, nome);
-        return `Extrato importado: ${r.importados} lançamento(s).`;
-      }
-      if (como === "reuniao") {
-        if (m.tipo !== "audio" && m.tipo !== "video") return "Para resumir como reunião, preciso de um áudio ou vídeo.";
-        // o MESMO trabalho da tela de Reuniões: transcreve com quem falou e encadeia o resumo
-        const { enqueueJob } = await import("../../jobs/queue");
-        await enqueueJob(userId, { kind: "reuniao.transcrever", input: dataUrl, payload: { title: m.texto?.slice(0, 120) || "Reunião pelo WhatsApp" }, dedupKey: `transcrever:${userId}:${m.midiaSha256 ?? m.id}` });
-        return "Comecei a transcrever e resumir a reunião. O resumo, os compromissos e as tarefas aparecem em Reuniões quando terminar.";
+        await enqueueJob(userId, { kind: "financas.extrato", input: dataUrl, payload: { nome, avisar: true }, dedupKey: `extrato:${userId}:${sha}` });
+        return "Importando o extrato. Aviso quando terminar.";
       }
       if (como === "conhecimento") {
-        const { indexFile } = await import("../../rag/files");
-        await indexFile(userId, dataUrl, nome);
-        return `Guardei "${nome}" na base de conhecimento. Dá para perguntar sobre ele depois.`;
+        await enqueueJob(userId, { kind: "rag.indexar_arquivo", input: dataUrl, payload: { nome, avisar: true }, dedupKey: `indexar:${userId}:${sha}` });
+        return "Guardando no conhecimento. Aviso quando terminar.";
       }
+      // boleto: leitura rápida, o resultado volta ao modelo
       const { extractFileText } = await import("../../rag/files");
       const { lerBoleto } = await import("../../finance/entradas");
       const { carregar, hojeDoServidor } = await import("../../finance/store");
@@ -216,7 +264,10 @@ export const usar_arquivo_whatsapp: ToolDef<typeof UsarArquivo> = {
       const b = lerBoleto(await carregar(userId, hoje, (await limiaresDaConfig()).mesesSemeados), { textoDoPdf: texto }, hoje);
       return `Boleto lido: ${b.beneficiario ?? "beneficiário não identificado"}, R$ ${(b.valor / 100).toFixed(2).replace(".", ",")}, vencimento ${b.vencimento ?? "não identificado"}. Para cadastrar, use adicionar_conta com estes dados.`;
     } catch (e) {
-      return `Não consegui usar esse arquivo como ${como}: ${e instanceof Error ? e.message : String(e)}`;
+      log.warn("whatsapp.usar_arquivo_falhou", { como, erro: e instanceof Error ? e.message : String(e) });
+      // o erro não vai cru para a conversa: pode trazer caminho de disco ou SQL
+      if (como === "boleto") return "Não consegui ler o código desse boleto. Mande o PDF do boleto ou digite a linha digitável aqui.";
+      return "Não consegui usar esse arquivo agora. Tente de novo em instantes.";
     }
   },
 };

@@ -16,6 +16,26 @@ import { aprovarPorFrase } from "../actions/por-frase";
 import { enviarAudio, enviarTexto } from "./enviar";
 import { lerMidia } from "./midia";
 import { conversaDoCanal } from "./conversa";
+import { embrulhar } from "./formatar";
+
+/**
+ * Os avisos automáticos entram no histórico (é o que dá sentido a "paga"), mas
+ * uma manhã de avisos empurraria a conversa de verdade para fora da janela: só
+ * os mais recentes ficam. PURA; recebe e devolve em ordem cronológica.
+ */
+export function historicoSemExcessoDeAvisos<T extends { content: string }>(msgs: readonly T[], maxAvisos: number): T[] {
+  const ehAviso = (m: T) => /^\((aviso|briefing) que a Órbita mandou/.test(m.content);
+  let restantes = maxAvisos;
+  const out: T[] = [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (ehAviso(msgs[i])) {
+      if (restantes <= 0) continue;
+      restantes--;
+    }
+    out.push(msgs[i]);
+  }
+  return out.reverse();
+}
 import { enqueueJob } from "../jobs/queue";
 
 /**
@@ -45,7 +65,9 @@ async function pedidoDe(userId: string, m: WaMensagem): Promise<string> {
     // encaminhado). Mandá-lo como pedido faria o modelo "obedecer" a uma
     // reunião inteira. Vai como arquivo, com o começo para dar contexto.
     if (t.length > (await settings.get("whatsapp.audioComoGravacaoChars"))) {
-      return `[o dono mandou um áudio longo, id=${m.id}, que parece uma gravação (reunião, aula, recado). Começo: "${t.slice(0, 400)}…"]`;
+      // o começo vai EMBRULHADO: pode ser a voz de outra pessoa (recado
+      // encaminhado), e não pode virar pedido nem memória do dono
+      return `[o dono mandou um áudio longo, id=${m.id}, que parece uma gravação (reunião, aula, recado). Pergunte o que fazer com ele.] Começo:\n${embrulhar([t.slice(0, 400) + "…"])}`;
     }
     return t;
   }
@@ -53,7 +75,9 @@ async function pedidoDe(userId: string, m: WaMensagem): Promise<string> {
     const bytes = await lerMidia(m.midiaCaminho);
     const dataUrl = `data:${m.midiaMime ?? "image/jpeg"};base64,${Buffer.from(bytes).toString("base64")}`;
     const descricao = await narrateSnapshot(dataUrl, "Descreva esta imagem com detalhes úteis, transcrevendo textos e valores visíveis.", { userId }).catch(() => "");
-    return `[o dono mandou uma imagem, id=${m.id}${descricao ? `: ${descricao}` : ""}]` + (m.texto ? `\n${m.texto}` : "");
+    // a descrição é do que está NA imagem (pode ser o print de uma conversa de
+    // outra pessoa): vai como dado; a legenda, que o dono escreveu, vai limpa
+    return `[o dono mandou uma imagem, id=${m.id}]` + (descricao ? `\n${embrulhar([descricao])}` : "") + (m.texto ? `\n${m.texto}` : "");
   }
   const legenda = m.texto?.trim() ? `\n${m.texto.trim()}` : "";
   // arquivo mandado sem pedido junto também é pedido: a Órbita pergunta o que fazer com ele
@@ -102,10 +126,15 @@ export async function turnoDoDono(userId: string, meuJid: string, m: WaMensagem)
     return responder(userId, meuJid, aprovacao.texto, recebidoEmAudio);
   }
 
-  const cfg = await settings.getMany(["whatsapp.historicoConversa", "whatsapp.ferramentas", "chat.maxSteps", "chat.ragTimeoutMs", "rag.topK", "memory.extractEnabled"]);
+  const cfg = await settings.getMany(["whatsapp.historicoConversa", "whatsapp.avisosNoHistorico", "whatsapp.ferramentas", "chat.maxSteps", "chat.ragTimeoutMs", "rag.topK", "memory.extractEnabled"]);
   await applyLlmSettings();
-  const historico = cfg["whatsapp.historicoConversa"]
-    ? (await db.select({ role: message.role, content: message.content }).from(message).where(eq(message.conversationId, convId)).orderBy(desc(message.createdAt)).limit(cfg["whatsapp.historicoConversa"])).reverse()
+  const janela = cfg["whatsapp.historicoConversa"];
+  // lê mais que a janela para compensar os avisos cortados, e corta depois
+  const historico = janela
+    ? historicoSemExcessoDeAvisos(
+        (await db.select({ role: message.role, content: message.content }).from(message).where(eq(message.conversationId, convId)).orderBy(desc(message.createdAt)).limit(janela * 3)).reverse(),
+        cfg["whatsapp.avisosNoHistorico"],
+      ).slice(-janela)
     : [];
   await db.insert(message).values({ conversationId: convId, role: "user", content: pedido });
 

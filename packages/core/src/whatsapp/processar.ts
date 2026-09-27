@@ -173,7 +173,7 @@ async function guardarMensagem(userId: string, deviceId: string, t: MensagemTrad
 
   // A VOLTA do que a Órbita mandou. Sem isto, a resposta dela na conversa "Eu"
   // chegaria como mensagem nova do dono e ela responderia a si mesma, em laço.
-  if (t.deMim && (await store.casarEco(userId, t.chatJid, t.tipo, t.texto, t.externalId))) return;
+  if (t.deMim && (await store.casarEco(userId, t.chatJid, t.tipo, t.texto, t.externalId, t.em))) return;
 
   // Sem o JID do dono ainda (logo depois de parear, antes da primeira volta
   // da saúde), a conversa "Eu" passaria por chat comum e o pedido ficaria mudo.

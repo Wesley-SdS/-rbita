@@ -7,6 +7,8 @@ import { profile } from "@orbita/db/profile-schema";
 import { skill } from "@orbita/db/extension-schema";
 import { buildMcpTools } from "../mcp/client";
 import { buildToolSet, type ActionCanal } from "../tools/index";
+import { settings } from "../settings";
+import { log } from "../observability/logger";
 
 /**
  * Ferramentas que a Órbita pode chamar (compartilhadas entre chat e rotinas).
@@ -136,7 +138,26 @@ export async function buildAllTools(
     buildMcpTools(userId),
     getSkillInstructions(userId, query),
   ]);
-  return { tools: { ...base, ...mcp.tools }, cleanup: mcp.cleanup, skillInstructions };
+  return { tools: comTeto(base, mcp.tools, opts.todas ? await settings.get("tools.maxTodas") : Infinity), cleanup: mcp.cleanup, skillInstructions };
+}
+
+/**
+ * Junta as tools nativas com as dos servidores MCP sem passar do teto. Com
+ * "todas" (conversa "Eu"), as nativas já são ~90; um servidor MCP grande por
+ * cima passaria do limite de ferramentas que os provedores compatíveis com
+ * OpenAI aceitam (~128), e o turno inteiro falharia. As nativas têm
+ * prioridade: são as que o registro conhece (risco, gate, testes). PURA.
+ */
+export function comTeto(base: ToolSet, mcp: ToolSet, teto: number): ToolSet {
+  const nativas = Object.keys(base);
+  const deFora = Object.keys(mcp);
+  if (nativas.length + deFora.length <= teto) return { ...base, ...mcp };
+  const sobra = Math.max(0, teto - nativas.length);
+  log.warn("tools.teto_de_todas", { nativas: nativas.length, mcp: deFora.length, teto, mcpCortadas: deFora.length - sobra });
+  const cortado: ToolSet = {};
+  for (const n of nativas.slice(0, teto)) cortado[n] = base[n];
+  for (const n of deFora.slice(0, sobra)) cortado[n] = mcp[n];
+  return cortado;
 }
 
 // o prompt mora em arquivo próprio (decisões de escrita e teste de invariantes

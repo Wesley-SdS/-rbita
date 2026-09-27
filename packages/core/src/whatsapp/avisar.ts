@@ -41,11 +41,19 @@ export async function avisarNoWhatsapp(userId: string, titulo: string, corpo: st
     const conta = enviadosNaHora.get(userId);
     const n = conta?.hora === hora ? conta.n : 0;
     if (tipo === "aviso" && n >= cfg["whatsapp.avisosPorHora"]) return "teto";
+    // a vaga é RESERVADA antes do envio: os avisos saem sem esperar uns pelos
+    // outros, e lendo a conta só depois do envio uma rajada inteira passava
+    if (tipo === "aviso") enviadosNaHora.set(userId, { hora, n: n + 1 });
 
     const texto = titulo.trim() ? `*${titulo.trim()}*\n${corpo.trim()}` : corpo.trim();
-    // a conversa "Eu" é do próprio dono: aprovação humana por definição
-    await enviarTexto(userId, normalizarJid(sessao.jid), texto.slice(0, 4000), { aprovacaoHumana: true });
-    enviadosNaHora.set(userId, { hora, n: n + 1 });
+    try {
+      // a conversa "Eu" é do próprio dono: aprovação humana por definição
+      await enviarTexto(userId, normalizarJid(sessao.jid), texto.slice(0, 4000), { aprovacaoHumana: true });
+    } catch (e) {
+      const atual = enviadosNaHora.get(userId);
+      if (tipo === "aviso" && atual?.hora === hora) enviadosNaHora.set(userId, { hora, n: Math.max(0, atual.n - 1) });
+      throw e;
+    }
     await registrarNoHistorico(userId, tipo, texto);
     return "enviado";
   } catch (e) {

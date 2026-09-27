@@ -41,3 +41,16 @@ export function instanteLocal(texto: string, fuso: string): Date | null {
   const r = new Date(inst);
   return Number.isNaN(r.getTime()) ? null : r;
 }
+
+/** Instante → "AAAA-MM-DDTHH:MM" no fuso da casa (o valor do campo datetime-local). PURA. */
+export function paraHoraLocal(d: Date, fuso: string): string {
+  let z = fuso || "America/Sao_Paulo";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: z });
+  } catch {
+    z = "America/Sao_Paulo";
+  }
+  const p = new Intl.DateTimeFormat("en-CA", { timeZone: z, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(d);
+  const v = (t: string) => p.find((x) => x.type === t)?.value ?? "";
+  return `${v("year")}-${v("month")}-${v("day")}T${String(Number(v("hour")) % 24).padStart(2, "0")}:${v("minute")}`;
+}

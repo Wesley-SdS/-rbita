@@ -29,7 +29,12 @@ export type SettingType =
   | { kind: "number"; min: number; max: number; step?: number; integer?: boolean }
   | { kind: "boolean" }
   | { kind: "select"; options: { value: string; label: string }[] }
-  | { kind: "text"; maxLength?: number; minLength?: number; multiline?: boolean }
+  /**
+   * `pattern`: formato exigido NA HORA DE SALVAR (horário "07:00", faixa
+   * "22:00-07:00"). Sem ele, "25:00" era aceito e o briefing simplesmente nunca
+   * saía, sem o dono saber por quê. `formato` é a mensagem para a tela.
+   */
+  | { kind: "text"; maxLength?: number; minLength?: number; multiline?: boolean; pattern?: string; formato?: string }
   | { kind: "list"; maxItems?: number; itemMaxLength?: number };
 
 export interface SettingDef<T> {
@@ -344,6 +349,7 @@ export const SETTING_DEFS = {
   "routines.tickSeconds": num("routines", "Intervalo do agendador", "De quanto em quanto tempo o processo persistente verifica rotinas e regras devidas.", 60, 10, 3600, { unit: "s" }),
   "routines.model": text("routines", "Modelo das rotinas", "Chave do modelo usado por rotinas e regras (vazio = padrão local).", ""),
   "routines.rateLimitPerMinute": num("routines", "Execuções manuais por minuto", "Limite do botão \"rodar agora\".", 6, 1, 120, { unit: "/min" }),
+  "routines.lembretesSegundos": num("routines", "Conferir lembretes a cada", "De quanto em quanto tempo o processo persistente procura lembretes de tarefa que chegaram na hora. Menor é mais pontual.", 30, 10, 600, { unit: "s" }),
 
   // ── casa (Home Assistant, packages/core/src/home/*, apps/api) ──
   "home.entitySyncMinutes": num("home", "Sincronizar entidades a cada", "De quanto em quanto tempo o processo persistente relê os estados e nomes das entidades do Home Assistant (para a busca semântica e o índice de estado).", 5, 1, 60, { unit: "min" }),
@@ -525,7 +531,7 @@ export const SETTING_DEFS = {
   "graph.edgeLimit": num("graph", "Arestas no grafo", "Teto de ligações desenhadas.", 150, 5, 2000),
 
   // ── ferramentas (tools/registry.ts) ──
-  "routines.lembretesSegundos": num("routines", "Conferir lembretes a cada", "De quanto em quanto tempo o processo persistente procura lembretes de tarefa que chegaram na hora. Menor é mais pontual.", 30, 10, 600, { unit: "s" }),
+  "tools.maxTodas": num("tools", "Teto quando vão todas as ferramentas", "Na conversa \"Eu\" do WhatsApp vão todas as ferramentas; com servidores MCP somados, o total é cortado aqui (as nativas primeiro). Provedores compatíveis com OpenAI recusam acima de ~128.", 120, 20, 500),
   "tools.maxPerTurn": num("tools", "Ferramentas por turno", "Acima disso, só as mais relevantes para o pedido vão ao modelo (seleção por palavras, sem LLM). Muitas ferramentas pioram custo e precisão.", 30, 5, 200),
 
   "meetings.sttCloud": sel(
@@ -917,14 +923,21 @@ export const SETTING_DEFS = {
     ],
   ),
   // ── a Órbita toma a iniciativa pelo WhatsApp (avisos, briefing) ──
-  "whatsapp.avisos": sel("whatsapp", "Avisos pelo WhatsApp", "Todo aviso da Órbita (conta vencendo, reunião chegando, lembrete, câmera, resumo de reunião) chega também na conversa \"Eu\", e você responde ali mesmo (\"paga\", \"adia\").", "todos", [
+  "whatsapp.avisos": sel("whatsapp", "Avisos pelo WhatsApp", "Todo aviso da Órbita (conta vencendo, reunião chegando, lembrete, e-mail importante, resumo de reunião) chega também na conversa \"Eu\", e você responde ali mesmo (\"paga\", \"adia\"). O conteúdo passa pelos servidores do WhatsApp (cifrado de ponta a ponta) e fica no celular e no backup dele.", "todos", [
     { value: "todos", label: "Todos" },
     { value: "nenhum", label: "Nenhum (só a notificação do app)" },
   ]),
-  "whatsapp.avisosSilencio": text("whatsapp", "Silêncio dos avisos", "Faixa de horário em que os avisos NÃO vão para o WhatsApp (continuam no app), no formato 22:00-07:00. Vazio: sem silêncio. Lembrete que você marcou com hora chega mesmo assim.", "", 11),
+  "whatsapp.avisosSilencio": {
+    ...text("whatsapp", "Silêncio dos avisos", "Faixa de horário em que os avisos NÃO vão para o WhatsApp (continuam no app), no formato 22:00-07:00. Vazio: sem silêncio. Lembrete que você marcou com hora chega mesmo assim.", "", 11),
+    type: { kind: "text", maxLength: 11, pattern: "^$|^([01]?\\d|2[0-3]):[0-5]\\d-([01]?\\d|2[0-3]):[0-5]\\d$", formato: "HH:MM-HH:MM, por exemplo 22:00-07:00, ou vazio" },
+  },
+  "whatsapp.avisosNoHistorico": num("whatsapp", "Avisos que a Órbita relê", "Quantos dos avisos mais recentes entram no histórico da conversa \"Eu\" (é o que dá sentido a \"paga\" logo depois de um aviso). Mais que isso empurraria a sua conversa para fora da janela.", 3, 0, 20),
   "whatsapp.avisosPorHora": num("whatsapp", "Avisos por hora (teto)", "Acima disto, na mesma hora, os avisos ficam só no app: uma rajada de câmera não pode lotar a conversa.", 20, 1, 200),
-  "whatsapp.briefingAtivo": bool("whatsapp", "Briefing de manhã", "Todo dia no horário escolhido: agenda, contas da semana, tarefas e quanto dá para gastar hoje.", true),
-  "whatsapp.briefingHorario": text("whatsapp", "Horário do briefing", "Hora do briefing no formato HH:MM, no fuso da casa (Conectores, fuso horário).", "07:00", 5, false, 4),
+  "whatsapp.briefingAtivo": bool("whatsapp", "Briefing de manhã", "Todo dia no horário escolhido: agenda, contas da semana, tarefas e quanto dá para gastar hoje. É montado pelo modelo das rotinas (pode ser de nuvem) e chega pelo WhatsApp.", true),
+  "whatsapp.briefingHorario": {
+    ...text("whatsapp", "Horário do briefing", "Hora do briefing no formato HH:MM, no fuso da casa (Conectores, fuso horário).", "07:00", 5, false, 4),
+    type: { kind: "text", maxLength: 5, minLength: 4, pattern: "^([01]?\\d|2[0-3]):[0-5]\\d$", formato: "HH:MM, por exemplo 07:00" },
+  },
   "whatsapp.briefingDias": sel("whatsapp", "Dias do briefing", "Em quais dias o briefing é mandado.", "todos", [
     { value: "todos", label: "Todos os dias" },
     { value: "uteis", label: "Só de segunda a sexta" },
@@ -990,8 +1003,10 @@ export function schemaFor(def: SettingDef<unknown>): z.ZodType<unknown> {
       return z.boolean();
     case "select":
       return z.enum(t.options.map((o) => o.value) as [string, ...string[]]);
-    case "text":
-      return z.string().min(t.minLength ?? 0).max(t.maxLength ?? 200);
+    case "text": {
+      const s = z.string().min(t.minLength ?? 0).max(t.maxLength ?? 200);
+      return t.pattern ? s.regex(new RegExp(t.pattern)) : s;
+    }
     case "list":
       return z.array(z.string().trim().min(1).max(t.itemMaxLength ?? 200)).max(t.maxItems ?? 200);
   }

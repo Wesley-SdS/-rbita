@@ -93,6 +93,12 @@ describe("mensagem nova", () => {
     expect(roteadas).toHaveLength(0);
   });
 
+  it("o eco é casado pelo HORÁRIO DA MENSAGEM, não pelo de processar (conversa ocupada não o transforma em pedido)", async () => {
+    eco = true;
+    await proc.aplicarEvento("u1", "dev1", msg({ is_from_me: true, timestamp: "2026-09-27T10:00:00Z" }), new Date());
+    expect(store.casarEco).toHaveBeenCalledWith("u1", expect.any(String), "texto", "oi", "W1", new Date("2026-09-27T10:00:00Z"));
+  });
+
   it("reentrega de mensagem que caiu antes de rotear: continua com a linha existente", async () => {
     store.inserirMensagem.mockResolvedValueOnce(null as never);
     existente = { id: "m1", roteadaEm: null, midiaCaminho: null };

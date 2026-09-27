@@ -8,7 +8,8 @@ const runPromptForUser = vi.fn(async (..._a: unknown[]) => {
   return "Hoje: reunião às 10h. Contas: internet amanhã. Pode gastar R$ 120.";
 });
 const avisarNoWhatsapp = vi.fn(async (..._a: unknown[]) => "enviado");
-vi.mock("../routines/run", () => ({ runPromptForUser }));
+const notifyUser = vi.fn(async (..._a: unknown[]) => undefined);
+vi.mock("../routines/run", () => ({ runPromptForUser, notifyUser }));
 vi.mock("./avisar", () => ({ avisarNoWhatsapp }));
 vi.mock("./sessao", () => ({ sessaoDe: async () => sessao }));
 vi.mock("../settings", () => ({
@@ -58,8 +59,15 @@ describe("briefingSeDevido", () => {
     expect(await briefingSeDevido("u1", as7h05)).toBe("sem_whatsapp");
   });
 
-  it("modelo fora do ar: não quebra o laço", async () => {
+  it("modelo fora do ar: não quebra o laço, e o dono fica sabendo no app", async () => {
     runPromptForUser.mockRejectedValueOnce(new Error("sem modelo"));
     expect(await briefingSeDevido("u1", as7h05)).toBe("falhou");
+    expect(notifyUser).toHaveBeenCalledWith("u1", "Briefing de hoje", expect.stringContaining("Não consegui"), null, expect.objectContaining({ whatsapp: false }));
+  });
+
+  it("montou mas o WhatsApp não levou: o briefing fica no app, não se perde", async () => {
+    avisarNoWhatsapp.mockResolvedValueOnce("falhou");
+    expect(await briefingSeDevido("u1", as7h05)).toBe("falhou");
+    expect(notifyUser).toHaveBeenCalledWith("u1", "Bom dia", expect.stringContaining("reunião às 10h"), null, expect.objectContaining({ whatsapp: false }));
   });
 });

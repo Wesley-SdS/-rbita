@@ -600,7 +600,7 @@ HTTPS, porque app nativo pede microfone ao sistema, não ao navegador.
 - [ ] **Anthropic por API key.** O token do Claude Code não pode em servidor público
   (termos de uso). Irrelevante rodando na máquina do dono.
 - [ ] **Serviço de voz hospedado**, **Postgres gerenciado**, **OAuth social nativo no
-  mobile** (deep link), **WhatsApp por usuário** (Embedded Signup da Meta).
+  mobile** (deep link). (O WhatsApp pessoal saiu desta lista: entrou pela ponte local GOWA, ver PRD-WHATSAPP.md.)
 
 ## ✅ Encerrado nesta leva (22 e 23/09/2026)
 

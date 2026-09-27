@@ -127,7 +127,13 @@ export const resumirConversa: JobDef = {
 export const indexarArquivo: JobDef = {
   kind: "rag.indexar_arquivo",
   title: (p) => `Indexar "${texto(p, "nome") || "arquivo"}"`,
-  run: async (ctx) => semRetentarErroConhecido(async () => ({ ...(await indexFile(ctx.userId, exigirInput(ctx), texto(ctx.payload, "nome") || "arquivo", ctx.progresso)) })),
+  run: async (ctx) =>
+    semRetentarErroConhecido(async () => {
+      const nome = texto(ctx.payload, "nome") || "arquivo";
+      const r = await indexFile(ctx.userId, exigirInput(ctx), nome, ctx.progresso);
+      await avisarSePedido(ctx, "Guardado no conhecimento", `"${nome}" já pode ser consultado.`);
+      return { ...r };
+    }),
 };
 
 export const indexarTexto: JobDef = {
@@ -138,6 +144,7 @@ export const indexarTexto: JobDef = {
       const title = texto(ctx.payload, "title") || "texto";
       const res = await ingestDocument(ctx.userId, title, exigirInput(ctx), "text", ctx.progresso);
       if (!res.chunks) throw new JobPermanentError("Conteúdo vazio.");
+      await avisarSePedido(ctx, "Guardado no conhecimento", `"${title}" já pode ser consultado.`);
       return { title, ...res };
     }),
 };
@@ -170,16 +177,39 @@ export const extrairMemoria: JobDef = {
   },
 };
 
+/**
+ * Quem pediu pelo WhatsApp (`payload.avisar`) não está olhando a tela de
+ * trabalhos: o resultado chega como aviso, que vai à conversa "Eu". Fail-soft:
+ * o trabalho já terminou, o aviso é cortesia.
+ */
+async function avisarSePedido(ctx: JobRunContext, titulo: string, corpo: string): Promise<void> {
+  if (ctx.payload.avisar !== true) return;
+  const { notifyUser } = await import("../routines/run");
+  await notifyUser(ctx.userId, titulo, corpo).catch(() => undefined);
+}
+
+const reais = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`;
+
 export const lerCupom: JobDef = {
   kind: "financas.cupom",
   title: () => "Ler o comprovante",
-  run: async (ctx) => semRetentarErroConhecido(async () => ({ ...(await importReceipt(ctx.userId, exigirInput(ctx), ctx.progresso)) })),
+  run: async (ctx) =>
+    semRetentarErroConhecido(async () => {
+      const r = await importReceipt(ctx.userId, exigirInput(ctx), ctx.progresso);
+      await avisarSePedido(ctx, "Comprovante lançado", `${r.lancamento.descricao}, ${reais(r.lancamento.valor)} (${r.lancamento.categoria}).`);
+      return { ...r };
+    }),
 };
 
 export const lerExtrato: JobDef = {
   kind: "financas.extrato",
   title: (p) => `Importar o extrato "${texto(p, "nome") || "extrato"}"`,
-  run: async (ctx) => semRetentarErroConhecido(async () => ({ ...(await importStatement(ctx.userId, exigirInput(ctx), texto(ctx.payload, "nome") || "extrato", ctx.progresso)) })),
+  run: async (ctx) =>
+    semRetentarErroConhecido(async () => {
+      const r = await importStatement(ctx.userId, exigirInput(ctx), texto(ctx.payload, "nome") || "extrato", ctx.progresso);
+      await avisarSePedido(ctx, "Extrato importado", `${r.importados} lançamento(s) importado(s).`);
+      return { ...r };
+    }),
 };
 
 registerJobs([recalcularVoz, recalcularRosto, transcreverReuniao, resumirReuniao, resumirConversa, indexarArquivo, indexarTexto, reindexarAcervo, extrairMemoria, lerCupom, lerExtrato]);

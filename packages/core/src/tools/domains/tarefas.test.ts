@@ -154,12 +154,16 @@ describe("as tools de tarefa", () => {
 // o registro é global: não deixar sujeira para os outros arquivos de teste
 afterAll(() => _resetRegistry());
 
+// uma hora à frente, no fuso da casa: data fixa ficaria no passado e o teste apodreceria
+const { paraHoraLocal } = await import("../../fuso");
+const FUTURO = paraHoraLocal(new Date(Date.now() + 3_600_000), "America/Sao_Paulo");
+
 describe("lembrete com hora (a Órbita chama o dono na hora marcada)", () => {
   it("adicionar_tarefa repassa a hora e o fuso da casa", async () => {
     criadas.length = 0;
     const def = getTool("adicionar_tarefa")!;
-    await def.run({ texto: "ligar pro contador", lembrar_em: "2026-09-27T15:00" }, { userId: "u1" });
-    expect(criadas.at(-1)).toMatchObject({ texto: "ligar pro contador", lembrarEm: "2026-09-27T15:00", fuso: "America/Sao_Paulo" });
+    await def.run({ texto: "ligar pro contador", lembrar_em: FUTURO }, { userId: "u1" });
+    expect(criadas.at(-1)).toMatchObject({ texto: "ligar pro contador", lembrarEm: FUTURO, fuso: "America/Sao_Paulo" });
   });
 
   it("hora que não deu para entender: cria a tarefa e avisa que ficou sem lembrete", async () => {
@@ -171,7 +175,18 @@ describe("lembrete com hora (a Órbita chama o dono na hora marcada)", () => {
   it("editar_tarefa remarca (\"adia pra 17h\")", async () => {
     linhas = [linha()];
     edicoes.length = 0;
-    await getTool("editar_tarefa")!.run({ id: "t1", lembrar_em: "2026-09-27T17:00" }, { userId: "u1" });
-    expect(edicoes.at(-1)!.edicao).toMatchObject({ lembrarEm: "2026-09-27T17:00", fuso: "America/Sao_Paulo" });
+    await getTool("editar_tarefa")!.run({ id: "t1", lembrar_em: FUTURO }, { userId: "u1" });
+    expect(edicoes.at(-1)!.edicao).toMatchObject({ lembrarEm: FUTURO, fuso: "America/Sao_Paulo" });
+  });
+
+  it("horário que já passou é engano: recusa em vez de disparar na hora como atrasado", async () => {
+    criadas.length = 0;
+    edicoes.length = 0;
+    const r = (await getTool("adicionar_tarefa")!.run({ texto: "x", lembrar_em: "2020-01-01T09:00" }, { userId: "u1" })) as { erro?: string };
+    expect(r.erro).toContain("já passou");
+    expect(criadas).toHaveLength(0);
+    const e = (await getTool("editar_tarefa")!.run({ id: "t1", lembrar_em: "2020-01-01T09:00" }, { userId: "u1" })) as { erro?: string };
+    expect(e.erro).toContain("já passou");
+    expect(edicoes).toHaveLength(0);
   });
 });

@@ -25,7 +25,9 @@ async function avisar(t: GuidedTask, titulo: string, corpo: string): Promise<voi
   // import dinâmico: `routines/run` carrega o motor de chat inteiro, e este
   // módulo roda num laço curto do scheduler
   const { notifyUser } = await import("../routines/run");
-  await notifyUser(t.userId, titulo, corpo, null, { personId: t.personId }).catch((e) =>
+  // não vai ao WhatsApp: o dono está na frente da câmera ouvindo cada passo, e
+  // um passo por mensagem lotaria a conversa (e o teto de avisos por hora)
+  await notifyUser(t.userId, titulo, corpo, null, { personId: t.personId, whatsapp: false }).catch((e) =>
     log.warn("guided.aviso_falhou", { taskId: t.id, error: e instanceof Error ? e.message : String(e) }),
   );
 }

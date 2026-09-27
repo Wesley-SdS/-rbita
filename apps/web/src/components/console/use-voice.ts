@@ -281,19 +281,22 @@ export function useVoice(p: Params) {
     // não mistura com o wake word local
     if (wakeRef.current?.active) { wakeRef.current.stop(); wakeRef.current = null; setWakeOn(false); }
     stopSpeaking();
-    // Houve proposta nesta sessão: a próxima fala do dono pode ser "manda".
+    // Houve proposta nesta sessão: as falas do dono podem ser "manda".
     // Quem decide se é aprovação é o servidor (POST /api/actions/falada); daqui
     // só sai a transcrição da fala DO DONO, nunca o que o modelo disse.
-    let temProposta = false;
+    //
+    // Vale até ser tratada ou até 5 minutos, e não "só a próxima fala": a
+    // transcrição do PRÓPRIO pedido ("manda pro João que…") chega depois da
+    // chamada da ferramenta (no Gemini, sempre, porque ela só sai no fim do
+    // turno), e consumia a vez do "manda" de verdade. O pedido em si nunca
+    // aprova: o servidor só aceita a frase curta, sem conteúdo novo.
+    let propostaAte = 0;
     const rt = criarSessaoRealtime({
       onState: (s) => p.setMode(s === "speaking" ? "speaking" : s === "connecting" ? "connecting" : s === "listening" ? "listening" : "standby"),
       onError: () => { p.setError("Falha no modo tempo real."); rt.stop(); rtRef.current = null; setRealtimeOn(false); },
       onTranscript: (role, text) => {
         p.setMessages((m) => [...m, { role, content: text }]);
-        if (role !== "user" || !temProposta) return;
-        // Só a PRÓXIMA fala do dono responde à proposta: depois dela, qualquer
-        // "manda" é conversa, até a Órbita propor de novo.
-        temProposta = false;
+        if (role !== "user" || Date.now() > propostaAte) return;
         void fetch("/api/actions/falada", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto: text.slice(0, 500) }) })
           .then((r) => r.json())
           .then((d: { tratado?: boolean; estado?: string; resposta?: string }) => {
@@ -308,7 +311,8 @@ export function useVoice(p: Params) {
               falhou: "O dono aprovou, mas o envio falhou; o motivo está na tela.",
             };
             if (d.estado && aviso[d.estado]) {
-              if (d.estado === "lista") temProposta = true;
+              // tratada: acabou a janela (a lista continua esperando o número)
+              if (d.estado !== "lista") propostaAte = 0;
               rt.avisar?.(aviso[d.estado] + " Diga isso a ele em uma frase curta.");
             }
           })
@@ -317,7 +321,7 @@ export function useVoice(p: Params) {
       // B7.2: mostra no log que a voz acionou uma ferramenta (mesmo gate do chat de texto).
       onToolCall: (name, result) => {
         const proposta = result && typeof result === "object" && (result as { aguardando_aprovacao?: boolean }).aguardando_aprovacao ? (result as { resumo?: string }) : null;
-        if (proposta) temProposta = true;
+        if (proposta) propostaAte = Date.now() + 5 * 60_000;
         // proposta: a tela mostra o resumo GRAVADO na fila (destino e texto reais),
         // não só o que o modelo falou sobre ela
         p.setMessages((m) => [...m, { role: "assistant", content: proposta?.resumo ? `⚙ Proposta: ${proposta.resumo}. Diga "manda" ou "cancela".` : `⚙ ${name}`, steps: [{ name, done: true }] }]);

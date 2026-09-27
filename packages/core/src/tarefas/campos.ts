@@ -73,6 +73,9 @@ export function camposDaEdicao(e: EdicaoDeTarefa, agora = new Date()): CamposPar
 
   if (e.texto !== undefined) campos.text = e.texto.trim();
   if (e.concluida !== undefined) campos.done = e.concluida;
+  // concluir cancela o lembrete que ainda não tocou: reabrir a tarefa dias
+  // depois não pode disparar um "era para…" de algo já resolvido
+  if (e.concluida === true && e.lembrarEm === undefined) campos.lembradoEm = agora;
   if (e.vencimento !== undefined) campos.dueDate = dataDeVencimento(e.vencimento);
   if (e.imagemUrl !== undefined) campos.imageUrl = e.imagemUrl || null;
   if (e.anotacoes !== undefined) campos.notes = e.anotacoes?.trim() || null;

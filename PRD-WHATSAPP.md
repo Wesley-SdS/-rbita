@@ -498,3 +498,30 @@ WhatsApp em si depende do celular pareado).
 
 Armadilha paga no teste: o `date` do Git Bash no Windows ignora `TZ=America/Sao_Paulo` e devolve a hora
 UTC; para calcular hora da casa em script, use Node com `Intl`.
+
+## 13. Auditoria de 2026-09-27, segunda rodada (tudo pelo WhatsApp e Órbita proativa)
+
+Três revisores; todos os achados corrigidos e travados em teste.
+
+| Área | Achado | Correção |
+|---|---|---|
+| Segurança | `usar_arquivo_whatsapp` aceitava mídia de TERCEIRO: uma legenda "guarde no conhecimento" virava contexto permanente, um cupom inventado virava gasto | só arquivo do dono (`deMim`); o de um contato é encaminhado para a conversa "Eu" |
+| Segurança | o eco de um aviso atrasado (conversa ocupada com um áudio longo) passava da janela e virava PEDIDO do dono, com todas as tools e texto de fora | janela medida pelo horário da mensagem, não pelo do processamento |
+| Segurança | descrição de imagem e começo de áudio longo iam crus como fala do dono; a memória extraía "fatos" deles e dos avisos | embrulhados como dado; a extração de memória tira `<dado_externo>` e ignora os avisos |
+| Latência | OCR, extrato e indexação rodavam dentro do turno (a conversa "Eu" travava) | viram trabalho da fila (os mesmos da tela) e avisam ao terminar |
+| Bugs | "guardar" um áudio indexava os bytes do OGG como texto | conferência de tipo por uso; áudio guardado é a transcrição |
+| Contratos | arquivo acima do limite de upload ia inteiro para a memória | teto conferido pelo tamanho em disco antes de ler |
+| Contratos | com "todas", as tools de MCP somavam além do limite dos provedores (~128) | `tools.maxTodas`: nativas primeiro, MCP cortado |
+| Bugs | o teto de avisos por hora não segurava uma rajada simultânea | a vaga é reservada antes do envio |
+| Bugs | na voz, a transcrição do próprio pedido consumia a vez do "manda" (no Gemini, sempre) | a janela da proposta dura até ser tratada ou 5 min |
+| Contratos | lembrete ilegível na rota apagava o lembrete com 200; horário no passado disparava na hora | 400 nos dois casos (rota e tools) |
+| Bugs | a tela mostrava e editava o lembrete no fuso do navegador | o servidor devolve o horário no fuso da casa |
+| Bugs | reabrir tarefa concluída disparava um "era para…" velho | concluir cancela o lembrete pendente |
+| Contratos | "25:00" no horário do briefing era aceito e ele nunca saía | formato validado ao salvar (`pattern` no tipo texto) |
+| UX | cada passo da "receita guiada" ia ao WhatsApp | fica só na voz e no app |
+| UX | briefing que falhava sumia calado; avisos antigos lotavam o histórico | cai no app; só os `whatsapp.avisosNoHistorico` mais recentes entram |
+| Docs | o CLAUDE.md tinha ganhado uma cópia inteira de si mesmo (um `$` num `replace`) | reconstruído, e a armadilha documentada |
+| Diversos | contagem e rótulo de acessibilidade na tela do WhatsApp; item velho no CHECKLIST; teste de rota incompleto | corrigidos |
+
+Decisão mantida de propósito: avisos e briefing nascem LIGADOS (é o que o dono pediu); a descrição de
+cada chave agora diz que o conteúdo passa pelo WhatsApp e que o briefing pode usar modelo de nuvem.

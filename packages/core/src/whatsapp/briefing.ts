@@ -3,7 +3,7 @@ import { db } from "@orbita/db";
 import { waSessao } from "@orbita/db/whatsapp-schema";
 import { settings } from "../settings";
 import { log } from "../observability/logger";
-import { runPromptForUser } from "../routines/run";
+import { notifyUser, runPromptForUser } from "../routines/run";
 import { FLUXO } from "../usage/registrar";
 import { agoraLocal, briefingDevido } from "./horario";
 import { avisarNoWhatsapp } from "./avisar";
@@ -38,9 +38,14 @@ export async function briefingSeDevido(userId: string, agora = new Date()): Prom
       todas: true,
     });
     const r = await avisarNoWhatsapp(userId, "Bom dia", texto, { tipo: "briefing" });
-    return r === "enviado" ? "enviado" : "falhou";
+    if (r === "enviado") return "enviado";
+    // montou mas não saiu pelo WhatsApp: o briefing do dia não se perde, fica no app
+    await notifyUser(userId, "Bom dia", texto, null, { destino: "/app", whatsapp: false }).catch(() => undefined);
+    return "falhou";
   } catch (e) {
     log.warn("whatsapp.briefing_falhou", { erro: e instanceof Error ? e.message : String(e) });
+    // o dia já foi marcado (para não repetir); o dono sabe que hoje não teve
+    await notifyUser(userId, "Briefing de hoje", "Não consegui montar o briefing desta manhã (nenhum modelo respondeu).", null, { destino: "/app", whatsapp: false }).catch(() => undefined);
     return "falhou";
   }
 }

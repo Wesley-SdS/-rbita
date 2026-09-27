@@ -19,6 +19,8 @@ interface Todo {
   /** quando avisar (WhatsApp e push); `lembradoEm` preenchido = já avisou */
   lembrarEm: string | null;
   lembradoEm: string | null;
+  /** o lembrete no horário da CASA, já formatado pelo servidor (o fuso é dele, não do navegador) */
+  lembrarEmLocal: string | null;
 }
 
 /** O que está sendo editado agora. Fora do `dado` porque é estado de tela, não de servidor. */
@@ -35,14 +37,8 @@ interface Rascunho {
 }
 
 const soData = (iso: string | null): string => (iso ? iso.slice(0, 10) : "");
-/** ISO → valor do datetime-local, na hora do aparelho (que é a da casa). */
-function paraCampoLocal(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const dois = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}T${dois(d.getHours())}:${dois(d.getMinutes())}`;
-}
-const horaDoLembrete = (iso: string) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+/** "2026-09-27T15:00" (horário da casa, vindo do servidor) → "27/09 15:00". Só formatação. */
+const horaDoLembrete = (local: string) => `${local.slice(8, 10)}/${local.slice(5, 7)} ${local.slice(11, 16)}`;
 const diaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
 /** Vence hoje ou já venceu: é a única diferença que muda o que a pessoa faz agora. */
@@ -142,8 +138,8 @@ export function TodoPanel() {
       paraQuem: t.paraQuem ?? "",
       imageUrl: t.imageUrl,
       // lembrete já dado não volta ao campo: salvar a tarefa não pode rearmá-lo
-      lembrarEm: t.lembradoEm ? "" : paraCampoLocal(t.lembrarEm),
-      lembrarEmAntes: t.lembradoEm ? "" : paraCampoLocal(t.lembrarEm),
+      lembrarEm: t.lembradoEm ? "" : (t.lembrarEmLocal ?? ""),
+      lembrarEmAntes: t.lembradoEm ? "" : (t.lembrarEmLocal ?? ""),
     });
   }
   function fecharEdicao() {
@@ -171,7 +167,16 @@ export function TodoPanel() {
       otimista: (atual) => ({
         todos: (atual?.todos ?? []).map((x) =>
           x.id === id
-            ? { ...x, text: campos.text, dueDate: campos.dueDate, notes: campos.notes, paraQuem: campos.paraQuem, imageUrl: campos.imageUrl }
+            ? {
+                ...x,
+                text: campos.text,
+                dueDate: campos.dueDate,
+                notes: campos.notes,
+                paraQuem: campos.paraQuem,
+                imageUrl: campos.imageUrl,
+                // o sininho já mostra a hora nova (ou some), sem esperar a volta do servidor
+                ...("lembrarEm" in campos ? { lembrarEmLocal: campos.lembrarEm ?? null, lembradoEm: null } : {}),
+              }
             : x,
         ),
       }),
@@ -378,9 +383,9 @@ export function TodoPanel() {
                             {quando === "hoje" ? "hoje" : quando === "vencida" ? `venceu ${diaMes(t.dueDate)}` : `para ${diaMes(t.dueDate)}`}
                           </span>
                         )}
-                        {t.lembrarEm && !t.lembradoEm && (
+                        {t.lembrarEmLocal && !t.lembradoEm && (
                           <span className="tag" title="Lembrete: chega pelo WhatsApp e no celular">
-                            <Icone nome="bell" /> {horaDoLembrete(t.lembrarEm)}
+                            <Icone nome="bell" /> {horaDoLembrete(t.lembrarEmLocal)}
                           </span>
                         )}
                         {t.paraQuem && <span className="tag">para {t.paraQuem}</span>}

@@ -178,7 +178,8 @@ function ContatosDoWhatsapp() {
 
   const f = filtro.trim().toLowerCase();
   const pessoas = (dado?.contatos ?? []).filter((c) => !c.grupo && (!f || `${c.apelido ?? ""} ${c.nome ?? ""} ${c.jid}`.toLowerCase().includes(f)));
-  const automaticos = pessoas.filter((c) => c.modo === "automatico").length;
+  // sobre TODOS os contatos: o filtro da busca continua valendo depois de fechar a lista
+  const automaticos = (dado?.contatos ?? []).filter((c) => !c.grupo && c.modo === "automatico").length;
 
   return (
     <div className="whatsapp-contatos">
@@ -239,7 +240,12 @@ function ContatosDoWhatsapp() {
                       </button>
                     )}
                     <label className="whatsapp-toggle">
-                      <input type="checkbox" checked={c.modo === "automatico"} onChange={(e) => mudar(c.id, { modo: e.target.checked ? "automatico" : "aprovar" })} />
+                      <input
+                        type="checkbox"
+                        aria-label={`Responder ${c.apelido ?? c.nome ?? "este contato"} sozinha`}
+                        checked={c.modo === "automatico"}
+                        onChange={(e) => mudar(c.id, { modo: e.target.checked ? "automatico" : "aprovar" })}
+                      />
                       Sozinha
                     </label>
                   </span>
