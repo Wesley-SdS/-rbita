@@ -6,7 +6,7 @@ import { recalcularAssinaturasDeRosto, recalcularAssinaturasDeVoz } from "../ide
 import { IdentityError } from "../identity/errors";
 import { summarizeMeeting } from "../meetings/summarize";
 import { foldConversation } from "../chat/conversation-summary";
-import { desconhecidosDaTranscricao, textoDaTranscricao, transcribeRecording } from "../meetings/transcribe";
+import { desconhecidosDaTranscricao, nomesDosLocutores, textoDaTranscricao, transcribeRecording } from "../meetings/transcribe";
 import { lerDataUrl } from "../finance/documents";
 import { createHash } from "node:crypto";
 import { importReceipt, importStatement, DocumentoIlegivelError } from "../finance/documents";
@@ -91,7 +91,10 @@ export const transcreverReuniao: JobDef = {
     const speakers = typeof ctx.payload.speakers === "number" ? ctx.payload.speakers : undefined;
     const r = await transcribeRecording(ctx.userId, new Uint8Array(arquivo.bytes), arquivo.mime, { diarize: true, expectedSpeakers: speakers }, ctx.progresso);
 
-    const transcricao = textoDaTranscricao(r);
+    // o resumo recebe a transcrição com o NOME de quem foi reconhecido com
+    // confiança: é o que faz o compromisso sair com responsável de verdade, e
+    // não "Locutor A", que nenhuma regra de tarefa consegue atribuir a alguém
+    const transcricao = textoDaTranscricao(r, nomesDosLocutores(r.speakerIdentities));
     let resumoJobId: string | null = null;
     if (transcricao.trim() && ctx.payload.resumir !== false) {
       const hash = createHash("sha256").update(transcricao).digest("hex").slice(0, 24);

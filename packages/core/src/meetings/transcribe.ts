@@ -56,9 +56,38 @@ export async function transcribeRecording(userId: string, audio: Uint8Array, mim
   return { ...result, speakerIdentities };
 }
 
-/** Texto que vai para o resumo: com os rótulos de locutor quando houve diarização. Puro. */
-export function textoDaTranscricao(r: { text?: string; utterances?: SttUtterance[] }): string {
-  if (r.utterances?.length) return r.utterances.map((u) => `Locutor ${u.speaker}: ${u.text}`).join("\n");
+/**
+ * Etiqueta de diarização → nome da pessoa, só para quem foi reconhecido COM
+ * CONFIANÇA.
+ *
+ * "provavelmente o Lucas" fica de fora de propósito (§5.4.2: identidade nunca
+ * afirma sem confiança). Escrever "Lucas:" numa transcrição com base num palpite
+ * seria pôr na boca de alguém o que ele talvez não tenha dito — e essa
+ * transcrição vai para o resumo, para as tarefas e para a memória da casa. Na
+ * dúvida, continua "Locutor B", e a tela pede o nome ao dono.
+ */
+export function nomesDosLocutores(identities: SpeakerIdentities | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const s of identities ?? []) {
+    if (s.outcome === "identificado" && s.name?.trim()) out[s.label] = s.name.trim();
+  }
+  return out;
+}
+
+/**
+ * Texto que vai para o resumo: com os rótulos de locutor quando houve
+ * diarização, trocados pelo NOME de quem foi reconhecido.
+ *
+ * O nome não é enfeite. O modelo extraía compromissos com responsável
+ * "Locutor A", e "Locutor A" não é o nome de ninguém: a regra que decide se a
+ * tarefa é sua (`ehMeu`) recusa rótulo de diarização, então o que o dono ficou
+ * de fazer não virava tarefa dele. A tela já mostrava o nome; quem nunca o via
+ * era justamente o modelo.
+ */
+export function textoDaTranscricao(r: { text?: string; utterances?: SttUtterance[] }, nomes: Record<string, string> = {}): string {
+  if (r.utterances?.length) {
+    return r.utterances.map((u) => `${nomes[u.speaker]?.trim() || `Locutor ${u.speaker}`}: ${u.text}`).join("\n");
+  }
   return (r.text ?? "").trim();
 }
 

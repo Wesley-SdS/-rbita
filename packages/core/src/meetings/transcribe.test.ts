@@ -21,7 +21,7 @@ vi.mock("../identity/actions", () => ({
   },
 }));
 
-import { desconhecidosDaTranscricao, textoDaTranscricao, transcribeRecording } from "./transcribe";
+import { desconhecidosDaTranscricao, nomesDosLocutores, textoDaTranscricao, transcribeRecording } from "./transcribe";
 
 const audio = new Uint8Array([1, 2, 3]);
 const falas = [
@@ -78,5 +78,38 @@ describe("texto para o resumo", () => {
   });
   it("só os desconhecidos viram rótulos para ligar à reunião", () => {
     expect(desconhecidosDaTranscricao({ speakerIdentities: [{ unknownLabel: null }, { unknownLabel: "Desconhecido 2" }] })).toEqual(["Desconhecido 2"]);
+  });
+
+  it("quem foi reconhecido entra por NOME, não por rótulo", () => {
+    // o rótulo "Locutor A" ia para o modelo, e ele extraía compromisso com
+    // responsável "Locutor A" — que a regra da tarefa recusa, por não ser nome
+    // de ninguém. Resultado: o que o dono ficou de fazer não virava tarefa dele.
+    expect(textoDaTranscricao({ utterances: falas }, { A: "Wesley" })).toBe("Wesley: bom dia\nLocutor B: entrego na sexta");
+  });
+
+  it("nome vazio não substitui o rótulo", () => {
+    expect(textoDaTranscricao({ utterances: falas }, { A: "   " })).toBe("Locutor A: bom dia\nLocutor B: entrego na sexta");
+  });
+});
+
+/**
+ * §5.4.2: identidade nunca afirma sem confiança. Escrever "Lucas:" numa
+ * transcrição com base num palpite poria na boca de alguém o que ele talvez não
+ * tenha dito — e essa transcrição vira resumo, tarefa e memória da casa.
+ */
+describe("nomes dos locutores", () => {
+  it("só quem foi identificado com confiança tem nome", () => {
+    expect(
+      nomesDosLocutores([
+        { label: "A", outcome: "identificado", name: "Wesley" },
+        { label: "B", outcome: "provavel", name: "Lucas" },
+        { label: "C", outcome: "desconhecido", name: null },
+      ] as never),
+    ).toEqual({ A: "Wesley" });
+  });
+
+  it("identificado sem nome não entra, e lista ausente não quebra", () => {
+    expect(nomesDosLocutores([{ label: "A", outcome: "identificado", name: null }] as never)).toEqual({});
+    expect(nomesDosLocutores(undefined)).toEqual({});
   });
 });

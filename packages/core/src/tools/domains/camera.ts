@@ -2,7 +2,7 @@ import { z } from "zod";
 import { findCamera, listCameras } from "../../cameras/query";
 import { resolverCamera } from "../../cameras/resolver";
 import { imagemFresca } from "../../cameras/fresca";
-import { AVISO_SO_LOCAL, narrateSnapshot } from "../../cameras/narrate";
+import { AVISO_SO_LOCAL, narrateSnapshot, soLocalParaCamera } from "../../cameras/narrate";
 import { authorizeRoomForRequester } from "../../home/room-permission";
 import { registerTools, type ToolContext, type ToolDef } from "../registry";
 
@@ -67,10 +67,10 @@ export const casa_ver_camera: ToolDef<typeof VerInput> = {
     // num botão ("deixar ela olhar"), e o quadro é capturado na hora, em vez
     // de a Órbita descrever uma imagem de horas atrás como se fosse agora.
     if (!ev?.snapshot) return { precisa_de_imagem: true, camera_id: cam.id, camera: cam.name, motivo: `A câmera "${cam.name}" não tem imagem recente.` };
-    const descricao = await narrateSnapshot(ev.snapshot, undefined, { localOnly: cam.identifyFaces, userId: userId });
+    const descricao = await narrateSnapshot(ev.snapshot, undefined, { localOnly: await soLocalParaCamera(cam.identifyFaces), userId: userId });
     // o porquê da demora vai junto: sem isso o dono liga "identificar pessoas"
     // e a câmera fica lenta sem explicação nenhuma
-    return { camera: cam.name, descricao, capturadoEm: ev.createdAt, ...(cam.identifyFaces ? { nota: AVISO_SO_LOCAL } : {}) };
+    return { camera: cam.name, descricao, capturadoEm: ev.createdAt, ...(await soLocalParaCamera(cam.identifyFaces) ? { nota: AVISO_SO_LOCAL } : {}) };
   },
 };
 

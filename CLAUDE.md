@@ -318,6 +318,26 @@ Antes de considerar qualquer tarefa concluída:
   cookie de sempre.
 - **Diarização só funciona sobre o áudio inteiro.** Os rótulos A/B/C são atribuídos por
   requisição — nunca diarize pedaços de uma mesma reunião separadamente.
+- **`z.string().optional()` recusa `null`, e modelo manda `null`.** O opcional do zod aceita o campo
+  AUSENTE, não o campo nulo. Um `"prazo": null` num compromisso invalidava a LISTA inteira, e o
+  `.catch([])` do schema a devolvia vazia sem log: resumo impecável, zero compromissos, zero
+  tarefas, nenhuma pista (medido em 26/09/2026, com o Opus acertando os dois compromissos). Campo
+  opcional que vem de LLM usa `textoOpcional` de `meetings/compromissos.ts`, e lista de LLM é
+  validada ITEM A ITEM (`compromissosDoModelo`) — `.catch([])` na lista inteira transforma um item
+  torto em perda total e muda.
+- **Microfone de navegador é afinado para CHAMADA, não para reunião na sala.** `echoCancellation`,
+  `noiseSuppression` e `autoGainControl` existem para uma voz perto do aparelho: com duas pessoas na
+  mesma sala, o ganho automático nivela as vozes (e a diarização separa justamente pela diferença
+  entre elas) e a redução de ruído come quem está mais longe. 22s de conversa entre duas pessoas
+  voltaram com UM locutor e falas truncadas. Quem decide é `meetings.processarMicrofone`: cru na
+  sala, tratado quando há áudio de tela (aí o eco é real). E mandar `speakers_expected` muda muito —
+  a tela pergunta quantas pessoas vão falar.
+- **"Locutor A" não é nome de ninguém, e isso quebrava as tarefas.** O rótulo de diarização ia para
+  o modelo, que extraía compromisso com responsável "Locutor A"; `ehMeu` recusa rótulo, então o que
+  o dono ficou de fazer não virava tarefa dele. A transcrição que vai ao resumo leva o NOME de quem
+  foi reconhecido com confiança (`nomesDosLocutores`), e só dele (§5.4.2: palpite continua "Locutor
+  B"). Com `meetings.meuNome` vazio vale o nome da CONTA — sem essa reserva, `ehMeu` devolvia falso
+  para qualquer responsável nomeado e "minhas tarefas" nunca criava nada.
 - **`assertPublicUrl` (`lib/net/ssrf.ts`) bloqueia a LAN** (192.168/10/172.16). Isso impede
   cadastrar o Home Assistant como servidor MCP. Precisa de exceção deliberada, não de remoção.
 - **Rota dinâmica sem `loading.tsx` NÃO é prefetchada.** Toda tela sob `/app` lê a sessão, então

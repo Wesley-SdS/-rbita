@@ -6,19 +6,31 @@ import { criarTokenEfemeroGemini } from "@orbita/core/realtime/token";
 import { log } from "@orbita/core/observability/logger";
 
 /**
- * GET /api/meeting/live — como a prévia ao vivo deve ser feita nesta casa.
+ * GET /api/meeting/live — como esta casa grava e transcreve uma reunião.
  *
- * A tela precisa saber ANTES de começar a gravar: tentar o Gemini para
- * descobrir que está desligado custaria uma sessão paga por reunião.
+ * A tela precisa saber ANTES de começar a gravar, por dois motivos: tentar o
+ * Gemini para descobrir que está desligado custaria uma sessão paga por
+ * reunião, e o tratamento do microfone é escolhido na hora de ABRIR o
+ * microfone, não depois (mudar depois exigiria gravar de novo).
+ *
+ * É o mesmo princípio de `GET /api/identity/limits`: config que o navegador
+ * precisa respeitar vem do servidor, nunca repetida numa constante no front.
  */
 export async function GET(_req: Request, ctx: RouteCtx) {
   const session = sessionOf(ctx);
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
-  const modo = await settings.get("meetings.liveTranscription");
+  const cfg = await settings.getMany(["meetings.liveTranscription", "meetings.processarMicrofone", "meetings.bitrateAudio"]);
+  const modo = cfg["meetings.liveTranscription"];
   const temChave = Boolean(process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY);
   // escolher Gemini sem a chave viraria uma reunião sem prévia nenhuma e sem
   // explicação; o navegador é a reserva honesta
-  return Response.json({ modo: modo === "gemini" && !temChave ? "navegador" : modo });
+  return Response.json({
+    modo: modo === "gemini" && !temChave ? "navegador" : modo,
+    captura: {
+      microfone: cfg["meetings.processarMicrofone"],
+      bitrate: cfg["meetings.bitrateAudio"],
+    },
+  });
 }
 
 /**

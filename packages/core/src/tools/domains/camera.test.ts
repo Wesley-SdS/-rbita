@@ -19,6 +19,8 @@ interface CamFalsa {
   identifyFaces: boolean;
 }
 let camera: CamFalsa | null = null;
+/** o que `vision.identificacaoSoLocal` responderia */
+let exigirLocal = false;
 let cameras: CamFalsa[] = [];
 let recusaComodo: string | null = null;
 let evento: { id: string; snapshot: string | null; createdAt: Date } | null = null;
@@ -35,6 +37,9 @@ vi.mock("../../cameras/narrate", () => ({
   // a tool devolve este aviso quando a câmera identifica pessoas: é o que
   // explica ao dono por que a leitura leva um minuto (decisão 9.6)
   AVISO_SO_LOCAL: "só local",
+  // a regra deixou de ser automática e virou config do dono (27/09/2026):
+  // a tool pergunta, e a resposta é o que o teste controla
+  soLocalParaCamera: async (identifica: boolean) => identifica && exigirLocal,
   narrateSnapshot: async (_snapshot: string, pergunta?: string, opts?: { localOnly?: boolean }) => {
     narradas.push({ pergunta, opts });
     return "uma pessoa na cozinha";
@@ -57,6 +62,7 @@ const ctx: ToolContext = { userId: "dono", requester: async () => anna };
 const set = () => toToolSet([casa_listar_cameras, casa_ver_camera], ctx, { enqueue: vi.fn() });
 
 beforeEach(() => {
+  exigirLocal = false; // o padrão novo: segue a preferência de visão
   narradas.length = 0;
   autorizacoes.length = 0;
   recusaComodo = null;
@@ -91,11 +97,29 @@ describe("casa_ver_camera: permissão por cômodo", () => {
   });
 });
 
-describe("casa_ver_camera: nuvem barrada em câmera que identifica (decisão 9.6)", () => {
-  it("câmera com identificação pede narração só local", async () => {
+describe("câmera que identifica pessoas: quem narra é ESCOLHA do dono", () => {
+  /**
+   * A decisão 9.6 mandava narrar só com modelo local, sem exceção. O dono a
+   * reviu em 27/09/2026, com dois fatos:
+   *
+   *   1. MEDIDO: o `moondream` levou 43 s numa imagem real da webcam e
+   *      devolveu "!!!". A regra não protegia nada, só inutilizava a câmera.
+   *   2. Na nuvem (Render) NÃO existe modelo local, então "só local" ali
+   *      significa "sem visão nenhuma".
+   *
+   * O vetor de rosto continua saindo só para o serviço local de percepção
+   * (§5.4.1): o que passou a poder ir para a nuvem é a DESCRIÇÃO DA CENA.
+   */
+  it("por padrão, segue a preferência de visão (nuvem/assinatura)", async () => {
+    exigirLocal = false;
     await set().casa_ver_camera!.execute!({ local: "cozinha" }, exec);
-    // o que a decisão 9.6 exige é o `localOnly`; o resto das opções
-    // (hoje o dono da conta, para o gasto) pode crescer sem quebrar a regra
+    expect(narradas[0]!.opts).toMatchObject({ localOnly: false });
+  });
+
+  it("com `vision.identificacaoSoLocal` ligado, volta a ser só local", async () => {
+    // o comportamento antigo continua disponível para quem o quiser
+    exigirLocal = true;
+    await set().casa_ver_camera!.execute!({ local: "cozinha" }, exec);
     expect(narradas[0]!.opts).toMatchObject({ localOnly: true });
   });
 

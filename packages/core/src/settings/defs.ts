@@ -418,9 +418,32 @@ export const SETTING_DEFS = {
   "meetings.meuNome": text(
     "meetings",
     "Como te chamam nas reuniões",
-    "Serve para saber quais compromissos são seus. Vazio, valem os que ninguém assumiu explicitamente.",
+    "Serve para saber quais compromissos são seus. Vazio, vale o nome da sua conta e os compromissos que ninguém assumiu explicitamente.",
     "",
     80,
+  ),
+  // Duas chaves que o NAVEGADOR precisa respeitar na hora de gravar. Nascem
+  // aqui (e não numa constante no front) porque quem sabe se a reunião é na
+  // mesma sala ou por chamada é o dono, não o código.
+  "meetings.processarMicrofone": sel(
+    "meetings",
+    "Tratamento do microfone na reunião",
+    "O navegador trata o microfone para CHAMADA: cancela eco, corta ruído e nivela o volume, tudo afinado para uma voz só. Com duas pessoas na mesma sala isso atrapalha a separação de quem falou, porque é justamente a diferença entre as vozes que a separa. No automático, o microfone vai cru quando a reunião é na sala e tratado quando você captura o áudio da tela (aí o eco existe de verdade).",
+    "auto",
+    [
+      { value: "auto", label: "Automático (cru na sala, tratado com áudio da tela)" },
+      { value: "nunca", label: "Sempre cru (separa vozes melhor)" },
+      { value: "sempre", label: "Sempre tratado (cancela eco e ruído)" },
+    ],
+  ),
+  "meetings.bitrateAudio": num(
+    "meetings",
+    "Qualidade do áudio da reunião",
+    "Quantos bits por segundo gravar. Mais alto preserva detalhe da voz (ajuda a transcrição e a separação de quem falou) e gera arquivo maior. Zero deixa o navegador escolher.",
+    96000,
+    0,
+    320000,
+    { unit: "bps" },
   ),
   "graph.arquivarConversas": bool(
     "graph",
@@ -658,6 +681,12 @@ export const SETTING_DEFS = {
   "vision.objectResults": num("vision", "Avistamentos por objeto na resposta", "Quantos avistamentos a Órbita lista ao responder onde um objeto foi visto. Mais que isso vira texto longo demais para ouvir.", 5, 1, 50),
   "vision.digestMaxEvents": num("vision", "Eventos no resumo das câmeras", "Teto de eventos lidos ao resumir o que as câmeras viram num período. Período movimentado é cortado neste número, do mais recente para trás.", 200, 10, 2000),
   "vision.localModel": text("vision", "Modelo de visão local", "Modelo do Ollama que descreve a imagem quando a resposta precisa ficar nesta casa (câmera com identificação, modo privacidade). Precisa estar instalado no Ollama.", "moondream"),
+  "vision.identificacaoSoLocal": bool(
+    "vision",
+    "Câmera que identifica pessoas só usa modelo local",
+    "LIGADO, a imagem dessas câmeras nunca sai de casa, e a descrição depende de um modelo local instalado (medido aqui: 43 s e resposta imprestável, e na nuvem não existe modelo local, então a câmera fica sem visão). DESLIGADO, a descrição da cena segue a preferência acima. Em qualquer dos casos, o vetor de rosto continua saindo só para o serviço local de percepção.",
+    false,
+  ),
   "vision.cloudProvider": sel(
     "vision",
     "Quem lê a imagem na nuvem",

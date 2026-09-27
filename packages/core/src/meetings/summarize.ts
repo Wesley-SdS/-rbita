@@ -5,7 +5,7 @@ import { registrarUso, FLUXO } from "../usage/registrar";
 import type { RelatoDeUso } from "./structured";
 import { ingestDocument } from "../rag/ingest";
 import { chunkText } from "../rag/chunk";
-import { dedupeCompromissos, type Compromisso } from "./compromissos";
+import { compromissosDoModelo, dedupeCompromissos, type Compromisso } from "./compromissos";
 import { criarTarefasDaReuniao } from "./tarefas-da-reuniao";
 import { generateStructured } from "./structured";
 import { settings } from "../settings";
@@ -26,17 +26,18 @@ import { isOwner } from "../owner";
 
 export type Progresso = (feito: number, total: number | null, passo: string) => Promise<void>;
 
-const CompromissoSchema = z.object({
-  descricao: z.string().max(300),
-  responsavel: z.string().max(120).optional().describe('quem se comprometeu (o nome, "Locutor A", ou vazio se não ficou claro)'),
-  prazo: z.string().max(60).optional().describe("prazo mencionado, em ISO (AAAA-MM-DD) se houver data explícita; vazio se não houver"),
-});
 const ExtractionSchema = z.object({
   resumo: z.string().describe("resumo em markdown com as seções: Resumo, Pontos principais, Decisões, Ações"),
-  // .catch([]): modelos locais pequenos às vezes esquecem este campo ou mandam
-  // formato levemente errado. Um resumo bom não deve ser jogado fora só porque
-  // a extração de compromissos falhou.
-  compromissos: z.array(CompromissoSchema).max(20).catch([]),
+  /**
+   * A lista chega CRUA e é validada item a item em `compromissosDoModelo`.
+   *
+   * Era `z.array(CompromissoSchema).max(20).catch([])`, e isso escondeu o
+   * defeito por completo: um `"prazo": null` num item invalidava a lista inteira
+   * e o `.catch([])` a devolvia vazia, sem log nenhum. Resumo bom, nenhum
+   * compromisso, nenhuma tarefa. Um resumo bom continua não sendo jogado fora
+   * por causa dos compromissos — a diferença é que agora a perda aparece.
+   */
+  compromissos: z.unknown().optional(),
 });
 
 const REGRAS_LOCUTOR =
@@ -71,7 +72,12 @@ const MAX_CHUNKS = 40;
 type Modelo = Awaited<ReturnType<typeof modeloDaCasa>>["model"];
 
 async function extractStructured(model: Modelo, prompt: string, aoUsar?: RelatoDeUso): Promise<{ resumo: string; compromissos: Compromisso[] }> {
-  return generateStructured(model, prompt, ExtractionSchema, aoUsar);
+  const bruto = await generateStructured(model, prompt, ExtractionSchema, aoUsar);
+  const { compromissos, descartados } = compromissosDoModelo(bruto.compromissos);
+  // item que o modelo mandou torto não pode desaparecer sem deixar rastro: foi
+  // assim que a extração inteira ficou quebrada sem ninguém ver
+  if (descartados) log.warn("meeting.compromisso_descartado", { descartados, aproveitados: compromissos.length });
+  return { resumo: bruto.resumo, compromissos };
 }
 
 /** Resumo em passada única (transcrição cabe no orçamento configurado). */

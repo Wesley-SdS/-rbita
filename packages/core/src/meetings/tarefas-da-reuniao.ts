@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { db } from "@orbita/db";
+import { user } from "@orbita/db/auth-schema";
 import type { Compromisso } from "./compromissos";
 import { parsePrazo } from "./compromissos";
 import type { NovaTarefa } from "../tarefas/store";
@@ -85,6 +88,21 @@ export function tarefasDeCompromissos(
  * Cria as tarefas da reunião. Fail-soft por natureza: o resumo já ficou pronto
  * e não pode ser perdido porque uma tarefa não entrou.
  */
+/**
+ * Como me chamam: o que o dono configurou, ou o NOME DA CONTA.
+ *
+ * A reserva não é conveniência, é o que faz a funcionalidade existir. Com
+ * `meetings.meuNome` vazio — que é o padrão —, `ehMeu` devolvia falso para
+ * QUALQUER responsável nomeado, então "minhas tarefas" nunca criava nada: a
+ * conta se chama Wesley, a reunião diz "Wesley", e mesmo assim o compromissso
+ * não era dele. Medido em 26/09/2026.
+ */
+async function comoMeChamam(userId: string, configurado: string): Promise<string> {
+  if (configurado.trim()) return configurado.trim();
+  const [conta] = await db.select({ name: user.name }).from(user).where(eq(user.id, userId)).limit(1);
+  return conta?.name?.trim() ?? "";
+}
+
 export async function criarTarefasDaReuniao(
   userId: string,
   compromissos: Compromisso[],
@@ -93,7 +111,7 @@ export async function criarTarefasDaReuniao(
   const cfg = await settings.getMany(["meetings.criarTarefas", "meetings.meuNome"]);
   const novas = tarefasDeCompromissos(compromissos, {
     quem: cfg["meetings.criarTarefas"] as QuemCria,
-    meuNome: cfg["meetings.meuNome"],
+    meuNome: await comoMeChamam(userId, cfg["meetings.meuNome"]),
     reuniaoId: reuniao.id,
     reuniaoTitulo: reuniao.titulo,
   });

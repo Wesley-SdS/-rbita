@@ -22,6 +22,37 @@ import { settings } from "../settings";
  * identifica gente nunca vai para a nuvem); o que muda é ela ser dita, com a
  * saída à mão.
  */
+/**
+ * A imagem desta câmera pode ir para a nuvem?
+ *
+ * DECISÃO DO DONO, 27/09/2026, revendo a decisão 9.6. Antes, câmera com
+ * identificação de pessoas narrava SÓ com modelo local, sem exceção. Dois
+ * fatos derrubaram isso:
+ *
+ *   1. MEDIDO: o `moondream` levou 43 s numa imagem real da webcam e devolveu
+ *      "!!!". Não é lento, é inútil. A regra não protegia nada, só impedia de
+ *      usar a câmera.
+ *   2. NA NUVEM NÃO HÁ MODELO LOCAL. Com a Órbita no Render, "só local"
+ *      significa "sem visão nenhuma" nessa câmera. A regra só funcionava na
+ *      máquina de casa.
+ *
+ * O que NÃO mudou, e é outra regra: vetor de rosto e de voz continua indo
+ * exclusivamente ao `apps/perception`, com o guard de saída barrando destino
+ * que não seja local (§5.4.1). Identificar QUEM é segue em casa; o que passa a
+ * poder ir para a nuvem é a DESCRIÇÃO DA CENA.
+ *
+ * Quem quiser o comportamento antigo liga `vision.identificacaoSoLocal`.
+ */
+export function decidirSoLocal(identificaPessoas: boolean, exigirLocal: boolean): boolean {
+  return identificaPessoas && exigirLocal;
+}
+
+/** Igual ao `decidirSoLocal`, lendo a config do dono. */
+export async function soLocalParaCamera(identificaPessoas: boolean): Promise<boolean> {
+  if (!identificaPessoas) return false;
+  return decidirSoLocal(true, await settings.get("vision.identificacaoSoLocal"));
+}
+
 export const AVISO_SO_LOCAL =
   "Esta câmera identifica pessoas, então só o modelo local pode olhar, e ele leva cerca de um minuto nesta máquina. Para respostas rápidas, desligue a identificação de pessoas nesta câmera, em Câmeras.";
 
@@ -115,9 +146,7 @@ export async function narrateCameraEvent(eventId: string): Promise<string> {
   if (!ev) throw new Error("Evento de câmera não encontrado");
   if (ev.narration) return ev.narration;
   if (!ev.snapshot) throw new Error("Evento sem imagem para narrar");
-  // decisão 9.6 (17/09): câmera que identifica pessoas narra só com modelo
-  // local, mesmo com OPENAI_API_KEY configurada. Sem modelo local, não narra.
-  const narration = await narrateSnapshot(ev.snapshot, undefined, { localOnly: ev.identifica });
+  const narration = await narrateSnapshot(ev.snapshot, undefined, { localOnly: await soLocalParaCamera(ev.identifica) });
   await db.update(cameraEvent).set({ narration, narratedAt: new Date() }).where(eq(cameraEvent.id, eventId));
   return narration;
 }

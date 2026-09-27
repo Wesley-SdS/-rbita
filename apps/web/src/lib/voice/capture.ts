@@ -29,6 +29,20 @@ export interface MeetingCapture {
 export type ModoDeMicrofone = "auto" | "sempre" | "nunca";
 
 /**
+ * Quantas vozes esperar, a partir do que o dono digitou na tela.
+ *
+ * É só uma DICA para a separação de vozes, mas faz diferença grande: sem ela, um
+ * áudio curto de duas pessoas na mesma sala volta rotulado como um locutor só
+ * (medido em 26/09/2026). Fora da faixa que a separação aceita (2 a 10) vira 0,
+ * que significa "não sei" — melhor deixar o provedor decidir do que mandar um
+ * número inventado.
+ */
+export function vozesEsperadas(valor: string): number {
+  const n = Number(valor.trim());
+  return Number.isInteger(n) && n >= 2 && n <= 10 ? n : 0;
+}
+
+/**
  * O navegador trata o microfone para CHAMADA, não para reunião gravada:
  * cancelamento de eco, redução de ruído e ganho automático são afinados para UMA
  * voz perto do aparelho.

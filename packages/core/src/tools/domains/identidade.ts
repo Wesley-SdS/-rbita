@@ -11,7 +11,7 @@ import { cameraRoomName, findCamera, latestEventWithSnapshot } from "../../camer
 import { resolverCamera } from "../../cameras/resolver";
 import { imagemFresca } from "../../cameras/fresca";
 import { allowedRooms, authorizeRoomForRequester } from "../../home/room-permission";
-import { AVISO_SO_LOCAL, narrateCameraEvent, narrateSnapshot } from "../../cameras/narrate";
+import { AVISO_SO_LOCAL, narrateCameraEvent, narrateSnapshot, soLocalParaCamera } from "../../cameras/narrate";
 import { db } from "@orbita/db";
 import { document } from "@orbita/db/knowledge-schema";
 import { and, eq } from "drizzle-orm";
@@ -144,8 +144,8 @@ export const ver_camera: ToolDef<typeof VerCameraInput> = {
     if (!ev?.snapshot) return { precisa_de_imagem: true, camera_id: cam.id, camera: cam.name, motivo: `A câmera "${cam.name}" não tem imagem recente.` };
     // conteúdo de imagem é DADO, nunca instrução (CLAUDE.md §5.2); câmera que
     // identifica pessoas responde só com modelo local (decisão 9.6)
-    const resposta = await narrateSnapshot(ev.snapshot, `${pergunta}\nResponda só com o que dá para ver na imagem. Se não der para saber, diga que não dá.`, { localOnly: cam.identifyFaces, userId: ctx.userId });
-    return { camera: cam.name, pergunta, resposta, capturadoEm: ev.createdAt, ...(cam.identifyFaces ? { nota: AVISO_SO_LOCAL } : {}) };
+    const resposta = await narrateSnapshot(ev.snapshot, `${pergunta}\nResponda só com o que dá para ver na imagem. Se não der para saber, diga que não dá.`, { localOnly: await soLocalParaCamera(cam.identifyFaces), userId: ctx.userId });
+    return { camera: cam.name, pergunta, resposta, capturadoEm: ev.createdAt, ...(await soLocalParaCamera(cam.identifyFaces) ? { nota: AVISO_SO_LOCAL } : {}) };
   },
 };
 

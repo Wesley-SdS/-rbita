@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRecurso } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
-import { ContinuousRecorder, startMeetingCapture, type MeetingCapture } from "@/lib/voice/capture";
+import { ContinuousRecorder, startMeetingCapture, vozesEsperadas, type MeetingCapture, type ModoDeMicrofone } from "@/lib/voice/capture";
 import { ContinuousDictation, getRecognitionCtor } from "@/lib/voice/speech";
 import { TranscricaoViva } from "@/lib/voice/transcricao-viva";
 import { avaliarGravacao } from "@/lib/voice/gravacao";
@@ -87,6 +87,11 @@ function autoSpeakerNames(identities: SpeakerIdentity[]): Record<string, string>
 export function MeetingPanel() {
   const [active, setActive] = useState(false);
   const [systemAudio, setSystemAudio] = useState(true);
+  // Quantas pessoas vão falar. É uma DICA para a separação de vozes, e faz
+  // diferença grande: sem ela, um áudio curto de duas pessoas na mesma sala
+  // volta rotulado como um locutor só (foi o que aconteceu em 26/09/2026).
+  // Vazio = não sei, e aí a separação decide sozinha, como antes.
+  const [pessoas, setPessoas] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [preview, setPreview] = useState("");
   const [utterances, setUtterances] = useState<SttUtterance[]>([]);
@@ -144,9 +149,19 @@ export function MeetingPanel() {
     setDocumentId(null); setSummarizeJob(null); setTranscribeJob(null); setCompromissos([]); setAddedTodos(new Set()); setSpeakerNames({}); setNamesSaved(false);
     setSpeakerIdentities([]); setLinkPerson({}); setUseSample({}); setAmostras({});
 
+    // Como esta casa grava, perguntado ANTES de abrir o microfone: o
+    // tratamento do microfone é escolhido na abertura e não muda depois, e
+    // saber quem faz a prévia evita pagar uma sessão do Gemini para descobrir
+    // que ela está desligada. Fail-soft: sem resposta, o padrão do navegador.
+    const cfg = await fetch("/api/meeting/live")
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((d: { modo?: string; captura?: { microfone?: ModoDeMicrofone; bitrate?: number } }) => d)
+      .catch(() => ({}) as { modo?: string; captura?: { microfone?: ModoDeMicrofone; bitrate?: number } });
+    const modo = cfg.modo ?? "navegador";
+
     let capture: MeetingCapture;
     try {
-      capture = await startMeetingCapture({ systemAudio });
+      capture = await startMeetingCapture({ systemAudio, microfone: cfg.captura?.microfone ?? "auto" });
     } catch {
       avisar("Preciso do microfone para ouvir a reunião. Libere o acesso no navegador e comece de novo.", true);
       return;
@@ -159,19 +174,11 @@ export function MeetingPanel() {
     }
 
     const recorder = new ContinuousRecorder();
-    recorder.start(capture.stream);
+    recorder.start(capture.stream, cfg.captura?.bitrate ?? 0);
     recorderRef.current = recorder;
 
     // PRÉVIA ao vivo, best-effort: se ela não subir, a reunião continua sendo
     // gravada e a transcrição final não depende dela em nada.
-    //
-    // Quem faz a prévia é escolha do dono (`meetings.liveTranscription`), e a
-    // tela pergunta ANTES de gravar: descobrir depois que o Gemini está
-    // desligado custaria uma sessão paga por reunião.
-    const modo = await fetch("/api/meeting/live")
-      .then((r) => (r.ok ? r.json() : { modo: "navegador" }))
-      .then((d: { modo?: string }) => d.modo ?? "navegador")
-      .catch(() => "navegador");
 
     if (modo === "gemini") {
       const viva = new TranscricaoViva({
@@ -225,8 +232,11 @@ export function MeetingPanel() {
     // aba, e fechá-la no meio perdia a reunião.
     setPhase("transcrevendo");
     try {
+      const esperadas = vozesEsperadas(pessoas);
       const fd = new FormData();
       fd.append("file", blob, "reuniao.webm");
+      // a rota valida a faixa (2 a 10); fora dela, nem manda
+      if (esperadas) fd.append("speakers", String(esperadas));
       const r = await fetch("/api/meeting/transcribe", { method: "POST", body: fd });
       setTranscribeJob(await enfileirar(r));
     } catch (e) {
@@ -271,6 +281,21 @@ export function MeetingPanel() {
         const pre: Record<string, string> = {};
         for (const si of identities) if (si.personId) pre[si.label] = si.personId;
         setLinkPerson(pre);
+      }
+
+      // Duas coisas passavam em SILÊNCIO e deixavam o dono sem entender o
+      // resultado: vir menos vozes do que ele disse que havia, e a separação
+      // funcionar sem o reconhecimento de quem é quem (percepção fora do ar).
+      // O aviso é ameno nos dois casos: o texto da reunião está lá.
+      const separadas = new Set(d.utterances.map((u) => u.speaker)).size;
+      const esperadas = vozesEsperadas(pessoas);
+      if (esperadas && separadas < esperadas) {
+        avisar(
+          `Você disse que eram ${esperadas} pessoas e eu só consegui separar ${separadas}. ` +
+            "Quase sempre é o microfone nivelando as vozes: em Ajustes, ponha o tratamento do microfone em “sempre cru” e aproxime quem fala mais longe.",
+        );
+      } else if (!identities.length) {
+        avisar("Separei as vozes, mas não reconheci de quem são. Dê nome a cada uma aqui embaixo, que eu aprendo para a próxima.");
       }
     } else {
       texto = (d.text ?? "").trim();
@@ -417,13 +442,31 @@ export function MeetingPanel() {
                     : "Começar a ouvir"}
               </button>
               {!busy && (
-                <label className="switch-row">
-                  <input type="checkbox" checked={systemAudio} onChange={(e) => setSystemAudio(e.target.checked)} />
-                  <span>
-                    <Icone nome="volume" />
-                    Capturar também o áudio da tela (Teams, Meet, Slack)
-                  </span>
-                </label>
+                <>
+                  <label className="switch-row">
+                    <input type="checkbox" checked={systemAudio} onChange={(e) => setSystemAudio(e.target.checked)} />
+                    <span>
+                      <Icone nome="volume" />
+                      Capturar também o áudio da tela (Teams, Meet, Slack)
+                    </span>
+                  </label>
+                  <label className="switch-row">
+                    <input
+                      className="inline-input compacto"
+                      style={{ width: 70 }}
+                      type="number"
+                      min={2}
+                      max={10}
+                      placeholder="?"
+                      value={pessoas}
+                      onChange={(e) => setPessoas(e.target.value)}
+                    />
+                    <span>
+                      <Icone nome="chat" />
+                      Quantas pessoas vão falar (ajuda muito a separar as vozes)
+                    </span>
+                  </label>
+                </>
               )}
             </>
           ) : (
