@@ -1,3 +1,4 @@
+import { paraFala } from "./fala-limpa";
 import { DetectorDeFala, EnergiaAdaptativa, LIMIARES_PADRAO } from "./vad";
 import { AMOSTRAS_POR_QUADRO, carregarSilero, para16k, type DetectorSilero } from "./silero";
 
@@ -104,6 +105,16 @@ export function prontoParaFalar(buffer: string, jaFalou: boolean, fim = false): 
   return { prontos: splitFala(fechado.trim()), resto: buffer.slice(corte + 1) };
 }
 
+/**
+ * Limpa cada trecho e descarta o que virou nada.
+ *
+ * Um trecho pode ser só marcação (uma linha de tabela, um `---`): mandá-lo ao
+ * `/api/tts` gastaria uma ida e volta para sintetizar silêncio.
+ */
+function limpos(trechos: string[]): string[] {
+  return trechos.map(paraFala).filter((t) => t.trim().length > 0);
+}
+
 /** O controle de uma fala que acompanha o texto chegando. */
 export interface FluxoDeFala {
   /** o texto acumulado ATÉ AGORA (o chamador manda tudo; a fala descobre o que é novo) */
@@ -159,7 +170,9 @@ export class LocalTTS {
    */
   async speak(text: string, opts?: { onStart?: () => void; onEnd?: () => void }): Promise<void> {
     this.stop();
-    const clean = text.replace(/[#*_`>[\]]/g, "").slice(0, 2000);
+    // `paraFala` e não um replace de caracteres: tirar os colchetes de
+    // `[texto](url)` deixaria a URL para o TTS ler em voz alta
+    const clean = paraFala(text).slice(0, 2000);
     if (!clean.trim()) return;
 
     const trechos = splitFala(clean);
@@ -286,7 +299,11 @@ export class LocalTTS {
         consumido = acumulado.length;
         const { prontos, resto } = prontoParaFalar(buffer, enfileirouAlgum);
         if (!prontos.length) return;
-        fila.push(...prontos);
+        // A limpeza acontece por TRECHO PRONTO, não por token: um `**` chega
+        // partido entre dois pedaços do stream, e limpar o pedaço solto não
+        // acharia o par. Um trecho pronto é uma frase fechada, que é onde o
+        // markdown de fato termina.
+        fila.push(...limpos(prontos));
         buffer = resto;
         enfileirouAlgum = true;
         sinalizar();
@@ -294,7 +311,7 @@ export class LocalTTS {
       async fim() {
         if (terminou) return worker;
         const { prontos } = prontoParaFalar(buffer, enfileirouAlgum, true);
-        fila.push(...prontos);
+        fila.push(...limpos(prontos));
         // marcar AQUI também: sem isto, `falou` saía falso logo depois de
         // `fim()` numa resposta curta (o texto inteiro só fecha no fim), e
         // quem chama devolvia o núcleo para "standby" com a fala prestes a sair

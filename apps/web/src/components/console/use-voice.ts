@@ -4,6 +4,7 @@ import { type Dispatch, type MutableRefObject, type SetStateAction, useEffect, u
 import type { OrbMode } from "@/components/console/types";
 import type { Msg } from "@/components/console/types";
 import { LocalTTS, WakeListener, recordUntilSilence, type FluxoDeFala } from "@/lib/voice/engine";
+import { paraFala } from "@/lib/voice/fala-limpa";
 import { criarSessaoRealtime, type SessaoRealtime } from "@/lib/voice/realtime";
 import { getRecognitionCtor, LocalWake, type RecognitionCtor, type RecognitionLike } from "@/lib/voice/speech";
 import { diagnosticarVoz, type JanelaSuficiente } from "@/lib/voice/contexto-seguro";
@@ -145,7 +146,7 @@ export function useVoice(p: Params) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) { p.setMode("standby"); return; }
     try {
       speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text.replace(/[#*_`>]/g, ""));
+      const u = new SpeechSynthesisUtterance(paraFala(text));
       const v = speechSynthesis.getVoices().find((x) => /pt.?BR/i.test(x.lang)) ?? null;
       if (v) u.voice = v;
       u.lang = v?.lang ?? "pt-BR";

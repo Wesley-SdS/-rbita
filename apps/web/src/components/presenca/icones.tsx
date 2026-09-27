@@ -51,6 +51,7 @@ const TRACOS: Record<string, string> = {
   lock: `<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4m-4 5v2"/>`,
   music: `<path d="M9 18V5l12-2v13M9 8l12-2"/><ellipse cx="6" cy="18" rx="3" ry="3"/><ellipse cx="18" cy="16" rx="3" ry="3"/>`,
   volume: `<path d="M4 9h4l5-5v16l-5-5H4Zm12-1a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>`,
+  mute: `<path d="M4 9h4l5-5v16l-5-5H4Zm12 1 5 5m0-5-5 5"/>`,
   trash: `<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/>`,
   edit: `<path d="M4 20h4l10-10a2.8 2.8 0 0 0-4-4L4 16v4Zm9-13 4 4"/>`,
   download: `<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>`,
