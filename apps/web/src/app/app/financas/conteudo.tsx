@@ -8,13 +8,15 @@ function Esqueleto() {
   return <div className="panel empty-state">Carregando…</div>;
 }
 
-const FinancePanel = dynamic(() => import("@/components/finance-panel").then((m) => m.FinancePanel), { ssr: false, loading: Esqueleto });
+const FinancasApp = dynamic(() => import("@/components/financas/financas-app").then((m) => m.FinancasApp), { ssr: false, loading: Esqueleto });
 const TodoPanel = dynamic(() => import("@/components/todo-panel").then((m) => m.TodoPanel), { ssr: false, loading: Esqueleto });
 
 export function Conteudo() {
   // O pedido sai agora, enquanto o JavaScript dos painéis ainda baixa.
   // Sem isto, baixar o código e buscar os dados aconteciam em fila.
-  useAdiantarRecursos(["/api/finance", "/api/todos"]);
+  // O cadastro (contas, cartões, categorias) entra junto porque é o que as
+  // folhas de lançar oferecem, e o "+" é a primeira coisa que se toca.
+  useAdiantarRecursos(["/api/financas/painel", "/api/financas/cadastros", "/api/todos"]);
 
   return (
     <section className="view">
@@ -25,7 +27,7 @@ export function Conteudo() {
       />
       <Abas
         abas={[
-          { id: "financas", rotulo: "Finanças", conteudo: <FinancePanel /> },
+          { id: "financas", rotulo: "Finanças", conteudo: <FinancasApp /> },
           { id: "tarefas", rotulo: "Tarefas", conteudo: <TodoPanel /> },
         ]}
       />

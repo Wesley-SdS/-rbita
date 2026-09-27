@@ -66,7 +66,7 @@ import * as cameraLimits from "./camera-limits";
 import * as meetingLive from "./meeting-live";
 import * as gestao from "./gestao";
 import * as ingest from "./ingest";
-import * as finance from "./finance";
+import * as financas from "./financas";
 import * as financeReceipt from "./finance-receipt";
 import * as financeStatement from "./finance-statement";
 import * as upload from "./upload";
@@ -129,7 +129,12 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/models", models),
   // dia a dia
   webRoute("api/todos", todos),
-  webRoute("api/finance", finance),
+  webRoute("api/financas", { POST: financas.POST }),
+  webRoute("api/financas/fotos", { GET: financas.GET_FOTOS }),
+  webRoute("api/financas/entrada", { POST: financas.POST_ENTRADA }),
+  webRoute("api/financas/exportar", { GET: financas.GET_EXPORTAR }),
+  webRoute("api/financas/restaurar", { POST: financas.POST_RESTAURAR }),
+  webRoute("api/financas/:vista", { GET: financas.GET }),
   webRoute("api/finance/receipt", financeReceipt),
   webRoute("api/finance/statement", financeStatement),
   webRoute("api/upload", upload),

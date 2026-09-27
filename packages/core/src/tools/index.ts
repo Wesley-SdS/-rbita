@@ -121,16 +121,21 @@ export async function buildToolSet(userId: string, query = "", requester?: ToolC
  * Definições cruas (não convertidas em ToolSet do AI SDK) das tools deste
  * usuário agora — usado pela sessão realtime (Onda 6, B7.2): a OpenAI
  * Realtime API quer `{ name, description, parameters }` em JSON Schema, não
- * o wrapper `tool()` do AI SDK. Mesma seleção do chat (ligadas, exigências
- * atendidas, relevância), sem query porque a sessão de voz não tem "o pedido
- * deste turno" com antecedência.
+ * o wrapper `tool()` do AI SDK.
+ *
+ * TODAS as tools que valem para o usuário (ligadas e com exigências
+ * atendidas), sem teto nem seleção por relevância. O chat escolhe as mais
+ * relevantes porque conhece o pedido do turno; a voz abre a sessão ANTES de
+ * o dono falar, e cortar por ordem de registro deixava de fora tudo que foi
+ * registrado depois das 30 primeiras (casa, câmera, identidade, metade das
+ * finanças). Decisão do dono em 27/09/2026: voz e texto fazem exatamente as
+ * mesmas coisas, sem diferença.
  */
 export async function toolDefsForRealtime(userId: string) {
-  const [overrides, connected, max, haConn, waConnected] = await Promise.all([
-    loadToolOverrides(), connectedProviders(userId), settings.get("tools.maxPerTurn"), getHaConnection(userId), whatsappConfigured(userId),
+  const [overrides, connected, haConn, waConnected] = await Promise.all([
+    loadToolOverrides(), connectedProviders(userId), getHaConnection(userId), whatsappConfigured(userId),
   ]);
-  const usable = availableFor(listRegisteredTools(), { connected, haConnected: haConn !== null, whatsappConnected: waConnected, overrides });
-  return selectRelevant(usable, "", max);
+  return availableFor(listRegisteredTools(), { connected, haConnected: haConn !== null, whatsappConnected: waConnected, overrides });
 }
 
 /**

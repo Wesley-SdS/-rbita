@@ -16,7 +16,7 @@ import { Conteudo } from "./conteudo";
  */
 export default async function PaginaFinancas() {
   const dados = await semearDaApi([
-    "/api/finance",
+    "/api/financas/painel",
     "/api/todos",
   ]);
   return (

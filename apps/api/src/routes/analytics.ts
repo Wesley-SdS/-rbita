@@ -44,7 +44,9 @@ export async function GET(_req: Request, ctx: RouteCtx) {
       (SELECT count(*) FROM routine WHERE user_id = ${uid} AND enabled = true) AS active_routines,
       (SELECT count(*) FROM notification WHERE user_id = ${uid}) AS notifications,
       (SELECT count(*) FROM connection WHERE user_id = ${uid}) AS connectors,
-      (SELECT coalesce(sum(amount_cents),0) FROM expense WHERE user_id = ${uid}) AS expense_cents
+      -- gasto de verdade: saída que não é transferência, menos estorno (mesma regra do painel de Finanças)
+      (SELECT coalesce(sum(CASE WHEN tipo = 'despesa' THEN valor WHEN estorno THEN -valor ELSE 0 END),0)
+         FROM fin_lancamento WHERE user_id = ${uid} AND NOT transferencia) AS expense_cents
     FROM msg
   `);
 

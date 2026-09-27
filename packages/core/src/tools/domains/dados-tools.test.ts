@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * As tools que escrevem no banco: finanças, memória e widgets (§5.7).
+ * As tools que escrevem no banco: memória e widgets (§5.7).
  *
  * Elas existem desde as primeiras ondas sem teste nenhum. O que passa a ficar
  * travado aqui é o que a conta do dono depende:
@@ -62,7 +62,6 @@ vi.mock("../../events/index", () => ({ events: { emit: async () => {} } }));
 vi.mock("../../settings", () => ({ settings: { get: async () => 0.7, getMany: async () => ({}) } }));
 
 const { _resetRegistry, toToolSet, getTool } = await import("../registry");
-await import("./financas");
 await import("./widgets");
 
 const ctx = { userId: "u1" } as Parameters<typeof toToolSet>[1];
@@ -87,55 +86,9 @@ beforeEach(() => {
   propostas.length = 0;
 });
 
-describe("finanças", () => {
-  it("as cinco tools estão registradas", () => {
-    for (const n of ["registrar_gasto", "resumo_financeiro", "adicionar_conta", "resumo_financeiro_completo", "contas_a_vencer"]) {
-      expect(getTool(n), n).toBeTruthy();
-    }
-  });
-
-  it("R$ 19,90 vira 1990 centavos, não 1989", async () => {
-    // 19.90 * 100 em ponto flutuante dá 1989.9999…; um floor aqui roubaria um
-    // centavo de todo lançamento, para sempre
-    await executar("registrar_gasto", { descricao: "café", valor: 19.9 });
-    expect(inseridas[0]).toMatchObject({ amountCents: 1990, description: "café", userId: "u1" });
-  });
-
-  it("gasto sem categoria não perde o lançamento", async () => {
-    await executar("registrar_gasto", { descricao: "x", valor: 10 });
-    expect(inseridas[0]!.category).toBeNull();
-  });
-
-  it("o resumo soma por categoria e junta o que não tem categoria", async () => {
-    selecionadas = [
-      { category: "mercado", amountCents: 5000 },
-      { category: "mercado", amountCents: 2500 },
-      { category: null, amountCents: 1000 },
-    ];
-    const r = (await executar("resumo_financeiro")) as { total: number; lancamentos: number; porCategoria: Record<string, number> };
-    expect(r.total).toBe(85);
-    expect(r.lancamentos).toBe(3);
-    expect(r.porCategoria).toEqual({ mercado: 75, outros: 10 });
-  });
-
-  it("sem lançamento nenhum, o resumo é zero e não quebra", async () => {
-    const r = (await executar("resumo_financeiro")) as { total: number; porCategoria: Record<string, number> };
-    expect(r.total).toBe(0);
-    expect(r.porCategoria).toEqual({});
-  });
-
-  it("conta a pagar guarda tipo e vencimento", async () => {
-    await executar("adicionar_conta", { descricao: "luz", valor: 250.5, tipo: "a_pagar", vencimento: "2026-10-10" });
-    expect(inseridas[0]).toMatchObject({ amountCents: 25050 });
-  });
-
-  it("registrar gasto é escrita: não passa pelo gate", async () => {
-    // o dono não precisa aprovar o próprio lançamento; o gate é para o que
-    // sai de casa (§5.1)
-    await executar("registrar_gasto", { descricao: "x", valor: 1 });
-    expect(propostas).toEqual([]);
-  });
-});
+// As tools de finanças saíram daqui quando o financeiro virou o executor de
+// comandos (set/2026): as mesmas garantias (centavos exatos, lançamento sem
+// categoria, conta a pagar, escrita sem gate) moram em `financas.test.ts`.
 
 describe("widgets", () => {
   it("cria com a configuração do tipo", async () => {

@@ -426,6 +426,14 @@ export const SETTING_DEFS = {
   // aqui (e não numa constante no front) porque quem sabe se a reunião é na
   // mesma sala ou por chamada é o dono, não o código.
   "meetings.processarMicrofone": sel(
+  // ── finanças (o painel "posso gastar hoje") ──
+  "finance.diasPerto": num("finance", "Conta perto de vencer", "Conta em aberto que vence em até tantos dias ganha o aviso âmbar no painel.", 7, 0, 60, { unit: "dias" }),
+  "finance.diasJanela": num("finance", "Janela do a pagar e a receber", "Horizonte de \"a pagar\", \"a receber\" e \"sobra\" no painel e em Contas.", 30, 1, 365, { unit: "dias" }),
+  "finance.diasFimDoMes": num("finance", "Reta final do mês", "Faltando até tantos dias, o painel mostra o que ainda cabe até o fim do mês em vez do valor por dia.", 5, 0, 31, { unit: "dias" }),
+  "finance.mesesMedia": num("finance", "Meses na média de gasto livre", "Meses completos usados para projetar o saldo na previsão.", 3, 1, 24, { unit: "meses" }),
+  "finance.mesesSemeados": num("finance", "Contas fixas criadas à frente", "Contas que repetem todo mês ficam cadastradas em aberto até tantos meses à frente.", 2, 0, 24, { unit: "meses" }),
+  "finance.mesesPrevisao": num("finance", "Meses na previsão", "Quantos meses à frente a tela de previsão projeta.", 12, 1, 60, { unit: "meses" }),
+  "finance.repeticoesAtalho": num("finance", "Repetições para sugerir atalho", "Um gasto que se repete tantas vezes vira sugestão de atalho de um toque.", 3, 2, 50, { unit: "vezes" }),
     "meetings",
     "Tratamento do microfone na reunião",
     "O navegador trata o microfone para CHAMADA: cancela eco, corta ruído e nivela o volume, tudo afinado para uma voz só. Com duas pessoas na mesma sala isso atrapalha a separação de quem falou, porque é justamente a diferença entre as vozes que a separa. No automático, o microfone vai cru quando a reunião é na sala e tratado quando você captura o áudio da tela (aí o eco existe de verdade).",

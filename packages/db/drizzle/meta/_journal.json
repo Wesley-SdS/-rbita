@@ -281,6 +281,13 @@
       "when": 1790132361061,
       "tag": "0039_tired_puppet_master",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1790478216718,
+      "tag": "0040_financas_freio_de_mao",
+      "breakpoints": true
     }
   ]
 }

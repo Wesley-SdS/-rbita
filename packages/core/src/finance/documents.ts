@@ -2,8 +2,11 @@ import { z } from "zod";
 import { modeloDaCasa } from "../llm/gerar";
 import { registrarUso, FLUXO } from "../usage/registrar";
 import type { RelatoDeUso } from "../meetings/structured";
-import { db } from "@orbita/db";
-import { expense } from "@orbita/db/finance-schema";
+import { carregar, hojeDoServidor, type DadosFinanceiros } from "./store";
+import { executar } from "./comandos";
+import { palpitarCategoria } from "./palpite";
+import { separarDuplicatas } from "./extrato";
+import { normalizar } from "./nomes";
 import { settings } from "../settings";
 import { log } from "../observability/logger";
 import { generateStructured } from "../meetings/structured";
@@ -88,18 +91,23 @@ export async function importReceipt(userId: string, dataUrl: string, progresso?:
   }
 
   const valor = Number.isFinite(fields.valor) ? fields.valor : 0;
-  const [row] = await db
-    .insert(expense)
-    .values({
-      userId,
-      description: fields.descricao || "Comprovante",
-      category: fields.categoria || null,
-      amountCents: Math.round(valor * 100),
-      kind: fields.tipo,
-      dueDate: parseYmd(fields.vencimento),
-      paid: fields.tipo === "expense",
-    })
-    .returning({ id: expense.id });
+  // grava pelo MESMO executor da tela e da voz: o cupom vira lançamento (ou
+  // conta a pagar/receber, se for boleto), com as marcas certas
+  const hoje = hojeDoServidor();
+  const dados = await carregar(userId, hoje, 0);
+  const data = parseYmd(fields.vencimento) ? ymd(parseYmd(fields.vencimento)!) : hoje;
+  const centavos = Math.round(valor * 100);
+  const descricao = fields.descricao || "Comprovante";
+  const natureza = fields.tipo === "receivable" ? "receita" : "despesa";
+  const categoriaId = categoriaDoTexto(dados, natureza, fields.categoria, descricao);
+  let id: string | undefined;
+  if (centavos > 0) {
+    const r = fields.tipo === "expense"
+      ? await executar(userId, { tipo: "lancar", natureza: "despesa", valor: centavos, data, descricao, categoriaId }, hoje)
+      : await executar(userId, { tipo: "salvar_compromisso", direcao: fields.tipo === "payable" ? "pagar" : "receber", descricao, valor: centavos, vencimento: data, categoriaId, recorrente: false }, hoje);
+    id = r.id ?? undefined;
+  }
+  const row = { id };
 
   log.info("finance.receipt", { userId, kind: fields.tipo, valor });
   return {
@@ -197,29 +205,49 @@ export async function importStatement(userId: string, dataUrl: string, nome: str
   });
   if (all.length === 0) throw new DocumentoIlegivelError("Não consegui extrair lançamentos do extrato.");
 
-  // 3) dedup (data + valor + descrição) e cadastro em lote
+  // 3) dedup (dentro do extrato e contra o que já está lançado) e cadastro
+  // pelo mesmo `importar` da tela: marcado como importado, com palpite de categoria
   await progresso?.(blocks.length, blocks.length + 1, "cadastrando os lançamentos");
+  const hoje = hojeDoServidor();
+  const dados = await carregar(userId, hoje, 0);
   const seen = new Set<string>();
-  const rows = all
+  const lidas = all
     .map((o) => {
-      const valor = Number(o.valor) || 0;
+      const valor = Math.round((Number(o.valor) || 0) * 100);
       if (valor <= 0) return null;
-      const key = `${o.data ?? ""}|${valor}|${(o.descricao ?? "").toLowerCase().slice(0, 40)}`;
+      const dt = parseYmd(o.data);
+      const linha = { data: dt ? ymd(dt) : hoje, valor, tipo: o.tipo === "receivable" ? ("receita" as const) : ("despesa" as const), descricao: (o.descricao || "Lançamento").slice(0, 300), categoria: o.categoria };
+      const key = `${linha.data}|${valor}|${linha.descricao.toLowerCase().slice(0, 40)}`;
       if (seen.has(key)) return null;
       seen.add(key);
-      return {
-        userId,
-        description: o.descricao || "Lançamento",
-        category: o.categoria || null,
-        amountCents: Math.round(valor * 100),
-        kind: o.tipo === "receivable" ? ("receivable" as const) : ("expense" as const),
-        dueDate: parseYmd(o.data),
-        paid: o.tipo !== "receivable",
-      };
+      return linha;
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
-
-  if (rows.length) await db.insert(expense).values(rows);
+  const { novas } = separarDuplicatas(lidas, dados.lancamentos.map((l) => ({ data: l.data, valor: l.valor, descricao: l.descricao ?? "" })));
+  const rows = novas.map((l) => ({ ...l, categoriaId: categoriaDoTexto(dados, l.tipo, (l as (typeof lidas)[number]).categoria, l.descricao) }));
+  if (rows.length) {
+    await executar(userId, {
+      tipo: "importar", lembrar: false, contaId: null, cartaoId: null,
+      linhas: rows.map((r) => ({ natureza: r.tipo, data: r.data, valor: r.valor, descricao: r.descricao, categoriaId: r.categoriaId })),
+    }, hoje);
+  }
   log.info("finance.statement", { userId, importados: rows.length });
-  return { importados: rows.length, lancamentos: rows.map((r) => ({ descricao: r.description, valor: r.amountCents / 100, tipo: r.kind })) };
+  return { importados: rows.length, lancamentos: rows.map((r) => ({ descricao: r.descricao, valor: r.valor / 100, tipo: r.tipo === "receita" ? "entrada" : "saída" })) };
+}
+
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/**
+ * A categoria que o modelo escreveu ("Alimentação") vira uma categoria DO
+ * DONO: pelo nome, se ele tiver uma assim; senão o palpite pela descrição
+ * (regras dele e palavras-chave). Nunca cria categoria nova: o modelo
+ * inventaria uma por cupom.
+ */
+function categoriaDoTexto(d: DadosFinanceiros, natureza: "despesa" | "receita", nome: string | null | undefined, descricao: string): string | null {
+  const doTipo = d.categorias.filter((c) => c.tipo === natureza);
+  const exata = nome ? doTipo.find((c) => normalizar(c.nome) === normalizar(nome)) : undefined;
+  if (exata) return exata.id;
+  const cats = d.categorias.map((c) => ({ id: c.id, nome: c.nome, tipo: c.tipo }));
+  return palpitarCategoria(`${descricao} ${nome ?? ""}`, d.regras, cats, natureza)
+    ?? doTipo.find((c) => normalizar(c.nome) === (natureza === "despesa" ? "outros gastos" : "outras entradas"))?.id ?? null;
 }

@@ -256,6 +256,11 @@ Antes de considerar qualquer tarefa concluída:
 | Transcrição de gravação (uma lógica, dois jeitos de esperar) | `packages/core/src/meetings/transcribe.ts` · imediata em `routes/stt.ts` (comando, mobile) · fila em `routes/meeting-transcribe.ts` (reunião, encadeia o resumo) |
 | Aparelhos da casa (de onde é "aqui") | `packages/core/src/identity/device.ts` · aba "Aparelhos" em `components/home-panel.tsx` |
 | Regras proativas (motor puro + execução) | `packages/core/src/rules/` · tela `components/rules-panel.tsx` |
+| Finanças: motor de cálculo puro ("posso gastar hoje", faturas, dívidas, previsão) | `packages/core/src/finance/{mes,cartao,divida,previsao,recorrentes,parcelas,metas,sugestoes}.ts` · PRD `PRD-FINANCAS-FREIO-DE-MAO.md` |
+| Finanças: TODA escrita (tela, chat e voz usam o mesmo executor) | `packages/core/src/finance/comandos.ts` (zod `Comando`) · regras puras em `finance/operacoes.ts` · rota `apps/api/src/routes/financas.ts` |
+| Finanças: o que cada tela mostra (as tools de consulta devolvem o mesmo) | `packages/core/src/finance/visoes.ts` · store `finance/store.ts` · tabelas `fin_*` em `packages/db/src/finance-schema.ts` |
+| Finanças: ditado, boleto, extrato CSV/OFX, palpite de categoria, CSV, backup | `packages/core/src/finance/{ditado,boleto,extrato,palpite,exportar,backup,entradas}.ts` · rota `POST /api/financas/entrada` |
+| Tools de finanças (19) | `packages/core/src/tools/domains/financas.ts` |
 | Rotinas (runner) · contas a vencer · refresh de token | `packages/core/src/routines/run.ts` · `finance/bill-due.ts` · `connectors/refresh.ts` |
 | Processo vivo (cron, poller do outbox, controllers) | `apps/api/src/` (`scheduler/scheduler.service.ts`, `auth/session.guard.ts`) |
 | Roteador de modelos (uma regex, a substituir) | `packages/llm/src/catalog.ts` → `routeModelKey` |
@@ -400,6 +405,17 @@ Antes de considerar qualquer tarefa concluída:
   "e se houver duas contas?".
 - **Leitura de conector varre TODAS as contas; escrita usa UMA** (`connectors/multi.ts`).
   Pedido ambíguo devolve a lista e pergunta: mandar e-mail pela conta errada não
+- **A voz realtime recebe TODAS as tools**, sem teto e sem seleção por relevância (decisão do dono,
+  27/09/2026: voz e texto fazem as mesmas coisas). A sessão abre antes de o dono falar, então não
+  há pedido para escolher; cortar em `tools.maxPerTurn` por ordem de registro deixava casa, câmera,
+  identidade e metade das finanças fora da voz sem ninguém perceber. O teto vale só para o chat.
+- **Dinheiro é centavo inteiro e data de negócio é texto.** O financeiro guarda `bigint` em centavos
+  e `date` "YYYY-MM-DD"; o motor soma meses em texto (`finance/calendario.ts`). Com `Date`, 31/01
+  mais um mês vira 03/03, e o fuso empurra o lançamento para o dia anterior. A tabela antiga
+  `expense` só existe para a primeira abertura copiar o que o dono tinha (`garantirInicio`).
+- **Número de dinheiro só sai do motor.** Painel, chat e voz leem de `finance/visoes.ts`; somar
+  gasto num SQL por fora (como o antigo `analytics`) dá número diferente do painel, porque
+  transferência, estorno, parcela e quitação têm regra (PRD §5).
   se desfaz.
 - **`prompt=select_account` é obrigatório** no Google e na Microsoft, senão o
   provedor reusa a conta já logada no navegador e a segunda conta nunca entra.

@@ -1,6 +1,8 @@
 import { and, eq, lte } from "drizzle-orm";
 import { db } from "@orbita/db";
-import { expense } from "@orbita/db/finance-schema";
+import { finCompromisso } from "@orbita/db/finance-schema";
+import { somarDias } from "./calendario";
+import { hojeDoServidor } from "./store";
 import { events } from "../events/index";
 import { settings } from "../settings";
 
@@ -20,22 +22,20 @@ export interface BillDueItem {
 }
 
 export async function billsDueFor(userId: string, dias: number): Promise<BillDueItem[]> {
-  const limite = new Date(Date.now() + dias * 86_400_000);
+  const hoje = hojeDoServidor();
+  // o vencido entra junto (não tem limite inferior): conta atrasada é a que mais importa avisar
   const rows = await db
-    .select({ description: expense.description, amountCents: expense.amountCents, kind: expense.kind, dueDate: expense.dueDate })
-    .from(expense)
-    .where(and(eq(expense.userId, userId), eq(expense.paid, false), lte(expense.dueDate, limite)))
-    .orderBy(expense.dueDate);
-  const hoje = new Date();
-  return rows
-    .filter((r) => r.kind !== "expense")
-    .map((r) => ({
-      descricao: r.description,
-      valor: r.amountCents / 100,
-      tipo: r.kind === "payable" ? "a_pagar" : "a_receber",
-      vencimento: r.dueDate?.toISOString().slice(0, 10) ?? null,
-      vencida: r.dueDate ? r.dueDate < hoje : false,
-    }));
+    .select({ descricao: finCompromisso.descricao, valor: finCompromisso.valor, direcao: finCompromisso.direcao, vencimento: finCompromisso.vencimento })
+    .from(finCompromisso)
+    .where(and(eq(finCompromisso.userId, userId), eq(finCompromisso.status, "aberto"), lte(finCompromisso.vencimento, somarDias(hoje, dias))))
+    .orderBy(finCompromisso.vencimento);
+  return rows.map((r) => ({
+    descricao: r.descricao,
+    valor: r.valor / 100,
+    tipo: r.direcao === "pagar" ? "a_pagar" : "a_receber",
+    vencimento: r.vencimento,
+    vencida: r.vencimento < hoje,
+  }));
 }
 
 /** Texto curto e legível para a notificação padrão. */
@@ -48,7 +48,7 @@ export function summarizeBills(items: BillDueItem[]): string {
 
 /** Usuários com alguma conta em aberto (evita varrer quem não usa finanças). */
 async function usersWithOpenBills(): Promise<string[]> {
-  const rows = await db.selectDistinct({ userId: expense.userId }).from(expense).where(eq(expense.paid, false));
+  const rows = await db.selectDistinct({ userId: finCompromisso.userId }).from(finCompromisso).where(eq(finCompromisso.status, "aberto"));
   return rows.map((r) => r.userId);
 }
 
