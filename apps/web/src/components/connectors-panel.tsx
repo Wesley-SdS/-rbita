@@ -30,9 +30,18 @@ interface Conector {
  * Cada conector é um cartão, como no protótipo. O estado "falta configurar no
  * servidor" aparece por escrito em vez de sumir o botão: o dono precisa saber
  * a diferença entre "não quis conectar" e "não dá para conectar ainda".
+ *
+ * E falha de carregamento é DITA, não engolida. Este painel já mostrou a grade
+ * com o cartão do WhatsApp sozinho, sem nenhum aviso, quando a leitura de
+ * `/api/connectors` falhou: o dono viu "não tenho conector nenhum" e a
+ * verdade era que a lista não tinha chegado (a rota respondia 200 com cinco
+ * conectores e o Google conectado, conferido no mesmo minuto). Lista vazia e
+ * lista que não carregou são coisas diferentes, e a tela tem de distinguir as
+ * duas. É o mesmo princípio do `contexto-seguro.ts`: falha silenciosa vira
+ * falha que se explica.
  */
 export function ConnectorsPanel() {
-  const { dado, carregando } = useRecurso<{ connectors: Conector[] }>("/api/connectors", { estavel: true });
+  const { dado, carregando, erro, recarregar } = useRecurso<{ connectors: Conector[] }>("/api/connectors", { estavel: true });
   const conectores = dado?.connectors ?? [];
   const [recado, setRecado] = useState<string | null>(null);
 
@@ -74,6 +83,20 @@ export function ConnectorsPanel() {
   return (
     <>
       {recado && <div className="notice">{recado}</div>}
+
+      {erro && (
+        <div className="notice" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <Icone nome="info" />
+          <span style={{ flex: 1, minWidth: 200 }}>
+            Não consegui carregar suas conexões ({erro}) Os conectores abaixo podem estar faltando por isso, não por
+            estarem desligados.
+          </span>
+          <button className="button secondary compacto" onClick={recarregar}>
+            <Icone nome="refresh" />
+            Tentar de novo
+          </button>
+        </div>
+      )}
 
       {carregando ? (
         <div className="panel empty-state">Carregando suas conexões…</div>
@@ -148,7 +171,7 @@ export function ConnectorsPanel() {
  * Meta que o dono já configurou.
  */
 function BlocoWhatsapp() {
-  const { dado: estado } = useRecurso<{ configured: boolean; phoneId: string | null }>("/api/channels/whatsapp", { estavel: true });
+  const { dado: estado, erro } = useRecurso<{ configured: boolean; phoneId: string | null }>("/api/channels/whatsapp", { estavel: true });
   const [numero, setNumero] = useState("");
   const [token, setToken] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -177,7 +200,11 @@ function BlocoWhatsapp() {
     <article className="panel connector-card">
       <div className="connector-top">
         <span className="connector-logo">W</span>
-        <span className={`tag ${estado?.configured ? "green" : ""}`}>{estado?.configured ? "Configurado" : "Não configurado"}</span>
+        {/* sem estado lido, "Não configurado" seria uma AFIRMAÇÃO que a tela não
+            pode fazer: ela não sabe, e dizer que não sabe é o certo */}
+        <span className={`tag ${estado?.configured ? "green" : erro ? "orange-tag" : ""}`}>
+          {erro ? "Não consegui verificar" : estado?.configured ? "Configurado" : "Não configurado"}
+        </span>
       </div>
       <h3>WhatsApp</h3>
       <p>Token e ID do número do seu app da Meta (WhatsApp Business Cloud API).</p>
@@ -195,13 +222,38 @@ function BlocoWhatsapp() {
         </>
       ) : (
         <form onSubmit={salvar}>
+          {/*
+            AUTOCOMPLETE: o Chrome ignora `autocomplete="off"` num par
+            texto + senha, porque presume um formulário de login. O resultado
+            foi ele preencher o ID do número com o e-mail da conta
+            (`wesley@orbita.local`) e o token com a senha guardada: um clique em
+            "Guardar" e a Órbita ficaria com credencial de WhatsApp inventada.
+            `new-password` é o que de fato desfaz essa presunção, e os `name`
+            próprios tiram o campo do palpite de "usuário" e "senha".
+          */}
           <label className="field">
             ID do número
-            <input value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="phone_id" autoComplete="off" />
+            <input
+              name="whatsapp-phone-id"
+              value={numero}
+              onChange={(e) => setNumero(e.target.value)}
+              placeholder="phone_id"
+              inputMode="numeric"
+              autoComplete="off"
+              data-lpignore="true"
+            />
           </label>
           <label className="field">
             Token de acesso
-            <input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="token" autoComplete="off" />
+            <input
+              name="whatsapp-token"
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="token"
+              autoComplete="new-password"
+              data-lpignore="true"
+            />
           </label>
           <button type="submit" className="button primary full-width" disabled={ocupado || !numero || !token}>
             <Icone nome="check" />

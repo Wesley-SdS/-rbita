@@ -9,6 +9,7 @@ import {
   limparCache,
   mutarRecurso,
   restaurarDado,
+  valeRetentar,
 } from "./cache";
 
 /** Resposta de leitura falsa, no formato que o cache espera. */
@@ -107,6 +108,66 @@ describe("erro", () => {
     await garantir("/api/x", 0);
     expect(lerCache("/api/x").erro).toBe("offline");
     expect(lerCache("/api/x").carregando).toBe(false);
+  });
+});
+
+describe("segunda chance", () => {
+  /**
+   * A tela de Conexões mostrou ZERO conector enquanto a rota respondia cinco,
+   * com o Google conectado (conferido por HTTP no mesmo minuto). O painel não
+   * estava vazio: a leitura tinha falhado no carregamento, e nada mais tentava
+   * de novo até a pessoa sair da tela e voltar. Em dev, o proxy do Next derruba
+   * a conexão quando o `apps/api` está ocupado (CLAUDE.md §9), então é uma falha
+   * de instante, que se resolve sozinha na tentativa seguinte.
+   */
+  it("falha de transporte e queda do proxy merecem outra tentativa", () => {
+    expect(valeRetentar(null)).toBe(true); // o fetch estourou
+    expect(valeRetentar(502)).toBe(true);
+    expect(valeRetentar(503)).toBe(true);
+    expect(valeRetentar(504)).toBe(true);
+  });
+
+  it("sessão expirada e pedido inválido NÃO são retentados", () => {
+    // insistir não conserta, e repetir só esconderia o motivo
+    expect(valeRetentar(401)).toBe(false);
+    expect(valeRetentar(403)).toBe(false);
+    expect(valeRetentar(404)).toBe(false);
+    expect(valeRetentar(400)).toBe(false);
+    expect(valeRetentar(500)).toBe(false);
+  });
+
+  it("a conexão derrubada no primeiro pedido se recupera sozinha", async () => {
+    let primeira = true;
+    responder = async (url) => {
+      if (primeira) {
+        primeira = false;
+        throw new Error("Failed to fetch");
+      }
+      return resposta({ url });
+    };
+    await garantir("/api/connectors", 0);
+    const estado = lerCache<{ url: string }>("/api/connectors");
+    expect(estado.dado).toEqual({ url: "/api/connectors" });
+    expect(estado.erro).toBeNull();
+    expect(chamadas).toHaveLength(2);
+  });
+
+  it("falhando as duas, o erro aparece: não pode virar lista vazia em silêncio", async () => {
+    responder = async () => {
+      throw new Error("Failed to fetch");
+    };
+    await garantir("/api/connectors", 0);
+    const estado = lerCache("/api/connectors");
+    expect(estado.erro).toBe("Failed to fetch");
+    expect(estado.dado).toBeNull();
+    expect(estado.carregando).toBe(false);
+    expect(chamadas).toHaveLength(2); // duas, e só duas
+  });
+
+  it("401 não gasta uma segunda tentativa", async () => {
+    responder = async () => resposta({}, 401);
+    await garantir("/api/x", 0);
+    expect(chamadas).toHaveLength(1);
   });
 });
 

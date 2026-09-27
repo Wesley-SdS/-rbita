@@ -68,6 +68,38 @@ function temPlateia(chave: string): boolean {
   return (ouvintes.get(chave)?.size ?? 0) > 0;
 }
 
+/**
+ * Vale tentar de novo? Puro.
+ *
+ * `null` é o `fetch` ter estourado: rede caiu, proxy derrubou a conexão,
+ * upstream demorou. O proxy do Next em dev faz exatamente isso quando o
+ * `apps/api` está ocupado (CLAUDE.md §9), e uma falha assim some sozinha no
+ * instante seguinte. 502, 503 e 504 são a mesma história dita pelo proxy.
+ *
+ * 401 e o resto dos 4xx NÃO entram: sessão expirada e pedido inválido não
+ * melhoram por insistência, e repetir só esconderia o motivo.
+ */
+export function valeRetentar(status: number | null): boolean {
+  if (status === null) return true;
+  return status === 502 || status === 503 || status === 504;
+}
+
+/** Uma tentativa. `status` é null quando o próprio `fetch` estourou. */
+async function tentar(chave: string): Promise<{ dado: unknown } | { erro: string; status: number | null }> {
+  try {
+    const r = await buscador(chave);
+    if (!r.ok) {
+      return { erro: r.status === 401 ? "Sessão expirada." : `Falha ao carregar (${r.status}).`, status: r.status };
+    }
+    return { dado: await r.json() };
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : "Falha ao carregar.", status: null };
+  }
+}
+
+/** Espera curta antes da segunda tentativa: é para uma queda de instante, não para insistir. */
+const ESPERA_RETENTAR_MS = 400;
+
 async function buscar(chave: string): Promise<void> {
   const antes = memoria.get(chave) ?? VAZIO;
   const tinhaDado = antes.dado !== null;
@@ -75,10 +107,17 @@ async function buscar(chave: string): Promise<void> {
   avisar(chave);
 
   try {
-    const r = await buscador(chave);
-    if (!r.ok) throw new Error(r.status === 401 ? "Sessão expirada." : `Falha ao carregar (${r.status}).`);
-    const dado = await r.json();
-    memoria.set(chave, { dado, erro: null, carregando: false, revalidando: false, em: Date.now() });
+    let r = await tentar(chave);
+    // UMA segunda chance, e só para falha que some sozinha. Sem isto, uma
+    // conexão derrubada no carregamento da tela deixava o painel vazio até a
+    // pessoa sair e voltar: foi assim que a tela de Conexões mostrou zero
+    // conector enquanto a rota respondia cinco, com o Google conectado.
+    if ("erro" in r && valeRetentar(r.status)) {
+      await new Promise((ok) => setTimeout(ok, ESPERA_RETENTAR_MS));
+      r = await tentar(chave);
+    }
+    if ("erro" in r) throw new Error(r.erro);
+    memoria.set(chave, { dado: r.dado, erro: null, carregando: false, revalidando: false, em: Date.now() });
   } catch (e) {
     // O dado velho FICA. Uma rota fora do ar por um instante não pode apagar o
     // que a pessoa já estava vendo: ela vê o aviso e o conteúdo junto.
