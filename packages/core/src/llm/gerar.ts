@@ -1,5 +1,5 @@
 import { generateText, stepCountIs, type ToolSet } from "ai";
-import { buildModelChain, recordProviderResult, resolveModel, statusDoErro, fallbackModelKey, cadeiaDaCasa } from "@orbita/llm";
+import { buildModelChain, recordProviderResult, resolveModel, statusDoErro, fallbackModelKey, cadeiaDaCasa, SEM_MODELO } from "@orbita/llm";
 import { log } from "../observability/logger";
 import { registrarUso } from "../usage/registrar";
 
@@ -43,14 +43,38 @@ export interface TextoGerado {
 }
 
 /**
+ * A CADEIA que atende este pedido, na ordem do dono.
+ *
+ * Um fluxo pode pedir um modelo por nome (config própria dele, como
+ * `routines.model`): aí ele entra como PRIMEIRO da cadeia, e os outros ficam de
+ * reserva se ele falhar.
+ *
+ * Sem pedido, quem manda é a ordem escolhida em Ajustes (`llm.failoverOrder`),
+ * NUNCA o modelo reserva. Esta distinção é a correção de um bug medido em
+ * 27/09/2026: o reserva nasce vazio, vazio significa o bootstrap
+ * `local/qwen2.5:7b`, e como `buildModelChain` põe o modelo pedido em primeiro
+ * lugar, rotina, regra e extração de memória iam todas para o modelo local
+ * mesmo com "assinatura primeiro" configurado, afogando a CPU da máquina.
+ *
+ * O reserva só volta a valer quando a descoberta não achou NADA (primeiro
+ * boot, antes de qualquer provedor responder a lista), e só se o dono fixou
+ * um: vazio devolve cadeia vazia, e quem chama lança `SEM_MODELO`.
+ */
+export async function candidatosDaCasa(modeloPreferido?: string): Promise<string[]> {
+  const pedido = modeloPreferido?.trim();
+  if (pedido) return buildModelChain(pedido);
+  const casa = cadeiaDaCasa();
+  return casa.length ? casa : buildModelChain(await fallbackModelKey());
+}
+
+/**
  * Tenta os candidatos em ordem até um responder. Cada tentativa, mesmo a que
  * falha, alimenta o disjuntor — é assim que uma conta no limite deixa de ser
  * tentada nas chamadas seguintes.
  */
 export async function gerarTexto(p: PedidoDeTexto): Promise<TextoGerado> {
-  const preferido = p.modeloPreferido?.trim() || (await fallbackModelKey());
-  const candidatos = buildModelChain(preferido);
-  if (!candidatos.length) throw new Error("Nenhum modelo disponível para atender este pedido.");
+  const candidatos = await candidatosDaCasa(p.modeloPreferido);
+  if (!candidatos.length) throw new Error(SEM_MODELO);
 
   let ultimoErro: unknown = null;
   for (const modelKey of candidatos) {
@@ -114,9 +138,8 @@ export async function gerarEstruturado<T>(
   schema: import("zod").ZodType<T>,
 ): Promise<{ dados: T; modelKey: string }> {
   const { generateStructured } = await import("../meetings/structured");
-  const preferido = p.modeloPreferido?.trim() || (await fallbackModelKey());
-  const candidatos = buildModelChain(preferido);
-  if (!candidatos.length) throw new Error("Nenhum modelo disponível para atender este pedido.");
+  const candidatos = await candidatosDaCasa(p.modeloPreferido);
+  if (!candidatos.length) throw new Error(SEM_MODELO);
 
   let ultimoErro: unknown = null;
   for (const modelKey of candidatos) {
@@ -170,25 +193,9 @@ export async function gerarEstruturado<T>(
  * escolhido). Quem puder usar `gerarTexto` tem os dois e deve preferi-lo.
  */
 export async function modeloDaCasa(modeloPreferido?: string): Promise<{ model: ReturnType<typeof resolveModel>; modelKey: string }> {
-  const pedido = modeloPreferido?.trim();
-  if (pedido) {
-    // o fluxo pediu um modelo por nome (config própria dele): respeita
-    const modelKey = buildModelChain(pedido)[0];
-    if (!modelKey) throw new Error("Nenhum modelo disponível para atender este pedido.");
-    return { model: resolveModel(modelKey), modelKey };
-  }
-
-  // SEM pedido explícito: quem manda é a ORDEM DO DONO, não o modelo reserva.
-  //
-  // Isto era `buildModelChain(await fallbackModelKey())[0]`, e o reserva é o
-  // bootstrap `local/qwen2.5:7b`. Como o `buildModelChain` põe o modelo pedido
-  // em PRIMEIRO lugar, toda tarefa da casa (resumo de reunião, extração de
-  // memória, rotinas) ia para o modelo local mesmo com a política em
-  // "assinatura primeiro". Medido em 27/09/2026 nesta máquina: resumo em 123 s
-  // e memória em 87 s na CPU, com a máquina inteira afogada, enquanto a
-  // assinatura do Claude estava ali, de graça e em segundos.
-  // o reserva só entra quando a descoberta não achou NADA (primeiro boot)
-  const modelKey = cadeiaDaCasa()[0] ?? buildModelChain(await fallbackModelKey())[0];
-  if (!modelKey) throw new Error("Nenhum modelo disponível para atender este pedido.");
+  // só o primeiro da cadeia: quem chama aqui leva o modelo adiante e faz as
+  // chamadas por conta própria, então não há para onde cair
+  const modelKey = (await candidatosDaCasa(modeloPreferido))[0];
+  if (!modelKey) throw new Error(SEM_MODELO);
   return { model: resolveModel(modelKey), modelKey };
 }
