@@ -39,7 +39,11 @@ export interface SttOptions {
    * Nunca diarize pedaços de uma mesma reunião separadamente.
    */
   diarize?: boolean;
-  /** Dica de quantos locutores esperar — melhora a precisão quando conhecido. */
+  /**
+   * Quantas vozes o dono disse que iam falar. Vira PISO (limite duro) na
+   * separação, não dica: a dica é ignorada quando as vozes se parecem, e foi
+   * assim que duas pessoas na mesma sala voltaram num locutor só.
+   */
   expectedSpeakers?: number;
   /** De quem é a conta. Sem isto a transcrição fica fora do registro de consumo. */
   userId?: string;

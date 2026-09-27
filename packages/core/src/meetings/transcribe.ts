@@ -6,6 +6,7 @@ import { log } from "../observability/logger";
 // nuvem (escolha do dono, PRD §4.3), e a cerca do NV.1 não deixa ele importar
 // o módulo de voz
 import { identificarLocutoresDaReuniao } from "../identity/actions";
+import { nomesAfirmaveis, nomesNaConversa, type NomeSugerido } from "./nomes-na-conversa";
 
 /**
  * Transcrição de uma GRAVAÇÃO inteira, com quem é quem. É o mesmo caminho para
@@ -19,6 +20,8 @@ export type SpeakerIdentities = Awaited<ReturnType<typeof identificarLocutoresDa
 
 export interface TranscricaoResultado extends SttResult {
   speakerIdentities?: SpeakerIdentities;
+  /** Nomes que a própria conversa revelou ("eu me chamo Lucas", "William, ..."). */
+  nomesDaConversa?: NomeSugerido[];
 }
 
 export interface TranscreverOpcoes {
@@ -40,20 +43,27 @@ export async function transcribeRecording(userId: string, audio: Uint8Array, mim
   const result = await transcribeAudio(file, { diarize, expectedSpeakers: opts.expectedSpeakers, userId, referencia: opts.referencia ?? null });
   log.info("stt", { userId, provider: result.provider, diarize, speakers: result.speakers ?? 0, bytes: audio.length, ms: Date.now() - started });
 
+  // Quem é quem PELO QUE FOI DITO. Não depende do serviço de percepção nem de
+  // assinatura cadastrada, então funciona para visitante — e é justamente o
+  // visitante que virava "Desconhecido 1" mesmo tendo dito o próprio nome.
+  const nomesDaConversa = result.utterances?.length ? nomesNaConversa(result.utterances) : [];
+  if (nomesDaConversa.length) log.info("stt.nomes_na_conversa", { userId, nomes: nomesDaConversa.map((n) => `${n.label}=${n.nome}:${n.fonte}`) });
+  const comNomes: TranscricaoResultado = nomesDaConversa.length ? { ...result, nomesDaConversa } : result;
+
   // Nomes dos locutores (VZ.5): a diarização foi sobre o áudio INTEIRO; aqui só
   // se calcula uma assinatura por etiqueta, LOCALMENTE. Só para o dono (pessoas
   // e biometria são da casa dele). Fail-soft: sem o serviço de percepção, a
   // reunião sai como antes ("Locutor A").
-  if (!diarize || !result.utterances?.length || (await getOwnerId()) !== userId) return result;
+  if (!diarize || !result.utterances?.length || (await getOwnerId()) !== userId) return comNomes;
   await progresso?.(1, total, "reconhecendo quem falou");
   const t = Date.now();
   const speakerIdentities = await identificarLocutoresDaReuniao(userId, audio, mime, result.utterances, opts.sourceRef ?? null).catch((e) => {
     log.warn("stt.locutores_falhou", { error: e instanceof Error ? e.message : String(e) });
     return undefined;
   });
-  if (!speakerIdentities) return result;
+  if (!speakerIdentities) return comNomes;
   log.info("stt.locutores", { reconhecidos: speakerIdentities.filter((s) => s.outcome === "identificado").length, total: speakerIdentities.length, ms: Date.now() - t });
-  return { ...result, speakerIdentities };
+  return { ...comNomes, speakerIdentities };
 }
 
 /**
@@ -66,8 +76,14 @@ export async function transcribeRecording(userId: string, audio: Uint8Array, mim
  * transcrição vai para o resumo, para as tarefas e para a memória da casa. Na
  * dúvida, continua "Locutor B", e a tela pede o nome ao dono.
  */
-export function nomesDosLocutores(identities: SpeakerIdentities | undefined): Record<string, string> {
-  const out: Record<string, string> = {};
+export function nomesDosLocutores(identities: SpeakerIdentities | undefined, daConversa: readonly NomeSugerido[] = []): Record<string, string> {
+  // O que foi DITO entra primeiro: "eu me chamo Lucas" não é biometria, é a
+  // pessoa dizendo o próprio nome, e vale mesmo sem nenhum cadastro. Só a
+  // apresentação entra; "William, te mandei o doc" fica de fora daqui, porque
+  // supor que quem responde é o William seria afirmar um palpite.
+  const out: Record<string, string> = { ...nomesAfirmaveis(daConversa) };
+  // A voz RECONHECIDA vence: ela sabe quem a pessoa é na casa, não só como ela
+  // se chamou nesta reunião.
   for (const s of identities ?? []) {
     if (s.outcome === "identificado" && s.name?.trim()) out[s.label] = s.name.trim();
   }

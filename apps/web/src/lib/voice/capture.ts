@@ -20,9 +20,41 @@ export interface MeetingCapture {
   stream: MediaStream;
   /** Conseguiu capturar o áudio do sistema além do microfone? */
   hasSystemAudio: boolean;
-  /** O microfone foi aberto com o tratamento de chamada ligado? (a UI explica) */
-  micProcessado: boolean;
+  /** O que o navegador REALMENTE aplicou no microfone (vai para o log). */
+  audio: AudioEfetivo;
   stop(): void;
+}
+
+/**
+ * O que o navegador de fato aplicou na trilha do microfone.
+ *
+ * Existe porque "o microfone está ruim" era palpite, e palpite não se conserta.
+ * Pedir uma restrição não garante que ela valeu: o navegador pode ignorar, o
+ * aparelho pode não suportar, e o padrão de uma caixa marcada na tela pode ter
+ * mandado o contrário do que se queria. Isto é a MEDIÇÃO, e ela viaja junto da
+ * gravação para o log dizer o que aconteceu.
+ */
+export interface AudioEfetivo {
+  echoCancellation?: boolean;
+  noiseSuppression?: boolean;
+  autoGainControl?: boolean;
+  sampleRate?: number;
+  channelCount?: number;
+  /** O áudio da tela entrou mesmo? É o que EXPLICA o tratamento estar ligado. */
+  comAudioDeTela?: boolean;
+}
+
+/** Lê da trilha o que valeu de verdade. */
+export function audioEfetivo(track: MediaStreamTrack | undefined): AudioEfetivo {
+  if (!track) return {};
+  const s = track.getSettings() as MediaTrackSettings & { autoGainControl?: boolean };
+  return {
+    echoCancellation: s.echoCancellation,
+    noiseSuppression: s.noiseSuppression,
+    autoGainControl: s.autoGainControl,
+    sampleRate: s.sampleRate,
+    channelCount: s.channelCount,
+  };
 }
 
 /** Como o navegador deve tratar o microfone. Espelha `meetings.processarMicrofone`. */
@@ -58,7 +90,69 @@ export function vozesEsperadas(valor: string): number {
  */
 export function restricoesDoMicrofone(modo: ModoDeMicrofone, comAudioDeTela: boolean): MediaTrackConstraints {
   const tratar = modo === "sempre" ? true : modo === "nunca" ? false : comAudioDeTela;
-  return { echoCancellation: tratar, noiseSuppression: tratar, autoGainControl: tratar };
+  return {
+    echoCancellation: tratar,
+    noiseSuppression: tratar,
+    autoGainControl: tratar,
+    // `voiceIsolation` (Chrome recente) isola a voz PRINCIPAL e joga o resto
+    // fora. Numa reunião ele apaga justamente a segunda pessoa, então fica
+    // desligado até com o tratamento ligado. Navegador que não conhece a
+    // restrição a ignora, e o cast existe porque ela ainda não está no lib.dom.
+    voiceIsolation: false,
+  } as MediaTrackConstraints;
+}
+
+/** Abre o microfone com um conjunto de restrições. Pedir 48 kHz é de graça: o
+ *  que sobra a separação de vozes descarta, o que falta não se recupera. */
+function abrirMicrofone(restricoes: MediaTrackConstraints): Promise<MediaStream> {
+  return navigator.mediaDevices.getUserMedia({ audio: { ...restricoes, sampleRate: 48000 } });
+}
+
+/** O tratamento aplicado bate com o pedido? Só estes três importam para a separação. */
+function tratamentoBate(atual: AudioEfetivo, alvo: MediaTrackConstraints): boolean {
+  return (
+    atual.echoCancellation === alvo.echoCancellation &&
+    atual.noiseSuppression === alvo.noiseSuppression &&
+    atual.autoGainControl === alvo.autoGainControl
+  );
+}
+
+/**
+ * Corrige o tratamento do microfone DEPOIS de saber se o áudio da tela entrou
+ * mesmo. Devolve a trilha que vale e o que ela de fato aplicou.
+ *
+ * A primeira decisão é tomada pela INTENÇÃO, que é o que se sabe antes de abrir
+ * o microfone — e a intenção erra no caso mais comum: a caixa "capturar também
+ * o áudio da tela" vem MARCADA por padrão, e quando o diálogo é cancelado a
+ * reunião é de microfone puro, com o tratamento ligado à toa.
+ *
+ * ⚠️ `applyConstraints` NÃO serve para isto. Foi a primeira tentativa e ela
+ * falhou em silêncio: o Chrome aceita a chamada, não lança nada, e
+ * `getSettings()` continua devolvendo os valores antigos — a cadeia de
+ * processamento de áudio é montada quando a trilha nasce. Medido em 26/09/2026,
+ * e só apareceu porque a medição vai para o log: `comAudioDeTela: false` com
+ * `echoCancellation: true` na mesma linha. A única forma que funciona é ABRIR A
+ * TRILHA DE NOVO — não custa permissão (já foi concedida) e a gravação começa
+ * depois, então não se perde áudio.
+ */
+async function ajustarMicrofone(
+  mic: MediaStream,
+  modo: ModoDeMicrofone,
+  comAudioDeTela: boolean,
+): Promise<{ mic: MediaStream; audio: AudioEfetivo }> {
+  const alvo = restricoesDoMicrofone(modo, comAudioDeTela);
+  const atual = audioEfetivo(mic.getAudioTracks()[0]);
+  if (tratamentoBate(atual, alvo)) return { mic, audio: atual };
+
+  try {
+    const novo = await abrirMicrofone(alvo);
+    mic.getTracks().forEach((t) => t.stop());
+    return { mic: novo, audio: audioEfetivo(novo.getAudioTracks()[0]) };
+  } catch {
+    // aparelho ocupado ou permissão revogada no meio: segue com o que já tem, e
+    // a medição conta a verdade em vez de prometer o que não houve
+    return { mic, audio: atual };
+  }
 }
 
 /** Mistura N streams de áudio num só (Web Audio). */
@@ -78,18 +172,17 @@ function mix(ctx: AudioContext, streams: MediaStream[]): MediaStream {
  * a UI avisar (em vez de gravar meia reunião em silêncio sem ninguém notar).
  */
 export async function startMeetingCapture(opts: { systemAudio: boolean; microfone?: ModoDeMicrofone }): Promise<MeetingCapture> {
-  // O tratamento é decidido pela INTENÇÃO de capturar a tela, que é o que se
-  // sabe antes de abrir o microfone. Pedir a tela primeiro daria a resposta
-  // exata, mas jogaria o diálogo de compartilhamento na frente do de microfone.
-  const audio = restricoesDoMicrofone(opts.microfone ?? "auto", opts.systemAudio);
-  const micProcessado = audio.echoCancellation === true;
-  const mic = await navigator.mediaDevices.getUserMedia({ audio });
+  const modo = opts.microfone ?? "auto";
+  // Abre pela INTENÇÃO e corrige depois, quando se souber se o áudio da tela
+  // entrou de verdade (ver `ajustarMicrofone`).
+  const inicial = await abrirMicrofone(restricoesDoMicrofone(modo, opts.systemAudio));
 
   if (!opts.systemAudio) {
+    const { mic, audio } = await ajustarMicrofone(inicial, modo, false);
     return {
       stream: mic,
       hasSystemAudio: false,
-      micProcessado,
+      audio,
       stop: () => mic.getTracks().forEach((t) => t.stop()),
     };
   }
@@ -110,14 +203,19 @@ export async function startMeetingCapture(opts: { systemAudio: boolean; microfon
 
   if (!sysTracks.length) {
     display?.getTracks().forEach((t) => t.stop());
+    // Pediu a tela e não veio som (diálogo cancelado, ou sem marcar
+    // "compartilhar áudio"): é uma reunião de microfone, e o tratamento tem de
+    // SAIR. É o caso mais comum, porque a caixa vem marcada por padrão.
+    const { mic, audio } = await ajustarMicrofone(inicial, modo, false);
     return {
       stream: mic,
       hasSystemAudio: false,
-      micProcessado,
+      audio,
       stop: () => mic.getTracks().forEach((t) => t.stop()),
     };
   }
 
+  const { mic, audio } = await ajustarMicrofone(inicial, modo, true);
   const sys = new MediaStream(sysTracks);
   const ctx = new AudioContext();
   const mixed = mix(ctx, [mic, sys]);
@@ -125,7 +223,7 @@ export async function startMeetingCapture(opts: { systemAudio: boolean; microfon
   return {
     stream: mixed,
     hasSystemAudio: true,
-    micProcessado,
+    audio,
     stop: () => {
       mic.getTracks().forEach((t) => t.stop());
       sys.getTracks().forEach((t) => t.stop());

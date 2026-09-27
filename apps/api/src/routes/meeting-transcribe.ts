@@ -1,9 +1,36 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import { enqueueJob } from "@orbita/core/jobs/queue";
 import { settings } from "@orbita/core/settings/index";
+import { log } from "@orbita/core/observability/logger";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { jobAccepted } from "../http/job-response";
+
+/**
+ * O que o navegador aplicou no microfone. Só medição: alimenta o log, não o
+ * processamento. Com `echoCancellation` e `autoGainControl` ligados, duas
+ * pessoas na mesma sala voltam como um locutor só — e sem registrar isto,
+ * descobrir o motivo depois é impossível.
+ */
+const Captura = z.object({
+  echoCancellation: z.boolean().optional(),
+  noiseSuppression: z.boolean().optional(),
+  autoGainControl: z.boolean().optional(),
+  sampleRate: z.number().int().min(0).max(384000).optional(),
+  channelCount: z.number().int().min(0).max(32).optional(),
+  comAudioDeTela: z.boolean().optional(),
+});
+
+/** Campo de formulário que carrega JSON: inválido não é erro, é ausência de medição. */
+function jsonDoCampo(valor: FormDataEntryValue | null): unknown {
+  if (typeof valor !== "string" || valor.length > 2000) return null;
+  try {
+    return JSON.parse(valor);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Reunião gravada: transcrição com separação de vozes, quem é quem e, em
@@ -29,6 +56,11 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const expected = Number(form.get("speakers"));
   const speakers = Number.isInteger(expected) && expected >= 2 && expected <= 10 ? expected : null;
   const title = String(form.get("title") ?? "").trim().slice(0, 200) || null;
+  // O que o microfone do navegador REALMENTE aplicou. Entra só no log, nunca no
+  // processamento: existe para "a separação de vozes não funcionou" parar de ser
+  // palpite. Entrada não confiável como qualquer outra, então passa por zod.
+  const captura = Captura.safeParse(jsonDoCampo(form.get("captura")));
+  if (captura.success) log.info("meeting.captura", { userId: session.user.id, esperadas: speakers ?? 0, ...captura.data });
 
   const bytes = Buffer.from(await file.arrayBuffer());
   // a mesma gravação enviada duas vezes (clique duplo, reenvio) é o mesmo

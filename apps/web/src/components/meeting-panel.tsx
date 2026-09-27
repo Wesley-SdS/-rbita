@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useRecurso } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
-import { ContinuousRecorder, startMeetingCapture, vozesEsperadas, type MeetingCapture, type ModoDeMicrofone } from "@/lib/voice/capture";
+import { Markdown } from "@/components/markdown";
+import { ContinuousRecorder, startMeetingCapture, vozesEsperadas, type AudioEfetivo, type MeetingCapture, type ModoDeMicrofone } from "@/lib/voice/capture";
 import { ContinuousDictation, getRecognitionCtor } from "@/lib/voice/speech";
 import { TranscricaoViva } from "@/lib/voice/transcricao-viva";
 import { avaliarGravacao } from "@/lib/voice/gravacao";
 import type { SttUtterance } from "@orbita/core/stt/types";
 import { parsePrazo, type Compromisso } from "@orbita/core/meetings/compromissos";
+import type { NomeSugerido } from "@orbita/core/meetings/nomes-na-conversa";
 import { enfileirar, type JobView } from "@/lib/jobs";
 import { JobProgress } from "@/components/job-progress";
 
@@ -40,25 +42,34 @@ function applySpeakerNames(text: string, names: Record<string, string>): string 
  * identificado, "Nome?" (com a confiança no title) quando provável, ou o
  * "Desconhecido N" efêmero. Sem identidade nenhuma, cai no rótulo cru.
  */
-function speakerSuggestion(tag: string, identities: SpeakerIdentity[]): { text: string; title?: string } {
+function speakerSuggestion(tag: string, identities: SpeakerIdentity[], daConversa: NomeSugerido[] = []): { text: string; title?: string } {
   const si = identities.find((s) => s.label === tag);
-  if (!si) return { text: `Locutor ${tag}` };
-  if (si.outcome === "identificado" && si.name) return { text: si.name };
-  if (si.outcome === "provavel" && si.name) return { text: `${si.name}?`, title: `${Math.round(si.score * 100)}% de confiança` };
-  return { text: si.unknownLabel ?? `Locutor ${tag}` };
+  const dito = daConversa.find((n) => n.label === tag);
+  // 1º a voz RECONHECIDA: ela sabe quem a pessoa é na casa, não só como ela se
+  // chamou hoje
+  if (si?.outcome === "identificado" && si.name) return { text: si.name };
+  // 2º quem disse o próprio nome: é evidência mais forte que um casamento de
+  // voz fraco, e é o único caminho para quem nunca cadastrou a voz
+  if (dito?.fonte === "apresentacao") return { text: dito.nome, title: `Foi como se apresentou: “${dito.trecho}”` };
+  if (si?.outcome === "provavel" && si.name) return { text: `${si.name}?`, title: `${Math.round(si.score * 100)}% de confiança` };
+  // 3º quem foi CHAMADO assim: palpite bom, marcado como palpite
+  if (dito?.fonte === "chamado") return { text: `${dito.nome}?`, title: `Foi chamado assim na conversa: “${dito.trecho}”` };
+  return { text: si?.unknownLabel ?? `Locutor ${tag}` };
 }
 
 /** Nome exibido: o que o usuário salvou manualmente, senão a sugestão do reconhecimento de voz. */
-function speakerLabel(tag: string, identities: SpeakerIdentity[], names: Record<string, string>): { text: string; title?: string } {
+function speakerLabel(tag: string, identities: SpeakerIdentity[], names: Record<string, string>, daConversa: NomeSugerido[] = []): { text: string; title?: string } {
   const manual = names[tag]?.trim();
   if (manual) return { text: manual };
-  return speakerSuggestion(tag, identities);
+  return speakerSuggestion(tag, identities, daConversa);
 }
 
 /** Mapa tag→texto da sugestão de voz, para alimentar `applySpeakerNames` no resumo e nos compromissos. */
-function autoSpeakerNames(identities: SpeakerIdentity[]): Record<string, string> {
+function autoSpeakerNames(identities: SpeakerIdentity[], daConversa: NomeSugerido[] = []): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const si of identities) out[si.label] = speakerSuggestion(si.label, identities).text;
+  for (const tag of new Set([...identities.map((s) => s.label), ...daConversa.map((n) => n.label)])) {
+    out[tag] = speakerSuggestion(tag, identities, daConversa).text;
+  }
   return out;
 }
 
@@ -111,10 +122,16 @@ export function MeetingPanel() {
   const [savingNames, setSavingNames] = useState(false);
   const [namesSaved, setNamesSaved] = useState(false);
   const [speakerIdentities, setSpeakerIdentities] = useState<SpeakerIdentity[]>([]);
+  // nomes que a própria conversa revelou; funcionam sem cadastro de voz nenhum
+  const [nomesDaConversa, setNomesDaConversa] = useState<NomeSugerido[]>([]);
   const [linkPerson, setLinkPerson] = useState<Record<string, string>>({}); // tag -> personId escolhido ("" = nenhum)
   const [useSample, setUseSample] = useState<Record<string, boolean>>({}); // tag -> "usar esta fala como amostra"
   const [amostras, setAmostras] = useState<Record<string, string>>({}); // tag -> resultado do cadastro de amostra
 
+  // O que o navegador realmente aplicou no microfone. Guardado num ref porque a
+  // captura é encerrada ANTES de montar o envio, e é justamente isto que
+  // explica um resultado ruim depois.
+  const audioRef = useRef<AudioEfetivo>({});
   const captureRef = useRef<MeetingCapture | null>(null);
   const recorderRef = useRef<ContinuousRecorder | null>(null);
   const dictationRef = useRef<ContinuousDictation | null>(null);
@@ -147,7 +164,7 @@ export function MeetingPanel() {
   async function start() {
     setSummary(""); setTranscript(""); setPreview(""); setUtterances([]); setNote(null);
     setDocumentId(null); setSummarizeJob(null); setTranscribeJob(null); setCompromissos([]); setAddedTodos(new Set()); setSpeakerNames({}); setNamesSaved(false);
-    setSpeakerIdentities([]); setLinkPerson({}); setUseSample({}); setAmostras({});
+    setSpeakerIdentities([]); setNomesDaConversa([]); setLinkPerson({}); setUseSample({}); setAmostras({});
 
     // Como esta casa grava, perguntado ANTES de abrir o microfone: o
     // tratamento do microfone é escolhido na abertura e não muda depois, e
@@ -167,6 +184,7 @@ export function MeetingPanel() {
       return;
     }
     captureRef.current = capture;
+    audioRef.current = { ...capture.audio, comAudioDeTela: capture.hasSystemAudio };
 
     if (systemAudio && !capture.hasSystemAudio) {
       // falha silenciosa aqui significaria gravar meia reunião sem ninguém notar
@@ -237,6 +255,9 @@ export function MeetingPanel() {
       fd.append("file", blob, "reuniao.webm");
       // a rota valida a faixa (2 a 10); fora dela, nem manda
       if (esperadas) fd.append("speakers", String(esperadas));
+      // o que o microfone fez de verdade vai junto, para o log do servidor poder
+      // explicar um resultado ruim em vez de deixar todo mundo no palpite
+      fd.append("captura", JSON.stringify(audioRef.current));
       const r = await fetch("/api/meeting/transcribe", { method: "POST", body: fd });
       setTranscribeJob(await enfileirar(r));
     } catch (e) {
@@ -264,6 +285,7 @@ export function MeetingPanel() {
       text?: string;
       utterances?: SttUtterance[];
       speakerIdentities?: SpeakerIdentity[];
+      nomesDaConversa?: NomeSugerido[];
       diarizationUnavailable?: boolean;
       provider?: string;
       resumoJobId?: string | null;
@@ -275,6 +297,8 @@ export function MeetingPanel() {
       // Onda 9: locutores reconhecidos por voz, se o serviço de percepção respondeu.
       // Pré-vincula o seletor de pessoa à sugestão (identificado ou provável); sem
       // sugestão o seletor começa vazio (não é correção, é vínculo novo).
+      // nomes ditos em voz alta: chegam mesmo sem percepção e sem cadastro
+      setNomesDaConversa(d.nomesDaConversa ?? []);
       const identities = d.speakerIdentities ?? [];
       if (identities.length) {
         setSpeakerIdentities(identities);
@@ -290,11 +314,19 @@ export function MeetingPanel() {
       const separadas = new Set(d.utterances.map((u) => u.speaker)).size;
       const esperadas = vozesEsperadas(pessoas);
       if (esperadas && separadas < esperadas) {
+        // o conselho depende do que o microfone FEZ, não do que foi pedido: se
+        // ele veio tratado, a causa é essa e tem conserto na tela; se já veio
+        // cru, o que sobra é físico, e mandar mexer em Ajustes seria enrolação
+        const tratado = audioRef.current.autoGainControl || audioRef.current.echoCancellation;
         avisar(
           `Você disse que eram ${esperadas} pessoas e eu só consegui separar ${separadas}. ` +
-            "Quase sempre é o microfone nivelando as vozes: em Ajustes, ponha o tratamento do microfone em “sempre cru” e aproxime quem fala mais longe.",
+            (tratado
+              ? "O microfone gravou com o tratamento de chamada ligado, que nivela as vozes e apaga quem está mais longe. Desmarque “capturar o áudio da tela” quando a conversa for aqui na sala, ou ponha o tratamento em “sempre cru” em Ajustes."
+              : "O microfone já gravou cru, então o que resta é a posição: deixe o aparelho entre as pessoas, a distâncias parecidas, e evite que alguém fale de lado ou de longe. Um microfone por pessoa resolve de vez."),
         );
-      } else if (!identities.length) {
+      } else if (!identities.length && !(d.nomesDaConversa ?? []).length) {
+        // só avisa quando não houve NENHUM caminho: nem voz reconhecida, nem
+        // nome dito na conversa
         avisar("Separei as vozes, mas não reconheci de quem são. Dê nome a cada uma aqui embaixo, que eu aprendo para a próxima.");
       }
     } else {
@@ -401,7 +433,7 @@ export function MeetingPanel() {
   const dim = { color: "var(--color-ink-dim)" };
   const boxed = { borderColor: "var(--color-line)", color: "var(--color-ink-dim)" };
   // nome efetivo por etiqueta: o que o dono digitou manualmente, senão a sugestão do reconhecimento de voz
-  const effectiveNames = { ...autoSpeakerNames(speakerIdentities), ...speakerNames };
+  const effectiveNames = { ...autoSpeakerNames(speakerIdentities, nomesDaConversa), ...speakerNames };
 
   const locutores = [...new Set(utterances.map((u) => u.speaker))];
 
@@ -512,7 +544,7 @@ export function MeetingPanel() {
               </div>
             )}
             {utterances.map((u, i) => {
-              const lbl = speakerLabel(u.speaker, speakerIdentities, speakerNames);
+              const lbl = speakerLabel(u.speaker, speakerIdentities, speakerNames, nomesDaConversa);
               return (
                 <div key={i} className="transcript-row">
                   <strong title={lbl.title}>{lbl.text}</strong>
@@ -540,7 +572,7 @@ export function MeetingPanel() {
           </p>
 
           {locutores.map((tag) => {
-            const sugestao = speakerSuggestion(tag, speakerIdentities);
+            const sugestao = speakerSuggestion(tag, speakerIdentities, nomesDaConversa);
             const si = speakerIdentities.find((x) => x.label === tag);
             return (
               <div key={tag} className="locutor">
@@ -643,7 +675,10 @@ export function MeetingPanel() {
         <article className="panel meeting-summary" style={{ marginTop: 22 }}>
           <span className="tag green">RESUMO</span>
           <h2 style={{ marginTop: 14 }}>O que essa conversa deixou</h2>
-          <p className="resumo-texto">{applySpeakerNames(summary, effectiveNames)}</p>
+          {/* o resumo vem em markdown (seções, bullets): renderizado, não cru */}
+          <div className="resumo-texto">
+            <Markdown>{applySpeakerNames(summary, effectiveNames)}</Markdown>
+          </div>
         </article>
       )}
     </>

@@ -21,40 +21,64 @@ function suggestedModels(errorBody: string): string[] | null {
 
 /** Cria a transcrição; se a API rejeitar o modelo por deprecação, lê o
  *  substituto sugerido no próprio erro e re-tenta uma vez (auto-recuperação). */
+/**
+ * Corpo do pedido. `comPiso` liga o LIMITE DURO de locutores.
+ *
+ * A diferença entre os dois jeitos de informar quantas pessoas falaram não é de
+ * estilo, é de efeito:
+ *
+ *   `speakers_expected`                  → DICA, e o modelo pode ignorar
+ *   `speaker_options.min_speakers_expected` → PISO, limite duro
+ *
+ * Medido em 26/09/2026: com `speakers_expected: 2`, duas pessoas conversando na
+ * mesma sala voltaram num locutor só, com a pergunta e a resposta dentro da
+ * MESMA fala. A própria doc da AssemblyAI desaconselha o `speakers_expected`
+ * ("only set when you are certain of the exact speaker count") e aponta o
+ * min/max como o caminho. O piso também liga a `advanced_speaker_segmentation`
+ * (verificado na resposta da API).
+ *
+ * Sem máximo de propósito: o dono diz quantos vão falar, e isso é o mínimo que
+ * precisa aparecer — se houver mais uma voz, é melhor vê-la do que fundi-la.
+ */
+function corpoDoPedido(audioUrl: string, speechModels: string[], opts: SttOptions, comPiso: boolean) {
+  return {
+    audio_url: audioUrl,
+    language_code: "pt",
+    speech_models: speechModels,
+    punctuate: true,
+    format_text: true,
+    // Diarização: a API devolve `utterances[]` com o rótulo do locutor.
+    ...(opts.diarize ? { speaker_labels: true } : {}),
+    ...(comPiso ? { speaker_options: { min_speakers_expected: opts.expectedSpeakers } } : {}),
+  };
+}
+
 async function createTranscript(
   audioUrl: string,
   apiKey: string,
   models: string[],
   opts: SttOptions,
 ): Promise<string> {
-  const send = (speechModels: string[]) =>
+  const send = (speechModels: string[], comPiso: boolean) =>
     fetch(`${API}/transcript`, {
       method: "POST",
       headers: { authorization: apiKey, "content-type": "application/json" },
-      body: JSON.stringify({
-        audio_url: audioUrl,
-        language_code: "pt",
-        speech_models: speechModels,
-        punctuate: true,
-        format_text: true,
-        // Diarização: a API devolve `utterances[]` com o rótulo do locutor.
-        // `speakers_expected` é uma DICA — quando o número real é conhecido
-        // (ex.: reunião com 3 pessoas), melhora bastante a separação.
-        ...(opts.diarize ? { speaker_labels: true } : {}),
-        ...(opts.diarize && opts.expectedSpeakers ? { speakers_expected: opts.expectedSpeakers } : {}),
-      }),
+      body: JSON.stringify(corpoDoPedido(audioUrl, speechModels, opts, comPiso)),
     });
 
-  let res = await send(models);
+  const piso = Boolean(opts.diarize && opts.expectedSpeakers);
+  let res = await send(models, piso);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     const suggested = res.status === 400 ? suggestedModels(body) : null;
     if (suggested && suggested.join() !== models.join()) {
-      res = await send(suggested); // re-tenta com o modelo que a própria API indicou
-      if (!res.ok) throw new Error(`AssemblyAI transcript ${res.status}: ${await res.text().catch(() => "")}`);
-    } else {
-      throw new Error(`AssemblyAI transcript ${res.status}: ${body}`);
+      res = await send(suggested, piso); // re-tenta com o modelo que a própria API indicou
+    } else if (res.status === 400 && piso) {
+      // conta ou modelo sem `speaker_options`: separar sem piso ainda é muito
+      // melhor do que cair para o whisper local, que não separa nada
+      res = await send(models, false);
     }
+    if (!res.ok) throw new Error(`AssemblyAI transcript ${res.status}: ${(await res.text().catch(() => "")) || body}`);
   }
   return ((await res.json()) as { id: string }).id;
 }

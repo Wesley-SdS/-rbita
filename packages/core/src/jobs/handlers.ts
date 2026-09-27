@@ -94,7 +94,7 @@ export const transcreverReuniao: JobDef = {
     // o resumo recebe a transcrição com o NOME de quem foi reconhecido com
     // confiança: é o que faz o compromisso sair com responsável de verdade, e
     // não "Locutor A", que nenhuma regra de tarefa consegue atribuir a alguém
-    const transcricao = textoDaTranscricao(r, nomesDosLocutores(r.speakerIdentities));
+    const transcricao = textoDaTranscricao(r, nomesDosLocutores(r.speakerIdentities, r.nomesDaConversa));
     let resumoJobId: string | null = null;
     if (transcricao.trim() && ctx.payload.resumir !== false) {
       const hash = createHash("sha256").update(transcricao).digest("hex").slice(0, 24);
