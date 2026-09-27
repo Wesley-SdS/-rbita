@@ -31,6 +31,8 @@ export const waSessao = pgTable(
     pareadoEm: timestamp("pareado_em"),
     /** reconexões contadas pela saúde (só a partir da segunda conexão) */
     reconexoes: integer("reconexoes").notNull().default(0),
+    /** dia ("AAAA-MM-DD", fuso da casa) do último briefing mandado: um por dia, mesmo com reinício */
+    ultimoBriefing: text("ultimo_briefing"),
     criadoEm: timestamp("criado_em").defaultNow().notNull(),
     atualizadoEm: timestamp("atualizado_em").defaultNow().notNull(),
   },

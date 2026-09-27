@@ -19,7 +19,13 @@ import { log } from "../observability/logger";
  */
 
 /** Cria uma notificação e dispara push (best-effort). */
-export async function notifyUser(userId: string, title: string, body: string, routineId?: string | null, opts: { personId?: string | null; destino?: string | null } = {}): Promise<void> {
+export async function notifyUser(
+  userId: string,
+  title: string,
+  body: string,
+  routineId?: string | null,
+  opts: { personId?: string | null; destino?: string | null; whatsapp?: boolean; furaSilencio?: boolean } = {},
+): Promise<void> {
   await db.insert(notification).values({ userId, routineId: routineId ?? null, title, content: body, destino: opts.destino ?? null });
   // A VOZ SEGUE A PESSOA (Onda 12): quando o aviso é sobre alguém e essa pessoa
   // foi vista num cômodo com dispositivo, avisa ali. Sem isso, avisa em todos.
@@ -28,6 +34,13 @@ export async function notifyUser(userId: string, title: string, body: string, ro
   // tela inicial obriga a pessoa a refazer o caminho que o aviso já sabia.
   void sendPush(userId, { title, body: body.slice(0, 180), url: opts.destino || "/app" }, { deviceId: alvo?.id ?? null });
   await events.emit("notification.created", { title, body: body.slice(0, 500), personId: opts.personId ?? null, deviceId: alvo?.id ?? null }, { userId });
+  // E pelo WhatsApp, na conversa "Eu": é onde o dono está quando não está na
+  // tela (no carro, na rua). Import dinâmico: o WhatsApp importa o turno do
+  // chat, e este módulo é carregado por quase tudo. Sem esperar: o aviso não
+  // pode atrasar quem o emitiu.
+  if (opts.whatsapp !== false) {
+    void import("../whatsapp/avisar").then((m) => m.avisarNoWhatsapp(userId, title, body, { furaSilencio: opts.furaSilencio })).catch(() => undefined);
+  }
 }
 
 /**
@@ -38,10 +51,10 @@ export async function runPromptForUser(
   userId: string,
   prompt: string,
   systemSuffix = "",
-  opts: { fluxo?: string; referencia?: string | null; soLeitura?: boolean } = {},
+  opts: { fluxo?: string; referencia?: string | null; soLeitura?: boolean; todas?: boolean } = {},
 ): Promise<string> {
   const [{ tools, cleanup, skillInstructions }, cfg] = await Promise.all([
-    buildAllTools(userId, "", undefined, undefined, undefined, { soLeitura: opts.soLeitura }),
+    buildAllTools(userId, "", undefined, undefined, undefined, { soLeitura: opts.soLeitura, todas: opts.todas }),
     settings.getMany(["routines.model", "chat.maxSteps"]),
     applyLlmSettings(),
   ]);

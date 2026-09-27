@@ -28,6 +28,8 @@ import { processarPendentes, purgarEventosBrutos } from "@orbita/core/whatsapp/p
 import { conferirSaude, usuariosComSessao } from "@orbita/core/whatsapp/sessao";
 import { caminhosSemUso, purgarMensagens } from "@orbita/core/whatsapp/store";
 import { apagarMidias } from "@orbita/core/whatsapp/midia";
+import { briefingSeDevido } from "@orbita/core/whatsapp/briefing";
+import { dispararLembretes } from "@orbita/core/tarefas/lembretes";
 // registra os trabalhos pesados (como os domínios de tool): ninguém os chama pelo nome
 import "@orbita/core/jobs/handlers";
 import { randomUUID } from "node:crypto";
@@ -152,6 +154,11 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       for (const userId of await usuariosComSessao()) await conferirSaude(userId);
     });
     this.loop("whatsapp-pendentes", async () => 15_000, () => processarPendentes());
+    // a Órbita toma a iniciativa: lembrete na hora marcada e briefing da manhã
+    this.loop("lembretes", () => settings.get("routines.lembretesSegundos").then((s) => s * 1000), () => dispararLembretes());
+    this.loop("whatsapp-briefing", async () => 60_000, async () => {
+      for (const userId of await usuariosComSessao()) await briefingSeDevido(userId);
+    });
     this.loop("whatsapp-retencao", pruneEvery, async () => {
       // reconfere logo antes do rm: a mesma mídia pode ter chegado de novo no meio
       await apagarMidias(await caminhosSemUso(await purgarMensagens(await settings.get("whatsapp.retencaoDias"))));

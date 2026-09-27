@@ -152,6 +152,75 @@ export const ver_imagem_whatsapp: ToolDef<typeof VerImagem> = {
   },
 };
 
+// ── arquivo recebido vira ação (cupom, extrato, boleto, documento) ──
+
+const UsarArquivo = z.object({
+  mensagem_id: z.string().uuid().describe("O id do arquivo ou imagem, como aparece em [imagem id=...] ou [documento id=...]."),
+  como: z
+    .enum(["cupom", "extrato", "boleto", "conhecimento", "reuniao"])
+    .describe("cupom: foto/PDF de compra vira gasto lançado; extrato: PDF/CSV/OFX do banco vira lançamentos; boleto: lê valor e vencimento para cadastrar a conta; conhecimento: guarda o documento para consultas futuras; reuniao: áudio de reunião vira transcrição com quem falou, resumo, compromissos e tarefas."),
+});
+
+/**
+ * O que o dono manda pelo WhatsApp entra nos MESMOS fluxos da tela: o cupom
+ * pelo motor de finanças (`importReceipt`, que grava pelo executor único de
+ * comandos), o extrato por `importStatement`, o documento pela indexação do
+ * RAG. O boleto só é LIDO: o valor e o vencimento voltam ao modelo, que cadastra
+ * a conta com `adicionar_conta` (é o mesmo passo de confirmação da tela).
+ */
+export const usar_arquivo_whatsapp: ToolDef<typeof UsarArquivo> = {
+  name: "usar_arquivo_whatsapp",
+  domain: "whatsapp",
+  description:
+    "Usa um arquivo ou foto recebido no WhatsApp (inclusive mandado pelo dono na conversa com ele mesmo): lança o cupom como gasto, importa o extrato, lê um boleto para cadastrar a conta, ou guarda o documento na base de conhecimento.",
+  risk: "escrita",
+  keywords: ["cupom", "nota", "comprovante", "extrato", "boleto", "fatura", "documento", "pdf", "arquivo", "guardar", "lancar", "reuniao", "gravacao", "resumir"],
+  requires: { whatsappPessoal: true },
+  inputSchema: UsarArquivo,
+  run: async ({ mensagem_id, como }, { userId }) => {
+    const m = await store.mensagemPorId(userId, mensagem_id);
+    if (!m) return "Não encontrei esse arquivo.";
+    if (!m.midiaCaminho) return "O arquivo chegou, mas não consegui baixá-lo do WhatsApp.";
+    const mime = m.midiaMime ?? "application/octet-stream";
+    const dataUrl = `data:${mime.split(";")[0]};base64,${Buffer.from(await lerMidia(m.midiaCaminho)).toString("base64")}`;
+    const nome = m.texto?.slice(0, 80) || `whatsapp-${m.tipo}`;
+    try {
+      if (como === "cupom") {
+        const { importReceipt } = await import("../../finance/documents");
+        const r = await importReceipt(userId, dataUrl);
+        return `Lançado: ${r.lancamento.descricao}, R$ ${r.lancamento.valor.toFixed(2).replace(".", ",")} (${r.lancamento.categoria}).`;
+      }
+      if (como === "extrato") {
+        const { importStatement } = await import("../../finance/documents");
+        const r = await importStatement(userId, dataUrl, nome);
+        return `Extrato importado: ${r.importados} lançamento(s).`;
+      }
+      if (como === "reuniao") {
+        if (m.tipo !== "audio" && m.tipo !== "video") return "Para resumir como reunião, preciso de um áudio ou vídeo.";
+        // o MESMO trabalho da tela de Reuniões: transcreve com quem falou e encadeia o resumo
+        const { enqueueJob } = await import("../../jobs/queue");
+        await enqueueJob(userId, { kind: "reuniao.transcrever", input: dataUrl, payload: { title: m.texto?.slice(0, 120) || "Reunião pelo WhatsApp" }, dedupKey: `transcrever:${userId}:${m.midiaSha256 ?? m.id}` });
+        return "Comecei a transcrever e resumir a reunião. O resumo, os compromissos e as tarefas aparecem em Reuniões quando terminar.";
+      }
+      if (como === "conhecimento") {
+        const { indexFile } = await import("../../rag/files");
+        await indexFile(userId, dataUrl, nome);
+        return `Guardei "${nome}" na base de conhecimento. Dá para perguntar sobre ele depois.`;
+      }
+      const { extractFileText } = await import("../../rag/files");
+      const { lerBoleto } = await import("../../finance/entradas");
+      const { carregar, hojeDoServidor } = await import("../../finance/store");
+      const { limiaresDaConfig } = await import("../../finance/config");
+      const texto = (await extractFileText(dataUrl, nome)).text;
+      const hoje = hojeDoServidor();
+      const b = lerBoleto(await carregar(userId, hoje, (await limiaresDaConfig()).mesesSemeados), { textoDoPdf: texto }, hoje);
+      return `Boleto lido: ${b.beneficiario ?? "beneficiário não identificado"}, R$ ${(b.valor / 100).toFixed(2).replace(".", ",")}, vencimento ${b.vencimento ?? "não identificado"}. Para cadastrar, use adicionar_conta com estes dados.`;
+    } catch (e) {
+      return `Não consegui usar esse arquivo como ${como}: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  },
+};
+
 // ── envio (sempre pelo gate) ──
 
 const Para = z.string().min(1).max(200).describe("Para quem: o chat (jid) devolvido pela leitura, de preferência; ou o número com DDI; ou o nome como aparece no WhatsApp.");
@@ -278,4 +347,4 @@ export const enviar_imagem_whatsapp: ToolDef<typeof Imagem> = {
   },
 };
 
-registerTools([whatsapp_conversas_recentes, ler_whatsapp, buscar_whatsapp, ver_imagem_whatsapp, enviar_whatsapp, responder_whatsapp, enviar_audio_whatsapp, enviar_imagem_whatsapp]);
+registerTools([whatsapp_conversas_recentes, ler_whatsapp, buscar_whatsapp, ver_imagem_whatsapp, usar_arquivo_whatsapp, enviar_whatsapp, responder_whatsapp, enviar_audio_whatsapp, enviar_imagem_whatsapp]);

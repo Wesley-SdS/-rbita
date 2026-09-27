@@ -1,6 +1,24 @@
 import { z } from "zod";
 import { criarTarefa, editarTarefa, listarTarefas, removerTarefa } from "../../tarefas/store";
 import { registerTools, type ToolDef } from "../registry";
+import { settings } from "../../settings";
+
+const LEMBRAR_EM = z
+  .string()
+  .max(40)
+  .nullable()
+  .optional()
+  .describe("Quando AVISAR o dono (com hora), AAAA-MM-DDTHH:MM no horário local da casa; converta 'às 15h', 'amanhã cedo' (08:00), 'daqui a 20 minutos' a partir da data e hora do contexto. null tira o lembrete.");
+
+/** Lembrete legível para devolver ao modelo: "27/09 15:00". */
+function lembreteLegivel(d: Date | null, fuso: string): string | null {
+  if (!d) return null;
+  try {
+    return d.toLocaleString("pt-BR", { timeZone: fuso || "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return d.toISOString();
+  }
+}
 
 /**
  * Domínio: tarefas (to-do).
@@ -27,12 +45,13 @@ export const adicionar_tarefa: ToolDef<
     anotacoes: z.ZodOptional<z.ZodString>;
     para_quem: z.ZodOptional<z.ZodString>;
     origem: typeof ORIGEM;
+    lembrar_em: typeof LEMBRAR_EM;
   }>
 > = {
   name: "adicionar_tarefa",
   domain: "tarefas",
   description:
-    "Adiciona uma tarefa (to-do) do usuário. Use `origem` quando a tarefa vier de uma reunião ou documento, com o trecho que a gerou.",
+    "Adiciona uma tarefa (to-do) do usuário. Use `lembrar_em` quando ele pedir para ser LEMBRADO numa hora ('me lembra às 15h de…'): o aviso chega pelo WhatsApp e no app. Use `origem` quando a tarefa vier de uma reunião ou documento, com o trecho que a gerou.",
   risk: "escrita",
   keywords: ["tarefa", "to-do", "lembrete", "fazer", "adicionar", "pendência", "compromisso"],
   inputSchema: z.object({
@@ -41,16 +60,21 @@ export const adicionar_tarefa: ToolDef<
     anotacoes: z.string().optional(),
     para_quem: z.string().optional().describe("para quem o usuário ficou de fazer isso"),
     origem: ORIGEM,
+    lembrar_em: LEMBRAR_EM,
   }),
-  run: async ({ texto, vencimento, anotacoes, para_quem, origem }, { userId }) => {
+  run: async ({ texto, vencimento, anotacoes, para_quem, origem, lembrar_em }, { userId }) => {
+    const fuso = await settings.get("connectors.fusoHorario");
     const row = await criarTarefa(userId, {
       texto,
       vencimento,
       anotacoes,
       paraQuem: para_quem,
       origem: origem ?? null,
+      lembrarEm: lembrar_em ?? null,
+      fuso,
     });
-    return { adicionada: true, id: row?.id, texto };
+    if (lembrar_em && !row?.lembrarEm) return { adicionada: true, id: row?.id, texto, aviso: "Não entendi a hora do lembrete; a tarefa foi criada sem ele." };
+    return { adicionada: true, id: row?.id, texto, lembrete: lembreteLegivel(row?.lembrarEm ?? null, fuso) };
   },
 };
 
@@ -70,6 +94,7 @@ export const listar_tarefas: ToolDef<z.ZodObject<{ incluir_concluidas: z.ZodOpti
         texto: t.text,
         concluida: t.done,
         vencimento: t.dueDate?.toISOString().slice(0, 10) ?? null,
+        lembrete: t.lembrarEm && !t.lembradoEm ? t.lembrarEm.toISOString() : null,
         anotacoes: t.notes,
         para_quem: t.paraQuem,
         // o "por que" da tarefa: é o que o modelo precisa para responder
@@ -87,12 +112,13 @@ export const editar_tarefa: ToolDef<
     vencimento: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     anotacoes: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     para_quem: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    lembrar_em: typeof LEMBRAR_EM;
   }>
 > = {
   name: "editar_tarefa",
   domain: "tarefas",
   description:
-    "Muda uma tarefa existente (texto, vencimento, anotações ou para quem). Só mande os campos que devem mudar; mande null para limpar um campo.",
+    "Muda uma tarefa existente (texto, vencimento, lembrete, anotações ou para quem). Use para 'adia o lembrete para as 17h'. Só mande os campos que devem mudar; mande null para limpar um campo.",
   risk: "escrita",
   keywords: ["editar", "mudar", "alterar", "adiar", "remarcar", "corrigir", "tarefa"],
   inputSchema: z.object({
@@ -101,11 +127,13 @@ export const editar_tarefa: ToolDef<
     vencimento: z.string().nullable().optional().describe("data ISO ou AAAA-MM-DD; null limpa"),
     anotacoes: z.string().nullable().optional(),
     para_quem: z.string().nullable().optional(),
+    lembrar_em: LEMBRAR_EM,
   }),
-  run: async ({ id, texto, vencimento, anotacoes, para_quem }, { userId }) => {
-    const row = await editarTarefa(userId, id, { texto, vencimento, anotacoes, paraQuem: para_quem });
+  run: async ({ id, texto, vencimento, anotacoes, para_quem, lembrar_em }, { userId }) => {
+    const fuso = await settings.get("connectors.fusoHorario");
+    const row = await editarTarefa(userId, id, { texto, vencimento, anotacoes, paraQuem: para_quem, lembrarEm: lembrar_em, fuso });
     if (!row) return { erro: "Não achei essa tarefa." };
-    return { editada: true, texto: row.text, vencimento: row.dueDate?.toISOString().slice(0, 10) ?? null };
+    return { editada: true, texto: row.text, vencimento: row.dueDate?.toISOString().slice(0, 10) ?? null, lembrete: lembreteLegivel(row.lembrarEm && !row.lembradoEm ? row.lembrarEm : null, fuso) };
   },
 };
 

@@ -15,6 +15,8 @@ import { narrateSnapshot } from "../cameras/narrate";
 import { aprovarPorFrase } from "../actions/por-frase";
 import { enviarAudio, enviarTexto } from "./enviar";
 import { lerMidia } from "./midia";
+import { conversaDoCanal } from "./conversa";
+import { enqueueJob } from "../jobs/queue";
 
 /**
  * A conversa "Eu" (PRD-WHATSAPP W5 e W6): o dono manda mensagem para ele mesmo
@@ -31,25 +33,36 @@ const DONO = async () => ({ personId: null, name: null, role: "dono" as const, v
 
 const SUFIXO_WHATSAPP =
   "\n\nVocê está falando com o dono pelo WhatsApp, na conversa dele com ele mesmo. Responda curto e direto, como numa conversa de WhatsApp, sem títulos nem tabelas. " +
-  "Quando propuser enviar uma mensagem a alguém, mostre o texto exato que vai sair; o dono aprova respondendo *manda* ou desiste com *cancela*.";
-
-/** A conversa "WhatsApp" do app, onde o histórico deste canal fica (e aparece na tela). */
-async function conversaDoCanal(userId: string): Promise<string> {
-  const [c] = await db.select({ id: conversation.id }).from(conversation).where(and(eq(conversation.userId, userId), eq(conversation.title, "WhatsApp"))).orderBy(asc(conversation.createdAt)).limit(1);
-  if (c) return c.id;
-  const [nova] = await db.insert(conversation).values({ userId, title: "WhatsApp", modelKey: "auto" }).returning({ id: conversation.id });
-  return nova.id;
-}
+  "Quando propuser enviar uma mensagem a alguém, mostre o texto exato que vai sair; o dono aprova respondendo *manda* ou desiste com *cancela*. " +
+  "Por aqui o dono faz TUDO que faz no app (finanças, tarefas, memória, agenda, e-mail, casa, câmeras, conhecimento): use as ferramentas como no chat. " +
+  "Foto ou arquivo que ele mandar chega com um id: cupom ou nota vira gasto, extrato vira lançamentos, boleto vira conta e documento vai para o conhecimento, com usar_arquivo_whatsapp; se não estiver claro o que ele quer com o arquivo, pergunte.";
 
 /** O que o dono mandou, em texto: o áudio já chega transcrito; a imagem é descrita. */
 async function pedidoDe(userId: string, m: WaMensagem): Promise<string> {
-  if (m.tipo === "audio") return m.transcricao?.trim() || "";
+  if (m.tipo === "audio") {
+    const t = m.transcricao?.trim() || "";
+    // Áudio LONGO não é comando falado: é gravação (reunião, aula, recado
+    // encaminhado). Mandá-lo como pedido faria o modelo "obedecer" a uma
+    // reunião inteira. Vai como arquivo, com o começo para dar contexto.
+    if (t.length > (await settings.get("whatsapp.audioComoGravacaoChars"))) {
+      return `[o dono mandou um áudio longo, id=${m.id}, que parece uma gravação (reunião, aula, recado). Começo: "${t.slice(0, 400)}…"]`;
+    }
+    return t;
+  }
   if (m.tipo === "imagem" && m.midiaCaminho) {
     const bytes = await lerMidia(m.midiaCaminho);
     const dataUrl = `data:${m.midiaMime ?? "image/jpeg"};base64,${Buffer.from(bytes).toString("base64")}`;
     const descricao = await narrateSnapshot(dataUrl, "Descreva esta imagem com detalhes úteis, transcrevendo textos e valores visíveis.", { userId }).catch(() => "");
     return `[o dono mandou uma imagem, id=${m.id}${descricao ? `: ${descricao}` : ""}]` + (m.texto ? `\n${m.texto}` : "");
   }
+  const legenda = m.texto?.trim() ? `\n${m.texto.trim()}` : "";
+  // arquivo mandado sem pedido junto também é pedido: a Órbita pergunta o que fazer com ele
+  if (m.tipo === "imagem") return `[o dono mandou uma imagem, id=${m.id}, que não pôde ser baixada]${legenda}`;
+  if (m.tipo === "documento") return `[o dono mandou um documento, id=${m.id}${m.midiaMime ? `, tipo ${m.midiaMime}` : ""}]${legenda}`;
+  if (m.tipo === "video") return `[o dono mandou um vídeo, id=${m.id}]${legenda}`;
+  if (m.tipo === "localizacao") return `[o dono mandou uma localização]${legenda}`;
+  if (m.tipo === "contato") return `[o dono mandou um contato]${legenda}`;
+  if (m.tipo === "figurinha") return "";
   return m.texto?.trim() || "";
 }
 
@@ -89,7 +102,7 @@ export async function turnoDoDono(userId: string, meuJid: string, m: WaMensagem)
     return responder(userId, meuJid, aprovacao.texto, recebidoEmAudio);
   }
 
-  const cfg = await settings.getMany(["whatsapp.historicoConversa", "chat.maxSteps", "chat.ragTimeoutMs", "rag.topK"]);
+  const cfg = await settings.getMany(["whatsapp.historicoConversa", "whatsapp.ferramentas", "chat.maxSteps", "chat.ragTimeoutMs", "rag.topK", "memory.extractEnabled"]);
   await applyLlmSettings();
   const historico = cfg["whatsapp.historicoConversa"]
     ? (await db.select({ role: message.role, content: message.content }).from(message).where(eq(message.conversationId, convId)).orderBy(desc(message.createdAt)).limit(cfg["whatsapp.historicoConversa"])).reverse()
@@ -100,7 +113,7 @@ export async function turnoDoDono(userId: string, meuJid: string, m: WaMensagem)
   const [persona, rag, ferramentas] = await Promise.all([
     buildPersonaContext(userId).catch(() => ""),
     Promise.race([retrieveContext(userId, pedido, cfg["rag.topK"]).catch(() => []), new Promise<[]>((r) => setTimeout(() => r([]), cfg["chat.ragTimeoutMs"]))]),
-    buildAllTools(userId, pedido, DONO, undefined, undefined, { canal: "whatsapp" }),
+    buildAllTools(userId, pedido, DONO, undefined, undefined, { canal: "whatsapp", todas: cfg["whatsapp.ferramentas"] === "todas" }),
   ]);
   const contexto = rag.length ? "\n\nContexto do usuário (use quando relevante e cite a fonte entre colchetes):\n" + rag.map((h, i) => `[${i + 1}] (${h.source}) ${h.content}`).join("\n\n") : "";
   const mensagens: ModelMessage[] = [...historico.map((h) => ({ role: h.role, content: h.content }) as ModelMessage), { role: "user", content: pedido }];
@@ -145,5 +158,11 @@ export async function turnoDoDono(userId: string, meuJid: string, m: WaMensagem)
 
   await db.insert(message).values({ conversationId: convId, role: "assistant", content: texto });
   await db.update(conversation).set({ updatedAt: new Date() }).where(eq(conversation.id, convId));
+  // a memória aprende com o que é dito pelo WhatsApp como aprende no chat (B4.1)
+  if (cfg["memory.extractEnabled"]) {
+    void enqueueJob(userId, { kind: "memoria.extrair", payload: { conversationId: convId }, dedupKey: `memoria-extrair:${convId}` }).catch((e) =>
+      log.warn("whatsapp.memoria_nao_enfileirada", { erro: e instanceof Error ? e.message : String(e) }),
+    );
+  }
   await responder(userId, meuJid, texto, recebidoEmAudio);
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { settings } from "@orbita/core/settings/index";
 import type { RouteHandler } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { criarTarefa, editarTarefa, listarTarefas, removerTarefa, tarefasDaOrigem } from "@orbita/core/tarefas/store";
@@ -16,6 +17,8 @@ const Create = z.object({
   imageUrl: IMAGEM,
   notes: z.string().max(5000).nullable().optional(),
   paraQuem: z.string().max(200).nullable().optional(),
+  /** "AAAA-MM-DDTHH:MM" no horário da casa: quando avisar (WhatsApp e push) */
+  lembrarEm: z.string().max(40).nullable().optional(),
   origem: z
     .object({
       tipo: z.enum(["reuniao", "documento", "chat"]),
@@ -40,6 +43,8 @@ const Update = z.object({
   imageUrl: IMAGEM,
   notes: z.string().max(5000).nullable().optional(),
   paraQuem: z.string().max(200).nullable().optional(),
+  /** "AAAA-MM-DDTHH:MM" no horário da casa: quando avisar (WhatsApp e push) */
+  lembrarEm: z.string().max(40).nullable().optional(),
 });
 
 export const GET: RouteHandler = async (req, ctx) => {
@@ -66,6 +71,8 @@ export const POST: RouteHandler = async (req, ctx) => {
     anotacoes: d.notes,
     paraQuem: d.paraQuem,
     origem: d.origem,
+    lembrarEm: d.lembrarEm,
+    fuso: await settings.get("connectors.fusoHorario"),
   });
   return Response.json({ id: row?.id });
 };
@@ -75,7 +82,7 @@ export const PATCH: RouteHandler = async (req, ctx) => {
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
   const parsed = Update.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" }, { status: 400 });
-  const { id, done, text, dueDate, imageUrl, notes, paraQuem } = parsed.data;
+  const { id, done, text, dueDate, imageUrl, notes, paraQuem, lembrarEm } = parsed.data;
   const row = await editarTarefa(session.user.id, id, {
     concluida: done,
     texto: text,
@@ -83,6 +90,8 @@ export const PATCH: RouteHandler = async (req, ctx) => {
     imagemUrl: imageUrl,
     anotacoes: notes,
     paraQuem,
+    lembrarEm,
+    fuso: await settings.get("connectors.fusoHorario"),
   });
   // 404 e não 200: editar o id de outra pessoa tem de falhar de forma visível
   if (!row) return Response.json({ error: "Tarefa não encontrada" }, { status: 404 });

@@ -16,6 +16,9 @@ interface Todo {
   origemTipo: string | null;
   origemTitulo: string | null;
   origemTrecho: string | null;
+  /** quando avisar (WhatsApp e push); `lembradoEm` preenchido = já avisou */
+  lembrarEm: string | null;
+  lembradoEm: string | null;
 }
 
 /** O que está sendo editado agora. Fora do `dado` porque é estado de tela, não de servidor. */
@@ -25,9 +28,21 @@ interface Rascunho {
   notes: string;
   paraQuem: string;
   imageUrl: string | null;
+  /** "AAAA-MM-DDTHH:MM" do campo datetime-local */
+  lembrarEm: string;
+  /** o que estava antes de editar: só manda se mudou (reenviar rearmaria um lembrete já dado) */
+  lembrarEmAntes: string;
 }
 
 const soData = (iso: string | null): string => (iso ? iso.slice(0, 10) : "");
+/** ISO → valor do datetime-local, na hora do aparelho (que é a da casa). */
+function paraCampoLocal(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const dois = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}T${dois(d.getHours())}:${dois(d.getMinutes())}`;
+}
+const horaDoLembrete = (iso: string) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const diaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
 /** Vence hoje ou já venceu: é a única diferença que muda o que a pessoa faz agora. */
@@ -126,6 +141,9 @@ export function TodoPanel() {
       notes: t.notes ?? "",
       paraQuem: t.paraQuem ?? "",
       imageUrl: t.imageUrl,
+      // lembrete já dado não volta ao campo: salvar a tarefa não pode rearmá-lo
+      lembrarEm: t.lembradoEm ? "" : paraCampoLocal(t.lembrarEm),
+      lembrarEmAntes: t.lembradoEm ? "" : paraCampoLocal(t.lembrarEm),
     });
   }
   function fecharEdicao() {
@@ -144,6 +162,8 @@ export function TodoPanel() {
       notes: r0.notes.trim() || null,
       paraQuem: r0.paraQuem.trim() || null,
       imageUrl: r0.imageUrl,
+      // só quando o dono mexeu: string vazia tira o lembrete
+      ...(r0.lembrarEm !== r0.lembrarEmAntes ? { lembrarEm: r0.lembrarEm || null } : {}),
     };
     fecharEdicao();
     const r = await mutarRecurso<{ todos: Todo[] }>({
@@ -295,6 +315,14 @@ export function TodoPanel() {
                         maxLength={200}
                         aria-label="Para quem"
                       />
+                      <input
+                        className="inline-input compacto"
+                        type="datetime-local"
+                        value={rasc.lembrarEm}
+                        onChange={(e) => setRascunho({ ...rasc, lembrarEm: e.target.value })}
+                        aria-label="Lembrar em (chega pelo WhatsApp e no celular)"
+                        title="Lembrar em"
+                      />
                     </div>
                     <textarea
                       className="inline-input"
@@ -348,6 +376,11 @@ export function TodoPanel() {
                         {t.dueDate && (
                           <span className={`tag ${quando === "vencida" ? "orange-tag" : ""}`}>
                             {quando === "hoje" ? "hoje" : quando === "vencida" ? `venceu ${diaMes(t.dueDate)}` : `para ${diaMes(t.dueDate)}`}
+                          </span>
+                        )}
+                        {t.lembrarEm && !t.lembradoEm && (
+                          <span className="tag" title="Lembrete: chega pelo WhatsApp e no celular">
+                            <Icone nome="bell" /> {horaDoLembrete(t.lembrarEm)}
                           </span>
                         )}
                         {t.paraQuem && <span className="tag">para {t.paraQuem}</span>}

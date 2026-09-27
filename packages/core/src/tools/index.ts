@@ -125,13 +125,16 @@ export function enqueueFor(userId: string, canal: ActionCanal = "tela"): Enqueue
  * ToolSet do turno: tools ligadas, com exigências atendidas para este usuário,
  * selecionadas por relevância ao pedido, com o gate derivado do risco efetivo.
  */
-export async function buildToolSet(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"], dominios?: readonly string[], canal: ActionCanal = "tela", soLeitura = false): Promise<ToolSet> {
+export async function buildToolSet(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"], dominios?: readonly string[], canal: ActionCanal = "tela", soLeitura = false, todas = false): Promise<ToolSet> {
   const [overrides, connected, max, haConn, wa] = await Promise.all([
     loadToolOverrides(), connectedProviders(userId), settings.get("tools.maxPerTurn"), getHaConnection(userId), estadoDoWhatsapp(userId),
   ]);
   const usable = availableFor(listRegisteredTools(), { connected, haConnected: haConn !== null, ...wa, overrides });
   const doDominio = (dominios?.length ? usable.filter((d) => dominios.includes(d.domain)) : usable).filter((d) => !soLeitura || effectiveRisk(d, overrides) === "leitura");
-  const chosen = selectRelevant(doDominio, query, max);
+  // `todas`: sem teto nem seleção (conversa "Eu" do WhatsApp, como a voz): o
+  // dono pede "tudo" por ali, e a seleção por palavras deixava de fora a tool
+  // certa quando o pedido não repetia o vocabulário dela
+  const chosen = todas ? doDominio : selectRelevant(doDominio, query, max);
   return toToolSet(chosen, { userId, requester, origin, voiceRef }, { overrides, enqueue: enqueueFor(userId, canal) });
 }
 

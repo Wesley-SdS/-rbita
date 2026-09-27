@@ -1,4 +1,5 @@
 import { and, asc, desc, eq } from "drizzle-orm";
+import { instanteLocal } from "../fuso";
 import { db } from "@orbita/db";
 import { todo, type Todo } from "@orbita/db/todo-schema";
 import { camposDaEdicao, dataDeVencimento, edicaoVazia, type EdicaoDeTarefa } from "./campos";
@@ -26,6 +27,9 @@ export interface NovaTarefa {
   anotacoes?: string | null;
   paraQuem?: string | null;
   origem?: OrigemDaTarefa | null;
+  /** "AAAA-MM-DDTHH:MM" no fuso da casa: quando avisar o dono (WhatsApp e push) */
+  lembrarEm?: string | null;
+  fuso?: string;
 }
 
 export async function listarTarefas(userId: string): Promise<Todo[]> {
@@ -48,6 +52,7 @@ export async function criarTarefa(userId: string, nova: NovaTarefa): Promise<Tod
       imageUrl: nova.imagemUrl ?? null,
       notes: nova.anotacoes?.trim() || null,
       paraQuem: nova.paraQuem?.trim() || null,
+      lembrarEm: nova.lembrarEm ? instanteLocal(nova.lembrarEm, nova.fuso ?? "") : null,
       origemTipo: nova.origem?.tipo ?? null,
       origemId: nova.origem?.id ?? null,
       origemTitulo: nova.origem?.titulo ?? null,

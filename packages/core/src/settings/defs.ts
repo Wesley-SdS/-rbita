@@ -455,6 +455,7 @@ export const SETTING_DEFS = {
   "cache.adiantarLeituras": bool("cache", "Adiantar as leituras pelo servidor", "O servidor busca os dados da primeira aba antes de mandar a tela. DESLIGADO por padrão: medindo nesta máquina, a ida extra do servidor custou mais (50 a 80ms por rota) do que a busca que ela poupa, porque o navegador está ao lado do servidor. Vale ligar quando se acessa a Órbita de fora de casa, onde a ida do navegador é a cara. A tela já adianta a busca por conta própria de qualquer jeito.", false),
   "cache.comprimirAcimaDeBytes": num("cache", "Comprimir respostas acima de", "Respostas JSON maiores que isto viajam comprimidas. Abaixo do limite, comprimir custa mais processador do que economiza banda. Zero desliga a compressão.", 1024, 0, 1048576, { unit: "bytes" }),
   "cache.offlineLeitura": bool("cache", "Abrir offline com o último dado conhecido", "Guarda no aparelho a última resposta das leituras seguras para o app abrir mostrando algo quando a rede cair. Nada que altere dados é guardado.", true),
+  "meetings.avisarResumo": bool("meetings", "Avisar quando o resumo ficar pronto", "O resumo da reunião, os compromissos e as tarefas criadas chegam como aviso (e pelo WhatsApp, se os avisos estiverem ligados lá).", true),
   "meetings.criarTarefas": sel(
     "meetings",
     "Virar tarefa depois da reunião",
@@ -524,6 +525,7 @@ export const SETTING_DEFS = {
   "graph.edgeLimit": num("graph", "Arestas no grafo", "Teto de ligações desenhadas.", 150, 5, 2000),
 
   // ── ferramentas (tools/registry.ts) ──
+  "routines.lembretesSegundos": num("routines", "Conferir lembretes a cada", "De quanto em quanto tempo o processo persistente procura lembretes de tarefa que chegaram na hora. Menor é mais pontual.", 30, 10, 600, { unit: "s" }),
   "tools.maxPerTurn": num("tools", "Ferramentas por turno", "Acima disso, só as mais relevantes para o pedido vão ao modelo (seleção por palavras, sem LLM). Muitas ferramentas pioram custo e precisão.", 30, 5, 200),
 
   "meetings.sttCloud": sel(
@@ -904,6 +906,38 @@ export const SETTING_DEFS = {
     { value: "texto", label: "Sempre texto" },
     { value: "audio", label: "Sempre áudio" },
   ]),
+  "whatsapp.ferramentas": sel(
+    "whatsapp",
+    "Ferramentas na conversa \"Eu\"",
+    "Todas: pelo WhatsApp você faz tudo que faz no app (finanças, tarefas, memória, agenda, casa…), como na voz. Só as relevantes: menos custo por mensagem, mas um pedido com palavras diferentes pode ficar sem a ferramenta certa.",
+    "todas",
+    [
+      { value: "todas", label: "Todas" },
+      { value: "relevantes", label: "Só as relevantes ao pedido (usa o teto do chat)" },
+    ],
+  ),
+  // ── a Órbita toma a iniciativa pelo WhatsApp (avisos, briefing) ──
+  "whatsapp.avisos": sel("whatsapp", "Avisos pelo WhatsApp", "Todo aviso da Órbita (conta vencendo, reunião chegando, lembrete, câmera, resumo de reunião) chega também na conversa \"Eu\", e você responde ali mesmo (\"paga\", \"adia\").", "todos", [
+    { value: "todos", label: "Todos" },
+    { value: "nenhum", label: "Nenhum (só a notificação do app)" },
+  ]),
+  "whatsapp.avisosSilencio": text("whatsapp", "Silêncio dos avisos", "Faixa de horário em que os avisos NÃO vão para o WhatsApp (continuam no app), no formato 22:00-07:00. Vazio: sem silêncio. Lembrete que você marcou com hora chega mesmo assim.", "", 11),
+  "whatsapp.avisosPorHora": num("whatsapp", "Avisos por hora (teto)", "Acima disto, na mesma hora, os avisos ficam só no app: uma rajada de câmera não pode lotar a conversa.", 20, 1, 200),
+  "whatsapp.briefingAtivo": bool("whatsapp", "Briefing de manhã", "Todo dia no horário escolhido: agenda, contas da semana, tarefas e quanto dá para gastar hoje.", true),
+  "whatsapp.briefingHorario": text("whatsapp", "Horário do briefing", "Hora do briefing no formato HH:MM, no fuso da casa (Conectores, fuso horário).", "07:00", 5, false, 4),
+  "whatsapp.briefingDias": sel("whatsapp", "Dias do briefing", "Em quais dias o briefing é mandado.", "todos", [
+    { value: "todos", label: "Todos os dias" },
+    { value: "uteis", label: "Só de segunda a sexta" },
+  ]),
+  "whatsapp.briefingPedido": text(
+    "whatsapp",
+    "O que vai no briefing",
+    "O pedido que a Órbita segue para montar o briefing. Ela usa só ferramentas de leitura.",
+    "Monte o briefing desta manhã para o dono, curto e no formato de WhatsApp (sem títulos, no máximo 12 linhas): a agenda de hoje, as contas que vencem nos próximos 7 dias, as tarefas pendentes de hoje ou atrasadas, quanto ele pode gastar hoje e a previsão do tempo. Use as ferramentas para buscar cada coisa. O que não estiver disponível, pule sem comentar.",
+    2000,
+    true,
+  ),
+  "whatsapp.audioComoGravacaoChars": num("whatsapp", "Áudio longo vira gravação a partir de", "Na conversa \"Eu\", áudio com transcrição maior que isto não é tratado como pedido, e sim como gravação (a Órbita pergunta se é para resumir como reunião ou guardar).", 1500, 200, 50000, { unit: "caracteres" }),
   "whatsapp.historicoConversa": num("whatsapp", "Histórico da conversa \"Eu\"", "Quantas mensagens anteriores a Órbita relê a cada pedido pelo WhatsApp.", 16, 0, 100),
   "whatsapp.frasesConfirmar": list("whatsapp", "Frases que aprovam", "Dita logo depois de uma proposta, qualquer uma destas envia. Vale só para a SUA fala e só para a proposta que acabou de ser feita. Evite palavras genéricas como \"sim\": elas também respondem a outras perguntas.", ["manda", "pode mandar", "envia", "pode enviar", "confirmo", "confirma"]),
   "whatsapp.frasesCancelar": list("whatsapp", "Frases que cancelam", "Dita logo depois de uma proposta, cancela. Evite \"não\" sozinho, pelo mesmo motivo.", ["cancela", "não manda", "não envia", "esquece", "deixa pra lá"]),

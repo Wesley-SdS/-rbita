@@ -120,19 +120,19 @@ export async function buildAllTools(
   origin?: ToolContext["origin"],
   voiceRef?: ToolContext["voiceRef"],
   /** `canal`: de onde o pedido veio; é por ele que "manda" aprova sem tela (PRD-WHATSAPP W6) */
-  opts: { dominios?: readonly string[]; canal?: ActionCanal; soLeitura?: boolean } = {},
+  opts: { dominios?: readonly string[]; canal?: ActionCanal; soLeitura?: boolean; todas?: boolean } = {},
 ): Promise<{ tools: ToolSet; cleanup: () => Promise<void>; skillInstructions: string }> {
   // Só leitura (regra disparada por texto de terceiro): nada de MCP, cujo
   // risco o registro não conhece, e nenhuma tool que escreva ou proponha.
   if (opts.soLeitura) {
-    return { tools: await buildToolSet(userId, query, requester, origin, voiceRef, undefined, opts.canal, true), cleanup: async () => {}, skillInstructions: "" };
+    return { tools: await buildToolSet(userId, query, requester, origin, voiceRef, undefined, opts.canal, true, Boolean(opts.todas)), cleanup: async () => {}, skillInstructions: "" };
   }
   // caminho rápido (comando da casa): só as tools do domínio, sem MCP nem skills
   if (opts.dominios?.length) {
     return { tools: await buildTools(userId, query, requester, origin, voiceRef, opts.dominios, opts.canal), cleanup: async () => {}, skillInstructions: "" };
   }
   const [base, mcp, skillInstructions] = await Promise.all([
-    buildTools(userId, query, requester, origin, voiceRef, undefined, opts.canal),
+    buildToolSet(userId, query, requester, origin, voiceRef, undefined, opts.canal ?? "tela", false, Boolean(opts.todas)),
     buildMcpTools(userId),
     getSkillInstructions(userId, query),
   ]);

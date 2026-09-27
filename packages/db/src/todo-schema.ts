@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, pgTable, text, timestamp, uuid, boolean } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
@@ -17,6 +18,13 @@ export const todo = pgTable("todo", {
   text: text("text").notNull(),
   done: boolean("done").notNull().default(false),
   dueDate: timestamp("due_date"),
+  /**
+   * Quando chamar o dono (com HORA): "me lembra às 15h". Diferente do
+   * vencimento, que é o dia do compromisso; o lembrete é o aviso, e chega pelo
+   * WhatsApp e pelo push. `lembradoEm` marca que já avisou: remarcar limpa.
+   */
+  lembrarEm: timestamp("lembrar_em"),
+  lembradoEm: timestamp("lembrado_em"),
   imageUrl: text("image_url"), // data URL da imagem anexa (opcional)
   /** Anotações livres: o detalhe que não cabe no título da tarefa. */
   notes: text("notes"),
@@ -38,6 +46,11 @@ export const todo = pgTable("todo", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 },
-(t) => [index("todo_user_idx").on(t.userId, t.createdAt), index("todo_origem_idx").on(t.userId, t.origemId)]);
+(t) => [
+  index("todo_user_idx").on(t.userId, t.createdAt),
+  index("todo_origem_idx").on(t.userId, t.origemId),
+  // o laço dos lembretes procura, a cada volta, só o que ainda vai avisar
+  index("todo_lembrete_idx").on(t.lembrarEm).where(sql`${t.lembradoEm} is null and ${t.done} = false`),
+]);
 
 export type Todo = typeof todo.$inferSelect;

@@ -483,3 +483,18 @@ ninguém recebe o webhook nem roda os laços. Enquanto isso, o WhatsApp funciona
 rodando no host (o jeito desta casa). Quando o `apps/api` virar contêiner: `whatsapp.ponteUrl` =
 `http://gowa:3000`, `whatsapp.webhookBase` = `http://api:3010`, `GOWA_BASIC_AUTH` no ambiente dele e
 um volume para `ORBITA_DATA_DIR` (senão a mídia some a cada recriação).
+
+## 12. A Órbita toma a iniciativa pelo WhatsApp (2026-09-27)
+
+Pedido do dono: itens 1 a 4. Implementados, testados e verificados no app real (o envio pelo
+WhatsApp em si depende do celular pareado).
+
+| # | O quê | Como |
+|---|---|---|
+| 1 | Todo aviso da Órbita chega na conversa "Eu" | `notifyUser` chama `avisarNoWhatsapp`: respeita `whatsapp.avisos`, a faixa de silêncio (`whatsapp.avisosSilencio`, ex. 22:00-07:00) e o teto por hora. O aviso entra no histórico da conversa "WhatsApp" embrulhado como dado, e é isso que dá contexto a "paga", "adia", "me mostra" |
+| 2 | Briefing da manhã | laço de 1 min; devido depois do horário (`whatsapp.briefingHorario`, fuso `connectors.fusoHorario`), um por dia (`wa_sessao.ultimo_briefing`, gravado antes de mandar), dias úteis opcional; montado pela Órbita com TODAS as tools de leitura e o pedido editável `whatsapp.briefingPedido` |
+| 3 | Lembrete com hora | `todo.lembrar_em`/`lembrado_em`; tools `adicionar_tarefa`/`editar_tarefa` com `lembrar_em` ("me lembra às 15h", "adia pra 17h"); campo e sininho na tela de tarefas; laço `lembretes` troca o "já avisei" antes de avisar (sem aviso em dobro) e fura o silêncio |
+| 4 | Resumo de reunião no WhatsApp | ao terminar o resumo, aviso com o resumo, os compromissos e as tarefas criadas (ou "quer que eu crie?") |
+
+Armadilha paga no teste: o `date` do Git Bash no Windows ignora `TZ=America/Sao_Paulo` e devolve a hora
+UTC; para calcular hora da casa em script, use Node com `Intl`.

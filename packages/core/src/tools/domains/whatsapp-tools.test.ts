@@ -35,7 +35,14 @@ vi.mock("../../whatsapp/store", async () => {
     marcarLidas,
     conversasRecentes: async () => [{ contato: contatos[1], naoLidas: 2, ultima: mensagens[1] }],
     buscarMensagens: async () => [mensagens[1]],
-    mensagemPorId: async (_u: string, id: string) => (id === "11111111-1111-1111-1111-111111111111" ? { id, tipo: "imagem", midiaCaminho: "bb/y.jpg", midiaMime: "image/jpeg", descricaoImagem: null } : null),
+    mensagemPorId: async (_u: string, id: string) =>
+      id === "11111111-1111-1111-1111-111111111111"
+        ? { id, tipo: "imagem", midiaCaminho: "bb/y.jpg", midiaMime: "image/jpeg", descricaoImagem: null, texto: null }
+        : id === "22222222-2222-2222-2222-222222222222"
+          ? { id, tipo: "audio", midiaCaminho: "cc/r.ogg", midiaMime: "audio/ogg", midiaSha256: "abc", texto: null }
+          : id === "33333333-3333-3333-3333-333333333333"
+            ? { id, tipo: "documento", midiaCaminho: null, midiaMime: "application/pdf", texto: null }
+            : null,
     atualizarMensagemPorId,
   };
 });
@@ -48,6 +55,16 @@ vi.mock("../../whatsapp/enviar", () => ({
 vi.mock("../../whatsapp/sessao", () => ({ sessaoDe: async () => ({ jid: "5511900000000@s.whatsapp.net" }) }));
 vi.mock("../../whatsapp/midia", () => ({ lerMidia: async () => new Uint8Array([1, 2, 3]) }));
 vi.mock("../../cameras/narrate", () => ({ narrateSnapshot: narrate }));
+const importReceipt = vi.fn(async (..._a: unknown[]) => ({ id: "l1", lancamento: { descricao: "Padaria", valor: 42.5, categoria: "Alimentação", tipo: "expense", vencimento: null }, ocrText: "" }));
+const importStatement = vi.fn(async (..._a: unknown[]) => ({ importados: 12, lancamentos: [] }));
+vi.mock("../../finance/documents", () => ({ importReceipt, importStatement }));
+const indexFile = vi.fn(async (..._a: unknown[]) => ({}));
+vi.mock("../../rag/files", () => ({ indexFile, extractFileText: async () => ({ text: "linha digitável" }) }));
+vi.mock("../../finance/entradas", () => ({ lerBoleto: () => ({ valor: 15990, vencimento: "2026-10-05", beneficiario: "Enel", categoriaId: null, tipo: "arrecadacao" }) }));
+vi.mock("../../finance/store", () => ({ carregar: async () => ({}), hojeDoServidor: () => "2026-09-27" }));
+vi.mock("../../finance/config", () => ({ limiaresDaConfig: async () => ({ mesesSemeados: 3 }) }));
+const enqueueJob = vi.fn(async (..._a: unknown[]) => ({ job: { id: "j1" }, jaExistia: false }));
+vi.mock("../../jobs/queue", () => ({ enqueueJob }));
 // por chave: um mock que devolve o mesmo número para tudo esconderia chave errada
 const cfg: Record<string, number> = { "whatsapp.leituraMax": 30 };
 vi.mock("../../settings", () => ({
@@ -159,5 +176,43 @@ describe("envio", () => {
   it("falha do envio vira erro da ação (a fila marca como falhou)", async () => {
     enviarTexto.mockRejectedValueOnce(new Error("Limite de 20 envios por minuto atingido"));
     await expect(t.responder_whatsapp.run({ para: "mãe", texto: "x" }, ctx)).rejects.toThrow("Limite");
+  });
+});
+
+describe("usar_arquivo_whatsapp: o que chega pelo WhatsApp entra nos fluxos do app", () => {
+  const IMG = "11111111-1111-1111-1111-111111111111";
+  const AUDIO = "22222222-2222-2222-2222-222222222222";
+
+  it("é escrita direta (lançar gasto é como registrar_gasto), sem gate", () => {
+    expect(t.usar_arquivo_whatsapp.risk).toBe("escrita");
+  });
+
+  it("cupom: vai para o motor de finanças", async () => {
+    const r = String(await t.usar_arquivo_whatsapp.run({ mensagem_id: IMG, como: "cupom" }, ctx));
+    expect(importReceipt).toHaveBeenCalledWith("u1", expect.stringContaining("data:image/jpeg;base64,"));
+    expect(r).toContain("Padaria, R$ 42,50 (Alimentação)");
+  });
+
+  it("extrato, conhecimento e boleto", async () => {
+    expect(String(await t.usar_arquivo_whatsapp.run({ mensagem_id: IMG, como: "extrato" }, ctx))).toContain("12 lançamento(s)");
+    expect(String(await t.usar_arquivo_whatsapp.run({ mensagem_id: IMG, como: "conhecimento" }, ctx))).toContain("base de conhecimento");
+    expect(indexFile).toHaveBeenCalledOnce();
+    const b = String(await t.usar_arquivo_whatsapp.run({ mensagem_id: IMG, como: "boleto" }, ctx));
+    expect(b).toContain("Enel, R$ 159,90, vencimento 2026-10-05");
+    expect(b).toContain("adicionar_conta");
+  });
+
+  it("reunião: enfileira o MESMO trabalho da tela de Reuniões", async () => {
+    const r = String(await t.usar_arquivo_whatsapp.run({ mensagem_id: AUDIO, como: "reuniao" }, ctx));
+    expect(enqueueJob).toHaveBeenCalledWith("u1", expect.objectContaining({ kind: "reuniao.transcrever", dedupKey: "transcrever:u1:abc" }));
+    expect(r).toContain("Reuniões");
+    expect(String(await t.usar_arquivo_whatsapp.run({ mensagem_id: IMG, como: "reuniao" }, ctx))).toContain("preciso de um áudio");
+  });
+
+  it("arquivo que não baixou, id desconhecido e falha do fluxo viram recado", async () => {
+    expect(String(await t.usar_arquivo_whatsapp.run({ mensagem_id: "33333333-3333-3333-3333-333333333333", como: "extrato" }, ctx))).toContain("não consegui baixá-lo");
+    expect(String(await t.usar_arquivo_whatsapp.run({ mensagem_id: "44444444-4444-4444-4444-444444444444", como: "cupom" }, ctx))).toContain("Não encontrei");
+    importReceipt.mockRejectedValueOnce(new Error("imagem ilegível"));
+    expect(String(await t.usar_arquivo_whatsapp.run({ mensagem_id: IMG, como: "cupom" }, ctx))).toContain("imagem ilegível");
   });
 });

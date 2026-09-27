@@ -309,6 +309,13 @@
       "when": 1790511166391,
       "tag": "0043_whatsapp_roteada",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1790533240715,
+      "tag": "0044_lembretes_e_briefing",
+      "breakpoints": true
     }
   ]
 }

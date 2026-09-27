@@ -34,6 +34,7 @@ export const FLUXO = {
   acompanhamento: "acompanhamento",
   whatsapp: "whatsapp",
   whatsappAutomatico: "whatsapp_automatico",
+  briefing: "briefing",
 } as const;
 
 export interface RegistroDeUso {

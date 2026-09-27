@@ -1,3 +1,5 @@
+import { instanteLocal } from "../fuso";
+
 /**
  * As decisões de uma tarefa, sem banco no meio.
  *
@@ -15,6 +17,10 @@ export interface EdicaoDeTarefa {
   imagemUrl?: string | null;
   anotacoes?: string | null;
   paraQuem?: string | null;
+  /** "AAAA-MM-DDTHH:MM" no fuso da casa (`fuso` abaixo); null tira o lembrete */
+  lembrarEm?: string | null;
+  /** fuso da casa, para ler `lembrarEm` (quem chama lê da config) */
+  fuso?: string;
 }
 
 /**
@@ -49,6 +55,8 @@ export interface CamposParaGravar {
   imageUrl?: string | null;
   notes?: string | null;
   paraQuem?: string | null;
+  lembrarEm?: Date | null;
+  lembradoEm?: Date | null;
   updatedAt: Date;
 }
 
@@ -69,6 +77,11 @@ export function camposDaEdicao(e: EdicaoDeTarefa, agora = new Date()): CamposPar
   if (e.imagemUrl !== undefined) campos.imageUrl = e.imagemUrl || null;
   if (e.anotacoes !== undefined) campos.notes = e.anotacoes?.trim() || null;
   if (e.paraQuem !== undefined) campos.paraQuem = e.paraQuem?.trim() || null;
+  if (e.lembrarEm !== undefined) {
+    campos.lembrarEm = e.lembrarEm ? instanteLocal(e.lembrarEm, e.fuso ?? "") : null;
+    // remarcar é lembrar de novo: o "já avisei" da hora antiga não vale para a nova
+    campos.lembradoEm = null;
+  }
 
   return campos;
 }

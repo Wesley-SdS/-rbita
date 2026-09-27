@@ -189,5 +189,29 @@ export async function summarizeMeeting(userId: string, input: SummarizeInput, pr
     );
   }
 
+  // Item 4 da proativa: o resumo chega ao dono (push e WhatsApp) quando fica
+  // pronto, com os compromissos. Antes ele só existia na tela de Reuniões, e
+  // um resumo que ninguém abre não vira ação. Fail-soft: o resumo já está salvo.
+  if (await settings.get("meetings.avisarResumo").catch(() => false)) {
+    const { notifyUser } = await import("../routines/run");
+    await notifyUser(userId, `Resumo: ${title}`, textoDoAvisoDeResumo(summary, compromissos, tarefasCriadas), null, { destino: "/app/reunioes" }).catch((e) =>
+      log.warn("meeting.aviso_falhou", { error: e instanceof Error ? e.message : String(e) }),
+    );
+  }
+
   return { title, summary, compromissos, documentId: res.documentId, archived: res.chunks > 0, blocos, tarefasCriadas };
+}
+
+/**
+ * O aviso do resumo, PURO: o resumo (cortado, é mensagem de celular), os
+ * compromissos e o que virou tarefa. Quando nada virou tarefa, diz como pedir.
+ */
+export function textoDoAvisoDeResumo(resumo: string, compromissos: readonly { descricao: string; responsavel?: string; prazo?: string }[], tarefasCriadas: number): string {
+  const corpo = resumo.length > 1500 ? resumo.slice(0, 1500).trimEnd() + "…" : resumo;
+  if (!compromissos.length) return corpo;
+  const lista = compromissos.slice(0, 15).map((c) => `• ${c.descricao}${c.responsavel ? ` (${c.responsavel})` : ""}${c.prazo ? `, prazo ${c.prazo}` : ""}`).join("\n");
+  const tarefas = tarefasCriadas
+    ? `Criei ${tarefasCriadas} tarefa(s) para você a partir disso.`
+    : "Quer que eu crie tarefas desses compromissos? É só pedir.";
+  return `${corpo}\n\nCompromissos:\n${lista}\n\n${tarefas}`;
 }

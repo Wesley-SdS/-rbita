@@ -320,7 +320,11 @@ Antes de considerar qualquer tarefa concluída:
 | WhatsApp: entrada (webhook grava, processa em série, mídia, transcrição) | rota `apps/api/src/routes/whatsapp.ts` · `whatsapp/processar.ts` · `whatsapp/midia.ts` · tabelas `wa_*` em `packages/db/src/whatsapp-schema.ts` |
 | WhatsApp: quem responde o quê (conversa "Eu", automático, dono assumiu) | `whatsapp/rotear.ts` · `whatsapp/turno.ts` · `whatsapp/automatico.ts` · regras puras em `whatsapp/regras.ts` |
 | WhatsApp: TODA saída (antibanimento, eco, provedor pessoal ou Cloud API) | `packages/core/src/whatsapp/enviar.ts` |
-| Tools de WhatsApp (8) | `packages/core/src/tools/domains/whatsapp.ts` |
+| Tools de WhatsApp (9, inclui usar arquivo/foto como cupom, extrato, boleto, documento, reunião) | `packages/core/src/tools/domains/whatsapp.ts` |
+| Órbita proativa pelo WhatsApp: todo `notifyUser` vai também à conversa "Eu" (silêncio, teto por hora, histórico embrulhado) | `whatsapp/avisar.ts` · `whatsapp/conversa.ts` · chaves `whatsapp.avisos*` |
+| Briefing da manhã (um por dia, só leitura, fuso da casa) | `whatsapp/briefing.ts` · `whatsapp/horario.ts` · laço `whatsapp-briefing` |
+| Lembrete de tarefa com hora ("me lembra às 15h") | `todo.lembrar_em` · `tarefas/lembretes.ts` · laço `lembretes` · hora local → instante em `core/fuso.ts` |
+| Aviso do resumo de reunião com os compromissos | `meetings/summarize.ts` (`textoDoAvisoDeResumo`) ← chave `meetings.avisarResumo` |
 | Aprovar (botão, frase "manda" no WhatsApp e na voz) | `packages/core/src/actions/aprovar.ts` · `actions/por-frase.ts` · rota `POST /api/actions/falada` |
 | Fala da Órbita (Edge → Gemini → Piper) e nota de voz OGG/Opus | `packages/core/src/voice/sintetizar.ts` · `apps/voice` `POST /converter/ogg` |
 | Backlog pré-existente | `CHECKLIST.md` |

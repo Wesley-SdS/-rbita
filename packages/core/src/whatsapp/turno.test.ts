@@ -49,8 +49,11 @@ const aprovarPorFrase = vi.fn(async (..._a: unknown[]): Promise<{ estado: string
 vi.mock("../actions/por-frase", () => ({ aprovarPorFrase }));
 const gerarTexto = vi.fn(async (_p: Record<string, unknown>) => ({ texto: "Vou responder ok para a Maria.", modelKey: "x" }));
 vi.mock("../llm/gerar", () => ({ gerarTexto }));
+const buildAllTools = vi.fn(async (..._a: unknown[]) => ({ tools: {}, cleanup: async () => undefined, skillInstructions: "" }));
+const enqueueJob = vi.fn(async (..._a: unknown[]) => ({}));
+vi.mock("../jobs/queue", () => ({ enqueueJob }));
 vi.mock("../chat/tools", () => ({
-  buildAllTools: vi.fn(async () => ({ tools: {}, cleanup: async () => undefined, skillInstructions: "" })),
+  buildAllTools,
   buildPersonaContext: async () => "",
   buildTemporalContext: () => "",
   SYSTEM_PROMPT: "SYS",
@@ -60,8 +63,8 @@ vi.mock("../cameras/narrate", () => ({ narrateSnapshot: async () => "" }));
 vi.mock("../settings/apply", () => ({ applyLlmSettings: async () => undefined }));
 vi.mock("../settings", () => ({
   settings: {
-    get: async () => "espelhar",
-    getMany: async () => ({ "whatsapp.historicoConversa": 4, "chat.maxSteps": 5, "chat.ragTimeoutMs": 10, "rag.topK": 3 }),
+    get: async (k: string) => ({ "whatsapp.respostaFormato": "espelhar", "whatsapp.audioComoGravacaoChars": 50 })[k],
+    getMany: async () => ({ "whatsapp.historicoConversa": 4, "whatsapp.ferramentas": "todas", "chat.maxSteps": 5, "chat.ragTimeoutMs": 10, "rag.topK": 3, "memory.extractEnabled": true }),
   },
 }));
 const enviarTexto = vi.fn(async (..._a: unknown[]) => ({}));
@@ -115,5 +118,27 @@ describe("turnoDoDono", () => {
     gerarTexto.mockRejectedValueOnce(new Error("sem modelo"));
     await turnoDoDono("u1", EU, texto("oi"));
     expect(String(enviarTexto.mock.calls[0][2])).toContain("Não consegui responder agora");
+  });
+
+  it("pelo WhatsApp o dono tem TODAS as ferramentas (sem o teto do chat), no canal whatsapp", async () => {
+    await turnoDoDono("u1", EU, texto("quanto gastei este mês?"));
+    expect(buildAllTools.mock.calls[0][5]).toEqual({ canal: "whatsapp", todas: true });
+  });
+
+  it("a memória aprende com a conversa pelo WhatsApp", async () => {
+    await turnoDoDono("u1", EU, texto("lembra que meu carro é placa ABC1234"));
+    expect(enqueueJob).toHaveBeenCalledWith("u1", expect.objectContaining({ kind: "memoria.extrair" }));
+  });
+
+  it("áudio LONGO vira gravação, não comando", async () => {
+    await turnoDoDono("u1", EU, { id: "m9", tipo: "audio", texto: null, transcricao: "x".repeat(80), midiaCaminho: "a/b.ogg" } as never);
+    const msgs = gerarTexto.mock.calls[0][0].messages as { content: string }[];
+    expect(msgs.at(-1)!.content).toContain("parece uma gravação");
+  });
+
+  it("documento mandado sem texto também é pedido (com o id para usar)", async () => {
+    await turnoDoDono("u1", EU, { id: "doc1", tipo: "documento", texto: null, transcricao: null, midiaCaminho: "a/x.pdf", midiaMime: "application/pdf" } as never);
+    const msgs = gerarTexto.mock.calls[0][0].messages as { content: string }[];
+    expect(msgs.at(-1)!.content).toContain("[o dono mandou um documento, id=doc1, tipo application/pdf]");
   });
 });
