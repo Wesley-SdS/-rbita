@@ -20,7 +20,7 @@ export async function transcribeAudio(file: File, opts: SttOptions = {}): Promis
   const comecou = Date.now();
   // a nuvem é escolha do dono, e escolha precisa de tela (§5.6): a chave no
   // .env habilita, a chave em `setting` decide
-  const permiteNuvem = (await settings.get("meetings.sttCloud").catch(() => "quando_houver_chave")) !== "nunca";
+  const permiteNuvem = opts.permitirNuvem ?? (await settings.get("meetings.sttCloud").catch(() => "quando_houver_chave")) !== "nunca";
   const key = permiteNuvem ? process.env.ASSEMBLYAI_API_KEY : undefined;
   if (key) {
     try {

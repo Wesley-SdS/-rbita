@@ -49,4 +49,10 @@ export interface SttOptions {
   userId?: string;
   /** O que está sendo transcrito, para a linha da conta dizer algo ("reunião de terça"). */
   referencia?: string | null;
+  /**
+   * Quem decide se pode ir para a nuvem. Ausente, vale a config das reuniões
+   * (`meetings.sttCloud`). O WhatsApp passa a própria escolha: o áudio de um
+   * terceiro é dado DELE, e o dono pode querer tratar diferente da reunião.
+   */
+  permitirNuvem?: boolean;
 }
