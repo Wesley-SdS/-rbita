@@ -58,6 +58,8 @@ export * from "./job-schema";
 export * from "./guided-schema";
 // Contabilidade de consumo: toda chamada paga da casa, seja qual for o fluxo.
 export * from "./usage-schema";
+// WhatsApp pessoal pela ponte local GOWA: sessão, contatos, mensagens, eventos brutos.
+export * from "./whatsapp-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {
