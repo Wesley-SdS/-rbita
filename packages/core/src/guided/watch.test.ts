@@ -2,15 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * O laço que olha a câmera e avança o passo. O que importa aqui é o que ele
- * NÃO faz: não avança na dúvida, não avança sem imagem, não manda snapshot
- * para a nuvem numa câmera que identifica pessoas, e não deixa a tarefa presa
- * quando o modelo falha.
+ * NÃO faz: não avança na dúvida, não avança sem imagem, não decide por conta
+ * própria onde a imagem é lida (isso é a preferência do dono, pelo mesmo
+ * caminho da narração) e não deixa a tarefa presa quando o modelo falha.
  */
 
 let cam: { id: string; enabled: boolean; identifyFaces: boolean } | null = null;
 let evento: { id: string; snapshot: string | null } | null = null;
 let resposta = "SIM, terminou.";
 const narracoes: { pergunta: string; localOnly: boolean | undefined }[] = [];
+/** o que `vision.identificacaoSoLocal` responderia */
+let exigirLocal = false;
 const atualizados: Record<string, unknown>[] = [];
 const avisos: { titulo: string; corpo: string; personId: string | null }[] = [];
 const encerradas: string[] = [];
@@ -32,6 +34,9 @@ vi.mock("@orbita/db", () => {
 });
 vi.mock("../cameras/query", () => ({ latestEventWithSnapshot: async () => evento }));
 vi.mock("../cameras/narrate", () => ({
+  // a decisão de "só local" virou config do dono em 27/09/2026: o laço pergunta
+  // pelo mesmo caminho da narração, e a resposta é o que o teste controla
+  soLocalParaCamera: async (identifica: boolean) => identifica && exigirLocal,
   narrateSnapshot: async (_s: string, pergunta: string, opts?: { localOnly?: boolean }) => {
     narracoes.push({ pergunta, localOnly: opts?.localOnly });
     return resposta;
@@ -73,6 +78,7 @@ const tarefa = {
 };
 
 beforeEach(() => {
+  exigirLocal = false; // o padrão novo: segue a preferência de visão
   cam = { id: "cam1", enabled: true, identifyFaces: false };
   evento = { id: "e1", snapshot: "data:image/jpeg;base64,AAA" };
   resposta = "SIM, terminou.";
@@ -123,7 +129,23 @@ describe("uma olhada na tarefa", () => {
     expect(narracoes).toEqual([]);
   });
 
-  it("câmera que identifica pessoas só usa modelo local (decisão 9.6)", async () => {
+  /**
+   * A decisão 9.6 mandava narrar só com modelo local em câmera que identifica
+   * pessoas. O dono a reviu em 27/09/2026 (o `moondream` levou 43 s e devolveu
+   * "!!!", e na Render não existe modelo local), e o acompanhamento pela câmera
+   * tinha ficado ATRÁS da revisão: ele lia `cam.identifyFaces` cru, por fora do
+   * `soLocalParaCamera`, então a receita seguia presa ao local enquanto o resto
+   * da casa já usava a assinatura. É a armadilha do §9 em ato.
+   */
+  it("câmera que identifica pessoas segue a preferência de visão do dono", async () => {
+    exigirLocal = false;
+    cam = { id: "cam1", enabled: true, identifyFaces: true };
+    await olharTarefa(tarefa);
+    expect(narracoes[0]!.localOnly).toBe(false);
+  });
+
+  it("com `vision.identificacaoSoLocal` ligado, o acompanhamento volta a ser só local", async () => {
+    exigirLocal = true;
     cam = { id: "cam1", enabled: true, identifyFaces: true };
     await olharTarefa(tarefa);
     expect(narracoes[0]!.localOnly).toBe(true);

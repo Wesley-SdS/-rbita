@@ -24,6 +24,12 @@ export interface LimitesCamera {
   quadroMaxKB: number;
   /** quanto esperar pelo quadro capturado junto da mensagem antes de mandar assim mesmo */
   esperaAoFalarMs: number;
+  /** mostrar o quadradinho com o que a Órbita está olhando */
+  previaAoOlhar: boolean;
+  /** quanto tempo a câmera fica aberta a mais só para a prévia mostrar vídeo ao vivo */
+  previaMs: number;
+  /** quanto tempo a foto enviada continua no canto depois de a câmera fechar */
+  previaSegundos: number;
 }
 
 export const LIMITES_CAMERA_PADRAO: LimitesCamera = {
@@ -32,6 +38,9 @@ export const LIMITES_CAMERA_PADRAO: LimitesCamera = {
   qualidade: 0.7,
   quadroMaxKB: 400,
   esperaAoFalarMs: 1500,
+  previaAoOlhar: true,
+  previaMs: 2000,
+  previaSegundos: 5,
 };
 
 let cache: Promise<LimitesCamera> | null = null;
@@ -228,25 +237,82 @@ export function definirAutorizacao(valor: boolean): void {
  * conseguiu ver — melhor do que travar a mensagem.
  */
 /**
- * O quadro que acabou de ser enviado, para a tela poder MOSTRAR.
+ * O QUE A ÓRBITA ESTÁ OLHANDO, PARA A TELA MOSTRAR.
  *
  * Existe porque a câmera abrir e a pessoa não ver nada é o pior dos mundos:
- * a luz acende, algo é enviado, e ela fica sem saber o quê. Ver a foto que a
- * Órbita está olhando é o mínimo de quem autorizou o olhar.
+ * a luz acende, algo é enviado, e ela fica sem saber o quê. Ver o que a Órbita
+ * está olhando é o mínimo de quem autorizou o olhar.
+ *
+ * Eram só a última foto, e o dono pediu o vídeo: "poderia abrir no canto
+ * inferior direito o quadrado mostrando a imagem em tempo real". Então isto
+ * publica DOIS momentos, porque são duas coisas diferentes: o `stream` é a
+ * câmera aberta agora (vídeo ao vivo), e a `foto` é o quadro que de fato subiu.
+ *
+ * É um publicador e não um `useState` porque quem abre a câmera é uma função de
+ * biblioteca, chamada do chat, do modo de voz e do Presença. Nenhum deles é o
+ * dono da prévia, e todos precisam que ela apareça.
  */
-let ultimoQuadro: string | null = null;
-export function quadroEnviado(): string | null {
-  return ultimoQuadro;
+export interface PreviaDaCamera {
+  /** a câmera aberta neste instante, ou null quando já fechou */
+  stream: MediaStream | null;
+  /** o quadro que subiu, para continuar visível depois de a câmera fechar */
+  foto: string | null;
 }
+
+let previa: PreviaDaCamera = { stream: null, foto: null };
+const ouvintes = new Set<(p: PreviaDaCamera) => void>();
+
+function anunciar(mudanca: Partial<PreviaDaCamera>): void {
+  previa = { ...previa, ...mudanca };
+  for (const cb of ouvintes) {
+    try {
+      cb(previa);
+    } catch {
+      /* um ouvinte com defeito não pode impedir os outros de saber */
+    }
+  }
+}
+
+/**
+ * Acompanha a prévia. Devolve a função de parar de acompanhar.
+ *
+ * O estado atual chega de imediato: quem monta no meio de uma captura tem de
+ * ver o vídeo que já está rolando, e não esperar a próxima.
+ */
+export function assistirPrevia(cb: (p: PreviaDaCamera) => void): () => void {
+  ouvintes.add(cb);
+  cb(previa);
+  return () => {
+    ouvintes.delete(cb);
+  };
+}
+
+/** Alguém está de fato mostrando a prévia? É o que autoriza a câmera a demorar. */
+export function previaAssistida(): boolean {
+  return ouvintes.size > 0;
+}
+
+/** A última foto enviada. Mantido para quem só precisa da imagem. */
+export function quadroEnviado(): string | null {
+  return previa.foto;
+}
+
+let limparFoto: ReturnType<typeof setTimeout> | null = null;
 
 export async function capturarUmQuadro(cameraId?: string | null): Promise<boolean> {
   const id = cameraId ?? ler(CHAVE_CAMERA);
   if (!id) return false;
 
+  const limites = await limitesDaCamera();
   let stream: MediaStream | null = null;
   try {
-    const limites = await limitesDaCamera();
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+    // a prévia sabe da câmera ANTES da foto: é o vídeo ao vivo que o dono pediu,
+    // e ele só existe enquanto a câmera está aberta
+    if (limites.previaAoOlhar) {
+      if (limparFoto) clearTimeout(limparFoto);
+      anunciar({ stream, foto: null });
+    }
     const video = document.createElement("video");
     video.srcObject = stream;
     video.muted = true;
@@ -272,13 +338,35 @@ export async function capturarUmQuadro(cameraId?: string | null): Promise<boolea
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cameraId: id, snapshot: dataUrl, label: "sob demanda" }),
     });
-    if (r.ok) ultimoQuadro = dataUrl;
+    if (r.ok) anunciar({ foto: dataUrl });
     return r.ok;
   } catch {
     return false;
   } finally {
-    stream?.getTracks().forEach((t) => t.stop());
+    fecharComPrevia(stream, limites);
   }
+}
+
+/**
+ * Fecha a câmera, respeitando a prévia.
+ *
+ * A câmera acender por uma fração de segundo é uma decisão antiga e boa: é a
+ * diferença entre autorizar um olhar e autorizar vigilância. A prévia estica
+ * isso de propósito, porque um vídeo de 300ms não é vídeo, é um susto. Mas
+ * estica SÓ quando alguém está de fato mostrando (`previaAssistida`) e SÓ pelo
+ * tempo configurado: sem tela olhando, a luz apaga na hora, como antes.
+ */
+function fecharComPrevia(stream: MediaStream | null, limites: LimitesCamera): void {
+  const fechar = () => {
+    stream?.getTracks().forEach((t) => t.stop());
+    anunciar({ stream: null });
+    // a foto sai depois: ela é o que responde "o que ela viu?" quando a luz
+    // já apagou
+    if (limparFoto) clearTimeout(limparFoto);
+    limparFoto = setTimeout(() => anunciar({ foto: null }), limites.previaSegundos * 1000);
+  };
+  if (limites.previaAoOlhar && limites.previaMs > 0 && previaAssistida()) setTimeout(fechar, limites.previaMs);
+  else fechar();
 }
 
 /**

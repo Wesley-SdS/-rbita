@@ -23,7 +23,7 @@ let camera: CamFalsa | null = null;
 let exigirLocal = false;
 let cameras: CamFalsa[] = [];
 let recusaComodo: string | null = null;
-let evento: { id: string; snapshot: string | null; createdAt: Date } | null = null;
+let evento: { id: string; label: string; snapshot: string | null; createdAt: Date } | null = null;
 
 const narradas: { pergunta: string | undefined; opts: { localOnly?: boolean } | undefined }[] = [];
 const autorizacoes: { roomId: string | null; quem: unknown; oQue: string }[] = [];
@@ -68,7 +68,10 @@ beforeEach(() => {
   recusaComodo = null;
   camera = { id: "cam1", name: "Cozinha", roomId: "cozinha", enabled: true, identifyFaces: true };
   cameras = [camera];
-  evento = { id: "e1", snapshot: "data:image/jpeg;base64,AAA", createdAt: new Date("2026-09-17T14:12:00Z") };
+  // `label` e data de AGORA: a janela de frescor deixou de ser checada dentro
+  // do mock e passou a ser a regra de `imagemFresca`, então o evento do teste
+  // precisa ser um evento plausível de verdade
+  evento = { id: "e1", label: "person", snapshot: "data:image/jpeg;base64,AAA", createdAt: new Date() };
 });
 
 describe("casa_ver_camera: permissão por cômodo", () => {
@@ -140,6 +143,39 @@ describe("câmera que identifica pessoas: quem narra é ESCOLHA do dono", () => 
     expect(r.motivo).toMatch(/imagem recente/i);
     expect(r.erro).toBeUndefined();
     expect(narradas).toEqual([]);
+  });
+});
+
+describe("a mesma foto duas vezes: de quem é o quadro", () => {
+  /**
+   * Medido no banco em 27/09/2026: o dono pediu cinco vezes, em 92 segundos, no
+   * modo de voz, e recebeu a MESMA imagem cinco vezes (UM `camera_event` e cinco
+   * chamadas de visão depois dele). A janela de frescor era uma só, de 120 s,
+   * para dois tipos de imagem muito diferentes.
+   */
+  it("quadro que a própria Órbita pediu, meio minuto atrás, já não serve", async () => {
+    evento = { id: "e2", label: "sob demanda", snapshot: "data:image/jpeg;base64,AAA", createdAt: new Date(Date.now() - 30_000) };
+    const r = (await set().casa_ver_camera!.execute!({ local: "cozinha" }, exec)) as { precisa_de_imagem?: boolean };
+    expect(r.precisa_de_imagem).toBe(true);
+    // e o mais importante: NÃO gastou uma chamada de visão na foto velha
+    expect(narradas).toEqual([]);
+  });
+
+  it("evento empurrado por detector, meio minuto atrás, continua servindo", async () => {
+    // encurtar a janela do Frigate seria "não consigo ver" numa câmera que o
+    // navegador nem tem como fotografar
+    evento = { id: "e3", label: "person", snapshot: "data:image/jpeg;base64,AAA", createdAt: new Date(Date.now() - 30_000) };
+    const r = (await set().casa_ver_camera!.execute!({ local: "cozinha" }, exec)) as Record<string, unknown>;
+    expect(r).toMatchObject({ descricao: "uma pessoa na cozinha" });
+    expect(narradas).toHaveLength(1);
+  });
+
+  it("quadro pedido de segundos atrás ainda vale, para duas tools do mesmo turno", async () => {
+    // sem esta folga, o modelo chamando `casa_ver_camera` e depois `ver_camera`
+    // no MESMO turno acenderia a webcam duas vezes
+    evento = { id: "e4", label: "sob demanda", snapshot: "data:image/jpeg;base64,AAA", createdAt: new Date(Date.now() - 3_000) };
+    const r = (await set().casa_ver_camera!.execute!({ local: "cozinha" }, exec)) as Record<string, unknown>;
+    expect(r).toMatchObject({ descricao: "uma pessoa na cozinha" });
   });
 });
 

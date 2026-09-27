@@ -6,7 +6,7 @@ import { settings } from "../settings";
 import { events } from "../events/index";
 import { log } from "../observability/logger";
 import { latestEventWithSnapshot } from "../cameras/query";
-import { narrateSnapshot } from "../cameras/narrate";
+import { narrateSnapshot, soLocalParaCamera } from "../cameras/narrate";
 import { activeGuidedTasks, expireGuidedTasks, stopGuidedTask } from "./task";
 import { avancar, devoOlhar, lerVeredito, montarPergunta } from "./rules";
 
@@ -16,8 +16,9 @@ import { avancar, devoOlhar, lerVeredito, montarPergunta } from "./rules";
  *
  * Roda no processo persistente, uma tarefa de cada vez, porque cada olhada é
  * uma chamada a modelo de visão e nesta máquina isso é CPU (CLAUDE.md §9). A
- * regra de privacidade é a mesma da narração: câmera que identifica pessoas
- * responde só com modelo local (decisão 9.6), e isso vem de `narrateSnapshot`.
+ * A regra de privacidade é a mesma da narração, e vem do mesmo lugar
+ * (`soLocalParaCamera`): câmera que identifica pessoas segue a preferência de
+ * visão do dono, e só é presa ao modelo local se ele ligar isso.
  */
 
 async function avisar(t: GuidedTask, titulo: string, corpo: string): Promise<void> {
@@ -47,7 +48,11 @@ export async function olharTarefa(t: GuidedTask): Promise<"sem_camera" | "sem_im
   const cfg = await settings.getMany(["guided.question"]);
   const passo = t.steps[t.currentStep] ?? "";
   const pergunta = montarPergunta(cfg["guided.question"], passo, t.title);
-  const resposta = await narrateSnapshot(ev.snapshot, pergunta, { localOnly: cam.identifyFaces });
+  // `soLocalParaCamera` e não `cam.identifyFaces` cru: é a armadilha do §9 em
+  // ato. A decisão de 27/09/2026 (câmera que identifica pessoas segue a
+  // preferência de visão) entrou na narração e nas tools, e ESTE laço ficou
+  // atrás, forçando o modelo local aqui enquanto o resto usava a assinatura.
+  const resposta = await narrateSnapshot(ev.snapshot, pergunta, { localOnly: await soLocalParaCamera(cam.identifyFaces) });
   const veredito = lerVeredito(resposta);
 
   await db

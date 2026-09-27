@@ -9,6 +9,7 @@ import { TELAS, telaDoCaminho } from "./navegacao";
 import { Busca } from "./busca";
 import { Atividade } from "./atividade";
 import { ModoFoco } from "./modo-foco";
+import { PreviaDaCameraNoCanto } from "@/components/previa-da-camera";
 import { ProvedorCasca } from "./contexto";
 import { signOut } from "@/lib/auth-client";
 import { limparCache, ProvedorCacheDados } from "@/lib/dados/recurso";
@@ -350,6 +351,9 @@ export function Casca({
           reduzido={movimentoReduzido}
           pausarVozDaTela={pausarVozDaTela}
         />
+        {/* a câmera abre do chat, da voz e do Presença: a prévia mora na casca
+            para o dono ver em qualquer tela que ela acendeu */}
+        <PreviaDaCameraNoCanto />
       </ProvedorCasca>
     </ProvedorCacheDados>
   );

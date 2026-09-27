@@ -13,12 +13,24 @@ import { sessionOf } from "../http/web-route";
 export async function GET(req: Request, ctx: RouteCtx) {
   const s = sessionOf(ctx);
   if (!s) return Response.json({ error: "Não autenticado" }, { status: 401 });
-  const cfg = await settings.getMany(["cameras.deviceIntervalSeconds", "cameras.deviceMaxWidth", "cameras.deviceQuality", "cameras.snapshotMaxKB", "cameras.capturaAoFalarMs"]);
+  const cfg = await settings.getMany([
+    "cameras.deviceIntervalSeconds",
+    "cameras.deviceMaxWidth",
+    "cameras.deviceQuality",
+    "cameras.snapshotMaxKB",
+    "cameras.capturaAoFalarMs",
+    "cameras.previaAoOlhar",
+    "cameras.previaMs",
+    "cameras.previaSegundos",
+  ]);
   return leituraCacheavel(req, {
     intervaloSegundos: cfg["cameras.deviceIntervalSeconds"],
     larguraMaxima: cfg["cameras.deviceMaxWidth"],
     qualidade: cfg["cameras.deviceQuality"],
     quadroMaxKB: cfg["cameras.snapshotMaxKB"],
     esperaAoFalarMs: cfg["cameras.capturaAoFalarMs"],
+    previaAoOlhar: cfg["cameras.previaAoOlhar"],
+    previaMs: cfg["cameras.previaMs"],
+    previaSegundos: cfg["cameras.previaSegundos"],
   });
 }
