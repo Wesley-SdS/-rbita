@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { waContato, waMensagem, type WaContato, type WaMensagem } from "@orbita/db/whatsapp-schema";
 import type { TipoMensagem } from "./traduzir";
@@ -67,6 +67,29 @@ export function casarContato<T extends { nome: string | null; apelido: string | 
   if (apelidoExato.length) return apelidoExato;
   const nomes = (c: T) => [c.apelido, c.nome].filter((x): x is string => Boolean(x)).map(normalizarFrase);
   return contatos.filter((c) => nomes(c).some((n) => n === t || n.split(" ").includes(t) || n.includes(t)));
+}
+
+/**
+ * O casamento que pode decidir SOZINHO para quem vai uma mensagem: apelido
+ * exato (vence sozinho), nome exato, ou todas as palavras do termo no nome.
+ * O "contém" do `casarContato` fica para leitura: "Ana" dentro de "Juliana",
+ * ou um desconhecido chamado "Mariana Vendas", não pode ganhar da Maria certa.
+ */
+export function casarContatoForte<T extends { nome: string | null; apelido: string | null; jid: string }>(contatos: readonly T[], termo: string): { achados: T[]; porApelido: boolean } {
+  const t = normalizarFrase(termo).replace(/^(a|o|pra|para|com)\s+/, "");
+  if (!t) return { achados: [], porApelido: false };
+  const apelido = contatos.filter((c) => c.apelido && normalizarFrase(c.apelido) === t);
+  if (apelido.length) return { achados: apelido, porApelido: true };
+  const palavras = t.split(" ");
+  return {
+    achados: contatos.filter((c) =>
+      [c.apelido, c.nome]
+        .filter((x): x is string => Boolean(x))
+        .map(normalizarFrase)
+        .some((n) => n === t || palavras.every((p) => n.split(" ").includes(p))),
+    ),
+    porApelido: false,
+  };
 }
 
 // ── mensagens ──
@@ -167,6 +190,44 @@ export async function mensagensDoChat(userId: string, chatJid: string, limite: n
     .orderBy(desc(waMensagem.em))
     .limit(limite);
   return rows.reverse();
+}
+
+/** O turno desta mensagem começou (ver `turnoPendenteEm` no schema). */
+export async function marcarTurnoPendente(userId: string, id: string): Promise<void> {
+  await db.update(waMensagem).set({ turnoPendenteEm: new Date() }).where(and(eq(waMensagem.userId, userId), eq(waMensagem.id, id)));
+}
+
+/** O turno terminou (bem ou mal): nada a retomar. */
+export async function limparTurnoPendente(userId: string, id: string): Promise<void> {
+  await db.update(waMensagem).set({ turnoPendenteEm: null }).where(and(eq(waMensagem.userId, userId), eq(waMensagem.id, id)));
+}
+
+/**
+ * Turnos que começaram ANTES desta subida do processo e não terminaram: foram
+ * interrompidos. Os de depois da subida são deste processo e podem estar
+ * rodando agora. Só os pedidos recentes (`desde`): um de uma hora atrás
+ * respondido agora surpreenderia mais do que ajudaria.
+ */
+export async function turnosInterrompidos(desde: Date, subida: Date): Promise<WaMensagem[]> {
+  return db
+    .select()
+    .from(waMensagem)
+    .where(and(isNotNull(waMensagem.turnoPendenteEm), lt(waMensagem.turnoPendenteEm, subida), gte(waMensagem.em, desde), eq(waMensagem.enviadaPelaOrbita, false)))
+    .orderBy(asc(waMensagem.em))
+    .limit(50);
+}
+
+/**
+ * Pega o turno para ESTE processo, atômico: com dois processos vivos (o `tsx
+ * watch` reiniciando), só um consegue, e o outro não responde em dobro.
+ */
+export async function reivindicarTurno(id: string, subida: Date): Promise<boolean> {
+  const r = await db
+    .update(waMensagem)
+    .set({ turnoPendenteEm: new Date() })
+    .where(and(eq(waMensagem.id, id), lt(waMensagem.turnoPendenteEm, subida)))
+    .returning({ id: waMensagem.id });
+  return r.length > 0;
 }
 
 export async function marcarLidas(userId: string, chatJid: string): Promise<void> {

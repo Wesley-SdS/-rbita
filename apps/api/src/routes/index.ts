@@ -59,6 +59,7 @@ import * as meetingTranscribe from "./meeting-transcribe";
 import * as devices from "./devices";
 import * as channelsWhatsapp from "./channels-whatsapp";
 import * as whatsapp from "./whatsapp";
+import * as telegram from "./telegram";
 import * as cameras from "./cameras";
 import * as cameraEvents from "./camera-events";
 import * as cameraIngest from "./camera-ingest";
@@ -126,6 +127,11 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/whatsapp/desconectar", { POST: whatsapp.POST_DESCONECTAR }),
   webRoute("api/whatsapp/contatos", { GET: whatsapp.GET_CONTATOS }),
   webRoute("api/whatsapp/contatos/:id", { PATCH: whatsapp.PATCH_CONTATO }),
+  webRoute("api/telegram", { GET: telegram.GET }),
+  webRoute("api/telegram/conectar", { POST: telegram.POST_CONECTAR }),
+  webRoute("api/telegram/desconectar", { POST: telegram.POST_DESCONECTAR }),
+  webRoute("api/telegram/convite", { POST: telegram.POST_CONVITE }),
+  webRoute("api/telegram/contatos/:id", { PATCH: telegram.PATCH_CONTATO, DELETE: telegram.DELETE_CONTATO }),
   webRoute("api/cameras", cameras),
   webRoute("api/cameras/events", cameraEvents),
   webRoute("api/cameras/ingest", cameraIngest),

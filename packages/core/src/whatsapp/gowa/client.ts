@@ -228,6 +228,10 @@ export async function enviarMidia(deviceId: string, paraJid: string, tipo: TipoD
   form.append("phone", paraJid);
   form.append(nomeDoCampo, new Blob([new Uint8Array(bytes)], { type: mime }), nomeArquivo);
   if (legenda && tipo === "image") form.append("caption", legenda);
+  // Sem `ptt`, o GOWA manda o OGG como anexo de áudio genérico, e o WhatsApp
+  // não o mostrava como nota de voz (o dono não recebeu a primeira resposta em
+  // áudio, 27/09/2026). Com `ptt`, a ponte ainda passa pelo ffmpeg dela.
+  if (tipo === "audio") form.append("ptt", "true");
   const r = await (await executar({ method: "POST", path, deviceId, form })).json();
   return idDaMensagem(r);
 }
@@ -298,4 +302,40 @@ export async function lerComTeto(res: Response, maxBytes: number): Promise<Uint8
 
 export async function marcarLida(deviceId: string, chatJid: string, externalId: string): Promise<void> {
   await json({ method: "POST", path: `/message/${enc(externalId)}/read`, deviceId, body: { phone: chatJid } });
+}
+
+// ── histórico (recuperar o que o webhook não entregou) ──
+
+export interface ChatDaPonte {
+  jid: string;
+  ultimaMensagemEm: Date | null;
+}
+
+/** Chats com movimento mais recente primeiro (o GOWA guarda o histórico da sessão). */
+export async function listarChats(deviceId: string, limite: number): Promise<ChatDaPonte[]> {
+  const r = await json<unknown>({ method: "GET", path: `/chats?limit=${limite}`, deviceId });
+  const lista = campo<unknown[]>(campo(r, "results", "Results"), "data", "Data") ?? [];
+  return lista.map((c) => {
+    const quando = campo<string>(c, "last_message_time", "LastMessageTime");
+    return { jid: String(campo(c, "jid", "JID") ?? ""), ultimaMensagemEm: quando ? new Date(quando) : null };
+  }).filter((c) => c.jid);
+}
+
+/** Uma mensagem do histórico da ponte, com os nomes do GOWA. */
+export interface MensagemDaPonte {
+  id: string;
+  chat_jid: string;
+  sender_jid?: string;
+  sender_display_name?: string;
+  content?: string;
+  timestamp?: string;
+  is_from_me?: boolean;
+  media_type?: string;
+  filename?: string;
+  url?: string;
+}
+
+export async function mensagensDoChatNaPonte(deviceId: string, jid: string, limite: number): Promise<MensagemDaPonte[]> {
+  const r = await json<unknown>({ method: "GET", path: `/chat/${enc(jid)}/messages?limit=${limite}`, deviceId });
+  return (campo<MensagemDaPonte[]>(campo(r, "results", "Results"), "data", "Data") ?? []).filter((m) => m && typeof m.id === "string");
 }

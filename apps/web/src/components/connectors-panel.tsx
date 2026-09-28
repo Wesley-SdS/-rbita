@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { invalidar, useRecurso } from "@/lib/dados/recurso";
 import { Icone } from "@/components/presenca/icones";
 import { BlocoWhatsappPessoal } from "@/components/whatsapp-pessoal";
+import { BlocoTelegram } from "@/components/telegram-panel";
 
 interface Conta {
   id: string;
@@ -154,6 +155,7 @@ export function ConnectorsPanel() {
           ))}
 
           <BlocoWhatsappPessoal />
+          <BlocoTelegram />
           <BlocoWhatsapp />
         </div>
       )}

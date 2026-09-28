@@ -2,6 +2,7 @@ import { z } from "zod";
 import { contaParaEscrever, lerDeTodasAsContas } from "../../connectors/multi";
 import { listRecentEmails, createDraft, sendEmail, listUpcomingEvents, createEvent } from "../../connectors/google";
 import { registerTools, type ToolDef } from "../registry";
+import { conferirEmail, destinoDoEmail, fixarEmail } from "../../contatos/agenda";
 
 /**
  * Domínio: Google (Gmail + Agenda). Só entram no ToolSet com o conector ligado.
@@ -42,7 +43,7 @@ export const ler_emails: ToolDef<z.ZodObject<{ consulta: z.ZodOptional<z.ZodStri
   },
 };
 
-const EmailInput = z.object({ para: z.string(), assunto: z.string(), corpo: z.string() });
+const EmailInput = z.object({ para: z.string().min(1).max(320).describe("Endereço de e-mail, ou o nome de alguém da agenda de contatos (\"o João\"): a Órbita acha o endereço."), para_nome: z.string().max(200).nullish().describe("Preenchido pela Órbita; não informe."), assunto: z.string(), corpo: z.string() });
 const EmailComConta = EmailInput.extend({ conta: CONTA });
 
 export const rascunhar_email: ToolDef<typeof EmailComConta> = {
@@ -53,6 +54,8 @@ export const rascunhar_email: ToolDef<typeof EmailComConta> = {
   keywords: ["rascunho", "email", "e-mail", "escrever", "redigir"],
   requires: { connector: "google" },
   inputSchema: EmailComConta,
+  authorize: conferirEmail,
+  preparar: fixarEmail,
   run: async ({ para, assunto, corpo, conta }, { userId }) => {
     const { token, rotulo } = await escrever(userId, conta);
     const d = await createDraft(token, para, assunto, corpo);
@@ -72,7 +75,10 @@ export const enviar_email: ToolDef<typeof EmailComConta> = {
   inputSchema: EmailComConta,
   // a conta aparece no resumo da fila: aprovar sem saber por qual conta sai
   // seria aprovar outra coisa
-  summarize: ({ para, assunto, conta }) => `Enviar e-mail para ${para}: "${assunto}"${conta ? ` (conta: ${conta})` : ""}`,
+  summarize: (i) => `Enviar e-mail para ${destinoDoEmail(i)}: "${i.assunto}"${i.conta ? ` (conta: ${i.conta})` : ""}`,
+  // "o João" vira o endereço na hora de propor: o dono aprova o endereço exato
+  authorize: conferirEmail,
+  preparar: fixarEmail,
   run: async ({ para, assunto, corpo, conta }, { userId }) => {
     const { token, rotulo } = await escrever(userId, conta);
     const r = await sendEmail(token, para, assunto, corpo);

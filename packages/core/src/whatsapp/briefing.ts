@@ -22,24 +22,43 @@ import { sessaoDe } from "./sessao";
  * gravado ANTES de mandar. Se o envio falhar, perde-se o briefing do dia;
  * gravar depois arriscaria mandar dois se o processo reiniciasse no meio.
  */
-export async function briefingSeDevido(userId: string, agora = new Date()): Promise<"enviado" | "fora_de_hora" | "sem_whatsapp" | "falhou"> {
-  const cfg = await settings.getMany(["whatsapp.briefingAtivo", "whatsapp.briefingHorario", "whatsapp.briefingDias", "whatsapp.briefingPedido", "connectors.fusoHorario"]);
-  const sessao = await sessaoDe(userId);
-  if (!sessao || sessao.status !== "conectado") return "sem_whatsapp";
-  const local = agoraLocal(agora, cfg["connectors.fusoHorario"]);
-  if (!briefingDevido(local, { ativo: cfg["whatsapp.briefingAtivo"], horario: cfg["whatsapp.briefingHorario"], dias: cfg["whatsapp.briefingDias"] }, sessao.ultimoBriefing)) return "fora_de_hora";
+export type ResultadoDoBriefing = "enviado" | "fora_de_hora" | "sem_canal" | "falhou";
 
-  await db.update(waSessao).set({ ultimoBriefing: local.dia }).where(eq(waSessao.id, sessao.id));
+/**
+ * O briefing vai para cada canal onde está DEVIDO: a conversa "Eu" do WhatsApp
+ * e o Telegram da Órbita (se `telegram.briefing`). Montado UMA vez (uma chamada
+ * de modelo), com o dia gravado em cada canal ANTES de mandar.
+ */
+export async function briefingSeDevido(userId: string, agora = new Date()): Promise<ResultadoDoBriefing> {
+  const cfg = await settings.getMany(["whatsapp.briefingAtivo", "whatsapp.briefingHorario", "whatsapp.briefingDias", "whatsapp.briefingPedido", "telegram.briefing", "connectors.fusoHorario"]);
+  const local = agoraLocal(agora, cfg["connectors.fusoHorario"]);
+  const regra = { ativo: cfg["whatsapp.briefingAtivo"], horario: cfg["whatsapp.briefingHorario"], dias: cfg["whatsapp.briefingDias"] };
+
+  const sessao = await sessaoDe(userId);
+  const temWhatsapp = Boolean(sessao && sessao.status === "conectado");
+  const tg = cfg["telegram.briefing"] ? await import("../telegram/store") : null;
+  const [bot, donoTg] = tg ? await Promise.all([tg.botDe(userId), tg.donoNoTelegram(userId)]) : [null, null];
+  const temTelegram = Boolean(bot && donoTg);
+  if (!temWhatsapp && !temTelegram) return "sem_canal";
+
+  const peloWhatsapp = temWhatsapp && briefingDevido(local, regra, sessao!.ultimoBriefing);
+  const peloTelegram = temTelegram && briefingDevido(local, regra, bot!.ultimoBriefing);
+  if (!peloWhatsapp && !peloTelegram) return "fora_de_hora";
+
+  if (peloWhatsapp) await db.update(waSessao).set({ ultimoBriefing: local.dia }).where(eq(waSessao.id, sessao!.id));
+  if (peloTelegram) await tg!.marcarBriefing(userId, local.dia);
   try {
-    const texto = await runPromptForUser(userId, cfg["whatsapp.briefingPedido"], "\nVocê está montando o briefing da manhã, que vai pelo WhatsApp. Responda só com o texto do briefing.", {
+    const texto = await runPromptForUser(userId, cfg["whatsapp.briefingPedido"], "\nVocê está montando o briefing da manhã, que vai por mensagem (WhatsApp ou Telegram). Responda só com o texto do briefing.", {
       fluxo: FLUXO.briefing,
       referencia: local.dia,
       soLeitura: true,
       todas: true,
     });
-    const r = await avisarNoWhatsapp(userId, "Bom dia", texto, { tipo: "briefing" });
-    if (r === "enviado") return "enviado";
-    // montou mas não saiu pelo WhatsApp: o briefing do dia não se perde, fica no app
+    let entregue = false;
+    if (peloWhatsapp) entregue = (await avisarNoWhatsapp(userId, "Bom dia", texto, { tipo: "briefing" })) === "enviado" || entregue;
+    if (peloTelegram) entregue = (await import("../telegram/enviar").then((m) => m.avisarNoTelegram(userId, "Bom dia", texto, { tipo: "briefing" }))) === "enviado" || entregue;
+    if (entregue) return "enviado";
+    // montou mas nenhum canal levou: o briefing do dia não se perde, fica no app
     await notifyUser(userId, "Bom dia", texto, null, { destino: "/app", whatsapp: false }).catch(() => undefined);
     return "falhou";
   } catch (e) {

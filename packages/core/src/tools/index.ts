@@ -1,5 +1,5 @@
 import type { ToolSet } from "ai";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { actionQueue } from "@orbita/db/action-schema";
 import { toolConfig } from "@orbita/db/tool-schema";
@@ -20,8 +20,12 @@ import "./domains/financas";
 import "./domains/tarefas";
 import "./domains/widgets";
 import "./domains/clima";
+import "./domains/mundo";
 import "./domains/web-tools";
 import "./domains/google";
+import "./domains/contatos";
+import "./domains/reunioes";
+import "./domains/telegram";
 import "./domains/notion";
 import "./domains/slack";
 import "./domains/whatsapp";
@@ -51,7 +55,7 @@ async function expiraPara(canal: ActionCanal): Promise<Date | null> {
   const min = await settings.get("whatsapp.aprovacaoValidadeMin").catch(() => 30);
   return new Date(Date.now() + min * 60_000);
 }
-export type ActionCanal = "tela" | "whatsapp" | "voz";
+export type ActionCanal = "tela" | "whatsapp" | "voz" | "telegram";
 
 // ── configuração por tool (tela do catálogo) ────────────────────────────────
 // Cache curto por processo, igual ao das settings: mudou na tela, vale em segundos.
@@ -113,10 +117,22 @@ export async function toolCatalog(userId: string) {
  */
 export function enqueueFor(userId: string, canal: ActionCanal = "tela"): Enqueue {
   return async (def, input, summary) => {
-    const [row] = await db
-      .insert(actionQueue)
-      .values({ userId, kind: def.name, summary, payload: (input ?? {}) as Record<string, unknown>, canal, expiraEm: await expiraPara(canal) })
-      .returning({ id: actionQueue.id });
+    const payload = (input ?? {}) as Record<string, unknown>;
+    const expiraEm = await expiraPara(canal);
+    // A MESMA proposta ainda pendente, no MESMO canal, não vira outra linha: o
+    // modelo relê o histórico e propõe de novo o que já estava na fila
+    // (27/09/2026: três "Cadastrar Ana" esperando aprovação). A existente
+    // renasce AGORA, para o "manda" desta conversa valer para ela. Canal
+    // diferente não junta: uma regra (tela) roubaria a proposta do WhatsApp e o
+    // "manda" do dono não a acharia mais. O resumo fica o original, com a nota
+    // de quem pediu.
+    const [igual] = await db
+      .update(actionQueue)
+      .set({ expiraEm, createdAt: new Date() })
+      .where(and(eq(actionQueue.userId, userId), eq(actionQueue.kind, def.name), eq(actionQueue.status, "pending"), eq(actionQueue.canal, canal), sql`${actionQueue.payload} = ${JSON.stringify(payload)}::jsonb`))
+      .returning({ id: actionQueue.id, summary: actionQueue.summary });
+    if (igual) return { proposta_enfileirada: true, aguardando_aprovacao: true, ja_estava_na_fila: true, id: igual.id, resumo: igual.summary };
+    const [row] = await db.insert(actionQueue).values({ userId, kind: def.name, summary, payload, canal, expiraEm }).returning({ id: actionQueue.id });
     return { proposta_enfileirada: true, aguardando_aprovacao: true, id: row?.id, resumo: summary };
   };
 }

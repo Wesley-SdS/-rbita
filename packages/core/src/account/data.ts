@@ -136,6 +136,8 @@ export async function eraseAccount(userId: string): Promise<{ limpezaExplicita: 
   // a linha do usuário já foi embora: o evento fica SEM dono, e sem nada que
   // identifique quem era (é o resto de trilha que "apagar é apagar" permite)
   await whatsapp.depoisDeApagarConta(midias).catch(() => undefined);
+  // a agenda do Google mora em memória (nunca no banco): some junto com a conta
+  await import("../contatos/agenda").then((m) => m.esquecerAgenda(userId)).catch(() => undefined);
   await events.emit("account.erased", { tabelas: semCascade.map((t) => t.name) }, { userId: null }).catch(() => undefined);
   return { limpezaExplicita: semCascade.map((t) => t.name) };
 }

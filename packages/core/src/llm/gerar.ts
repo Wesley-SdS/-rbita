@@ -81,10 +81,17 @@ export async function candidatosDaCasa(modeloPreferido?: string): Promise<string
 export async function gerarTexto(p: PedidoDeTexto): Promise<TextoGerado> {
   const candidatos = await candidatosDaCasa(p.modeloPreferido);
   if (!candidatos.length) throw new Error(SEM_MODELO);
+  // import sob demanda: a busca nativa puxa as configurações, e este módulo é
+  // carregado por quase tudo (e pelos testes que simulam o pacote de modelos)
+  const nativa = p.tools ? await import("../chat/busca-nativa") : null;
+  const busca = nativa ? await nativa.configDaBusca() : null;
 
   let ultimoErro: unknown = null;
   for (const modelKey of candidatos) {
     const comecou = Date.now();
+    // a busca nativa do Claude entra por MODELO: no failover para outro
+    // provedor, volta a pesquisar_web (ver chat/busca-nativa.ts)
+    const tools = nativa && busca ? nativa.comBuscaNativa(p.tools, modelKey, busca) : p.tools;
     // Tool que já rodou não roda de novo: recomeçar o turno em outro modelo
     // depois de um passo com tool registraria o gasto duas vezes ou deixaria
     // duas propostas na fila. Aí o erro sobe, como o chat faz depois do 1º token.
@@ -94,7 +101,7 @@ export async function gerarTexto(p: PedidoDeTexto): Promise<TextoGerado> {
         model: resolveModel(modelKey),
         ...(p.system ? { system: p.system } : {}),
         ...(p.messages?.length ? { messages: p.messages } : { prompt: p.prompt }),
-        ...(p.tools ? { tools: p.tools } : {}),
+        ...(tools ? { tools } : {}),
         ...(p.maxSteps ? { stopWhen: stepCountIs(p.maxSteps) } : {}),
         onStepFinish: (passo) => {
           if (passo.toolCalls?.length) rodouTool = true;

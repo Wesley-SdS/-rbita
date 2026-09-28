@@ -88,6 +88,31 @@ describe("sintetizarFala", () => {
   });
 });
 
+describe("voz da nota de voz (a mesma da conversa em tempo real)", () => {
+  it("preferindo o Gemini: ele vem primeiro, com a voz pedida", async () => {
+    gemini.mockResolvedValueOnce(Buffer.from([1]));
+    const f = await sintetizarFala("oi", { preferirGemini: true, vozGemini: "Sulafat" });
+    expect(f.servico).toBe("gemini-tts");
+    expect(gemini).toHaveBeenCalledWith("oi", undefined, "Sulafat");
+    expect(edge).not.toHaveBeenCalled();
+  });
+  it("Gemini sem cota: cai no Edge, a nota de voz não deixa de sair", async () => {
+    gemini.mockRejectedValue(new Error("429 cota"));
+    edge.mockResolvedValueOnce(Buffer.from([2]));
+    const f = await sintetizarFala("oi", { preferirGemini: true, vozGemini: "Sulafat" });
+    expect(f.servico).toBe("edge-tts");
+    gemini.mockReset();
+  });
+  it("Gemini e Edge falharam: vai ao Piper sem chamar o Gemini de novo (seria o mesmo 429, outra linha de uso)", async () => {
+    gemini.mockRejectedValue(new Error("429 cota"));
+    edge.mockRejectedValueOnce(new Error("edge fora"));
+    const f = await sintetizarFala("oi", { preferirGemini: true, vozGemini: "Sulafat" }).catch((e) => e);
+    expect(gemini).toHaveBeenCalledTimes(1);
+    expect(f).toBeDefined();
+    gemini.mockReset();
+  });
+});
+
 describe("paraNotaDeVoz", () => {
   it("OGG já está pronto", async () => {
     const f = { bytes: new Uint8Array([1]), mime: "audio/ogg; codecs=opus" };

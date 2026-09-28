@@ -602,6 +602,42 @@ HTTPS, porque app nativo pede microfone ao sistema, não ao navegador.
 - [ ] **Serviço de voz hospedado**, **Postgres gerenciado**, **OAuth social nativo no
   mobile** (deep link). (O WhatsApp pessoal saiu desta lista: entrou pela ponte local GOWA, ver PRD-WHATSAPP.md.)
 
+## 🗺️ Google Maps para endereço e trânsito (pedido do Wesley, 27/09/2026)
+
+Hoje: endereço pelo Photon (Nominatim de reserva), rota pelo OSRM (sem trânsito) e
+trânsito de agora pelo TomTom quando há `TOMTOM_API_KEY` (`tools/mundo.ts`). Ficou
+assim por decisão do dono: o Google exige cartão cadastrado mesmo sem cobrar.
+
+- [ ] **Google como primeiro da fila** (`GOOGLE_MAPS_API_KEY`, Geocoding API + Routes
+  API), OpenStreetMap e TomTom de reserva. Motivo medido: o mapa aberto não achou
+  "Av. Nossa Senhora do Sabará, 4567" no Nominatim e não conhece "Rua Estrela, 96"
+  na Vila Mariana; o Google acha até pelo nome do lugar.
+- [ ] **Trânsito PREVISTO para a hora de sair** (`departureTime`), não só o de agora:
+  o aviso das 5h diria "saindo às 7h, leva 55 min". Hora de saída configurável por
+  lugar salvo.
+- [ ] Cache da posição dos lugares salvos (casa e trabalhos não mudam) e teto de
+  chamadas por dia em Ajustes, para nunca passar da franquia gratuita (10 mil
+  geocodificações e 5 mil rotas com trânsito por mês, tabela de 2025). Passou do
+  teto, cai no mapa grátis em vez de cobrar.
+
+## 📞 Número próprio da Órbita, modelo híbrido (pedido do Wesley, 27/09/2026)
+
+- [x] **Feito pelo Telegram** (27/09/2026, `PRD-TELEGRAM.md`): bot oficial, sem banimento e sem chip.
+  Os itens abaixo ficam para um eventual SEGUNDO número de WhatsApp, se um dia fizer falta.
+
+- [ ] **Dois números, dois papéis.** O número do Wesley continua como está: a
+  Órbita LÊ e RESPONDE como ele, sempre com aprovação. O número DELA (um chip
+  pré-pago ou virtual) é onde ela fala como ela mesma: conversa com o dono, avisos,
+  briefing, lembretes e família (Anna pergunta direto para a Órbita, com a
+  permissão por pessoa que já existe). Um segundo aparelho na mesma ponte GOWA
+  (ela aceita vários deviceId) resolve a parte técnica sem serviço novo.
+- [ ] Decidir antes: chip físico ou número virtual (risco de banimento maior em
+  número novo que só manda mensagem; aquecer o número conversando antes de avisar
+  em volume), e se a conversa "Eu" continua valendo ou migra toda para o número dela.
+- [ ] Contato de terceiro no número dela é pessoa da casa ou desconhecido: quem não
+  está cadastrado não recebe resposta com tools (a mesma regra da resposta
+  automática). Nada de efeito colateral sem o gate, mesmo vindo do dono por ali.
+
 ## ✅ Encerrado nesta leva (22 e 23/09/2026)
 
 - [x] Toda chamada paga registrada, inclusive voz em tempo real, transcrição ao vivo,

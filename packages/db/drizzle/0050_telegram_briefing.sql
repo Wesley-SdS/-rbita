@@ -1,0 +1,1 @@
+ALTER TABLE "tg_bot" ADD COLUMN "ultimo_briefing" text;

@@ -107,6 +107,15 @@ export const waMensagem = pgTable(
      * linha como "reentrega" e parar: o pedido do dono sumia em silêncio.
      */
     roteadaEm: timestamp("roteada_em"),
+    /**
+     * O turno desta mensagem COMEÇOU e ainda não terminou. O turno roda em
+     * memória, fora da fila: um reinício no meio da resposta perdia o pedido
+     * (27/09/2026, "manda um áudio para o Lucas"), porque a mensagem já estava
+     * "roteada". Ao subir, o que tem esta marca e é de ANTES da subida foi
+     * interrompido e é retomado. Marca de "começou" e não de "terminou": código
+     * antigo nunca a grava, então não há falso positivo na troca de versão.
+     */
+    turnoPendenteEm: timestamp("turno_pendente_em"),
     em: timestamp("em").notNull(),
     criadoEm: timestamp("criado_em").defaultNow().notNull(),
   },

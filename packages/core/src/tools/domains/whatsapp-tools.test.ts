@@ -29,6 +29,7 @@ vi.mock("../../whatsapp/store", async () => {
   const real = await vi.importActual<typeof import("../../whatsapp/store")>("../../whatsapp/store");
   return {
     casarContato: real.casarContato,
+    casarContatoForte: real.casarContatoForte,
     listarContatos: async () => contatos,
     contatoPorJid: async (_u: string, jid: string) => contatos.find((c) => c.jid === jid) ?? null,
     mensagensDoChat: async () => mensagens,
@@ -79,6 +80,15 @@ vi.mock("../../settings", () => ({
   },
 }));
 vi.mock("@orbita/db", () => ({ db: {} }));
+// a agenda do Google: vazia por padrão, cada teste põe quem precisa
+const agenda = {
+  contatos: [] as { nome: string; apelidos: string[]; emails: string[]; telefones: string[]; aniversario: null; empresa: null }[],
+  candidatos: [] as { nome: string; numeros: string[]; soFixo: boolean }[],
+};
+vi.mock("../../contatos/agenda", () => ({
+  contatosDaAgenda: async () => agenda.contatos,
+  candidatosDaAgenda: async () => agenda.candidatos,
+}));
 
 const t = await import("./whatsapp");
 const ctx = { userId: "u1" };
@@ -260,5 +270,66 @@ describe("usar_arquivo_whatsapp: o arquivo do DONO entra nos fluxos do app, pela
     expect(t.arquivoServe("extrato", { tipo: "documento", midiaMime: "text/csv", transcricao: null })).toBeNull();
     expect(t.arquivoServe("conhecimento", { tipo: "audio", midiaMime: "audio/ogg", transcricao: null })).toContain("não tem transcrição");
     expect(t.arquivoServe("cupom", { tipo: "documento", midiaMime: "application/pdf", transcricao: null })).toBeNull();
+  });
+});
+
+describe("agenda do Google no WhatsApp", () => {
+  beforeEach(() => {
+    agenda.contatos = [];
+    agenda.candidatos = [];
+  });
+
+  it("quem não está nas conversas é achado pelo telefone da agenda", async () => {
+    agenda.candidatos = [{ nome: "Lucas Prado", numeros: ["5511977776666"], soFixo: false }];
+    expect(await t.resolverChat("u1", "Lucas")).toEqual({ ok: true, jid: "5511977776666@s.whatsapp.net", nome: "Lucas Prado" });
+  });
+
+  it("o número da agenda casa com a conversa que já existe (vale o JID da conversa)", async () => {
+    agenda.candidatos = [{ nome: "Ma. Souza", numeros: ["5511911111111"], soFixo: false }];
+    expect(await t.resolverChat("u1", "Ma. Souza")).toMatchObject({ ok: true, jid: contatos[0].jid });
+  });
+
+  it("a mesma pessoa nas conversas e na agenda é UMA; duas pessoas viram pergunta", async () => {
+    agenda.candidatos = [{ nome: "Maria Souza", numeros: ["5511911111111"], soFixo: false }];
+    expect(await t.resolverChat("u1", "Maria Souza")).toMatchObject({ ok: true, jid: contatos[0].jid });
+    agenda.candidatos = [{ nome: "Pedro A", numeros: ["5511933333333"], soFixo: false }, { nome: "Pedro B", numeros: ["5511944444444"], soFixo: false }];
+    expect(await t.resolverChat("u1", "Pedro")).toMatchObject({ ok: false, erro: expect.stringContaining("mais de um contato") });
+  });
+
+  it("pessoa com dois celulares pergunta qual; só fixo avisa no nome", async () => {
+    agenda.candidatos = [{ nome: "Tio", numeros: ["5511955555555", "5511966666666"], soFixo: false }];
+    expect(await t.resolverChat("u1", "Tio")).toMatchObject({ ok: false, erro: expect.stringContaining("mais de um número") });
+    agenda.candidatos = [{ nome: "Padaria", numeros: ["551133334444"], soFixo: true }];
+    expect(await t.resolverChat("u1", "Padaria")).toMatchObject({ ok: true, nome: "Padaria (telefone fixo)" });
+  });
+
+  it("palpite ('Mari' dentro de 'Maria') nunca decide o envio: vira pergunta", async () => {
+    expect(await t.resolverChat("u1", "Mari")).toMatchObject({ ok: false, erro: expect.stringContaining("Não achei ninguém chamado exatamente") });
+    expect(await t.resolverChat("u1", "Pedro")).toMatchObject({ ok: false, erro: expect.stringContaining("nem na agenda") });
+  });
+
+  it("número sem DDI não vira número dos EUA", async () => {
+    expect(await t.resolverChat("u1", "11 98888-7777")).toMatchObject({ ok: true, jid: "5511988887777@s.whatsapp.net" });
+    // o mesmo celular sem o 9 que já conversou: vale a conversa que existe
+    expect(await t.resolverChat("u1", "(11) 91111-1111")).toMatchObject({ ok: true, jid: contatos[0].jid });
+  });
+
+  it("o nome do resumo da aprovação vem do código, nunca do modelo", async () => {
+    const fixo = await t.enviar_whatsapp.preparar!({ para: "5511977776666", para_nome: "Mãe", texto: "oi" }, ctx);
+    expect(fixo).toMatchObject({ para: "5511977776666@s.whatsapp.net", para_nome: null });
+  });
+
+  it("as conversas mostram o nome que o DONO deu na agenda", async () => {
+    agenda.contatos = [{ nome: "Mãe Lima", apelidos: [], emails: [], telefones: ["+5511922222222"], aniversario: null, empresa: null }];
+    // o apelido dado na Órbita vale mais que a agenda
+    expect(String(await t.whatsapp_conversas_recentes.run({}, ctx))).toContain("mãe (chat");
+    // sem apelido, a agenda vale mais que o nome que a pessoa escolheu no WhatsApp
+    const apelido = contatos[1].apelido;
+    contatos[1].apelido = null;
+    try {
+      expect(String(await t.whatsapp_conversas_recentes.run({}, ctx))).toContain("Mãe Lima (chat");
+    } finally {
+      contatos[1].apelido = apelido;
+    }
   });
 });

@@ -325,6 +325,10 @@ Antes de considerar qualquer tarefa concluída:
 | Briefing da manhã (um por dia, só leitura, fuso da casa) | `whatsapp/briefing.ts` · `whatsapp/horario.ts` · laço `whatsapp-briefing` |
 | Lembrete de tarefa com hora ("me lembra às 15h") | `todo.lembrar_em` · `tarefas/lembretes.ts` · laço `lembretes` · hora local → instante em `core/fuso.ts` |
 | Aviso do resumo de reunião com os compromissos | `meetings/summarize.ts` (`textoDoAvisoDeResumo`) ← chave `meetings.avisarResumo` |
+| Contatos do Google (agenda em memória: e-mail e WhatsApp pelo nome, nome que o dono deu, aniversários) | `packages/core/src/contatos/` · tools `domains/contatos.ts` ← chaves `contatos.*` |
+| Reunião online vira resumo sozinha (Meet, Teams, Zoom → a mesma fila `reuniao.resumir`) | `packages/core/src/meetings/online/` · tabela `reuniao_importada` · laço `reunioes-online` · tool `domains/reunioes.ts` ← chaves `meetings.importar*` |
+| Trânsito e lugares com nome ("quanto tempo até a Adalink") | `packages/core/src/tools/mundo.ts` (Photon/Nominatim, OSRM, TomTom com `TOMTOM_API_KEY`) ← chaves `casa.endereco`, `casa.lugares` |
+| Telegram, o canal da própria Órbita (bot oficial: dono e pessoas da casa, convite, botão de aprovar) | `packages/core/src/telegram/` · tabelas `tg_*` em `packages/db/src/telegram-schema.ts` · laço `telegram` · rotas `routes/telegram.ts` · tela `telegram-panel.tsx` · PRD `PRD-TELEGRAM.md` |
 | Aprovar (botão, frase "manda" no WhatsApp e na voz) | `packages/core/src/actions/aprovar.ts` · `actions/por-frase.ts` · rota `POST /api/actions/falada` |
 | Fala da Órbita (Edge → Gemini → Piper) e nota de voz OGG/Opus | `packages/core/src/voice/sintetizar.ts` · `apps/voice` `POST /converter/ogg` |
 | Backlog pré-existente | `CHECKLIST.md` |
@@ -509,6 +513,40 @@ Antes de considerar qualquer tarefa concluída:
   processar), processada em série no processo, com o laço `whatsapp-pendentes` retomando o que
   falhou. Edição, apagada e reação de mensagem ainda não guardada FALHAM de propósito para voltar
   depois, em vez de se perderem.
+- **O turno do WhatsApp roda em memória, e o processo reinicia.** A mensagem era marcada como
+  roteada ANTES de o turno terminar; um reinício do `tsx watch` no meio da resposta perdia o
+  pedido do dono (27/09/2026, "manda um áudio para o Lucas"). Agora a mensagem ganha
+  `turno_pendente_em` ao começar o turno e perde ao terminar (falha também conta), e ao subir o
+  api retoma (`retomarTurnosInterrompidos`) só o turno começado ANTES desta subida, reivindicado
+  de forma atômica, e só se não tiver feito efeito (resposta ou proposta). A primeira versão
+  marcava o FIM e retomava o turno que ainda estava rodando: resposta em dobro. Um "manda"
+  interrompido nunca volta ao modelo (ele repropunha e a mensagem saía duas vezes).
+- **Um `tsx watch` do api por vez.** Chegaram a rodar QUATRO (sobras de sessões): um fica com a
+  porta, os outros tentam subir a cada arquivo salvo, morrem com `EADDRINUSE` e, antes de morrer,
+  rodam os laços do scheduler por alguns segundos em dobro. Antes de subir o api, confira se já
+  há um (`Get-CimInstance Win32_Process` filtrando `main.ts`).
+- **Regra não é rotina.** A ação "avisar" das regras passava o id da REGRA em `notification.routine_id`,
+  que é chave estrangeira para `routine`: o banco recusava e nenhum aviso de regra saía (o de
+  "reunião em breve" nunca chegou). Trava em `rules/aviso.test.ts`.
+- **`getAllTranscripts` do Graph não aceita login delegado** (só permissão de aplicativo). O Teams
+  sai da AGENDA: `calendarView` → `onlineMeetings?$filter=JoinWebUrl eq '…'` → `/transcripts`.
+- **Transcrição do Teams exige o administrador.** `OnlineMeetingTranscript.Read.All` delegada
+  precisa de consentimento do admin do tenant: pedida sempre, impediria até conectar o Outlook.
+  Por isso é opcional (`connectors.microsoftTranscricoes`, via `escoposOpcionais` do registro).
+  O Meet exige a "Google Meet REST API" ligada no projeto, e conta já conectada precisa
+  reconectar para ganhar o escopo novo (a importação diz "sem permissão", não falha).
+- **O Zoom troca o refresh token a cada renovação** e quer as credenciais do app em Basic.
+  `refreshConnectionToken` guarda o refresh novo quando vem; sem isso a conexão caía na segunda
+  renovação.
+- **Celular brasileiro existe com e sem o nono dígito.** O WhatsApp guarda contas antigas sem o 9;
+  a agenda tem o número de hoje. Compare por `chaveDoTelefone` (DDD + oito últimos), e prefira o
+  JID da conversa que já existe ao montado do número, senão abre uma segunda conversa.
+- **Pessoa da casa no Telegram não é o dono.** O turno dela roda na conta do dono (é o assistente
+  dele), então tudo que for "do dono" precisa ser tirado à mão: sem RAG (documentos), persona e
+  memória (o que a Anna diz não vira fato do Wesley), e só `telegram.dominiosDaFamilia`. Ao criar
+  domínio de tool com dado pessoal, ele NÃO entra nessa lista por padrão.
+- **O Telegram responde 409 quando dois processos ouvem o mesmo bot** (o `tsx watch` reiniciando).
+  Não é erro: o outro processo cuida. O cursor (`tg_bot.proximo_update`) só avança depois de gravar.
 - **`apps/mobile` é fácil de esquecer.** Está fora do workspace pnpm, tem npm
   próprio, e ficou quebrado contra o servidor por meses sem ninguém ver (o chat
   virou NDJSON e ele lia bytes crus). Agora `apps/mobile/lib` roda no `vitest`.

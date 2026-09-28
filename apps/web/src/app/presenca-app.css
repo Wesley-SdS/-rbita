@@ -1227,3 +1227,12 @@ img.fin-pastilha { object-fit: cover; background: var(--color-surface-soft); }
 .whatsapp-lista li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .whatsapp-acoes { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .whatsapp-toggle { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+
+/* passo a passo dentro de um card de conexão (criar o bot do Telegram) */
+.connector-card .lista-passos {
+  margin: 0.5rem 0 0.75rem;
+  padding-left: 1.25rem;
+  list-style: decimal;
+  display: grid;
+  gap: 0.25rem;
+}

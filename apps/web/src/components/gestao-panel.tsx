@@ -38,6 +38,7 @@ const NOME_DO_FLUXO: Record<string, string> = {
   acompanhamento: "Acompanhar tarefa",
   whatsapp: "WhatsApp (conversa com você)",
   whatsapp_automatico: "WhatsApp (resposta automática)",
+  telegram: "Telegram",
   briefing: "Briefing da manhã",
 };
 

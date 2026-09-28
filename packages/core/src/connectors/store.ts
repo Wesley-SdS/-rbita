@@ -6,15 +6,16 @@ import { identidadeDaConta, type RespostaDeToken } from "./identidade";
 import { getConnector, isConfigured, redirectUri, type ConnectorId } from "./registry";
 
 /** Monta a URL de autorização (authorization code flow) com state anti-CSRF. */
-export function buildAuthorizeUrl(id: ConnectorId, state: string): string {
+export async function buildAuthorizeUrl(id: ConnectorId, state: string): Promise<string> {
   const def = getConnector(id);
   if (!def || !def.clientId) throw new Error(`Conector ${id} não configurado`);
+  const escopos = [...def.scopes, ...((await def.escoposOpcionais?.().catch(() => [])) ?? [])];
   const p = new URLSearchParams({
     client_id: def.clientId,
     redirect_uri: redirectUri(id),
     response_type: "code",
     state,
-    ...(def.scopes.length ? { scope: def.scopes.join(" ") } : {}),
+    ...(escopos.length ? { scope: escopos.join(" ") } : {}),
     ...(def.authorizeParams ?? {}),
   });
   return `${def.authorizeUrl}?${p.toString()}`;
@@ -50,6 +51,12 @@ async function postToken(
   return json;
 }
 
+function cabecalhoBasic(cid: ConnectorId): Record<string, string> {
+  const def = getConnector(cid);
+  if (!def?.clientId || !def.clientSecret || !(def.tokenAuthBasic || cid === "notion")) return {};
+  return { Authorization: `Basic ${Buffer.from(`${def.clientId}:${def.clientSecret}`).toString("base64")}` };
+}
+
 /** Troca o `code` do callback por tokens e persiste (criptografado). */
 export async function exchangeCodeAndSave(cid: ConnectorId, userId: string, code: string): Promise<void> {
   const def = getConnector(cid);
@@ -62,11 +69,8 @@ export async function exchangeCodeAndSave(cid: ConnectorId, userId: string, code
     client_id: def.clientId,
     client_secret: def.clientSecret,
   });
-  // Notion exige Basic auth + JSON; tratamos como form igual aos demais via header.
-  const headers: Record<string, string> =
-    cid === "notion"
-      ? { Authorization: `Basic ${Buffer.from(`${def.clientId}:${def.clientSecret}`).toString("base64")}` }
-      : {};
+  // Notion e Zoom exigem as credenciais do app em Basic auth
+  const headers = cabecalhoBasic(cid);
 
   const tok = await postToken(cid, def.tokenUrl, body, headers, def.tokenAsJson);
 
@@ -140,7 +144,23 @@ export async function exchangeCodeAndSave(cid: ConnectorId, userId: string, code
  * token da conta A em cima da conta B. As duas continuariam "conectadas" na
  * tela, e uma delas passaria a ler a caixa de entrada da outra.
  */
-export async function refreshConnectionToken(cid: ConnectorId, userId: string, refreshToken: string, connectionId: string): Promise<string> {
+/**
+ * Uma renovação por conta de cada vez. O laço de tokens e uma chamada que
+ * achou o token vencido podiam renovar juntos com o MESMO refresh token; no
+ * Zoom (e no Atlassian) ele vale uma vez só, a segunda falhava, e o laço
+ * contava como falha e mandava o aviso falso de "reconecte".
+ */
+const renovando = new Map<string, Promise<string>>();
+
+export function refreshConnectionToken(cid: ConnectorId, userId: string, refreshToken: string, connectionId: string): Promise<string> {
+  const emAndamento = renovando.get(connectionId);
+  if (emAndamento) return emAndamento;
+  const p = renovar(cid, userId, refreshToken, connectionId).finally(() => renovando.delete(connectionId));
+  renovando.set(connectionId, p);
+  return p;
+}
+
+async function renovar(cid: ConnectorId, userId: string, refreshToken: string, connectionId: string): Promise<string> {
   const def = getConnector(cid);
   if (!def?.clientId || !def.clientSecret) throw new Error(`Conector ${cid} não configurado`);
   const tok = await postToken(
@@ -152,15 +172,24 @@ export async function refreshConnectionToken(cid: ConnectorId, userId: string, r
       client_id: def.clientId,
       client_secret: def.clientSecret,
     }),
-    {},
+    cabecalhoBasic(cid),
     def.tokenAsJson,
   );
   const expiresAt = tok.expires_in ? new Date(Date.now() + tok.expires_in * 1000) : null;
   await db
     .update(connection)
     // qualquer renovação bem-sucedida (laço ou request) zera o histórico de falha:
-    // senão uma falha passageira antiga silenciava o aviso de uma revogação real (RV.4)
-    .set({ accessTokenEnc: encryptSecret(tok.access_token), expiresAt, refreshFailures: 0, refreshFailedAt: null, updatedAt: new Date() })
+    // senão uma falha passageira antiga silenciava o aviso de uma revogação real (RV.4).
+    // E o refresh token NOVO, quando vem: o Zoom invalida o antigo a cada
+    // renovação, e guardar só o access token derrubava a conexão na segunda vez.
+    .set({
+      accessTokenEnc: encryptSecret(tok.access_token),
+      ...(tok.refresh_token ? { refreshTokenEnc: encryptSecret(tok.refresh_token) } : {}),
+      expiresAt,
+      refreshFailures: 0,
+      refreshFailedAt: null,
+      updatedAt: new Date(),
+    })
     .where(and(eq(connection.id, connectionId), eq(connection.userId, userId)));
   return tok.access_token;
 }
@@ -300,6 +329,8 @@ export async function desconectarConta(userId: string, connectionId: string): Pr
   if (!alvo) return false;
 
   await db.delete(connection).where(and(eq(connection.id, connectionId), eq(connection.userId, userId)));
+  // a agenda do Google fica em memória: desconectou, esquece já (e não daqui a horas)
+  if (alvo.provider === "google") await import("../contatos/agenda").then((m) => m.esquecerAgenda(userId)).catch(() => undefined);
 
   if (alvo.principal) {
     const restantes = await listarContas(userId, alvo.provider as ConnectorId);

@@ -23,12 +23,16 @@ import { onJobEnqueued, purgeJobs, recoverZombies } from "@orbita/core/jobs/queu
 import { drainJobs, jobsEmExecucao } from "@orbita/core/jobs/runner";
 import { closeIdleMcpConnections } from "@orbita/core/mcp/client";
 import { rotularVetoresLegados } from "@orbita/core/rag/modelo-dos-vetores";
-import { instalarRoteadorDoWhatsapp } from "@orbita/core/whatsapp/rotear";
+import { instalarRoteadorDoWhatsapp, retomarTurnosInterrompidos } from "@orbita/core/whatsapp/rotear";
+import { importarDeTodos } from "@orbita/core/meetings/online/importar";
+import { ouvirTelegram, retomarNoTelegram } from "@orbita/core/telegram/receber";
+import { todosOsBots } from "@orbita/core/telegram/store";
 import { processarPendentes, purgarEventosBrutos } from "@orbita/core/whatsapp/processar";
 import { conferirSaude, usuariosComSessao } from "@orbita/core/whatsapp/sessao";
 import { caminhosSemUso, purgarMensagens } from "@orbita/core/whatsapp/store";
 import { apagarMidias } from "@orbita/core/whatsapp/midia";
 import { briefingSeDevido } from "@orbita/core/whatsapp/briefing";
+import { recuperarPerdidas } from "@orbita/core/whatsapp/recuperar";
 import { dispararLembretes } from "@orbita/core/tarefas/lembretes";
 // registra os trabalhos pesados (como os domínios de tool): ninguém os chama pelo nome
 import "@orbita/core/jobs/handlers";
@@ -109,6 +113,11 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     installCameraIdentityListener();
     // WhatsApp: o que for guardado passa pelo roteador (conversa "Eu", automático)
     instalarRoteadorDoWhatsapp();
+    // e retoma o pedido que o processo anterior deixou no meio do turno. Com
+    // espera: um processo que sobe e morre no listen (porta ocupada) não pode
+    // começar a responder, e o velho precisa de uns segundos para morrer
+    setTimeout(() => void retomarTurnosInterrompidos().catch((e) => log.warn("whatsapp.retomar_falhou", { error: String(e) })), 25_000).unref();
+    setTimeout(() => void retomarNoTelegram().catch((e) => log.warn("telegram.retomar_falhou", { error: String(e) })), 25_000).unref();
 
     // fila de trabalho pesado: recupera o que um processo anterior deixou no
     // meio, e passa a acordar na hora em que alguém enfileira
@@ -128,6 +137,11 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     // lista vazia (Ollama ainda subindo) volta a tentar em segundos, não num TTL inteiro
     this.loop("models-warm", () => readPolicy().then((p) => (discoveredSnapshot().length ? p.discoveryTtlMs : EMPTY_DISCOVERY_RETRY_MS)), () => this.warmModels());
     this.loop("calendar", () => settings.get("meetings.calendarPollMinutes").then((m) => m * 60_000), () => this.tickCalendar());
+    // Telegram: espera longa (o Telegram segura a resposta até chegar algo), então
+    // o intervalo entre voltas é curto e ninguém martela a API
+    this.loop("telegram", async () => 500, () => ouvirTelegram());
+    // transcrição nova do Meet, Teams ou Zoom vira resumo (meetings/online)
+    this.loop("reunioes-online", () => settings.get("meetings.importarMinutos").then((m) => m * 60_000), () => importarDeTodos());
     this.loop("gmail", () => settings.get("meetings.gmailPollMinutes").then((m) => m * 60_000), () => this.tickGmail());
     // a conversa que parou vira base de conhecimento. O intervalo acompanha o
     // "parada há": verificar muito mais rápido do que o corte é trabalho à toa.
@@ -154,10 +168,16 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       for (const userId of await usuariosComSessao()) await conferirSaude(userId);
     });
     this.loop("whatsapp-pendentes", async () => 15_000, () => processarPendentes());
+    // o GOWA desiste do webhook em segundos; o que se perdeu num reinício vem do histórico dele
+    this.loop("whatsapp-recuperar", async () => 60_000, async () => {
+      for (const userId of await usuariosComSessao()) await recuperarPerdidas(userId).catch((e) => log.warn("whatsapp.recuperar_falhou", { erro: e instanceof Error ? e.message : String(e) }));
+    });
     // a Órbita toma a iniciativa: lembrete na hora marcada e briefing da manhã
     this.loop("lembretes", () => settings.get("routines.lembretesSegundos").then((s) => s * 1000), () => dispararLembretes());
     this.loop("whatsapp-briefing", async () => 60_000, async () => {
-      for (const userId of await usuariosComSessao()) await briefingSeDevido(userId);
+      // quem tem WhatsApp OU o bot do Telegram: o briefing escolhe o canal
+      const donos = new Set([...(await usuariosComSessao()), ...(await todosOsBots()).map((b) => b.userId)]);
+      for (const userId of donos) await briefingSeDevido(userId);
     });
     this.loop("whatsapp-retencao", pruneEvery, async () => {
       // reconfere logo antes do rm: a mesma mídia pode ter chegado de novo no meio

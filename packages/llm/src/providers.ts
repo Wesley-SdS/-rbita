@@ -1,6 +1,6 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createGateway } from "@ai-sdk/gateway";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import { createAnthropic, anthropic as anthropicTools } from "@ai-sdk/anthropic";
 import type { LanguageModel } from "ai";
 import { getModelInfo } from "./catalog";
 
@@ -256,4 +256,13 @@ export function providerEnv() {
     openai: Boolean(process.env.OPENAI_API_KEY),
     cohere: Boolean(process.env.COHERE_API_KEY),
   };
+}
+
+/**
+ * A busca na web NATIVA da Anthropic (`web_search`), executada pelos servidores
+ * dela: o Claude pesquisa, lê e cita as fontes. Só serve quando o modelo da
+ * vez é Claude; com outro provedor, quem pesquisa é a tool `pesquisar_web`.
+ */
+export function buscaNativaDoClaude(maxUsos: number) {
+  return anthropicTools.tools.webSearch_20250305({ maxUses: maxUsos });
 }

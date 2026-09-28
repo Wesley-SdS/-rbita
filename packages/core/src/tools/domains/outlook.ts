@@ -2,6 +2,7 @@ import { z } from "zod";
 import { contaParaEscrever, lerDeTodasAsContas } from "../../connectors/multi";
 import { listRecentMessages, createDraftMail, sendMail, listUpcomingEvents, createCalendarEvent } from "../../connectors/microsoft";
 import { registerTools, type ToolDef } from "../registry";
+import { conferirEmail, destinoDoEmail, fixarEmail } from "../../contatos/agenda";
 
 /**
  * Domínio: Outlook (e-mail e agenda da Microsoft).
@@ -43,7 +44,7 @@ export const outlook_ler_emails: ToolDef<z.ZodObject<{ busca: z.ZodOptional<z.Zo
   },
 };
 
-const EmailInput = z.object({ para: z.string(), assunto: z.string(), corpo: z.string(), conta: CONTA });
+const EmailInput = z.object({ para: z.string().min(1).max(320).describe("Endereço de e-mail, ou o nome de alguém da agenda de contatos (\"o João\"): a Órbita acha o endereço."), para_nome: z.string().max(200).nullish().describe("Preenchido pela Órbita; não informe."), assunto: z.string(), corpo: z.string(), conta: CONTA });
 
 export const outlook_rascunhar_email: ToolDef<typeof EmailInput> = {
   name: "outlook_rascunhar_email",
@@ -53,6 +54,8 @@ export const outlook_rascunhar_email: ToolDef<typeof EmailInput> = {
   keywords: ["outlook", "rascunho", "email", "e-mail", "escrever", "redigir"],
   requires: { connector: "microsoft" },
   inputSchema: EmailInput,
+  authorize: conferirEmail,
+  preparar: fixarEmail,
   run: async ({ para, assunto, corpo, conta }, { userId }) => {
     const { token, rotulo } = await escrever(userId, conta);
     const d = await createDraftMail(token, para, assunto, corpo);
@@ -69,7 +72,9 @@ export const outlook_enviar_email: ToolDef<typeof EmailInput> = {
   keywords: ["outlook", "enviar", "email", "e-mail", "mandar", "responder", "trabalho"],
   requires: { connector: "microsoft" },
   inputSchema: EmailInput,
-  summarize: ({ para, assunto, conta }) => `Enviar e-mail pelo Outlook para ${para}: "${assunto}"${conta ? ` (conta: ${conta})` : ""}`,
+  summarize: (i) => `Enviar e-mail pelo Outlook para ${destinoDoEmail(i)}: "${i.assunto}"${i.conta ? ` (conta: ${i.conta})` : ""}`,
+  authorize: conferirEmail,
+  preparar: fixarEmail,
   run: async ({ para, assunto, corpo, conta }, { userId }) => {
     const { token, rotulo } = await escrever(userId, conta);
     await sendMail(token, para, assunto, corpo);

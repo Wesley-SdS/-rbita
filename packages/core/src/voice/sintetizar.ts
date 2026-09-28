@@ -40,8 +40,35 @@ function registrarFala(userId: string | undefined, servico: string, texto: strin
   registrarUso({ userId, fluxo: FLUXO.tts, servico, consumo: { unidade: "caracteres", entrada: 0, saida: texto.length }, duracaoMs: Date.now() - comecou, erro: erro ?? null });
 }
 
-export async function sintetizarFala(texto: string, opts: { userId?: string; signal?: AbortSignal; lengthScale?: number } = {}): Promise<Fala> {
+export async function sintetizarFala(
+  texto: string,
+  opts: {
+    userId?: string;
+    signal?: AbortSignal;
+    lengthScale?: number;
+    /** começar pelo Gemini (a voz da conversa em tempo real) em vez do Edge; o resto da cadeia continua de reserva */
+    preferirGemini?: boolean;
+    vozGemini?: string;
+    /** o Gemini já falhou neste pedido: a cadeia não tenta de novo (seria outra chamada com o mesmo 429) */
+    semGemini?: boolean;
+  } = {},
+): Promise<Fala> {
   const provider = process.env.TTS_PROVIDER ?? "auto";
+  if (opts.preferirGemini && provider === "auto" && geminiTtsAvailable()) {
+    const comecou = Date.now();
+    try {
+      const buf = await synthesizeGemini(texto, opts.signal, opts.vozGemini);
+      registrarFala(opts.userId, "gemini-tts", texto, comecou);
+      return { bytes: new Uint8Array(buf), mime: "audio/wav", servico: "gemini-tts" };
+    } catch (e) {
+      if (opts.signal?.aborted) throw new FalaError("interrompida", 499);
+      const msg = e instanceof Error ? e.message : String(e);
+      log.warn("tts.gemini_preferido_falhou", { erro: msg.slice(0, 200) });
+      registrarFala(opts.userId, "gemini-tts", texto, comecou, msg.slice(0, 200));
+      // segue a cadeia normal (Edge, e o Gemini de novo não ajuda: já falhou)
+      return sintetizarFala(texto, { ...opts, preferirGemini: false, semGemini: true });
+    }
+  }
   const fixo = provider !== "auto";
   const comecou = Date.now();
   const abortado = () => opts.signal?.aborted === true;
@@ -62,7 +89,7 @@ export async function sintetizarFala(texto: string, opts: { userId?: string; sig
     }
   }
 
-  if ((provider === "auto" || provider === "gemini") && geminiTtsAvailable()) {
+  if ((provider === "auto" || provider === "gemini") && geminiTtsAvailable() && !opts.semGemini) {
     try {
       const buf = await synthesizeGemini(texto, opts.signal);
       registrarFala(opts.userId, "gemini-tts", texto, comecou);

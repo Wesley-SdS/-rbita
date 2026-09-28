@@ -39,8 +39,18 @@ export function quandoGuardar(fn: AoGuardar): void {
   aoGuardar = fn;
 }
 
-/** Edição, apagada ou reação de uma original que não chegou nisso vira abandono, não erro. */
-const ESPERA_PELA_ORIGINAL_MS = 10 * 60_000;
+/** O laço de pendentes tenta de novo em 5, 10, 20, 40, 80 e 160 s depois de RECEBIDO (não da falha anterior). */
+export const ESPERA_BASE_S = 5;
+export const MAX_FALHAS = 6;
+
+/**
+ * Edição, apagada ou reação de uma original que não chegou nisso vira abandono,
+ * não erro. Tem de ficar ENTRE a penúltima e a última tentativa: com 10 min e
+ * depois com 4 min, as seis tentativas acabavam (a última em ~160 s) antes de
+ * a espera vencer, e o evento ficava com erro para sempre. Derivada das mesmas
+ * constantes do laço, para as duas não se desencontrarem de novo.
+ */
+export const ESPERA_PELA_ORIGINAL_MS = (ESPERA_BASE_S * 2 ** (MAX_FALHAS - 1) - 20) * 1000;
 
 // ── entrada (chamada pela rota do webhook, já autenticada pelo HMAC) ──
 
@@ -95,7 +105,7 @@ function agendar(id: string, chat: string): void {
  * falha (5 s, 10 s, 20 s…): uma original que ainda está na fila tem tempo de
  * chegar antes de a edição dela desistir.
  */
-export async function processarPendentes(maxFalhas = 6): Promise<number> {
+export async function processarPendentes(maxFalhas = MAX_FALHAS): Promise<number> {
   const rows = await db
     .select({ id: waEventoBruto.id, corpo: waEventoBruto.corpo })
     .from(waEventoBruto)
@@ -104,7 +114,7 @@ export async function processarPendentes(maxFalhas = 6): Promise<number> {
         isNull(waEventoBruto.processadoEm),
         lt(waEventoBruto.falhas, maxFalhas),
         // sem Date crua no sql`` (CLAUDE.md §9): a conta é toda do Postgres
-        sql`${waEventoBruto.recebidoEm} <= now() - interval '5 seconds' * power(2, ${waEventoBruto.falhas})`,
+        sql`${waEventoBruto.recebidoEm} <= now() - make_interval(secs => ${ESPERA_BASE_S}::float8 * power(2, ${waEventoBruto.falhas}))`,
       ),
     )
     .orderBy(asc(waEventoBruto.recebidoEm))
@@ -128,15 +138,19 @@ export async function processarEvento(id: string): Promise<void> {
 }
 
 /** Chat que a config manda ignorar (grupo, status). PURA. */
-export function chatIgnorado(chatJid: string, cfg: { grupos: string; status: string }): boolean {
+export function chatIgnorado(chatJid: string, cfg: { grupos: string; status: string; canais?: string }): boolean {
   if (chatJid === "status@broadcast") return cfg.status === "ignorar";
+  // Canal do WhatsApp (@newsletter) é publicação de quem o dono SEGUE, não
+  // conversa: guardado, cada post baixava mídia e enchia o banco. Visto no
+  // primeiro minuto depois de parear o número de verdade (27/09/2026).
+  if (chatJid.endsWith("@newsletter")) return (cfg.canais ?? "ignorar") === "ignorar";
   return chatJid.endsWith("@g.us") && cfg.grupos === "ignorar";
 }
 
 /** Aplica um evento já validado (exportado para os testes; quem chama é `processarEvento`). */
 export async function aplicarEvento(userId: string, deviceId: string, ev: GowaEvent, recebidoEm: Date): Promise<void> {
-  const cfg = await settings.getMany(["whatsapp.grupos", "whatsapp.status"]);
-  const filtro = { grupos: cfg["whatsapp.grupos"], status: cfg["whatsapp.status"] };
+  const cfg = await settings.getMany(["whatsapp.grupos", "whatsapp.status", "whatsapp.canais"]);
+  const filtro = { grupos: cfg["whatsapp.grupos"], status: cfg["whatsapp.status"], canais: cfg["whatsapp.canais"] };
 
   const msg = gowaMessageEventSchema.safeParse(ev);
   if (msg.success) return guardarMensagem(userId, deviceId, traduzirMensagem(msg.data.payload), filtro);
@@ -168,7 +182,7 @@ export async function aplicarEvento(userId: string, deviceId: string, ev: GowaEv
   if (reacao.success) return aplicarNaOriginal(reacao.data.payload.chat_id, reacao.data.payload.reacted_message_id, { reacao: reacao.data.payload.emoji || null });
 }
 
-async function guardarMensagem(userId: string, deviceId: string, t: MensagemTraduzida, filtro: { grupos: string; status: string }): Promise<void> {
+async function guardarMensagem(userId: string, deviceId: string, t: MensagemTraduzida, filtro: { grupos: string; status: string; canais?: string }): Promise<void> {
   if (chatIgnorado(t.chatJid, filtro)) return;
 
   // A VOLTA do que a Órbita mandou. Sem isto, a resposta dela na conversa "Eu"
@@ -211,7 +225,9 @@ async function guardarMensagem(userId: string, deviceId: string, t: MensagemTrad
       // o que o dono mesmo escreveu (em qualquer chat) ele já leu
       lidaEm: t.deMim ? new Date() : null,
     })) ?? (await store.mensagemPorExternalId(userId, t.externalId));
-  if (!m || m.roteadaEm) return;
+  // já roteada, ou é a saída da PRÓPRIA Órbita voltando (pelo histórico da
+  // ponte, na recuperação): responder a ela seria a Órbita conversando consigo
+  if (!m || m.roteadaEm || m.enviadaPelaOrbita) return;
 
   let final: WaMensagem = m;
   if (t.midia && !m.midiaCaminho) final = await baixarETranscrever(userId, deviceId, t, m);

@@ -14,6 +14,7 @@ import { sessionOf } from "../http/web-route";
 import { retrieveContext, type RagHit } from "@orbita/core/rag/retrieve";
 import { buildAllTools, SYSTEM_PROMPT, buildTemporalContext, buildPersonaContext } from "@orbita/core/chat/tools";
 import { composeSystem, type Chunk } from "@orbita/core/chat/compose";
+import { comBuscaNativa, configDaBusca } from "@orbita/core/chat/busca-nativa";
 import { log } from "@orbita/core/observability/logger";
 import { rateLimit, tooMany } from "@orbita/core/ratelimit";
 import { settings } from "@orbita/core/settings/index";
@@ -230,10 +231,11 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const quemPede = requesterResolver(userId, clip, deviceId ?? null);
   if (clip) void quemPede.voice();
 
-  const [personaCtx, toolsRes, ragHits] = await Promise.all([
+  const [personaCtx, toolsRes, ragHits, busca] = await Promise.all([
     rapido ? Promise.resolve("") : buildPersonaContext(userId).catch(() => ""),
     buildAllTools(userId, content, quemPede.resolve, quemPede.origin, quemPede.voiceRef, rapido ? { dominios: ["casa"] } : {}),
     ragTask,
+    configDaBusca(),
   ]);
   const { tools, cleanup, skillInstructions } = toolsRes;
 
@@ -283,7 +285,8 @@ export async function POST(req: Request, ctx: RouteCtx) {
       model,
       system: systemFor(key),
       messages: modelMessages,
-      tools: image ? undefined : tools, // visão local não faz function-calling
+      // visão local não faz function-calling; com Claude, a busca na web é a nativa dele
+      tools: image ? undefined : comBuscaNativa(tools, key, busca),
       stopWhen: stepCountIs(cfg["chat.maxSteps"]),
       maxOutputTokens: maxTokensFor(key),
       maxRetries: cfg["chat.maxRetries"],

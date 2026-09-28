@@ -7,6 +7,7 @@ import { deveDescobrirLocal, embedProvider, localAvailable, readPolicy } from "@
 import { temChaveDeNuvem } from "@orbita/core/ocr/visao";
 import { estadoDoServico, ollamaEmUso, vozLocalEmUso } from "@orbita/core/saude/servicos-locais";
 import { waSessao } from "@orbita/db/whatsapp-schema";
+import { tgBot } from "@orbita/db/telegram-schema";
 import { ponteConfigurada } from "@orbita/core/whatsapp/gowa/client";
 
 async function ping(url: string, ms: number): Promise<boolean> {
@@ -67,6 +68,11 @@ export async function GET(_req: Request, _ctx: RouteCtx) {
   // aqui: o health é público e não deve tocar na sessão do dono)
   const sessoes = await db.select({ status: waSessao.status }).from(waSessao).catch(() => []);
   checks.whatsapp = sessoes.length > 0 && !ponteConfigurada() ? "mal_configurado" : estadoDoServico(sessoes.length > 0, sessoes.some((x) => x.status === "conectado"));
+
+  // Telegram: o laço de escuta anota cada volta; parado há mais de 2 minutos,
+  // ou com erro na última, o canal da Órbita está mudo
+  const bots = await db.select({ em: tgBot.ultimoContatoEm, erro: tgBot.ultimoErro }).from(tgBot).catch(() => []);
+  checks.telegram = estadoDoServico(bots.length > 0, bots.some((b) => !b.erro && b.em !== null && Date.now() - b.em.getTime() < 120_000));
 
   const status = checks.db === "up" ? "ok" : "error";
   return Response.json(

@@ -41,13 +41,14 @@ function pcmToWav(pcm: Buffer, rate = SAMPLE_RATE): Buffer {
 }
 
 /** Sintetiza `text` e devolve um WAV. Lança se a API falhar. */
-export async function synthesizeGemini(text: string, signal?: AbortSignal): Promise<Buffer> {
+/** `voz`: quem chama pode pedir uma voz (a nota de voz do WhatsApp usa a mesma do tempo real). */
+export async function synthesizeGemini(text: string, signal?: AbortSignal, voz?: string): Promise<Buffer> {
   const key = apiKey();
   if (!key) throw new Error("gemini_tts_sem_chave");
 
   // var própria: cada provedor tem seu catálogo, um nome não vale no outro
   const model = process.env.TTS_GEMINI_MODEL ?? DEFAULT_MODEL;
-  const voice = process.env.TTS_GEMINI_VOICE ?? DEFAULT_VOICE;
+  const voice = voz || process.env.TTS_GEMINI_VOICE || DEFAULT_VOICE;
   // instrução de estilo opcional: o Gemini aceita direção em linguagem natural
   const style = process.env.TTS_GEMINI_STYLE?.trim();
   const prompt = style ? `${style}: ${text}` : text;

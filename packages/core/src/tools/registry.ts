@@ -26,7 +26,7 @@ export interface Requester {
   personId: string | null;
   name: string | null;
   role: "dono" | "morador" | "visitante";
-  via: "voz" | "conta";
+  via: "voz" | "conta" | "telegram";
   confidence?: number;
 }
 
@@ -90,7 +90,10 @@ export interface ToolDef<I extends z.ZodTypeAny = z.ZodTypeAny> {
 
 /** "(pedido por voz: Anna, 91%)" para a fila de aprovação mostrar quem pediu. Puro. */
 export function requesterNote(r: Requester | null | undefined): string {
-  if (!r || r.via !== "voz" || !r.name) return "";
+  if (!r || !r.name) return "";
+  // pelo Telegram quem pede é conhecido pelo convite, não por palpite: sem porcentagem
+  if (r.via === "telegram") return ` (pedido pelo Telegram: ${r.name})`;
+  if (r.via !== "voz") return "";
   return ` (pedido por voz: ${r.name}${r.confidence !== undefined ? `, ${Math.round(r.confidence * 100)}%` : ""})`;
 }
 

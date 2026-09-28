@@ -31,6 +31,7 @@ const breakers = new Map<ProviderId, { fails: number; openUntil: number }>();
 /** Zera o estado dos disjuntores. Só para teste: em produção o estado é por processo, de propósito. */
 export function resetBreakersForTests(): void {
   breakers.clear();
+  modelosEmPausa.clear();
 }
 
 /** Provedor em cooldown (deve ser pulado)? */
@@ -75,9 +76,35 @@ export function statusDoErro(e: unknown, profundidade = 0): number | undefined {
  * cada turno pagava o timeout de novo, porque o contador zerava a cada
  * sucesso de outro provedor e nunca chegava a três.
  */
+/**
+ * Modelo em pausa, sem pausar o provedor: o Opus da assinatura tem cota
+ * própria, e um 429 dele fechava o provedor inteiro, levando junto o Sonnet que
+ * responde o dia a dia (auditoria de 27/09/2026, com `llm.modeloComplexo`).
+ */
+const modelosEmPausa = new Map<string, number>();
+
+export function modeloEmPausa(key: string): boolean {
+  return (modelosEmPausa.get(key) ?? 0) > Date.now();
+}
+
+/** O preferido do dono para este provedor, se for OUTRO modelo que não esta chave. */
+function irmaoPreferido(key: string): string | null {
+  const p = getModelInfo(key)?.provider;
+  if (!p) return null;
+  const k = policySnapshot()
+    .modelosPreferidos.map((x) => x.trim())
+    .find((x) => x !== key && getModelInfo(x)?.provider === p && availableModelsSync().some((m) => m.key === x));
+  return k ?? null;
+}
+
 export function recordProviderResult(key: string, ok: boolean, status?: number): void {
   const p = getModelInfo(key)?.provider;
   if (!p) return;
+  // 429 de um modelo que não é o preferido do provedor: pausa SÓ ele
+  if (!ok && status === 429 && irmaoPreferido(key)) {
+    modelosEmPausa.set(key, Date.now() + cb.cooldownMs);
+    return;
+  }
   const b = breakers.get(p) ?? { fails: 0, openUntil: 0 };
   if (ok) {
     b.fails = 0;
@@ -118,10 +145,23 @@ const ordemTier = { large: 0, medium: 1, small: 2 } as const;
  */
 function umPorProvedor(exceto: readonly ProviderId[]): ModelInfo[] {
   const porProvedor = new Map<ProviderId, ModelInfo>();
+  // a POSIÇÃO na lista do dono decide entre dois preferidos do mesmo provedor
+  const ordemPreferida = new Map(policySnapshot().modelosPreferidos.map((k, i) => [k.trim(), i] as const).filter(([k]) => k));
+  const fixados = new Set<ProviderId>();
   for (const m of availableModelsSync()) {
     if (exceto.includes(m.provider)) continue;
     if (m.supportsTools === false) continue; // a cadeia do chat precisa de tools
     if (m.local && !localAvailable()) continue;
+    // o modelo que o dono escolheu para este provedor vence qualquer outro dele;
+    // entre dois escolhidos, vale o que vem antes na lista (não o último descoberto)
+    if (ordemPreferida.has(m.key)) {
+      const atual = porProvedor.get(m.provider);
+      const posAtual = atual && fixados.has(m.provider) ? ordemPreferida.get(atual.key)! : Infinity;
+      if (ordemPreferida.get(m.key)! < posAtual) porProvedor.set(m.provider, m);
+      fixados.add(m.provider);
+      continue;
+    }
+    if (fixados.has(m.provider)) continue;
     const atual = porProvedor.get(m.provider);
     // por provedor: o mais forte; empate resolve pelo preço conhecido e mais barato
     const melhorPreco = m.priceKnown !== atual?.priceKnown ? m.priceKnown : m.costPer1k < (atual?.costPer1k ?? Infinity);
@@ -214,12 +254,16 @@ function podeTentar(key: string): boolean {
 
 export function buildModelChain(requestedKey: string, _env?: ProviderFlags): string[] {
   const chain: string[] = [];
-  if (podeTentar(requestedKey)) chain.push(requestedKey);
+  if (podeTentar(requestedKey) && !modeloEmPausa(requestedKey)) chain.push(requestedKey);
+  // O preferido do MESMO provedor logo atrás: pedido complexo no Opus que falha
+  // cai no Sonnet da mesma assinatura, não numa conta paga nem em "sem modelo"
+  const irmao = irmaoPreferido(requestedKey);
+  if (irmao && podeTentar(irmao) && !chain.includes(irmao)) chain.push(irmao);
 
   const policy = policySnapshot();
   // o provedor do modelo pedido sai da lista de alternativas: ele já é a
   // primeira tentativa, e repetir a casa dele é repetir a falha dela
-  const jaNaCadeia = chain.map((k) => getModelInfo(k)?.provider).filter((p): p is ProviderId => Boolean(p));
+  const jaNaCadeia = [requestedKey, ...chain].map((k) => getModelInfo(k)?.provider).filter((p): p is ProviderId => Boolean(p));
   for (const m of ordenarAlternativas(umPorProvedor(jaNaCadeia), policy.failoverOrder)) if (!chain.includes(m.key)) chain.push(m.key);
 
   // nada descoberto ainda (primeiro boot, cache frio): só o reserva que o dono

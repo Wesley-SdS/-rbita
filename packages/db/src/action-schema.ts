@@ -23,7 +23,7 @@ export const actionQueue = pgTable("action_queue", {
    * "manda" na conversa "Eu" ou por voz) só vale para proposta do MESMO canal:
    * um "manda" no WhatsApp não aprova o que foi pedido no chat do app.
    */
-  canal: text("canal", { enum: ["tela", "whatsapp", "voz"] }).notNull().default("tela"),
+  canal: text("canal", { enum: ["tela", "whatsapp", "voz", "telegram"] }).notNull().default("tela"),
   /** depois disto, aprovar por frase não vale mais (só pela tela) */
   expiraEm: timestamp("expira_em"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

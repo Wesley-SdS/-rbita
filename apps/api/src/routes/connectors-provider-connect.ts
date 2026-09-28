@@ -18,6 +18,6 @@ export async function GET(_req: Request, ctx: RouteCtx) {
   }
 
   const state = signState(session.user.id);
-  const url = buildAuthorizeUrl(def.id as ConnectorId, state);
+  const url = await buildAuthorizeUrl(def.id as ConnectorId, state);
   return Response.redirect(url, 302);
 }

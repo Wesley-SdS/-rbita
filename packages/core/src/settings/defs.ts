@@ -72,6 +72,7 @@ export const SETTING_GROUPS = {
   events: { label: "Eventos", order: 65 },
   connectors: { label: "Conectores", order: 70 },
   whatsapp: { label: "WhatsApp", order: 71 },
+  telegram: { label: "Telegram (o canal da Órbita)", order: 71.5 },
   finance: { label: "Finanças", order: 75 },
   limits: { label: "Limites", order: 80 },
   graph: { label: "Grafo de conhecimento", order: 85 },
@@ -315,6 +316,18 @@ export const SETTING_DEFS = {
   ),
 
   "llm.fallbackModel": text("models", "Modelo reserva", "Chave de um modelo (ex.: claude/claude-sonnet-5) tentada só quando nenhum provedor respondeu a lista de modelos. Vazio significa que a ordem do failover decide, e sem nenhum provedor a Órbita avisa em vez de tentar um modelo que talvez não exista.", ""),
+  "llm.modelosPreferidos": list(
+    "models",
+    "Modelo preferido de cada provedor",
+    "Chaves de modelo que a Órbita usa em vez do mais forte de cada provedor. Com a assinatura do Claude, o Sonnet é bem mais rápido que o Opus e gasta menos a cota; o Opus fica para o que você pedir por nome (e para o resumo de reunião, se configurado lá).",
+    ["claude/claude-sonnet-5"],
+  ),
+  "llm.modeloComplexo": text(
+    "models",
+    "Modelo do automático para pedido complexo",
+    "No modo automático, pedido com código, análise, estratégia ou texto longo vai para este modelo (ex.: claude/claude-opus-5-5); o resto vai para o preferido. Vazio: tudo vai para o preferido. Se o modelo não estiver disponível, vale o preferido.",
+    "",
+  ),
   "llm.discoveryTtlMinutes": num("models", "Renovar a lista de modelos a cada", "A lista vencida continua valendo e é renovada em segundo plano, sem atrasar a resposta.", 5, 1, 1440, { unit: "min" }),
   "llm.discoveryTimeoutMs": num("models", "Timeout por provedor na descoberta", "Quanto esperar cada provedor responder a lista de modelos.", 4000, 500, 30000, { unit: "ms" }),
   "llm.descobrirLocal": sel(
@@ -416,6 +429,10 @@ export const SETTING_DEFS = {
   "events.retentionDays": num("events", "Retenção da trilha de eventos", "Eventos mais antigos que isso são apagados.", 30, 1, 3650, { unit: "dias" }),
 
   // ── conectores (apps/api) ──
+  "connectors.microsoftTranscricoes": bool("connectors", "Pedir permissão de transcrição do Teams", "Ao conectar a Microsoft, pede também a leitura das transcrições das reuniões do Teams. Em conta de empresa essa permissão precisa do administrador aprovar; ligue só se ele aprovar, senão a conexão inteira é recusada. Depois de ligar, reconecte a conta.", false),
+  "contatos.usarGoogle": bool("connectors", "Usar os contatos do Google", "A Órbita consulta a sua agenda do Google para achar o e-mail ou o WhatsApp de alguém pelo nome (\"manda para a Maria\"), mostrar o nome que VOCÊ deu a quem escreve no WhatsApp e lembrar aniversários no briefing. Nada é copiado para o banco: fica só na memória do processo.", true),
+  "contatos.cacheMinutos": num("connectors", "Atualizar os contatos a cada", "A agenda é lida do Google e guardada na memória por este tempo. Contato novo aparece depois disso (ou ao reiniciar).", 360, 5, 10080, { unit: "min" }),
+  "contatos.maximo": num("connectors", "Máximo de contatos lidos", "Teto por conta do Google, para uma agenda gigante não pesar no processo.", 5000, 100, 50000),
   "connectors.refreshCheckMinutes": num("connectors", "Verificação de tokens", "De quanto em quanto tempo o processo persistente procura tokens perto de expirar.", 10, 1, 1440, { unit: "min" }),
   "connectors.refreshBackoffMaxHours": num("connectors", "Espera máxima após falha de renovação", "Conexão que falha ao renovar é tentada de novo com espera crescente, até este teto. O aviso \"reconecte\" sai uma vez só.", 24, 1, 168, { unit: "h" }),
   "connectors.fusoHorario": text(
@@ -462,6 +479,16 @@ export const SETTING_DEFS = {
   "cache.comprimirAcimaDeBytes": num("cache", "Comprimir respostas acima de", "Respostas JSON maiores que isto viajam comprimidas. Abaixo do limite, comprimir custa mais processador do que economiza banda. Zero desliga a compressão.", 1024, 0, 1048576, { unit: "bytes" }),
   "cache.offlineLeitura": bool("cache", "Abrir offline com o último dado conhecido", "Guarda no aparelho a última resposta das leituras seguras para o app abrir mostrando algo quando a rede cair. Nada que altere dados é guardado.", true),
   "meetings.avisarResumo": bool("meetings", "Avisar quando o resumo ficar pronto", "O resumo da reunião, os compromissos e as tarefas criadas chegam como aviso (e pelo WhatsApp, se os avisos estiverem ligados lá).", true),
+  "meetings.importarMeet": bool("meetings", "Resumir reuniões do Google Meet", "Reunião do Meet com transcrição ligada vira resumo, compromissos e tarefas sozinha, sem precisar gravar. A transcrição (a fala de todos os participantes) vai para o modelo configurado e fica na base de conhecimento. Ao ligar, reconecte o Google para dar a permissão; só vale para reunião que você organizou.", false),
+  "meetings.importarTeams": bool("meetings", "Resumir reuniões do Teams", "O mesmo para o Teams, com o mesmo cuidado: a fala de todos vai para o modelo e para a base. Precisa da permissão de transcrição ligada em Conectores (ela depende do administrador da empresa aprovar).", false),
+  "meetings.importarZoom": bool("meetings", "Resumir reuniões do Zoom", "O mesmo para o Zoom, com gravação na nuvem e transcrição de áudio ligadas na conta do Zoom. A fala de todos vai para o modelo e para a base.", false),
+  "meetings.importarEsperaMs": num("meetings", "Quanto a Órbita espera ao buscar reunião online na hora", "Quando você pede \"resume a reunião que acabou\", ela espera até isto; passou, continua buscando sozinha e avisa quando o resumo ficar pronto.", 8000, 1000, 60000, { unit: "ms" }),
+  "meetings.importarTentativas": num("meetings", "Tentativas por reunião online", "Transcrição que falha ao baixar ou ao resumir é tentada de novo, com espera crescente (15 min, 30 min, 1 h…), até este número de vezes.", 4, 1, 20),
+  "meetings.importarMinutos": num("meetings", "Procurar reunião online nova a cada", "De quanto em quanto tempo a Órbita pergunta ao Meet, Teams e Zoom se há transcrição nova.", 15, 5, 1440, { unit: "min" }),
+  "meetings.importarDias": num("meetings", "Olhar reuniões online dos últimos", "Até onde a Órbita olha para trás. Na primeira vez, é isso que ela pode resumir de uma vez.", 2, 1, 29, { unit: "dias" }),
+  "meetings.importarMaxPorVolta": num("meetings", "Reuniões online resumidas por volta", "Teto de resumos novos a cada volta, para uma semana de reuniões não ocupar o modelo de uma vez. O resto vem nas próximas voltas.", 3, 1, 20),
+  "meetings.importarMinCaracteres": num("meetings", "Transcrição mínima para resumir", "Transcrição menor que isto (reunião que caiu, teste de áudio) fica registrada mas não vira resumo.", 300, 0, 10000, { unit: "caracteres" }),
+  "meetings.importarMaxPaginas": num("meetings", "Páginas lidas de uma transcrição do Meet", "O Meet entrega a transcrição em páginas de 100 falas. Teto para uma reunião de dia inteiro não pesar.", 50, 1, 500),
   "meetings.criarTarefas": sel(
     "meetings",
     "Virar tarefa depois da reunião",
@@ -532,6 +559,13 @@ export const SETTING_DEFS = {
 
   // ── ferramentas (tools/registry.ts) ──
   "tools.maxTodas": num("tools", "Teto quando vão todas as ferramentas", "Na conversa \"Eu\" do WhatsApp vão todas as ferramentas; com servidores MCP somados, o total é cortado aqui (as nativas primeiro). Provedores compatíveis com OpenAI recusam acima de ~128.", 120, 20, 500),
+  "web.buscaNativa": bool("tools", "Busca na web nativa do Claude", "Quando quem responde é o Claude, a pesquisa na internet usa a busca da própria Anthropic (pesquisa, lê e cita as fontes) em vez de raspar página de buscador. Com outro modelo, vale a lista abaixo.", true),
+  "web.buscaNativaMaxUsos": num("tools", "Buscas nativas por resposta", "Quantas pesquisas o Claude pode fazer numa mesma resposta.", 3, 1, 10),
+  "web.provedores": list("tools", "Buscadores (quando não é o Claude)", "Ordem dos buscadores da pesquisar_web. Tavily e Brave só entram com a chave no .env (TAVILY_API_KEY, BRAVE_SEARCH_API_KEY); duckduckgo e bing raspam a página de resultados; wikipedia é o último recurso.", ["tavily", "brave", "duckduckgo", "bing", "wikipedia"]),
+  "casa.cidade": text("home", "Cidade da casa", "Usada no clima (\"vai chover amanhã?\") e no briefing quando ninguém diz a cidade.", "", 120),
+  "casa.endereco": { ...text("home", "Endereço da casa", "Ponto de partida das rotas (\"quanto tempo até o escritório?\"). Para achar a posição e o caminho, o endereço vai ao Photon e ao Nominatim (OpenStreetMap); as coordenadas vão ao OSRM e, com a chave configurada, ao TomTom (trânsito).", "", 200), sensitive: true },
+  "web.timeoutMs": num("tools", "Espera máxima de cada serviço da internet", "Quanto a pesquisa, a cotação e a rota esperam por cada serviço antes de tentar o próximo.", 8000, 2000, 30000, { unit: "ms" }),
+  "casa.lugares": list("home", "Lugares com nome", "Um por linha, no formato \"Nome: endereço\" (ex.: \"Trabalho: Rua Estrela, 96, São Paulo\"). A rota entende o nome (\"quanto tempo até o trabalho?\").", [], { sensitive: true }),
   "tools.maxPerTurn": num("tools", "Ferramentas por turno", "Acima disso, só as mais relevantes para o pedido vão ao modelo (seleção por palavras, sem LLM). Muitas ferramentas pioram custo e precisão.", 30, 5, 200),
 
   "meetings.sttCloud": sel(
@@ -901,6 +935,11 @@ export const SETTING_DEFS = {
     { value: "ignorar", label: "Ignorar" },
     { value: "guardar", label: "Guardar" },
   ]),
+  "whatsapp.canais": sel("whatsapp", "Canais que você segue", "Publicações dos canais do WhatsApp (os de notícias, marcas, criadores). Não são conversa: guardar baixa cada post.", "ignorar", [
+    { value: "ignorar", label: "Ignorar" },
+    { value: "guardar", label: "Guardar" },
+  ]),
+  "whatsapp.recuperarMinutos": num("whatsapp", "Recuperar mensagens perdidas de até", "Se a Órbita estava reiniciando quando uma mensagem chegou, ela a busca no histórico da ponte. Só até este tanto para trás: responder hoje a um pedido de ontem seria pior que não responder.", 30, 5, 720, { unit: "min" }),
   "whatsapp.retencaoDias": num("whatsapp", "Guardar mensagens por", "Mensagens e mídia mais velhas que isto são apagadas. Zero guarda para sempre.", 0, 0, 3650, { unit: "dias" }),
   "whatsapp.leituraMax": num("whatsapp", "Mensagens por leitura", "Quantas mensagens uma consulta ao WhatsApp traz de uma vez para a Órbita ler.", 30, 5, 200),
   "whatsapp.envioPorMinuto": num("whatsapp", "Envios por minuto (antibanimento)", "Teto de mensagens que a Órbita manda por minuto, somando tudo.", 20, 1, 120),
@@ -946,11 +985,38 @@ export const SETTING_DEFS = {
     "whatsapp",
     "O que vai no briefing",
     "O pedido que a Órbita segue para montar o briefing. Ela usa só ferramentas de leitura.",
-    "Monte o briefing desta manhã para o dono, curto e no formato de WhatsApp (sem títulos, no máximo 12 linhas): a agenda de hoje, as contas que vencem nos próximos 7 dias, as tarefas pendentes de hoje ou atrasadas, quanto ele pode gastar hoje e a previsão do tempo. Use as ferramentas para buscar cada coisa. O que não estiver disponível, pule sem comentar.",
+    "Monte o briefing desta manhã para o dono, curto e no formato de WhatsApp (sem títulos, no máximo 12 linhas): a agenda de hoje, as contas que vencem nos próximos 7 dias, as tarefas pendentes de hoje ou atrasadas, quanto ele pode gastar hoje, a previsão do tempo e quem faz aniversário hoje ou amanhã. Use as ferramentas para buscar cada coisa. O que não estiver disponível, pule sem comentar.",
     2000,
     true,
   ),
+  "telegram.esperaSegundos": num("telegram", "Espera de cada pergunta ao Telegram", "A Órbita pergunta ao Telegram se há mensagem nova e ele segura a resposta até chegar algo ou passar este tempo. Maior gasta menos, sem atrasar mensagem nenhuma.", 25, 1, 50, { unit: "s" }),
+  "telegram.conviteMinutos": num("telegram", "Validade do convite", "Quanto tempo o link de convite (para você ou para uma pessoa da casa) vale antes de vencer. Ele serve uma vez só.", 60, 5, 10080, { unit: "min" }),
+  "telegram.respostaFormato": sel("telegram", "Responder em", "Texto sempre, áudio sempre, ou no mesmo formato em que a pessoa falou (áudio responde áudio).", "espelhar", [
+    { value: "espelhar", label: "No mesmo formato" },
+    { value: "texto", label: "Sempre texto" },
+    { value: "audio", label: "Sempre áudio" },
+  ]),
+  "telegram.historicoConversa": num("telegram", "Mensagens de contexto", "Quantas mensagens anteriores de cada conversa a Órbita lembra ao responder.", 12, 0, 50),
+  "telegram.dominiosDaFamilia": list("telegram", "O que a família pode pedir", "Domínios de ferramentas liberados para as pessoas da casa (não para você, que tem tudo). Nada de e-mail, finanças, agenda ou memória do dono por padrão. Ações da casa seguem a permissão por pessoa e cômodo, e toda ação com efeito vai para a sua aprovação.", ["casa", "clima", "mundo", "tempo", "web"]),
+  "telegram.porHoraPessoa": num("telegram", "Mensagens por hora de cada pessoa", "Teto por pessoa da casa. Passou disso, a Órbita para de responder até a hora virar (um celular perdido não gasta a sua cota).", 30, 1, 500),
+  "telegram.avisos": sel("telegram", "Avisos por aqui", "Os avisos da Órbita (lembretes, contas, reuniões, regras) também chegam no Telegram. Se chegarem pelo WhatsApp também e você quiser um só, desligue lá (WhatsApp, avisos).", "todos", [
+    { value: "todos", label: "Todos os avisos" },
+    { value: "desligado", label: "Desligado" },
+  ]),
+  "telegram.avisosSilencio": {
+    ...text("telegram", "Silêncio dos avisos", "Nesse horário os avisos não chegam por aqui (lembrete com hora marcada chega mesmo assim). Vazio: sem silêncio.", "", 11),
+    type: { kind: "text", maxLength: 11, pattern: "^$|^([01]?\\d|2[0-3]):[0-5]\\d-([01]?\\d|2[0-3]):[0-5]\\d$", formato: "HH:MM-HH:MM, por exemplo 22:00-07:00, ou vazio" },
+  },
+  "telegram.avisosPorHora": num("telegram", "Avisos por hora", "Teto de avisos por hora no Telegram, para uma avalanche de eventos não virar spam.", 10, 1, 100),
+  "telegram.briefing": bool("telegram", "Briefing da manhã por aqui", "O briefing da manhã (mesmo horário e dias do WhatsApp) chega também no Telegram.", true),
+  "telegram.recadoDesconhecido": text("telegram", "Recado para quem não é da casa", "O que a Órbita responde, uma vez só, a alguém que achou o bot sem convite. Vazio: não responde nada.", "Oi! Eu sou a Órbita, assistente de uma casa. Só converso com quem foi convidado.", 300),
+  "telegram.midiaMaxMb": num("telegram", "Tamanho máximo de áudio ou foto", "O Telegram entrega até 20 MB para bots.", 20, 1, 20, { unit: "MB" }),
+  "whatsapp.retomarMinutos": num("whatsapp", "Retomar pedido interrompido de até", "Se a Órbita cair no meio de uma resposta (reinício, queda de energia), ao voltar ela responde os pedidos que ficaram sem resposta, desde que sejam deste tempo para cá. 0 desliga.", 15, 0, 240, { unit: "min" }),
   "whatsapp.audioComoGravacaoChars": num("whatsapp", "Áudio longo vira gravação a partir de", "Na conversa \"Eu\", áudio com transcrição maior que isto não é tratado como pedido, e sim como gravação (a Órbita pergunta se é para resumir como reunião ou guardar).", 1500, 200, 50000, { unit: "caracteres" }),
+  "whatsapp.vozDaNota": sel("whatsapp", "Voz da nota de voz", "Igual ao tempo real usa a voz do Gemini escolhida em Conversa por voz (cai para o Edge se a cota do Gemini acabar).", "igual_tempo_real", [
+    { value: "igual_tempo_real", label: "A mesma da conversa em tempo real (Gemini)" },
+    { value: "padrao", label: "A voz padrão do app (Edge)" },
+  ]),
   "whatsapp.historicoConversa": num("whatsapp", "Histórico da conversa \"Eu\"", "Quantas mensagens anteriores a Órbita relê a cada pedido pelo WhatsApp.", 16, 0, 100),
   "whatsapp.frasesConfirmar": list("whatsapp", "Frases que aprovam", "Dita logo depois de uma proposta, qualquer uma destas envia. Vale só para a SUA fala e só para a proposta que acabou de ser feita. Evite palavras genéricas como \"sim\": elas também respondem a outras perguntas.", ["manda", "pode mandar", "envia", "pode enviar", "confirmo", "confirma"]),
   "whatsapp.frasesCancelar": list("whatsapp", "Frases que cancelam", "Dita logo depois de uma proposta, cancela. Evite \"não\" sozinho, pelo mesmo motivo.", ["cancela", "não manda", "não envia", "esquece", "deixa pra lá"]),

@@ -53,7 +53,7 @@ const DONO = async () => ({ personId: null, name: null, role: "dono" as const, v
 
 const SUFIXO_WHATSAPP =
   "\n\nVocê está falando com o dono pelo WhatsApp, na conversa dele com ele mesmo. Responda curto e direto, como numa conversa de WhatsApp, sem títulos nem tabelas. " +
-  "Quando propuser enviar uma mensagem a alguém, mostre o texto exato que vai sair; o dono aprova respondendo *manda* ou desiste com *cancela*. " +
+  "Quando o dono pedir para mandar algo a alguém, chame a ferramenta de envio JÁ, sem perguntar se pode: ela não envia, cria a proposta, e a proposta é a confirmação. Mostre o texto exato que vai sair; o dono aprova respondendo *manda* ou desiste com *cancela*. " +
   "Por aqui o dono faz TUDO que faz no app (finanças, tarefas, memória, agenda, e-mail, casa, câmeras, conhecimento): use as ferramentas como no chat. " +
   "Foto ou arquivo que ele mandar chega com um id: cupom ou nota vira gasto, extrato vira lançamentos, boleto vira conta e documento vai para o conhecimento, com usar_arquivo_whatsapp; se não estiver claro o que ele quer com o arquivo, pergunte.";
 

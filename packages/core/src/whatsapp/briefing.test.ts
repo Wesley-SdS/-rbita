@@ -12,9 +12,15 @@ const notifyUser = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock("../routines/run", () => ({ runPromptForUser, notifyUser }));
 vi.mock("./avisar", () => ({ avisarNoWhatsapp }));
 vi.mock("./sessao", () => ({ sessaoDe: async () => sessao }));
+let bot: Record<string, unknown> | null = null;
+let donoTg: Record<string, unknown> | null = null;
+const marcarBriefing = vi.fn(async (_u: string, dia: string) => void (bot!.ultimoBriefing = dia));
+vi.mock("../telegram/store", () => ({ botDe: async () => bot, donoNoTelegram: async () => donoTg, marcarBriefing }));
+const avisarNoTelegram = vi.fn(async (..._a: unknown[]) => "enviado");
+vi.mock("../telegram/enviar", () => ({ avisarNoTelegram }));
 vi.mock("../settings", () => ({
   settings: {
-    getMany: async () => ({ "whatsapp.briefingAtivo": true, "whatsapp.briefingHorario": "07:00", "whatsapp.briefingDias": "todos", "whatsapp.briefingPedido": "Monte o briefing", "connectors.fusoHorario": "America/Sao_Paulo" }),
+    getMany: async () => ({ "whatsapp.briefingAtivo": true, "whatsapp.briefingHorario": "07:00", "whatsapp.briefingDias": "todos", "whatsapp.briefingPedido": "Monte o briefing", "telegram.briefing": true, "connectors.fusoHorario": "America/Sao_Paulo" }),
   },
 }));
 vi.mock("@orbita/db", () => ({
@@ -37,6 +43,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   ordem.length = 0;
   sessao = { id: "s1", status: "conectado", ultimoBriefing: null };
+  bot = null;
+  donoTg = null;
 });
 
 describe("briefingSeDevido", () => {
@@ -56,7 +64,26 @@ describe("briefingSeDevido", () => {
   it("antes da hora, ou sem WhatsApp conectado", async () => {
     expect(await briefingSeDevido("u1", new Date("2026-09-28T09:00:00Z"))).toBe("fora_de_hora");
     sessao = { id: "s1", status: "desconectado", ultimoBriefing: null };
-    expect(await briefingSeDevido("u1", as7h05)).toBe("sem_whatsapp");
+    expect(await briefingSeDevido("u1", as7h05)).toBe("sem_canal");
+  });
+
+  it("Telegram também: montado UMA vez e entregue nos dois canais, cada um com o seu dia", async () => {
+    bot = { ultimoBriefing: null };
+    donoTg = { id: "c1", telegramId: "99" };
+    expect(await briefingSeDevido("u1", as7h05)).toBe("enviado");
+    expect(runPromptForUser).toHaveBeenCalledOnce();
+    expect(avisarNoWhatsapp).toHaveBeenCalledOnce();
+    expect(avisarNoTelegram).toHaveBeenCalledWith("u1", "Bom dia", expect.stringContaining("reunião às 10h"), { tipo: "briefing" });
+    expect(bot.ultimoBriefing).toBe("2026-09-28");
+  });
+
+  it("só com Telegram (WhatsApp desconectado): sai por lá", async () => {
+    sessao = { id: "s1", status: "desconectado", ultimoBriefing: null };
+    bot = { ultimoBriefing: null };
+    donoTg = { id: "c1", telegramId: "99" };
+    expect(await briefingSeDevido("u1", as7h05)).toBe("enviado");
+    expect(avisarNoWhatsapp).not.toHaveBeenCalled();
+    expect(avisarNoTelegram).toHaveBeenCalledOnce();
   });
 
   it("modelo fora do ar: não quebra o laço, e o dono fica sabendo no app", async () => {

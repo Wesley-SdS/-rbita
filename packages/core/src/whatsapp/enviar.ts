@@ -138,7 +138,10 @@ export async function enviarAudio(userId: string, destino: string, texto: string
   const paraJid = jidDoDestino(destino);
   const { sessao, contato } = await prepararPessoal(userId, paraJid, opts);
 
-  const fala = await sintetizarFala(texto, { userId });
+  // a MESMA voz da conversa em tempo real (Gemini, `realtime.geminiVoice`): a
+  // nota de voz saía pelo Edge, uma voz diferente, e o dono estranhou
+  const voz = await settings.getMany(["whatsapp.vozDaNota", "realtime.geminiVoice"]);
+  const fala = await sintetizarFala(texto, { userId, preferirGemini: voz["whatsapp.vozDaNota"] === "igual_tempo_real", vozGemini: voz["realtime.geminiVoice"] });
   let audio: { bytes: Uint8Array; mime: string } = fala;
   try {
     audio = await paraNotaDeVoz(fala);

@@ -34,6 +34,7 @@ export const FLUXO = {
   acompanhamento: "acompanhamento",
   whatsapp: "whatsapp",
   whatsappAutomatico: "whatsapp_automatico",
+  telegram: "telegram",
   briefing: "briefing",
 } as const;
 

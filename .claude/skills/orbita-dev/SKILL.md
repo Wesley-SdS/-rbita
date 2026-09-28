@@ -49,6 +49,19 @@ export PERCEPTION_MODELS_DIR="C:/Users/Users/Documents/github/orbita/apps/percep
 ./.venv/Scripts/python.exe -m uvicorn main:app --host 127.0.0.1 --port 8002
 ```
 
+```bash
+# 7. Ponte do WhatsApp pessoal (GOWA, opcional). A senha vem do .env DA RAIZ
+#    (GOWA_BASIC_AUTH=usuario:senha); sem ela o contêiner se recusa a subir.
+cd /c/Users/Users/Documents/github/orbita
+docker compose up -d gowa        # container orbita-gowa, 127.0.0.1:3011
+```
+
+Se o `.env` da raiz não existir, crie só com a senha da ponte (o resto continua em `apps/web/.env`,
+e os carregadores leem os dois):
+`echo "GOWA_BASIC_AUTH=orbita:$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")" > .env`.
+Depois de subir, pareie o celular em Conexões → WhatsApp pessoal. A porta 3001 é do GOWA do
+`whatsapp-workspace`: não mexa nele.
+
 O `VOICE_MODELS_DIR` é obrigatório: o default do `main.py` é `/models`, que não existe no Windows.
 Os modelos (Piper + Vosk) já estão baixados em `apps/voice/models_test`. A percepção tem o mesmo
 problema e o mesmo remédio; os `.onnx` dela vêm de `python scripts/download_models.py` e a venv é

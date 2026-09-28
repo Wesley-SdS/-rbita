@@ -40,6 +40,8 @@ export async function notifyUser(
   // pode atrasar quem o emitiu.
   if (opts.whatsapp !== false) {
     void import("../whatsapp/avisar").then((m) => m.avisarNoWhatsapp(userId, title, body, { furaSilencio: opts.furaSilencio })).catch(() => undefined);
+    // e no Telegram, o canal da própria Órbita (cada canal tem a sua chave de avisos)
+    void import("../telegram/enviar").then((m) => m.avisarNoTelegram(userId, title, body, { furaSilencio: opts.furaSilencio })).catch(() => undefined);
   }
 }
 

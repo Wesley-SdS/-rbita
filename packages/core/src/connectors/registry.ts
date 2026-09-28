@@ -7,7 +7,7 @@
  * e o conector acende sozinho, sem mudança de código.
  */
 
-export type ConnectorId = "google" | "notion" | "slack" | "microsoft" | "jira";
+export type ConnectorId = "google" | "notion" | "slack" | "microsoft" | "jira" | "zoom";
 
 export interface ConnectorDef {
   id: ConnectorId;
@@ -28,6 +28,18 @@ export interface ConnectorDef {
    * O Atlassian é assim; mandar form devolve 400 sem dizer o porquê.
    */
   tokenAsJson?: boolean;
+  /**
+   * O endpoint de token quer as credenciais do app em `Authorization: Basic`,
+   * não no corpo (Notion, Zoom). O Zoom devolve 401 sem explicar.
+   */
+  tokenAuthBasic?: boolean;
+  /**
+   * Escopos que só entram quando o dono liga uma opção. Existe para permissão
+   * que exige o administrador da organização aprovar (transcrição do Teams):
+   * pedida sempre, ela impediria até conectar o Outlook numa empresa onde o
+   * dono não é administrador.
+   */
+  escoposOpcionais?: () => Promise<string[]>;
   /**
    * Descobre QUAL conta é esta com uma segunda chamada, para provedores que
    * não devolvem id_token nem id de workspace no retorno do token.
@@ -50,6 +62,8 @@ const M_ID = process.env.MICROSOFT_CLIENT_ID;
 const M_SECRET = process.env.MICROSOFT_CLIENT_SECRET;
 const J_ID = process.env.ATLASSIAN_CLIENT_ID ?? process.env.JIRA_CLIENT_ID;
 const J_SECRET = process.env.ATLASSIAN_CLIENT_SECRET ?? process.env.JIRA_CLIENT_SECRET;
+const Z_ID = process.env.ZOOM_CLIENT_ID;
+const Z_SECRET = process.env.ZOOM_CLIENT_SECRET;
 
 const DEFS: Record<ConnectorId, ConnectorDef> = {
   google: {
@@ -74,6 +88,13 @@ const DEFS: Record<ConnectorId, ConnectorDef> = {
     // logada no navegador e a SEGUNDA conta nunca chega a ser oferecida. O
     // dono clicava em "conectar outra" e reconectava a mesma.
     authorizeParams: { access_type: "offline", prompt: "consent select_account" },
+    // Transcrições do Meet viram resumo (meetings/online), só quando o dono liga
+    // `meetings.importarMeet`: é fala de terceiros, não se pede por padrão. Só
+    // leitura; exige a "Google Meet REST API" ligada no projeto do Google Cloud.
+    escoposOpcionais: async () => {
+      const { settings } = await import("../settings");
+      return (await settings.get("meetings.importarMeet")) ? ["https://www.googleapis.com/auth/meetings.space.readonly"] : [];
+    },
     clientId: G_ID,
     clientSecret: G_SECRET,
   },
@@ -129,6 +150,11 @@ const DEFS: Record<ConnectorId, ConnectorDef> = {
       "Team.ReadBasic.All",
       "Channel.ReadBasic.All",
     ],
+    escoposOpcionais: async () => {
+      // import tardio: o registro é carregado por quase tudo, e as settings puxam o banco
+      const { settings } = await import("../settings");
+      return (await settings.get("connectors.microsoftTranscricoes")) ? ["User.Read", "OnlineMeetings.Read", "OnlineMeetingTranscript.Read.All"] : [];
+    },
     clientId: M_ID,
     clientSecret: M_SECRET,
   },
@@ -158,6 +184,27 @@ const DEFS: Record<ConnectorId, ConnectorDef> = {
     },
     clientId: J_ID,
     clientSecret: J_SECRET,
+  },
+  zoom: {
+    id: "zoom",
+    label: "Zoom",
+    icon: "🎥",
+    blurb: "Reunião gravada na nuvem do Zoom, com transcrição, vira resumo e tarefas sozinha.",
+    authorizeUrl: "https://zoom.us/oauth/authorize",
+    tokenUrl: "https://zoom.us/oauth/token",
+    // no Zoom os escopos moram no app (Marketplace), não no pedido: o app precisa
+    // de cloud_recording:read:list_user_recordings e user:read:user
+    scopes: [],
+    tokenAuthBasic: true,
+    descobrirConta: async (accessToken: string) => {
+      // com prazo: é o callback do OAuth, e o dono fica olhando a tela
+      const res = await fetch("https://api.zoom.us/v2/users/me", { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) return { externalId: "", label: null };
+      const eu = (await res.json()) as { id?: string; email?: string };
+      return { externalId: eu.id ?? "", label: eu.email ?? null };
+    },
+    clientId: Z_ID,
+    clientSecret: Z_SECRET,
   },
 };
 

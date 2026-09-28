@@ -220,7 +220,7 @@ export async function defaultModelKey(_env?: ProviderEnv): Promise<string> {
 export function classificarComplexidade(content: string): boolean {
   return (
     content.length > 600 ||
-    /```|\b(fun[çc][ãa]o|c[óo]digo|code|algoritmo|refator\w*|arquitetura|demonstre|prove|equa[çc][ãa]o|matem[áa]tic\w*|debug\w*)\b/i.test(content)
+    /```|\b(fun[çc][ãa]o|c[óo]digo|code|algoritmo|refator\w*|arquitetura|demonstre|prove que|equa[çc][ãa]o|matem[áa]tic\w*|debug\w*|analis\w*|an[áa]lises?|estrat[ée]gi\w*|planejamento|compar(?:a|ar|e|a[çc][ãa]o|a[çc][õo]es)|detalhad\w*)\b/i.test(content)
   );
 }
 
@@ -243,6 +243,15 @@ export function escolherModelo(lista: ModelInfo[], opts: { complexo: boolean; or
 
 /** Auto-router: aplica `escolherModelo` sobre o que a descoberta já encontrou. */
 export function routeModelKey(content: string, _env?: ProviderEnv): string {
-  const escolha = escolherModelo(availableModelsSync(), { complexo: classificarComplexidade(content), ordem: policySnapshot().failoverOrder });
+  // o modelo que o dono escolheu (Ajustes, Modelos) vale para o "auto" também:
+  // sem isto, pedido complexo ia ao mais forte (Opus) e o simples ao local
+  const disponiveis = availableModelsSync();
+  // Pedido complexo com modelo próprio (ex.: Opus): o dia a dia fica no rápido
+  // (Sonnet) e só o que pede raciocínio longo paga a lentidão e a cota do Opus
+  const complexo = policySnapshot().modeloComplexo.trim();
+  if (complexo && disponiveis.some((m) => m.key === complexo) && classificarComplexidade(content)) return complexo;
+  const preferido = policySnapshot().modelosPreferidos.map((k) => k.trim()).find((k) => disponiveis.some((m) => m.key === k));
+  if (preferido) return preferido;
+  const escolha = escolherModelo(disponiveis, { complexo: classificarComplexidade(content), ordem: policySnapshot().failoverOrder });
   return escolha?.key ?? fallbackSync();
 }

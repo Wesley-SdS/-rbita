@@ -137,7 +137,10 @@ async function executeActions(rule: AutomationRule, actions: RuleAction[], conte
       // Quem recebe é escolha da REGRA, nunca do evento: o `personId` do evento
       // é de quem foi VISTO, e mandar o aviso sobre a Anna para o aparelho ao
       // lado da Anna seria o oposto do que o dono pediu.
-      await notifyUser(rule.userId, renderTemplate(a.title, context), renderTemplate(a.body, context), rule.id, { personId: a.avisarPersonId ?? null, destino: a.destino ?? null });
+      // `routineId` é chave estrangeira para ROTINA: passar o id da regra ali
+      // fazia o banco recusar o aviso, e toda ação "avisar" falhava em silêncio
+      // (medido em 27/09/2026 com o aviso de reunião, que nunca chegou)
+      await notifyUser(rule.userId, renderTemplate(a.title, context), renderTemplate(a.body, context), null, { personId: a.avisarPersonId ?? null, destino: a.destino ?? null });
     } else if (a.kind === "prompt") {
       const body = await runPromptForUser(
         rule.userId,

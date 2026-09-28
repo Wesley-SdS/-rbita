@@ -28,7 +28,7 @@ export interface RespostaDaFrase {
   texto: string;
 }
 
-export async function aprovarPorFrase(userId: string, canal: "whatsapp" | "voz", fala: string, desde?: Date | null): Promise<RespostaDaFrase | null> {
+export async function aprovarPorFrase(userId: string, canal: "whatsapp" | "voz" | "telegram", fala: string, desde?: Date | null): Promise<RespostaDaFrase | null> {
   const cfg = await settings.getMany(["whatsapp.frasesConfirmar", "whatsapp.frasesCancelar"]);
   const r = interpretarResposta(fala, cfg["whatsapp.frasesConfirmar"], cfg["whatsapp.frasesCancelar"]);
   if (!r.acao) return null;

@@ -11,6 +11,8 @@ import { embrulhar, linhaDaMensagem } from "../../whatsapp/formatar";
 
 export { embrulhar, linhaDaMensagem };
 import { narrateSnapshot } from "../../cameras/narrate";
+import { candidatosDaAgenda, contatosDaAgenda } from "../../contatos/agenda";
+import { chaveDoTelefone, contatoPorTelefone, normalizarTelefone } from "../../contatos/casar";
 
 /**
  * Domínio: WhatsApp (PRD-WHATSAPP W3 e W4).
@@ -26,9 +28,17 @@ import { narrateSnapshot } from "../../cameras/narrate";
  * escreveu no WhatsApp não dá ordem à Órbita.
  */
 
+/** Nome de terceiro dentro de um recado ao modelo: uma linha, curto, sem marcação (§5.2). */
+const limparNome = (s: string | null | undefined) => (s ?? "?").replace(/[\r\n<>\[\]{}`*_]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40) || "?";
+
 /**
  * "a Maria", "5511999998888" ou o JID: vira UM chat, ou um recado dizendo por
  * que não. Ambíguo nunca escolhe: responder para a Maria errada não se desfaz.
+ *
+ * Conversas do WhatsApp E agenda do Google, sempre as duas (só casamento
+ * forte: nome, apelido, palavra inteira). O apelido que o DONO deu vence
+ * sozinho. O mesmo número nas duas fontes é a mesma pessoa. Casamento fraco
+ * ("Ana" dentro de "Juliana") nunca decide: vira pergunta.
  */
 export async function resolverChat(userId: string, para: string): Promise<{ ok: true; jid: string; nome: string | null } | { ok: false; erro: string }> {
   const p = para.trim();
@@ -36,12 +46,49 @@ export async function resolverChat(userId: string, para: string): Promise<{ ok: 
     const c = await store.contatoPorJid(userId, normalizarJid(p));
     return { ok: true, jid: normalizarJid(p), nome: c?.apelido ?? c?.nome ?? null };
   }
-  if (p.replace(/\D/g, "").length >= 10) return { ok: true, jid: jidDoDestino(p), nome: null };
-  const achados = store.casarContato(await store.listarContatos(userId, 2000), p);
-  if (achados.length === 1) return { ok: true, jid: achados[0].jid, nome: achados[0].apelido ?? achados[0].nome };
-  if (!achados.length) return { ok: false, erro: `Não encontrei "${p}" nas conversas do WhatsApp. Peça o número ou o nome como aparece no WhatsApp.` };
-  const opcoes = achados.slice(0, 8).map((c) => `${c.apelido ?? c.nome ?? "?"} (${c.jid})`).join("; ");
-  return { ok: false, erro: `Há mais de um contato para "${p}": ${opcoes}. Pergunte qual é e use o chat (jid) dele.` };
+  const contatos = await store.listarContatos(userId, 2000);
+  const pelaChave = (numero: string) => contatos.find((c) => !c.grupo && chaveDoTelefone(c.jid.split("@")[0]) === chaveDoTelefone(numero));
+
+  if (/^\+?[\d\s().-]+$/.test(p) && p.replace(/\D/g, "").length >= 10) {
+    // "11 98888-7777" sem DDI virava o JID 11988887777, que é dos EUA
+    const numero = normalizarTelefone(p);
+    if (!numero) return { ok: false, erro: `"${p}" não parece um telefone completo. Peça com DDD (e DDI, se for de fora do Brasil).` };
+    const conhecido = pelaChave(numero);
+    return { ok: true, jid: conhecido?.jid ?? jidDoDestino(numero), nome: conhecido ? conhecido.apelido ?? conhecido.nome : null };
+  }
+
+  const forte = store.casarContatoForte(contatos, p);
+  if (forte.porApelido && forte.achados.length === 1) return { ok: true, jid: forte.achados[0].jid, nome: forte.achados[0].apelido ?? forte.achados[0].nome };
+
+  const candidatos = new Map<string, { jid: string; nome: string; numeros?: string[] }>();
+  for (const c of forte.achados) candidatos.set(c.grupo ? c.jid : chaveDoTelefone(c.jid.split("@")[0]), { jid: c.jid, nome: c.apelido ?? c.nome ?? c.jid });
+  // Fail-soft: sem a agenda, ficam só as conversas
+  for (const a of await candidatosDaAgenda(userId, p).catch(() => [])) {
+    if (a.numeros.length > 1) {
+      candidatos.set(`agenda:${a.nome}`, { jid: "", nome: a.nome, numeros: a.numeros });
+      continue;
+    }
+    const chave = chaveDoTelefone(a.numeros[0]);
+    if (candidatos.has(chave)) continue; // a mesma pessoa, que já conversou: vale o JID da conversa
+    // quem já conversou tem o JID CERTO, com ou sem o nono dígito: montar do
+    // número da agenda abriria uma segunda conversa com a mesma pessoa
+    const conhecido = pelaChave(a.numeros[0]);
+    candidatos.set(chave, { jid: conhecido?.jid ?? jidDoDestino(a.numeros[0]), nome: a.nome + (a.soFixo ? " (telefone fixo)" : "") });
+  }
+
+  const lista = [...candidatos.values()];
+  if (lista.length === 1 && !lista[0].numeros) return { ok: true, jid: lista[0].jid, nome: lista[0].nome };
+  if (lista.length === 1) return { ok: false, erro: `${limparNome(lista[0].nome)} tem mais de um número na agenda: ${lista[0].numeros!.join(", ")}. Pergunte qual.` };
+  if (lista.length > 1) {
+    const opcoes = lista.slice(0, 8).map((c) => `${limparNome(c.nome)} (${c.numeros ? c.numeros.join(" ou ") : c.jid})`).join("; ");
+    return { ok: false, erro: `Há mais de um contato para "${p}": ${opcoes}. Pergunte qual é e use o chat (jid) ou o número dele.` };
+  }
+  // Nada forte: o palpite vira PERGUNTA, nunca envio
+  const parecidos = store.casarContato(contatos, p).slice(0, 5);
+  if (parecidos.length) {
+    return { ok: false, erro: `Não achei ninguém chamado exatamente "${p}". Parecidos: ${parecidos.map((c) => `${limparNome(c.apelido ?? c.nome)} (${c.jid})`).join("; ")}. Pergunte ao dono se é um desses.` };
+  }
+  return { ok: false, erro: `Não encontrei "${p}" nas conversas do WhatsApp nem na agenda de contatos. Peça o número ou o nome como aparece no WhatsApp.` };
 }
 
 // ── leitura ──
@@ -65,9 +112,13 @@ export const whatsapp_conversas_recentes: ToolDef<typeof Recentes> = {
     const lista = await store.conversasRecentes(userId, limite, new Date(Date.now() - (horas ?? 24) * 3_600_000), sessao?.jid ?? null);
     const filtradas = so_nao_lidas ? lista.filter((c) => c.naoLidas > 0) : lista;
     if (!filtradas.length) return "Nenhuma conversa com movimento nesse período.";
+    // o nome que o DONO deu na agenda vale mais que o que a pessoa escolheu no
+    // WhatsApp ("Tia Cida" em vez de "Cida ✨"); o apelido dado aqui vale mais que os dois
+    const agenda = await contatosDaAgenda(userId).catch(() => []);
     return embrulhar(
       filtradas.map((c) => {
-        const nome = c.contato.apelido ?? c.contato.nome ?? c.contato.jid;
+        const daAgenda = c.contato.grupo ? null : contatoPorTelefone(agenda, c.contato.jid)?.nome;
+        const nome = c.contato.apelido ?? daAgenda ?? c.contato.nome ?? c.contato.jid;
         const ultima = c.ultima ? linhaDaMensagem(c.ultima, nome) : "";
         return `${c.contato.grupo ? "Grupo " : ""}${nome} (chat ${c.contato.jid}) · ${c.naoLidas} nova(s) · última: ${ultima}`;
       }),
@@ -293,7 +344,9 @@ const resumoDe = (acao: string, i: { para: string; para_nome?: string | null }, 
  */
 async function fixarDestino<T extends { para: string; para_nome?: string | null }>(input: T, ctx: { userId: string }): Promise<T> {
   const alvo = await resolverChat(ctx.userId, input.para);
-  return alvo.ok ? { ...input, para: alvo.jid, para_nome: alvo.nome ?? input.para_nome ?? null } : input;
+  // o nome do resumo vem SÓ do código (conversa ou agenda), nunca do modelo:
+  // "para: <número do golpista>, para_nome: Mãe" seria aprovado pela confiança no nome
+  return alvo.ok ? { ...input, para: alvo.jid, para_nome: alvo.nome } : { ...input, para_nome: null };
 }
 
 async function destino(userId: string, para: string): Promise<string> {

@@ -114,6 +114,20 @@ describe("mensagem nova", () => {
     expect(emit).not.toHaveBeenCalled();
   });
 
+  it("a SAÍDA da própria Órbita voltando pelo histórico da ponte nunca é roteada (ela conversaria consigo)", async () => {
+    store.inserirMensagem.mockResolvedValueOnce(null as never);
+    existente = { id: "m1", roteadaEm: null, midiaCaminho: null, enviadaPelaOrbita: true };
+    await proc.aplicarEvento("u1", "dev1", msg(), agora());
+    expect(roteadas).toHaveLength(0);
+  });
+
+  it("espera pela original fica ENTRE a penúltima e a última tentativa do laço", () => {
+    const ultima = proc.ESPERA_BASE_S * 2 ** (proc.MAX_FALHAS - 1) * 1000;
+    const penultima = proc.ESPERA_BASE_S * 2 ** (proc.MAX_FALHAS - 2) * 1000;
+    expect(proc.ESPERA_PELA_ORIGINAL_MS).toBeLessThan(ultima);
+    expect(proc.ESPERA_PELA_ORIGINAL_MS).toBeGreaterThan(penultima);
+  });
+
   it("grupo com 'ignorar' nem entra", async () => {
     cfg["whatsapp.grupos"] = "ignorar";
     await proc.aplicarEvento("u1", "dev1", msg({ chat_id: "120363@g.us" }), agora());
@@ -163,5 +177,10 @@ describe("chatIgnorado", () => {
     expect(proc.chatIgnorado("status@broadcast", { grupos: "guardar", status: "ignorar" })).toBe(true);
     expect(proc.chatIgnorado("120363@g.us", { grupos: "ignorar", status: "guardar" })).toBe(true);
     expect(proc.chatIgnorado("5511@s.whatsapp.net", { grupos: "ignorar", status: "ignorar" })).toBe(false);
+  });
+
+  it("canal do WhatsApp (@newsletter) é ignorado por padrão, e guardado só se o dono pedir", () => {
+    expect(proc.chatIgnorado("120363999@newsletter", { grupos: "guardar", status: "guardar" })).toBe(true);
+    expect(proc.chatIgnorado("120363999@newsletter", { grupos: "guardar", status: "guardar", canais: "guardar" })).toBe(false);
   });
 });

@@ -10,7 +10,7 @@ export const pesquisar_web: ToolDef<z.ZodObject<{ consulta: z.ZodString }>> = {
   description: "Pesquisa na internet e retorna resultados (título, url, trecho). Use para informação atual.",
   risk: "leitura",
   keywords: ["pesquisar", "buscar", "internet", "notícia", "cotação", "atual", "quem é", "o que é", "preço"],
-  inputSchema: z.object({ consulta: z.string() }),
+  inputSchema: z.object({ consulta: z.string().min(1).max(400) }),
   run: async ({ consulta }) => searchWeb(consulta, 5),
 };
 

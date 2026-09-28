@@ -42,6 +42,17 @@ export interface ModelPolicy {
   discoveryTimeoutMs: number;
   descobrirLocal: DescobrirLocal;
   localDisponivel: LocalDisponivel;
+  /**
+   * O modelo que o dono QUER de cada provedor (ex.: `claude/claude-sonnet-5`).
+   * Sem isto a cadeia pega o mais forte de cada um, e na assinatura isso é o
+   * Opus: mais lento e gasta a cota bem mais depressa. Vazio = o mais forte.
+   */
+  modelosPreferidos: string[];
+  /**
+   * Modelo do "auto" para pedido COMPLEXO (código, análise, texto longo). Vazio:
+   * o complexo vai para o preferido como qualquer outro pedido.
+   */
+  modeloComplexo: string;
 }
 
 /**
@@ -102,6 +113,8 @@ const current: ModelPolicy = {
   discoveryTimeoutMs: 4000,
   descobrirLocal: "auto",
   localDisponivel: "auto",
+  modelosPreferidos: [],
+  modeloComplexo: "",
 };
 let sources: PolicySources = {};
 
@@ -164,6 +177,8 @@ export function resetModelPolicyForTests(over: Partial<ModelPolicy> = {}): void 
     discoveryTimeoutMs: 4000,
     descobrirLocal: "auto",
     localDisponivel: "auto",
+    modelosPreferidos: [],
+    modeloComplexo: "",
     ...over,
   });
 }

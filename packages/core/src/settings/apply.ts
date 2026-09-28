@@ -45,4 +45,6 @@ configureModelPolicy({
   discoveryTimeoutMs: () => settings.get("llm.discoveryTimeoutMs"),
   descobrirLocal: () => settings.get("llm.descobrirLocal"),
   localDisponivel: () => settings.get("llm.localDisponivel"),
+  modelosPreferidos: () => settings.get("llm.modelosPreferidos"),
+  modeloComplexo: () => settings.get("llm.modeloComplexo"),
 });

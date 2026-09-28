@@ -35,9 +35,10 @@ describe("registry de conectores", () => {
     delete process.env.MICROSOFT_CLIENT_ID;
     delete process.env.ATLASSIAN_CLIENT_ID;
     delete process.env.JIRA_CLIENT_ID;
+    delete process.env.ZOOM_CLIENT_ID;
     const { listConnectors } = await import("./registry");
     const list = listConnectors();
-    expect(list.map((c) => c.id).sort()).toEqual(["google", "jira", "microsoft", "notion", "slack"]);
+    expect(list.map((c) => c.id).sort()).toEqual(["google", "jira", "microsoft", "notion", "slack", "zoom"]);
     expect(list.every((c) => c.configured === false)).toBe(true);
   });
 

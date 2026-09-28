@@ -60,6 +60,8 @@ export * from "./guided-schema";
 export * from "./usage-schema";
 // WhatsApp pessoal pela ponte local GOWA: sessão, contatos, mensagens, eventos brutos.
 export * from "./whatsapp-schema";
+// Telegram: o canal da própria Órbita (bot oficial), com o dono e as pessoas da casa.
+export * from "./telegram-schema";
 
 /** Tabela mínima para validar a esteira de migração (Fase 0). */
 export const meta = pgTable("meta", {
