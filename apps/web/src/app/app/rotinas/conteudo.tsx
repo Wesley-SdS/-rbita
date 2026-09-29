@@ -14,7 +14,7 @@ const RulesPanel = dynamic(() => import("@/components/rules-panel").then((m) => 
 export function Conteudo() {
   // O pedido sai agora, enquanto o JavaScript dos painéis ainda baixa.
   // Sem isto, baixar o código e buscar os dados aconteciam em fila.
-  useAdiantarRecursos(["/api/routines", "/api/notifications"]);
+  useAdiantarRecursos(["/api/routines", "/api/notifications?de=pedidos"]);
 
   return (
     <section className="view">

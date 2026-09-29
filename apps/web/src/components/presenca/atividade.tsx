@@ -1,21 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useRecurso, definirDado, invalidar } from "@/lib/dados/recurso";
-import { useRouter } from "next/navigation";
 import { Icone } from "./icones";
+import { AvisosLista } from "./avisos-lista";
 
 const ActionsPanel = dynamic(() => import("@/components/actions-panel").then((m) => m.ActionsPanel), { ssr: false });
-
-interface Notificacao {
-  id: string;
-  title?: string;
-  content?: string;
-  /** Para onde o aviso leva, quando leva a algum lugar. */
-  destino?: string | null;
-  createdAt?: string;
-  read?: boolean;
-}
 
 /**
  * Gaveta de atividade: o que está esperando você e o que já aconteceu.
@@ -25,46 +14,6 @@ interface Notificacao {
  * primeiro, antes do histórico.
  */
 export function Atividade({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => void }) {
-  const router = useRouter();
-  // A MESMA chave que o painel de Rotinas lê. Abrir a gaveta com a tela de
-  // rotinas aberta não faz requisição nenhuma, e marcar um aviso como lido
-  // aqui risca o aviso lá também, sem que um precise saber do outro.
-  const CHAVE = "/api/notifications";
-  const { dado, carregando } = useRecurso<{ notifications: Notificacao[] }>(CHAVE, { ativo: aberta });
-  const notificacoes = dado?.notifications ?? [];
-
-  async function marcarLida(id: string) {
-    definirDado<{ notifications: Notificacao[] }>(CHAVE, (atual) => ({
-      notifications: (atual?.notifications ?? []).map((n) => (n.id === id ? { ...n, read: true } : n)),
-    }));
-    await fetch("/api/notifications", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    }).catch(() => {});
-    invalidar(CHAVE);
-  }
-
-  async function marcarTodasLidas() {
-    definirDado<{ notifications: Notificacao[] }>(CHAVE, (atual) => ({
-      notifications: (atual?.notifications ?? []).map((n) => ({ ...n, read: true })),
-    }));
-    await fetch("/api/notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
-    invalidar(CHAVE);
-  }
-
-  /* Abrir um aviso faz as duas coisas de uma vez: marca como lido e leva ao
-     lugar onde aquilo se resolve. Um aviso que não leva a lugar nenhum obriga a
-     pessoa a refazer sozinha o caminho que o aviso já conhecia. */
-  function abrir(n: Notificacao) {
-    void marcarLida(n.id);
-    if (!n.destino) return;
-    aoFechar();
-    router.push(n.destino);
-  }
-
-  const naoLidas = notificacoes.filter((n) => !n.read).length;
-
   if (!aberta) return null;
 
   return (
@@ -92,45 +41,12 @@ export function Atividade({ aberta, aoFechar }: { aberta: boolean; aoFechar: () 
 
         <ActionsPanel />
 
-        <div className="section-heading" style={{ marginTop: 26, marginBottom: 12 }}>
-          <div className="panel-label" style={{ marginBottom: 0 }}>
-            TRILHA DE ATIVIDADE
-          </div>
-          {naoLidas > 0 && (
-            <button className="text-button" onClick={marcarTodasLidas}>
-              Marcar todas como lidas
-            </button>
-          )}
+        <div className="panel-label" style={{ marginTop: 26, marginBottom: 8 }}>
+          TRILHA DE ATIVIDADE
         </div>
-
-        {carregando ? (
-          <div className="empty-state">Carregando…</div>
-        ) : notificacoes.length === 0 ? (
-          <div className="empty-state">Nada por aqui ainda. É bom sinal.</div>
-        ) : (
-          notificacoes.map((n) => (
-            <button
-              key={n.id}
-              className={`activity-item aviso ${n.read ? "lido" : ""} ${n.destino ? "navega" : ""}`}
-              onClick={() => abrir(n)}
-              title={n.destino ? "Abrir onde isso se resolve" : "Marcar como lido"}
-            >
-              <span>
-                <Icone nome={n.read ? "check" : "spark"} />
-              </span>
-              <div>
-                <strong>{n.title || "Aviso"}</strong>
-                {n.content && <p>{n.content}</p>}
-                <small>
-                  {n.createdAt
-                    ? new Date(n.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
-                    : ""}
-                </small>
-              </div>
-              {n.destino && <Icone nome="arrow-up-right" />}
-            </button>
-          ))
-        )}
+        {/* A MESMA fonte que a tela de Rotinas lê (outra chave, mesmo prefixo):
+            marcar como lido aqui risca lá também. */}
+        <AvisosLista de="todos" ativo={aberta} aoNavegar={aoFechar} />
       </aside>
     </div>
   );

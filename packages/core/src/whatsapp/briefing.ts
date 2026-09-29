@@ -4,6 +4,8 @@ import { waSessao } from "@orbita/db/whatsapp-schema";
 import { settings } from "../settings";
 import { log } from "../observability/logger";
 import { notifyUser, runPromptForUser } from "../routines/run";
+import { applyLlmSettings } from "../settings/apply";
+import { discoverModels } from "@orbita/llm";
 import { FLUXO } from "../usage/registrar";
 import { agoraLocal, briefingDevido } from "./horario";
 import { avisarNoWhatsapp } from "./avisar";
@@ -22,7 +24,7 @@ import { sessaoDe } from "./sessao";
  * gravado ANTES de mandar. Se o envio falhar, perde-se o briefing do dia;
  * gravar depois arriscaria mandar dois se o processo reiniciasse no meio.
  */
-export type ResultadoDoBriefing = "enviado" | "fora_de_hora" | "sem_canal" | "falhou";
+export type ResultadoDoBriefing = "enviado" | "fora_de_hora" | "sem_canal" | "sem_modelo" | "falhou";
 
 /**
  * O briefing vai para cada canal onde está DEVIDO: a conversa "Eu" do WhatsApp
@@ -44,6 +46,13 @@ export async function briefingSeDevido(userId: string, agora = new Date()): Prom
   const peloWhatsapp = temWhatsapp && briefingDevido(local, regra, sessao!.ultimoBriefing);
   const peloTelegram = temTelegram && briefingDevido(local, regra, bot!.ultimoBriefing);
   if (!peloWhatsapp && !peloTelegram) return "fora_de_hora";
+
+  // Sem modelo descoberto ainda (o api acabou de subir e a lista esfria no
+  // boot), NÃO marca o dia: tenta de novo no minuto seguinte. Antes o briefing
+  // rodava 3 s depois de subir, falhava com "nenhum modelo" e o dia ficava
+  // marcado como feito: o dono ficou sem briefing (28/09/2026).
+  await applyLlmSettings().catch(() => undefined);
+  if (!(await discoverModels().catch(() => [])).length) return "sem_modelo";
 
   if (peloWhatsapp) await db.update(waSessao).set({ ultimoBriefing: local.dia }).where(eq(waSessao.id, sessao!.id));
   if (peloTelegram) await tg!.marcarBriefing(userId, local.dia);

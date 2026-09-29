@@ -24,9 +24,10 @@ export async function notifyUser(
   title: string,
   body: string,
   routineId?: string | null,
-  opts: { personId?: string | null; destino?: string | null; whatsapp?: boolean; furaSilencio?: boolean } = {},
+  opts: { personId?: string | null; destino?: string | null; whatsapp?: boolean; furaSilencio?: boolean; origem?: "rotina" | "regra" | "sistema" } = {},
 ): Promise<void> {
-  await db.insert(notification).values({ userId, routineId: routineId ?? null, title, content: body, destino: opts.destino ?? null });
+  const origem = opts.origem ?? (routineId ? "rotina" : "sistema");
+  await db.insert(notification).values({ userId, routineId: routineId ?? null, title, content: body, destino: opts.destino ?? null, origem });
   // A VOZ SEGUE A PESSOA (Onda 12): quando o aviso é sobre alguém e essa pessoa
   // foi vista num cômodo com dispositivo, avisa ali. Sem isso, avisa em todos.
   const alvo = opts.personId ? await import("../identity/device").then((m) => m.deviceForPerson(userId, opts.personId!)).catch(() => null) : null;
@@ -56,7 +57,10 @@ export async function runPromptForUser(
   opts: { fluxo?: string; referencia?: string | null; soLeitura?: boolean; todas?: boolean } = {},
 ): Promise<string> {
   const [{ tools, cleanup, skillInstructions }, cfg] = await Promise.all([
-    buildAllTools(userId, "", undefined, undefined, undefined, { soLeitura: opts.soLeitura, todas: opts.todas }),
+    // o PEDIDO é a consulta da seleção por relevância: com "" ela escolhia às
+    // cegas e a regra do trânsito das 5h rodou sem a tool `rota` ("não tenho
+    // uma ferramenta de rota", 28/09/2026)
+    buildAllTools(userId, prompt, undefined, undefined, undefined, { soLeitura: opts.soLeitura, todas: opts.todas }),
     settings.getMany(["routines.model", "chat.maxSteps"]),
     applyLlmSettings(),
   ]);

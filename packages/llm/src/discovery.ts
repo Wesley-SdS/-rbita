@@ -79,15 +79,31 @@ const num = (v: unknown): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 
-/** Toda descoberta é best-effort: provedor fora do ar não derruba os outros. */
+/**
+ * Toda descoberta é best-effort: provedor fora do ar não derruba os outros.
+ *
+ * E tem PRAZO aqui, não só no `fetch` de quem lembrou de passar um sinal: o
+ * catálogo do AI Gateway (`getAvailableModels`) não aceita timeout, uma ida
+ * dele pendurou, e como chamadas simultâneas compartilham a mesma descoberta
+ * (`emVoo`), a tela de Conversas do web ficou esperando PARA SEMPRE, em todo
+ * acesso, até reiniciar o processo (28/09/2026).
+ */
 async function safe<T>(label: string, fn: () => Promise<T[]>): Promise<T[]> {
+  let cancelar: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await fn();
+    const prazo = new Promise<never>((_, falhar) => {
+      // margem sobre o timeout de rede: o fetch com sinal falha antes e diz o motivo
+      cancelar = setTimeout(() => falhar(new Error(`${label}: sem resposta no prazo`)), timeoutMs() + 1000);
+      cancelar.unref?.();
+    });
+    return await Promise.race([fn(), prazo]);
   } catch (e) {
     if (process.env.LOG_LEVEL === "debug") {
       console.warn(`[discovery] ${label} falhou:`, e instanceof Error ? e.message : e);
     }
     return [];
+  } finally {
+    clearTimeout(cancelar);
   }
 }
 

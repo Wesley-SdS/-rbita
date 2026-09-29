@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { discoverModels, discoveredSnapshot, invalidateDiscovery, discoveryAgeMs, versaoDe, EMPTY_DISCOVERY_RETRY_MS, descobrirLocalSobDemanda } from "./discovery";
 import { resetModelPolicyForTests } from "./policy";
 
+// o catálogo do AI Gateway que NUNCA responde (só entra quando o teste põe a chave)
+vi.mock("@ai-sdk/gateway", () => ({ createGateway: () => ({ getAvailableModels: () => new Promise(() => undefined) }) }));
+
 /**
  * Descoberta com fetch simulado: só o Ollama responde (as chaves de nuvem saem
  * do ambiente durante o teste), para não depender da máquina.
@@ -46,6 +49,16 @@ describe("descoberta de modelos", () => {
     const lista = await discoverModels();
     expect(lista.map((m) => m.key)).toEqual(["local/qwen2.5:3b"]);
     expect(lista[0]).toMatchObject({ local: true, tier: "small", supportsTools: true, paramsB: 3.1 });
+  });
+
+  it("provedor que nunca responde não segura a descoberta (a tela de Conversas pendurou assim)", async () => {
+    resetModelPolicyForTests({ descobrirLocal: "sempre", discoveryTimeoutMs: 50 });
+    process.env.AI_GATEWAY_API_KEY = "chave";
+    vi.stubGlobal("fetch", ollamaCom(["qwen2.5:3b"]));
+    const inicio = Date.now();
+    const lista = await discoverModels();
+    expect(lista.map((m) => m.key)).toEqual(["local/qwen2.5:3b"]);
+    expect(Date.now() - inicio).toBeLessThan(3000);
   });
 
   it("Ollama fora do ar não derruba a descoberta", async () => {

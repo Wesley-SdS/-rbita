@@ -602,6 +602,24 @@ HTTPS, porque app nativo pede microfone ao sistema, não ao navegador.
 - [ ] **Serviço de voz hospedado**, **Postgres gerenciado**, **OAuth social nativo no
   mobile** (deep link). (O WhatsApp pessoal saiu desta lista: entrou pela ponte local GOWA, ver PRD-WHATSAPP.md.)
 
+## 🟦 Conectar a Microsoft (Outlook e Teams) (pedido do Wesley, 28/09/2026)
+
+O código está pronto (`connectors/registry.ts`, tools `outlook.ts` e `teams.ts`); falta o app no Azure.
+
+- [ ] **Registrar o app** em portal.azure.com: Microsoft Entra ID, Registros de aplicativo, Novo
+  registro "Órbita", contas "em qualquer diretório organizacional e contas pessoais da Microsoft"
+  (a Órbita usa o endpoint `common`), redirecionamento **Web**
+  `http://localhost:3000/api/connectors/microsoft/callback`.
+- [ ] **Segredo do cliente** (Certificados e segredos, copiar o VALOR na hora) e no `.env` da raiz:
+  `MICROSOFT_CLIENT_ID` (ID do aplicativo) e `MICROSOFT_CLIENT_SECRET`. Reiniciar api e web.
+- [ ] **Conectar em Conexões.** Conta pessoal: o próprio dono aceita. Conta da empresa (Adalink): as
+  permissões pedidas não exigem admin, mas app "não verificado" costuma ser bloqueado pela política
+  do tenant; aí o admin concede em Aplicativos empresariais, Órbita, Permissões, "Conceder
+  consentimento do administrador".
+- [ ] **Transcrição do Teams** (opcional): exige o admin SEMPRE. Ligar
+  `connectors.microsoftTranscricoes` só depois de ele aprovar, reconectar, e ligar
+  `meetings.importarTeams`.
+
 ## 🗺️ Google Maps para endereço e trânsito (pedido do Wesley, 27/09/2026)
 
 Hoje: endereço pelo Photon (Nominatim de reserva), rota pelo OSRM (sem trânsito) e

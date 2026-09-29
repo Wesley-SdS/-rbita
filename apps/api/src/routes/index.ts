@@ -6,6 +6,7 @@ import * as chat from "./chat";
 import * as tts from "./tts";
 import * as memory from "./memory";
 import * as notifications from "./notifications";
+import * as agenda from "./agenda";
 import * as routines from "./routines";
 import * as routinesRun from "./routines-run";
 import * as profile from "./profile";
@@ -162,6 +163,7 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/routines", routines),
   webRoute("api/routines/run", routinesRun),
   webRoute("api/notifications", notifications),
+  webRoute("api/agenda", agenda),
   webRoute("api/actions/falada", { POST: actions.POST_FALADA }),
   webRoute("api/actions", actions),
   webRoute("api/push/subscribe", pushSubscribe),

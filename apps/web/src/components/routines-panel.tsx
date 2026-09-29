@@ -2,21 +2,19 @@
 
 import { useState } from "react";
 import { Icone } from "@/components/presenca/icones";
+import { AvisosLista } from "@/components/presenca/avisos-lista";
 import { useAtualizacaoPeriodica, useVisivel } from "@/lib/use-visible";
 import { invalidar, mutarRecurso, useRecursos } from "@/lib/dados/recurso";
 
-interface Aviso {
-  id: string;
-  title: string;
-  content: string;
-  read: boolean;
-}
 interface Rotina {
   id: string;
   title: string;
   intervalMinutes: number;
   prompt?: string;
 }
+
+/** Só o que o dono PEDIU (rotinas e regras dele): aviso do sistema mora no sino. */
+const AVISOS = "/api/notifications?de=pedidos";
 
 const CADENCIAS = [
   { minutos: 60, rotulo: "A cada hora" },
@@ -48,11 +46,10 @@ function iconeDa(minutos: number) {
  */
 export function RoutinesPanel() {
   const naTela = useVisivel();
-  const { dados } = useRecursos<{ avisosResp: { notifications: Aviso[] }; rotinasResp: { routines: Rotina[] } }>({
-    avisosResp: "/api/notifications",
+  const { dados } = useRecursos<{ avisosResp: { unread?: number }; rotinasResp: { routines: Rotina[] } }>({
+    avisosResp: AVISOS,
     rotinasResp: "/api/routines",
   });
-  const avisos = dados.avisosResp?.notifications ?? [];
   const rotinas = dados.rotinasResp?.routines ?? [];
 
   const [criando, setCriando] = useState(false);
@@ -107,51 +104,26 @@ export function RoutinesPanel() {
     });
   }
 
-  async function marcarLida(id: string) {
-    // A tarja de "não lidos" some na hora. Esperar a volta do servidor para
-    // riscar um aviso já lido é exatamente o tipo de espera que não se explica.
-    await mutarRecurso<{ notifications: Aviso[] }>({
-      chave: "/api/notifications",
-      otimista: (atual) => ({ notifications: (atual?.notifications ?? []).map((a) => (a.id === id ? { ...a, read: true } : a)) }),
-      executar: () =>
-        fetch("/api/notifications", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id }),
-        }),
-    });
-  }
-
-  const naoLidos = avisos.filter((a) => !a.read);
+  const naoLidos = dados.avisosResp?.unread ?? 0;
 
   return (
     <>
-      {naoLidos.length > 0 && (
+      {naoLidos > 0 && (
         <div className="memory-banner">
           <Icone nome="spark" />
           <div>
             <h3>
-              {naoLidos.length === 1 ? "Uma rotina trouxe algo" : `${naoLidos.length} rotinas trouxeram algo`}
+              {naoLidos === 1 ? "Uma rotina trouxe algo" : `${naoLidos} resultados de rotina para ler`}
             </h3>
             <p>Enquanto você estava em outra coisa, a Órbita reuniu isto para você.</p>
           </div>
         </div>
       )}
 
-      {avisos.length > 0 && (
-        <div className="panel" style={{ marginBottom: 22 }}>
-          <div className="panel-label">O QUE CHEGOU ENQUANTO ISSO</div>
-          {avisos.slice(0, 6).map((a) => (
-            <button key={a.id} className={`aviso-rotina ${a.read ? "lido" : ""}`} onClick={() => marcarLida(a.id)}>
-              <span className="tiny-dot" />
-              <span>
-                <strong>{a.title}</strong>
-                <small>{a.content}</small>
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="panel" style={{ marginBottom: 22 }}>
+        <div className="panel-label">O QUE SUAS ROTINAS TROUXERAM</div>
+        <AvisosLista de="pedidos" />
+      </div>
 
       <div className="section-heading" style={{ marginBottom: 18 }}>
         <div>

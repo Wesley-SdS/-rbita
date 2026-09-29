@@ -430,6 +430,51 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
 .activity-item.aviso > .icon { margin-left: auto; align-self: center; color: var(--color-ink-dim); width: 15px; height: 15px; }
 .activity-item.aviso small { display: block; margin-top: 5px; color: var(--color-ink-dim); font-size: 11px; }
 
+/* Lista de avisos (components/presenca/avisos-lista.tsx), no sino e em Rotinas.
+   Fechado mostra o começo; aberto mostra o aviso inteiro em markdown. */
+.avisos-barra { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.avisos-filtro { display: inline-flex; background: var(--color-surface-soft); border-radius: 999px; padding: 3px; }
+.avisos-filtro button { font-size: 12px; padding: 5px 12px; border-radius: 999px; color: var(--color-ink-dim); }
+.avisos-filtro button.ativo { background: var(--color-surface); color: var(--color-ink); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+.avisos-itens { list-style: none; margin: 0; padding: 0; }
+.aviso-item { border-bottom: 1px solid var(--color-line); padding: 4px 0 10px; }
+.aviso-item:last-child { border-bottom: 0; }
+.aviso-cabeca { display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left; padding: 8px 4px 2px; border-radius: 8px; }
+.aviso-cabeca:hover { background: var(--color-surface-soft); }
+.aviso-cabeca > .icon { margin-left: auto; width: 14px; height: 14px; color: var(--color-ink-dim); transition: transform .15s ease; flex: none; margin-top: 4px; }
+.aviso-item.aberto .aviso-cabeca > .icon { transform: rotate(90deg); }
+.aviso-ponto { width: 7px; height: 7px; border-radius: 50%; background: var(--color-forest); margin-top: 7px; flex: none; }
+.aviso-item.lido .aviso-ponto { background: var(--color-line); }
+.aviso-titulo { min-width: 0; }
+.aviso-titulo strong { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.aviso-item.lido .aviso-titulo strong { font-weight: 500; color: var(--color-ink-dim); }
+.aviso-titulo small { display: block; font-size: 11px; color: var(--color-ink-dim); margin-top: 2px; }
+.aviso-corpo { padding: 2px 4px 0 21px; color: var(--color-ink); overflow-wrap: anywhere; }
+.aviso-corpo .orbita-md { font-size: 13.5px; line-height: 1.7; }
+.aviso-corpo .orbita-md a { color: var(--color-forest) !important; }
+.aviso-corpo.resumido { cursor: pointer; max-height: 3.4em; overflow: hidden; color: var(--color-ink-dim);
+  -webkit-mask-image: linear-gradient(#000 55%, transparent); mask-image: linear-gradient(#000 55%, transparent); }
+.aviso-corpo.resumido .orbita-md :is(h1, h2, h3, h4) { font-size: 1em; margin: 0; }
+.aviso-acoes { padding: 8px 4px 0 21px; }
+.avisos-mais { margin: 12px auto 0; display: flex; }
+
+/* Agenda de verdade (components/presenca/agenda-proxima.tsx): Visão geral e Reuniões. */
+.agenda-evento { display: flex; align-items: center; gap: 13px; padding: 10px 6px; border-radius: 8px; }
+.agenda-evento.agora { background: var(--color-surface-soft); }
+.agenda-evento .agenda-time { min-width: 52px; font-variant-numeric: tabular-nums; }
+.agenda-evento-texto { min-width: 0; flex: 1; }
+.agenda-evento-texto a { color: inherit; text-decoration: none; }
+.agenda-evento-texto a:hover strong { text-decoration: underline; text-underline-offset: 3px; }
+.agenda-evento-texto strong { display: block; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.agenda-evento-texto small { display: block; font-size: 12px; color: var(--color-ink-dim); margin-top: 3px; }
+.agenda-contas { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.agenda-contas .proposta-conta { font-size: 11px; padding: 1px 8px; }
+.agenda-entrar { flex: none; }
+.agenda-aviso { font-size: 12px; color: var(--color-ink-dim); margin: 6px 0; }
+.agenda-vazia { padding: 14px 0; }
+.agenda-dia { font-size: 12px; letter-spacing: .4px; text-transform: uppercase; color: var(--color-ink-dim); margin: 14px 0 4px; font-weight: 500; }
+.agenda-dias section:first-child .agenda-dia { margin-top: 4px; }
+
 /* ── Busca (⌘K) ─────────────────────────────────────────────────────────────
    A lista rola por dentro, não a caixa inteira: o campo tem de ficar visível
    enquanto se escolhe, senão a pessoa perde de vista o que digitou. */
@@ -743,7 +788,10 @@ span:has(> svg.icon:only-child) { display: inline-flex; flex-shrink: 0; }
 .escolha-pergunta { margin: 6px 0 0; font-size: 14px; opacity: .85; }
 .escolha-opcoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 /* o custo vai DENTRO do botão: quem clica precisa saber o preço antes, não depois */
-.escolha-opcoes .button { flex-direction: column; align-items: flex-start; gap: 2px; background: var(--color-surface); }
+.escolha-opcoes .button { flex-direction: column; align-items: flex-start; gap: 2px; }
+/* só o secundário ganha a superfície: no primário ela apagava o verde e deixava o
+   texto claro sobre fundo claro (o "Confirmar" ilegível, 28/09/2026) */
+.escolha-opcoes .button:not(.primary) { background: var(--color-surface); }
 .escolha-opcoes .button small { font-size: 11px; color: var(--color-ink-dim); font-weight: 400; }
 
 /* O que o reconhecedor entendeu, enquanto espera o chamado. Discreto: é
@@ -1199,6 +1247,25 @@ img.fin-pastilha { object-fit: cover; background: var(--color-surface-soft); }
 /* O cartão de aprovação dentro da conversa (`proposta-card.tsx`).
    Os campos são derivados do payload da ação, então o CSS descreve a LISTA,
    não cada tipo de ação: tool nova ganha o mesmo cartão sem tocar aqui. */
+/* A aprovação é da Órbita, não um contratempo: o tom é o verde da casa, e não a
+   argila da escolha de provedor, que fazia o "Feito." parecer erro. */
+.proposta-cartao {
+  background: var(--color-surface-soft); color: var(--color-ink);
+  border: 1px solid var(--color-line); border-left: 3px solid var(--color-forest);
+  border-radius: var(--radius-card); padding: 14px 16px;
+}
+.proposta-cartao .escolha-motivo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.proposta-cartao .escolha-motivo .icon { color: var(--color-forest); flex: none; }
+.proposta-cartao.feita .escolha-motivo strong { color: var(--color-forest); font-weight: 600; }
+.proposta-cartao.descartada { border-left-color: var(--color-line); color: var(--color-ink-dim); }
+.proposta-cartao.descartada .escolha-motivo .icon { color: var(--color-ink-dim); }
+.proposta-conta {
+  display: inline-flex; align-items: center; max-width: 100%; padding: 2px 10px;
+  border-radius: 999px; font-size: 12px; background: var(--color-mint); color: var(--color-forest);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.proposta-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.proposta-links a { font-size: 13px; font-weight: 500; color: var(--color-forest); text-decoration: underline; text-underline-offset: 3px; }
 .proposta-campos { display: grid; gap: 10px; margin: 12px 0 14px; }
 .proposta-campo { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 4px 12px; align-items: start; }
 .proposta-campo dt { font-size: 12px; letter-spacing: .4px; text-transform: uppercase; color: var(--color-ink-dim); padding-top: 6px; }

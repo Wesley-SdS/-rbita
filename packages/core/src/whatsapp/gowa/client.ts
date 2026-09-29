@@ -244,7 +244,7 @@ export async function enviarMidia(deviceId: string, paraJid: string, tipo: TipoD
  * faz o GOWA buscar e decifrar (a chave da mídia vive na sessão dele). O
  * workspace mediu o primeiro falhando entre versões; o segundo é o documentado.
  */
-export async function baixarMidia(deviceId: string, ref: { path: string | null; externalId: string; mime: string | null }, maxBytes: number): Promise<{ bytes: Uint8Array; mime: string }> {
+export async function baixarMidia(deviceId: string, ref: { path: string | null; externalId: string; mime: string | null; chat: string }, maxBytes: number): Promise<{ bytes: Uint8Array; mime: string }> {
   if (ref.path) {
     try {
       const caminho = ref.path.startsWith("http") ? new URL(ref.path).pathname : `/${ref.path.replace(/^\/+/, "")}`;
@@ -256,7 +256,11 @@ export async function baixarMidia(deviceId: string, ref: { path: string | null; 
       log.info("whatsapp.midia_caminho_local_falhou", { erro: e instanceof Error ? e.message : String(e) });
     }
   }
-  const res = await executar({ method: "GET", path: `/message/${enc(ref.externalId)}/download`, deviceId });
+  // A rota de download exige o CHAT (`phone`): sem ele o GOWA responde 400
+  // "phone: cannot be blank". A mensagem do webhook quase nunca chega aqui (vem
+  // com o arquivo local), mas a RECUPERADA do histórico só tem a URL cifrada do
+  // WhatsApp, e todo áudio recuperado se perdia (28/09/2026).
+  const res = await executar({ method: "GET", path: `/message/${enc(ref.externalId)}/download?phone=${encodeURIComponent(ref.chat)}`, deviceId });
   return { bytes: await lerComTeto(res, maxBytes), mime: ref.mime || res.headers.get("content-type") || "application/octet-stream" };
 }
 

@@ -17,7 +17,7 @@ import { Conteudo } from "./conteudo";
 export default async function PaginaRotinas() {
   const dados = await semearDaApi([
     "/api/routines",
-    "/api/notifications",
+    "/api/notifications?de=pedidos",
   ]);
   return (
     <CacheSemeado dados={dados}>

@@ -137,7 +137,8 @@ describe("mensagem nova", () => {
   it("áudio é baixado com teto e transcrito antes de rotear", async () => {
     baixarMidia.mockResolvedValueOnce({ bytes: new Uint8Array([1, 2]), mime: "audio/ogg" });
     await proc.aplicarEvento("u1", "dev1", msg({ body: undefined, audio: "statics/media/a.ogg" }), agora());
-    expect(baixarMidia).toHaveBeenCalledWith("dev1", expect.anything(), 64 * 1024 * 1024);
+    // o chat vai junto: a rota de download da ponte exige o `phone`
+    expect(baixarMidia).toHaveBeenCalledWith("dev1", expect.objectContaining({ chat: expect.stringContaining("@") }), 64 * 1024 * 1024);
     expect(roteadas[0].m).toMatchObject({ transcricao: "chego às oito", midiaCaminho: "aa/x.ogg" });
   });
 

@@ -358,6 +358,13 @@
       "when": 1790560408375,
       "tag": "0050_telegram_briefing",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1790616753881,
+      "tag": "0051_notificacao_origem",
+      "breakpoints": true
     }
   ]
 }

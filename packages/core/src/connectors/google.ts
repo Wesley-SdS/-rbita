@@ -1,3 +1,5 @@
+import { decodificarEntidades } from "../texto/entidades";
+
 /** Clients REST de Gmail e Google Calendar. Recebem um access token válido. */
 
 async function gapi<T>(token: string, url: string, init?: RequestInit): Promise<T> {
@@ -32,7 +34,7 @@ export async function listRecentEmails(token: string, max = 5, query = "in:inbox
       `https://gmail.googleapis.com/gmail/v1/users/me/messages/${mid}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
     );
     const h = (n: string) => msg.payload?.headers?.find((x) => x.name.toLowerCase() === n)?.value ?? "";
-    out.push({ id: msg.id, from: h("from"), subject: h("subject"), date: h("date"), snippet: msg.snippet });
+    out.push({ id: msg.id, from: h("from"), subject: h("subject"), date: h("date"), snippet: decodificarEntidades(msg.snippet ?? "") });
   }
   return out;
 }
@@ -58,7 +60,7 @@ export async function listImportantUnread(token: string, max = 10): Promise<Impo
     );
     const h = (n: string) => msg.payload?.headers?.find((x) => x.name.toLowerCase() === n)?.value ?? "";
     const ms = Number(msg.internalDate);
-    out.push({ id: msg.id, from: h("from"), subject: h("subject"), snippet: msg.snippet, internalDate: new Date(Number.isFinite(ms) ? ms : Date.now()) });
+    out.push({ id: msg.id, from: h("from"), subject: h("subject"), snippet: decodificarEntidades(msg.snippet ?? ""), internalDate: new Date(Number.isFinite(ms) ? ms : Date.now()) });
   }
   return out;
 }
@@ -142,6 +144,57 @@ export async function listEventsStartingWithin(token: string, windowMinutes: num
       `&singleEvents=true&orderBy=startTime`,
   );
   return (data.items ?? []).map(toCalEvent);
+}
+
+/** Um evento como a TELA da agenda precisa (Visão geral, Reuniões): link para abrir e para entrar. */
+export interface EventoDaAgenda {
+  id: string;
+  titulo: string;
+  inicio: string;
+  fim: string;
+  diaInteiro: boolean;
+  local?: string;
+  pessoas: string[];
+  /** onde abrir o evento no provedor */
+  abrir?: string;
+  /** link da chamada (Meet, ou Zoom/Teams colado no evento) */
+  entrar?: string;
+}
+
+interface CalItemTela {
+  id: string;
+  summary?: string;
+  status?: string;
+  htmlLink?: string;
+  start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
+  location?: string;
+  hangoutLink?: string;
+  conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
+  attendees?: { email: string; displayName?: string; self?: boolean; responseStatus?: string }[];
+}
+
+/** Eventos entre dois instantes, com os links da tela. Recusados pelo dono e cancelados ficam de fora. */
+export async function listarEventosEntre(token: string, de: Date, ate: Date, max = 50): Promise<EventoDaAgenda[]> {
+  const data = await gapi<{ items?: CalItemTela[] }>(
+    token,
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=${max}` +
+      `&timeMin=${encodeURIComponent(de.toISOString())}&timeMax=${encodeURIComponent(ate.toISOString())}` +
+      `&singleEvents=true&orderBy=startTime`,
+  );
+  return (data.items ?? [])
+    .filter((e) => e.status !== "cancelled" && e.attendees?.find((a) => a.self)?.responseStatus !== "declined")
+    .map((e) => ({
+      id: e.id,
+      titulo: e.summary?.trim() || "(sem título)",
+      inicio: e.start?.dateTime ?? e.start?.date ?? "",
+      fim: e.end?.dateTime ?? e.end?.date ?? "",
+      diaInteiro: !e.start?.dateTime,
+      local: e.location || undefined,
+      pessoas: (e.attendees ?? []).filter((a) => !a.self).map((a) => a.displayName || a.email),
+      abrir: e.htmlLink,
+      entrar: e.hangoutLink ?? e.conferenceData?.entryPoints?.find((p) => p.entryPointType === "video")?.uri,
+    }));
 }
 
 export async function createEvent(

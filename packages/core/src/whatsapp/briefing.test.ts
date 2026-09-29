@@ -12,6 +12,9 @@ const notifyUser = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock("../routines/run", () => ({ runPromptForUser, notifyUser }));
 vi.mock("./avisar", () => ({ avisarNoWhatsapp }));
 vi.mock("./sessao", () => ({ sessaoDe: async () => sessao }));
+let modelos: unknown[] = [{ key: "claude/claude-sonnet-5" }];
+vi.mock("@orbita/llm", () => ({ discoverModels: async () => modelos }));
+vi.mock("../settings/apply", () => ({ applyLlmSettings: async () => undefined }));
 let bot: Record<string, unknown> | null = null;
 let donoTg: Record<string, unknown> | null = null;
 const marcarBriefing = vi.fn(async (_u: string, dia: string) => void (bot!.ultimoBriefing = dia));
@@ -84,6 +87,18 @@ describe("briefingSeDevido", () => {
     expect(await briefingSeDevido("u1", as7h05)).toBe("enviado");
     expect(avisarNoWhatsapp).not.toHaveBeenCalled();
     expect(avisarNoTelegram).toHaveBeenCalledOnce();
+  });
+
+  it("api acabou de subir e ainda não há modelo: NÃO marca o dia, tenta no minuto seguinte", async () => {
+    modelos = [];
+    try {
+      expect(await briefingSeDevido("u1", as7h05)).toBe("sem_modelo");
+      expect(sessao!.ultimoBriefing).toBeNull();
+      expect(runPromptForUser).not.toHaveBeenCalled();
+    } finally {
+      modelos = [{ key: "claude/claude-sonnet-5" }];
+    }
+    expect(await briefingSeDevido("u1", as7h05)).toBe("enviado");
   });
 
   it("modelo fora do ar: não quebra o laço, e o dono fica sabendo no app", async () => {

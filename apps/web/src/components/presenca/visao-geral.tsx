@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Icone } from "./icones";
+import { AgendaProxima } from "./agenda-proxima";
 import { useCasca } from "./contexto";
 import { BlocoObservado } from "@/lib/use-visible";
 import { useRecursos } from "@/lib/dados/recurso";
@@ -239,29 +240,8 @@ export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
             <span>Hoje</span>
           </div>
 
-          <Link className="agenda-row" href="/app/reunioes">
-            <span className="agenda-time">
-              <Icone nome="wave" />
-            </span>
-            <span className="agenda-line lavender" />
-            <span>
-              <strong>Reuniões</strong>
-              <small>Gravar, transcrever e virar próximos passos</small>
-            </span>
-            <Icone nome="arrow-up-right" />
-          </Link>
-
-          <Link className="agenda-row" href="/app/conexoes">
-            <span className="agenda-time">
-              <Icone nome="plug" />
-            </span>
-            <span className="agenda-line mint" />
-            <span>
-              <strong>Conexões</strong>
-              <small>Ligue sua agenda para ver compromissos aqui</small>
-            </span>
-            <Icone nome="arrow-up-right" />
-          </Link>
+          {/* a agenda de verdade, de todas as contas: antes eram dois atalhos fixos */}
+          <AgendaProxima modo="hoje" />
 
           <Link className="insight-card" href="/app/memoria">
             <span className="insight-icon">

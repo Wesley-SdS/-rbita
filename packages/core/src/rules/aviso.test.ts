@@ -26,6 +26,12 @@ describe("ação avisar", () => {
       actions: [{ kind: "notify", title: "Reunião em breve: {{payload.titulo}}", body: "{{payload.resumo}}" }],
     };
     expect(await fireRuleNow(regra as never, { payload: { titulo: "Planejar a semana", resumo: "Às 21:00." } })).toBe(true);
-    expect(notifyUser).toHaveBeenCalledWith("u1", "Reunião em breve: Planejar a semana", "Às 21:00.", null, { personId: null, destino: null });
+    expect(notifyUser).toHaveBeenCalledWith("u1", "Reunião em breve: Planejar a semana", "Às 21:00.", null, { personId: null, destino: null, origem: "regra" });
+  });
+
+  it("regra de fábrica avisa como sistema (sino), regra do dono como regra (Rotinas)", async () => {
+    const { origemDoAviso } = await import("./run");
+    expect(origemDoAviso({ builtinKey: "calendar.meeting_upcoming" })).toBe("sistema");
+    expect(origemDoAviso({ builtinKey: null })).toBe("regra");
   });
 });

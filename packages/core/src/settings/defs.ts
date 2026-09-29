@@ -419,6 +419,9 @@ export const SETTING_DEFS = {
   // ── reuniões e agenda (packages/core/src/meetings/*, apps/api) ──
   "meetings.calendarPollMinutes": num("meetings", "Verificar agenda a cada", "De quanto em quanto tempo o processo persistente olha a Google Agenda em busca de reuniões próximas. Sem URL pública ainda, é polling, não push do Google.", 5, 1, 60, { unit: "min" }),
   "meetings.warnMinutesBefore": num("meetings", "Avisar reunião com antecedência de", "Quantos minutos antes do início a Órbita avisa sobre uma reunião.", 15, 1, 120, { unit: "min" }),
+  "meetings.avisarSoReunioes": bool("meetings", "Avisar só de reunião de verdade", "Evento sem ninguém convidado e sem link de chamada (lembrete de hábito, bloco de foco) e evento de dia inteiro não geram \"Reunião em breve\". Desligue para ser avisado de todo evento da agenda.", true),
+  "meetings.agendaDias": num("meetings", "Mostrar a agenda dos próximos", "Quantos dias à frente aparecem em Reuniões (Próximas) e na Visão geral. Junta todas as contas do Google e da Microsoft.", 7, 1, 30, { unit: "dias" }),
+  "meetings.agendaCacheSegundos": num("meetings", "Guardar a agenda da tela por", "Durante este tempo a tela reaproveita a última leitura em vez de perguntar ao Google e à Microsoft de novo. Zero pergunta sempre.", 60, 0, 900, { unit: "s" }),
   "meetings.gmailPollMinutes": num("meetings", "Verificar e-mail importante a cada", "De quanto em quanto tempo o processo persistente procura e-mails novos marcados como importantes pelo próprio Gmail.", 5, 1, 60, { unit: "min" }),
   "meetings.mapChunkChars": num("meetings", "Tamanho do bloco no resumo longo", "Reunião maior que o limite de resumo direto é dividida em blocos deste tamanho, resumida por bloco e depois consolidada (mapa-redução).", 15000, 2000, 100000, { unit: "chars" }),
 

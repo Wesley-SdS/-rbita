@@ -331,6 +331,8 @@ Antes de considerar qualquer tarefa concluída:
 | Telegram, o canal da própria Órbita (bot oficial: dono e pessoas da casa, convite, botão de aprovar) | `packages/core/src/telegram/` · tabelas `tg_*` em `packages/db/src/telegram-schema.ts` · laço `telegram` · rotas `routes/telegram.ts` · tela `telegram-panel.tsx` · PRD `PRD-TELEGRAM.md` |
 | Aprovar (botão, frase "manda" no WhatsApp e na voz) | `packages/core/src/actions/aprovar.ts` · `actions/por-frase.ts` · rota `POST /api/actions/falada` |
 | Fala da Órbita (Edge → Gemini → Piper) e nota de voz OGG/Opus | `packages/core/src/voice/sintetizar.ts` · `apps/voice` `POST /converter/ogg` |
+| Avisos: sino (todos) e Rotinas (só `origem` rotina/regra), markdown, abrir no clique, carregar mais | `packages/core/src/avisos/listar.ts` · `components/presenca/avisos-lista.tsx` · coluna `notification.origem` |
+| Agenda na tela (todas as contas Google + Microsoft, "Entrar" na chamada) | `packages/core/src/agenda/proximos.ts` · rota `routes/agenda.ts` · `components/presenca/agenda-proxima.tsx` ← chaves `meetings.agenda*` |
 | Backlog pré-existente | `CHECKLIST.md` |
 
 ---
@@ -525,6 +527,9 @@ Antes de considerar qualquer tarefa concluída:
   porta, os outros tentam subir a cada arquivo salvo, morrem com `EADDRINUSE` e, antes de morrer,
   rodam os laços do scheduler por alguns segundos em dobro. Antes de subir o api, confira se já
   há um (`Get-CimInstance Win32_Process` filtrando `main.ts`).
+- **Rotina e regra escolhem as tools PELO PEDIDO.** `runPromptForUser` montava as tools com consulta
+  vazia, a seleção por relevância escolhia às cegas e o trânsito das 5h saiu "não tenho ferramenta de
+  rota" (28/09/2026). Trava em `routines/pedido-escolhe-tools.test.ts`.
 - **Regra não é rotina.** A ação "avisar" das regras passava o id da REGRA em `notification.routine_id`,
   que é chave estrangeira para `routine`: o banco recusava e nenhum aviso de regra saía (o de
   "reunião em breve" nunca chegou). Trava em `rules/aviso.test.ts`.

@@ -43,17 +43,23 @@ E quando você quiser velocidade ou qualidade de nuvem, é **um clique**: troca 
 | | |
 |---|---|
 | 🧠 **Núcleo (Orb)** | Identidade visual própria: geometria em **WebGL** com vidro, malha neural e giroscópios, em dez estados que contam o que ela está fazendo. Canvas 2D como plano B. |
-| 💬 **Conversa com ferramentas** | Chat em streaming com seleção de modelo, failover antes do primeiro token e ferramentas em pt‑BR (`registrar_gasto`, `contas_a_vencer`, …). |
-| 📚 **RAG + memória** | Busca híbrida (vetor + texto, pgvector) nos seus documentos, com **citação de página** e rerank. Ela aprende com a conversa e **pergunta** quando não tem certeza. |
-| 🎙️ **Voz completa** | Wake word (Vosk), STT (faster‑whisper / AssemblyAI), TTS (Piper), conversa em tempo real (WebRTC) e transcrição de reunião **com diarização**. |
-| 📝 **Reuniões** | Grava, separa quem falou o quê, resume em mapa‑redução e extrai compromissos que viram tarefa. |
+| 💬 **Conversa com ferramentas** | Chat em streaming com quase **cem ferramentas** em pt‑BR (`registrar_gasto`, `rota`, `enviar_whatsapp`, …), escolhidas por relevância a cada pedido, e failover entre provedores antes do primeiro token. |
+| 📚 **RAG + memória** | Busca híbrida (vetor + texto, pgvector) nos seus documentos, com **citação de página** e rerank. Ela aprende com a conversa, **pergunta** quando não tem certeza e liga tudo num **mapa do conhecimento**. |
+| 🎙️ **Voz completa** | Wake word (Vosk), STT (faster‑whisper / AssemblyAI), TTS (Edge, Gemini, Piper), conversa em tempo real com **todas as ferramentas** e transcrição de reunião **com diarização**. |
+| 📱 **WhatsApp pessoal** | O **seu número**, por uma ponte que roda em casa: ela lê, ouve os áudios, vê as fotos e responde por você, **sempre com aprovação**. Você aprova falando: diz *manda* na conversa com você mesmo. |
+| ✈️ **Telegram da Órbita** | O canal **dela**: um bot oficial onde ela fala como ela mesma, com você e com as pessoas da casa, com botões de aprovar. |
+| 🌐 **Internet** | Pesquisa (busca nativa do Claude ou uma cadeia de buscadores), cotação de moeda, ação e índice, clima e **rota com o trânsito de agora** até os lugares que você salvou ("quanto tempo até o trabalho?"). |
+| 📝 **Reuniões** | Grava, separa quem falou o quê, resume em mapa‑redução e extrai compromissos que viram tarefa. Reunião do **Meet, Teams e Zoom** com transcrição vira resumo sozinha. |
+| 👥 **Contatos** | A agenda do Google acha o e‑mail e o WhatsApp de alguém pelo nome, mostra o nome que **você** deu a quem escreve e lembra aniversários. |
 | 🏠 **Casa** | Home Assistant como *ferramenta*: cômodos, dispositivos, aparelhos e **risco por domínio** (luz direto, fechadura pelo gate). |
-| 👤 **Identidade e câmeras** | Reconhece voz e rosto num serviço **local** de percepção, com consentimento; presença por cômodo e gestos viram **evento**, nunca ação. |
-| 💸 **Finanças** | Contas a pagar e receber, foto de comprovante → OCR → lançamento, e extrato em PDF. |
-| ⏱️ **Proatividade** | Rotinas e regras que rodam no **processo vivo** (com o navegador fechado) e geram avisos que **levam à tela certa**. |
-| 🛡️ **Gate humano** | O LLM só *propõe* ações com efeito (e‑mail, evento); você aprova antes de executar. |
+| 👤 **Identidade e câmeras** | Reconhece voz e rosto num serviço **local** de percepção, com consentimento; presença por cômodo e gestos viram **evento**, nunca ação. Acompanha uma tarefa pela câmera ("me ajuda com essa receita"). |
+| 💸 **Finanças** | *Posso gastar hoje?*, faturas de cartão, dívidas, parcelas, metas e previsão do mês; lançar falando, pela foto do cupom, pelo boleto ou pelo extrato (CSV/OFX). Painel, chat e voz leem o **mesmo motor**. |
+| ✅ **Tarefas** | Com prazo e lembrete na hora ("me lembra às 15h"); o que ficou combinado numa reunião entra sozinho. |
+| ⏱️ **Proatividade** | Rotinas, regras, briefing da manhã e aviso antes da reunião, rodando no **processo vivo** (com o navegador fechado), no app, no WhatsApp e no Telegram. |
+| 🔌 **Conectores** | Google (Gmail, Agenda, Contatos, Meet), Microsoft (Outlook, Teams), Jira, Notion, Slack e Zoom, com **várias contas por serviço** (lê em todas, escreve em uma). |
+| 🛡️ **Gate humano** | O LLM só *propõe* ações com efeito (e‑mail, evento, mensagem); você aprova antes de executar, na tela, falando ou no botão. |
 | 🔐 **LGPD** | Exportar todos os dados e apagar a conta; tokens de conectores cifrados em repouso (AES‑256‑GCM). |
-| 📊 **Economia vs. nuvem** | Quanto você economizou rodando local, com estimativa transparente de energia. |
+| 📊 **Gestão de consumo** | Quanto cada fluxo gastou (chat, voz, WhatsApp, resumos) e quanto você economizou rodando local. |
 
 ---
 
@@ -98,7 +104,7 @@ orbita/
 │  ├─ core/         domínio puro: chat, RAG, regras, identidade, jobs…
 │  ├─ db/           schema Drizzle + migrações
 │  └─ llm/          provedores (descoberta · resolver · failover · embeddings)
-└─ docker-compose.yml
+└─ docker-compose.yml  Postgres + pgvector · GOWA (a ponte do WhatsApp, só em 127.0.0.1)
 ```
 
 **Origem única:** o navegador só fala com o Next (:3000), que encaminha `/api/*` para o `apps/api` (:3010). Os dois validam a sessão com a **mesma instância** do Better Auth, sem token entre serviços.
@@ -107,8 +113,10 @@ orbita/
 - **Backend:** NestJS 12, rodando de TypeScript com `tsx`
 - **IA:** Vercel AI SDK 7, Ollama (Qwen 2.5) + provedores de nuvem OpenAI‑compatible
 - **Dados:** Postgres 16 + **pgvector**, Drizzle ORM, índices HNSW cosine
-- **Voz:** faster‑whisper · Piper · Vosk · AssemblyAI (opcional)
+- **Voz:** faster‑whisper · Piper · Vosk · Edge TTS · Gemini TTS · AssemblyAI (opcional)
 - **Percepção:** sherpa‑onnx · onnxruntime · MediaPipe
+- **Canais:** GOWA (whatsmeow) para o WhatsApp pessoal · Bot API do Telegram
+- **Mundo:** Open‑Meteo · AwesomeAPI e Yahoo Finance · Photon, Nominatim e OSRM (OpenStreetMap) · TomTom (trânsito)
 
 ---
 
@@ -127,8 +135,8 @@ docker compose up -d db
 ollama pull qwen2.5:3b        # rápido, aguenta CPU
 ollama pull nomic-embed-text  # embeddings do RAG
 
-# 4. variáveis de ambiente
-cp .env.example apps/web/.env   # e preencha (veja abaixo)
+# 4. variáveis de ambiente (o .env da RAIZ, lido pelo api, pelo web e pelo docker compose)
+cp .env.example .env            # e preencha (veja abaixo)
 
 # 5. migrações
 cd packages/db && npx drizzle-kit migrate && cd ../..
@@ -157,6 +165,14 @@ cd apps/perception && ./.venv/Scripts/python.exe -m uvicorn main:app --port 8002
 
 Sem a voz, o TTS cai para o navegador e o STT para a nuvem. Sem a percepção, o chat funciona, mas cadastrar e identificar voz ou rosto responde 503.
 
+**WhatsApp pessoal** (opcional): defina `GOWA_BASIC_AUTH` no `.env` da raiz, suba a ponte e pareie o número em *Conexões*:
+
+```bash
+docker compose up -d gowa   # só escuta em 127.0.0.1:3011; recusa subir sem a senha
+```
+
+**Telegram** (opcional): crie um bot no **@BotFather** e cole o token em *Conexões → Telegram da Órbita*. Não precisa de endereço público.
+
 > 💡 **Sem GPU?** O modelo local fica lento (de 30 s a minutos por resposta). Configure Gemini ou Groq, que têm camada grátis, e a Órbita passa a preferir a nuvem sozinha.
 
 ---
@@ -175,7 +191,35 @@ Tudo é **OpenAI‑compatible** e mora em `packages/llm`. Cada um liga sozinho q
 | 🟣 **Cohere** | `COHERE_API_KEY` | modelos Command |
 | ☁️ **Vercel Gateway** | `AI_GATEWAY_API_KEY` | muitos modelos, uma chave |
 
-O seletor mostra só os provedores configurados. A **ordem do failover** (assinatura → local → nuvem paga) e o modelo pré‑selecionado se ajustam em *Preferências → Modelos*, sem tocar em código.
+O seletor mostra só os provedores configurados. A **ordem do failover** (assinatura → nuvem paga → local) e o modelo pré‑selecionado se ajustam em *Preferências → Modelos*, sem tocar em código.
+
+No modo **automático**, o dia a dia vai para o **modelo preferido** (por padrão o Sonnet 5 da assinatura, rápido e econômico), e o pedido complexo (código, análise, estratégia, texto longo) pode ir para um modelo mais forte, como o Opus. Se o forte bater no limite, só ele pausa: o preferido continua respondendo.
+
+Outros serviços, todos opcionais e acesos pela chave:
+
+| Serviço | Env | Para quê |
+|---|---|---|
+| 🗺️ TomTom | `TOMTOM_API_KEY` | tempo de rota com o trânsito de agora (grátis, sem cartão) |
+| 🔎 Tavily / Brave | `TAVILY_API_KEY` · `BRAVE_SEARCH_API_KEY` | pesquisa na web quando o modelo não é o Claude |
+| 🎥 Zoom | `ZOOM_CLIENT_ID` · `ZOOM_CLIENT_SECRET` | transcrição das reuniões gravadas na nuvem |
+| 🟦 Microsoft | `MICROSOFT_CLIENT_ID` · `MICROSOFT_CLIENT_SECRET` | Outlook e Teams (app registrado no Azure) |
+| ✉️ Google | `GOOGLE_CLIENT_ID` · `GOOGLE_CLIENT_SECRET` | Gmail, Agenda, Contatos e Meet |
+
+---
+
+## 📨 Dois canais, dois papéis
+
+| | **WhatsApp pessoal** | **Telegram da Órbita** |
+|---|---|---|
+| **De quem é** | O seu número | O número dela (um bot oficial) |
+| **Quem fala** | Ela, **como você**, com os seus contatos | Ela, **como ela mesma** |
+| **Com quem** | Você (na conversa com você mesmo) e quem te escreve | Você e as pessoas da casa que você convidar |
+| **Aprovação** | Tudo que sai para alguém; você diz *manda* | Botões ✅/❌ que só valem os seus |
+| **Resposta sozinha** | Só para os contatos que você marcar, sem acesso a nada seu | Não se aplica |
+
+Pelos dois dá para fazer **tudo** que se faz no app: finanças, tarefas, memória, agenda, e‑mail, casa, pesquisa e rota. Mensagem não se perde: o que chega é gravado antes de ser processado, e o que ficou no meio de um reinício é retomado.
+
+As **pessoas da casa** no Telegram falam com a Órbita só sobre o que você liberar (casa, clima, rota…). Elas não veem o seu e‑mail, as suas finanças, a sua agenda nem a sua memória, e toda ação com efeito vira um pedido que **você** aprova.
 
 ---
 
@@ -195,6 +239,8 @@ O teste é simples: *"se o dono quiser mudar isso amanhã, ele precisa de um dev
 - **Biometria nunca sai de casa:** voz e rosto só trafegam até o serviço local de percepção, e um guard de saída recusa destino que não seja local.
 - **Identidade não afirma sem confiança:** presença velha sai como "visto por último", e identificação fraca sai como "provavelmente".
 - **Tokens de conectores** cifrados em repouso (AES‑256‑GCM).
+- **Canais de mensagem:** quem aprova é o código lendo a fala ou o botão do dono, nunca uma ferramenta; ação perigosa (destrancar, cadastrar pessoa) só pela tela. O destino e o nome no resumo da aprovação são fixados pelo código, não pelo modelo.
+- **Fala de terceiros sob controle:** a transcrição das reuniões online e a agenda de contatos só entram quando você liga; a agenda fica só na memória do processo, nunca copiada para o banco.
 - **LGPD:** exportar tudo e apagar a conta pela própria interface.
 - Rate limiting, guard de SSRF e headers de segurança nas rotas.
 
@@ -232,6 +278,10 @@ Os arquivos gerados não se editam à mão. O que é extensão do app (e não ex
 - [x] Camada de provedores (local + 6 de nuvem) · fila de trabalhos pesados · regras proativas
 - [x] Identidade e percepção: voz, rosto, presença por cômodo, gestos e câmeras
 - [x] Interface Presença: nove telas, temas mineral e floresta, núcleo em WebGL
+- [x] Finanças completas: *posso gastar hoje*, faturas, dívidas, previsão, ditado, boleto e extrato
+- [x] WhatsApp pessoal com aprovação falada · Telegram da Órbita com a família
+- [x] Internet: pesquisa, cotação, rota com trânsito · contatos do Google · reuniões online (Meet, Teams, Zoom)
+- [ ] Google Maps para endereço e trânsito previsto na hora de sair
 - [ ] Voz em streaming (STT parcial + TTS em pedaços)
 - [ ] CSP/HSTS · OAuth social nativo no mobile
 

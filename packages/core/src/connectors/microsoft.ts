@@ -1,5 +1,6 @@
 /** Cliente REST do Microsoft Graph (Teams + Outlook). Recebe um access token válido. */
 import { settings } from "../settings";
+import type { EventoDaAgenda } from "./google";
 
 /**
  * O fuso que o Graph exige separado do horário.
@@ -194,6 +195,34 @@ export async function listUpcomingEvents(token: string, max = 5): Promise<CalEve
     `&$top=${max}&$orderby=start/dateTime&$select=id,subject,bodyPreview,webLink,location,start,end,attendees`;
   const r = await graph<GraphList<GraphEvent>>(token, path, { headers: { Prefer: `outlook.timezone="${await fuso()}"` } });
   return r.value.map(paraEvento);
+}
+
+/**
+ * Eventos entre dois instantes, para a TELA. Em UTC (com "Z" acrescentado):
+ * o Graph devolve o horário sem fuso, e misturar com a agenda do Google exige
+ * um instante de verdade para ordenar.
+ */
+export async function listarEventosEntre(token: string, de: Date, ate: Date, max = 50): Promise<EventoDaAgenda[]> {
+  const path =
+    `/me/calendarView?startDateTime=${de.toISOString()}&endDateTime=${ate.toISOString()}` +
+    `&$top=${max}&$orderby=start/dateTime&$select=id,subject,webLink,location,start,end,attendees,isAllDay,isCancelled,onlineMeeting,responseStatus`;
+  const r = await graph<GraphList<GraphEvent & { isAllDay?: boolean; isCancelled?: boolean; onlineMeeting?: { joinUrl?: string } | null; responseStatus?: { response?: string } }>>(
+    token, path, { headers: { Prefer: 'outlook.timezone="UTC"' } },
+  );
+  const utc = (t?: string) => (t ? (/(?:[zZ]|[+-]\d\d:\d\d)$/.test(t) ? t : `${t.replace(/\.\d+$/, "")}Z`) : "");
+  return r.value
+    .filter((e) => !e.isCancelled && e.responseStatus?.response !== "declined")
+    .map((e) => ({
+      id: e.id,
+      titulo: e.subject?.trim() || "(sem título)",
+      inicio: e.isAllDay ? utc(e.start?.dateTime).slice(0, 10) : utc(e.start?.dateTime),
+      fim: e.isAllDay ? utc(e.end?.dateTime).slice(0, 10) : utc(e.end?.dateTime),
+      diaInteiro: !!e.isAllDay,
+      local: e.location?.displayName || undefined,
+      pessoas: (e.attendees ?? []).map((a) => a.emailAddress?.name || a.emailAddress?.address || "").filter(Boolean),
+      abrir: e.webLink,
+      entrar: e.onlineMeeting?.joinUrl ?? undefined,
+    }));
 }
 
 /** Cria um evento na agenda do Outlook. Chamar só após confirmação explícita. */

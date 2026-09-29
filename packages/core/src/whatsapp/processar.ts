@@ -242,7 +242,7 @@ async function guardarMensagem(userId: string, deviceId: string, t: MensagemTrad
 async function baixarETranscrever(userId: string, deviceId: string, t: MensagemTraduzida, m: WaMensagem): Promise<WaMensagem> {
   const cfg = await settings.getMany(["whatsapp.midiaMaxMb", "whatsapp.transcricao", "meetings.sttCloud"]);
   try {
-    const baixada = await ponte.baixarMidia(deviceId, { path: t.midia!.path, externalId: t.externalId, mime: t.midia!.mimeType }, cfg["whatsapp.midiaMaxMb"] * 1024 * 1024);
+    const baixada = await ponte.baixarMidia(deviceId, { path: t.midia!.path, externalId: t.externalId, mime: t.midia!.mimeType, chat: t.chatJid }, cfg["whatsapp.midiaMaxMb"] * 1024 * 1024);
     const { caminho, sha256 } = await salvarMidia(baixada.bytes, baixada.mime);
     const patch: Partial<WaMensagem> = { midiaCaminho: caminho, midiaSha256: sha256, midiaMime: baixada.mime };
     if (t.tipo === "audio") {

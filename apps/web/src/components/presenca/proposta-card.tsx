@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Icone } from "@/components/presenca/icones";
 import type { PropostaPendente } from "@/components/console/types";
+import { arrumarResultado } from "@/lib/resultado-da-acao";
 
 /**
  * CONFIRMAR NA CONVERSA, e não em outra tela.
@@ -57,13 +58,25 @@ export function PropostaCard({
   const campos = Object.entries(valores).filter(([, v]) => v === null || ["string", "number", "boolean"].includes(typeof v));
 
   if (proposta.estado) {
+    const feita = proposta.estado === "confirmada";
+    const r = arrumarResultado(proposta.resultado);
     return (
-      <div className="escolha-provedor">
+      <div className={`proposta-cartao ${feita ? "feita" : "descartada"}`}>
         <p className="escolha-motivo">
-          <Icone nome={proposta.estado === "confirmada" ? "check" : "close"} />
-          {proposta.estado === "confirmada" ? "Feito." : "Descartado, nada foi enviado."}
-          {proposta.resultado ? ` ${proposta.resultado}` : ""}
+          <Icone nome={feita ? "check" : "close"} />
+          <strong>{feita ? "Feito." : "Descartado, nada foi enviado."}</strong>
+          {r.texto && <span>{r.texto}</span>}
+          {r.conta && <span className="proposta-conta" title={r.conta}>{r.conta}</span>}
         </p>
+        {r.links.length > 0 && (
+          <div className="proposta-links">
+            {r.links.map((l) => (
+              <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer">
+                {l.rotulo}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -98,7 +111,7 @@ export function PropostaCard({
   }
 
   return (
-    <div className="escolha-provedor">
+    <div className="proposta-cartao">
       <p className="escolha-motivo">
         <Icone nome="shield" />
         Isto ainda não aconteceu. Confira e confirme.

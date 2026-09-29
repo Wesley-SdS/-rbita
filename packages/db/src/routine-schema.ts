@@ -31,6 +31,12 @@ export const notification = pgTable("notification", {
    * quem CRIA o aviso, nunca adivinhado pelo texto do título.
    */
   destino: text("destino"),
+  /**
+   * De onde o aviso veio: `rotina` e `regra` são coisas que o DONO pediu que a
+   * Órbita produzisse (a tela de Rotinas mostra só essas); `sistema` é o resto
+   * (reunião em breve, conector caiu, conta a vencer), que mora no sino.
+   */
+  origem: text("origem").notNull().default("sistema"),
   read: boolean("read").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 },
