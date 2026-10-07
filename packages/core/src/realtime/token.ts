@@ -10,14 +10,19 @@
  */
 const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/auth_tokens";
 
-/** Quanto tempo o token vale. Curto: ele serve para abrir UMA sessão e nada mais. */
-const VALIDADE_MS = 10 * 60_000;
-
-export async function criarTokenEfemeroGemini(apiKey: string, agora = Date.now()): Promise<string> {
+/**
+ * O token NÃO leva prazo calculado aqui. Ele levava "agora + 10 min" pelo
+ * relógio desta máquina, e com o relógio do Windows 3h atrasado (06/10/2026)
+ * o Google recebia um prazo já vencido e derrubava a sessão na hora ("Token
+ * has expired", código 1011), sem nada na tela. Sem o campo, vale o padrão do
+ * Google medido no relógio DELE (30 min para usar, 1 min para abrir a sessão),
+ * e `uses: 1` continua garantindo que ele abre uma sessão só.
+ */
+export async function criarTokenEfemeroGemini(apiKey: string): Promise<string> {
   const res = await fetch(ENDPOINT, {
     method: "POST",
     headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ uses: 1, expireTime: new Date(agora + VALIDADE_MS).toISOString() }),
+    body: JSON.stringify({ uses: 1 }),
   });
   if (!res.ok) {
     const detalhe = await res.text().catch(() => "");

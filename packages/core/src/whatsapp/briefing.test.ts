@@ -21,11 +21,18 @@ const marcarBriefing = vi.fn(async (_u: string, dia: string) => void (bot!.ultim
 vi.mock("../telegram/store", () => ({ botDe: async () => bot, donoNoTelegram: async () => donoTg, marcarBriefing }));
 const avisarNoTelegram = vi.fn(async (..._a: unknown[]) => "enviado");
 vi.mock("../telegram/enviar", () => ({ avisarNoTelegram }));
+let emAudio = false;
 vi.mock("../settings", () => ({
   settings: {
-    getMany: async () => ({ "whatsapp.briefingAtivo": true, "whatsapp.briefingHorario": "07:00", "whatsapp.briefingDias": "todos", "whatsapp.briefingPedido": "Monte o briefing", "telegram.briefing": true, "connectors.fusoHorario": "America/Sao_Paulo" }),
+    getMany: async () => ({ "whatsapp.briefingAtivo": true, "whatsapp.briefingHorario": "07:00", "whatsapp.briefingDias": "todos", "whatsapp.briefingPedido": "Monte o briefing", "whatsapp.briefingAudio": emAudio, "casa.trabalhoPorDia": ["ter, qui: Companhia de Estágios", "seg, qua, sex: Adalink"], "telegram.briefing": true, "connectors.fusoHorario": "America/Sao_Paulo" }),
   },
 }));
+let audioFalha = false;
+const enviarAudio = vi.fn(async (..._a: unknown[]) => {
+  if (audioFalha) throw new Error("conversão indisponível");
+  return { provedor: "pessoal", id: "m1", para: "5511@s.whatsapp.net" };
+});
+vi.mock("./enviar", () => ({ enviarAudio }));
 vi.mock("@orbita/db", () => ({
   db: {
     update: () => ({
@@ -45,9 +52,36 @@ const as7h05 = new Date("2026-09-28T10:05:00Z"); // segunda, 07:05 em São Paulo
 beforeEach(() => {
   vi.clearAllMocks();
   ordem.length = 0;
-  sessao = { id: "s1", status: "conectado", ultimoBriefing: null };
+  sessao = { id: "s1", status: "conectado", ultimoBriefing: null, jid: "5511999999999@s.whatsapp.net" };
   bot = null;
+  emAudio = false;
+  audioFalha = false;
   donoTg = null;
+});
+
+describe("bom dia em áudio, com o trânsito do trabalho do dia (pedido de 06/10/2026)", () => {
+  it("em áudio: vai como nota de voz, e o pedido diz que dia é e para qual trabalho pedir a rota", async () => {
+    emAudio = true;
+    expect(await briefingSeDevido("u1", as7h05)).toBe("enviado");
+    expect(enviarAudio).toHaveBeenCalledWith("u1", "5511999999999@s.whatsapp.net", expect.stringContaining("reunião às 10h"), { aprovacaoHumana: true });
+    expect(avisarNoWhatsapp).not.toHaveBeenCalled();
+    const instrucao = String(runPromptForUser.mock.calls[0]![2]);
+    expect(instrucao).toContain("Hoje é segunda-feira, 28/09.");
+    expect(instrucao).toContain('rota de casa até "Adalink"');
+    expect(instrucao).toContain("NOTA DE VOZ");
+  });
+
+  it("o áudio falhou: o bom dia vai em texto, não se perde", async () => {
+    emAudio = true;
+    audioFalha = true;
+    expect(await briefingSeDevido("u1", as7h05)).toBe("enviado");
+    expect(avisarNoWhatsapp).toHaveBeenCalledWith("u1", "Bom dia", expect.stringContaining("reunião às 10h"), { tipo: "briefing" });
+  });
+
+  it("terça é dia da Companhia de Estágios", async () => {
+    await briefingSeDevido("u1", new Date("2026-09-29T10:05:00Z"));
+    expect(String(runPromptForUser.mock.calls[0]![2])).toContain('rota de casa até "Companhia de Estágios"');
+  });
 });
 
 describe("briefingSeDevido", () => {

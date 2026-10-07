@@ -4,6 +4,7 @@ import { connection, type Connection } from "@orbita/db/connector-schema";
 import { encryptSecret, decryptSecret } from "../crypto";
 import { identidadeDaConta, type RespostaDeToken } from "./identidade";
 import { getConnector, isConfigured, redirectUri, type ConnectorId } from "./registry";
+import { TokenRecusado, validarToken } from "./por-token";
 
 /** Monta a URL de autorização (authorization code flow) com state anti-CSRF. */
 export async function buildAuthorizeUrl(id: ConnectorId, state: string): Promise<string> {
@@ -134,6 +135,25 @@ export async function exchangeCodeAndSave(cid: ConnectorId, userId: string, code
         updatedAt: new Date(),
       },
     });
+}
+
+/**
+ * Conecta colando um token (`por-token.ts`). O token é conferido no serviço
+ * antes; colar de novo o token da mesma conta atualiza a conexão em vez de
+ * duplicar, e a primeira conta do serviço nasce principal, como no OAuth.
+ */
+export async function salvarConexaoPorToken(cid: ConnectorId, userId: string, valores: Record<string, string>): Promise<{ label: string }> {
+  if (!getConnector(cid)?.porToken) throw new TokenRecusado("Este serviço não conecta por token.");
+  const conta = await validarToken(cid, valores);
+  const jaTem = await db.select({ id: connection.id }).from(connection).where(and(eq(connection.userId, userId), eq(connection.provider, cid))).limit(1);
+  await db
+    .insert(connection)
+    .values({ userId, provider: cid, externalId: conta.externalId, accountLabel: conta.label, principal: jaTem.length === 0, accessTokenEnc: encryptSecret(conta.segredo), refreshTokenEnc: null, scope: "token", expiresAt: null, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: [connection.userId, connection.provider, connection.externalId],
+      set: { accessTokenEnc: encryptSecret(conta.segredo), accountLabel: conta.label, scope: "token", expiresAt: null, refreshFailures: 0, refreshFailedAt: null, updatedAt: new Date() },
+    });
+  return { label: conta.label };
 }
 
 /**

@@ -1,3 +1,4 @@
+import { paraWhatsapp } from "./markdown";
 import { settings } from "../settings";
 import { log } from "../observability/logger";
 import { sendWhatsApp, whatsappConfigured as cloudConfigurada } from "../connectors/whatsapp";
@@ -107,7 +108,10 @@ async function prepararPessoal(userId: string, paraJid: string, opts: OpcoesDeEn
   return { sessao, contato };
 }
 
-export async function enviarTexto(userId: string, destino: string, texto: string, opts: OpcoesDeEnvio): Promise<Enviado> {
+export async function enviarTexto(userId: string, destino: string, textoDoModelo: string, opts: OpcoesDeEnvio): Promise<Enviado> {
+  // markdown do modelo no formato do WhatsApp, ANTES de registrar a saída: o
+  // eco volta com o texto que de fato saiu, e é por ele que é casado
+  const texto = paraWhatsapp(textoDoModelo);
   const provedor = await provedorAtivo(userId);
   if (!provedor) throw new EnvioRecusado("Nenhum WhatsApp conectado.");
   const paraJid = jidDoDestino(destino);
@@ -140,8 +144,16 @@ export async function enviarAudio(userId: string, destino: string, texto: string
 
   // a MESMA voz da conversa em tempo real (Gemini, `realtime.geminiVoice`): a
   // nota de voz saía pelo Edge, uma voz diferente, e o dono estranhou
-  const voz = await settings.getMany(["whatsapp.vozDaNota", "realtime.geminiVoice"]);
-  const fala = await sintetizarFala(texto, { userId, preferirGemini: voz["whatsapp.vozDaNota"] === "igual_tempo_real", vozGemini: voz["realtime.geminiVoice"] });
+  const voz = await settings.getMany(["whatsapp.vozDaNota", "realtime.geminiVoice", "whatsapp.notaSoComAVozDaOrbita", "whatsapp.vozTentativas"]);
+  const daOrbita = voz["whatsapp.vozDaNota"] === "igual_tempo_real";
+  // nota de voz ninguém espera ao vivo: melhor tentar de novo do que mandar com
+  // outra voz; sem a voz dela, quem chama decide (o bom dia vai em texto)
+  const fala = await sintetizarFala(texto, {
+    userId,
+    preferirGemini: daOrbita,
+    vozGemini: voz["realtime.geminiVoice"],
+    ...(daOrbita && voz["whatsapp.notaSoComAVozDaOrbita"] ? { soAVozPreferida: { tentativas: voz["whatsapp.vozTentativas"] } } : {}),
+  });
   let audio: { bytes: Uint8Array; mime: string } = fala;
   try {
     audio = await paraNotaDeVoz(fala);
@@ -155,6 +167,25 @@ export async function enviarAudio(userId: string, destino: string, texto: string
   await store.atualizarMensagemPorId(userId, linha, { transcricao: texto });
   try {
     const id = await ponte.enviarMidia(sessao.deviceId, paraJid, "audio", audio.bytes, audio.mime.split(";")[0], audio.mime.startsWith("audio/ogg") ? "orbita.ogg" : "orbita.mp3");
+    await store.confirmarSaida(userId, linha, id);
+    return { provedor: "pessoal", id, para: paraJid };
+  } catch (e) {
+    return falhouAoEnviar(userId, linha, e);
+  }
+}
+
+/**
+ * Um ARQUIVO que a Órbita gerou (o extrato em PDF, por exemplo) como documento.
+ * Só no número pessoal: a Cloud API aqui é só texto. Registra a saída antes de
+ * mandar, como a imagem, para o eco não voltar como pedido do dono.
+ */
+export async function enviarDocumento(userId: string, destino: string, arquivo: { bytes: Uint8Array; mime: string; nome: string }, legenda: string | null, opts: OpcoesDeEnvio): Promise<Enviado> {
+  if ((await provedorAtivo(userId)) !== "pessoal") throw new EnvioRecusado("Documento só pelo WhatsApp pessoal.");
+  const paraJid = jidDoDestino(destino);
+  const { sessao, contato } = await prepararPessoal(userId, paraJid, opts);
+  const linha = await store.registrarSaida(userId, contato.id, paraJid, "documento", legenda, Boolean(opts.automatica), { midiaMime: arquivo.mime });
+  try {
+    const id = await ponte.enviarMidia(sessao.deviceId, paraJid, "document", arquivo.bytes, arquivo.mime, arquivo.nome, legenda);
     await store.confirmarSaida(userId, linha, id);
     return { provedor: "pessoal", id, para: paraJid };
   } catch (e) {

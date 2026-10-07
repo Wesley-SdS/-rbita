@@ -65,6 +65,51 @@ export async function listImportantUnread(token: string, max = 10): Promise<Impo
   return out;
 }
 
+/** O que a triagem precisa de cada mensagem: além do básico, os rótulos e os cabeçalhos que dizem quem mandou de verdade. */
+export interface MensagemDaCaixa {
+  id: string;
+  from: string;
+  subject: string;
+  snippet: string;
+  internalDate: Date;
+  labelIds: string[];
+  listUnsubscribe: boolean;
+  authResults: string;
+}
+
+/**
+ * A caixa de entrada desde um instante, da mais antiga para a mais nova (a
+ * triagem avança o marcador da conta até a última que conseguiu processar).
+ * `after:` do Gmail é em segundos e inclusivo: quem chama descarta o que já
+ * viu pelo id.
+ */
+export async function listarCaixaDesde(token: string, desde: Date, max = 25): Promise<MensagemDaCaixa[]> {
+  const q = `in:inbox after:${Math.floor(desde.getTime() / 1000)}`;
+  const list = await gapi<GmailListResp>(token, `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${max}&q=${encodeURIComponent(q)}`);
+  const out: MensagemDaCaixa[] = [];
+  for (const { id } of list.messages ?? []) {
+    const msg = await gapi<GmailMsg & { internalDate?: string; labelIds?: string[] }>(
+      token,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=List-Unsubscribe&metadataHeaders=Authentication-Results`,
+    );
+    const hs = msg.payload?.headers ?? [];
+    const h = (n: string) => hs.filter((x) => x.name.toLowerCase() === n).map((x) => x.value);
+    const ms = Number(msg.internalDate);
+    out.push({
+      id: msg.id,
+      from: h("from")[0] ?? "",
+      subject: h("subject")[0] ?? "",
+      snippet: decodificarEntidades(msg.snippet ?? ""),
+      internalDate: new Date(Number.isFinite(ms) ? ms : Date.now()),
+      labelIds: msg.labelIds ?? [],
+      listUnsubscribe: h("list-unsubscribe").length > 0,
+      // pode haver mais de um (cada servidor no caminho escreve o seu): todos contam
+      authResults: h("authentication-results").join("; "),
+    });
+  }
+  return out.sort((a, b) => a.internalDate.getTime() - b.internalDate.getTime());
+}
+
 /** Cria um RASCUNHO (não envia) — ação segura; o envio real exige confirmação. */
 export async function createDraft(token: string, to: string, subject: string, body: string): Promise<{ id: string }> {
   const raw = Buffer.from(

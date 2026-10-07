@@ -134,3 +134,38 @@ describe("paraNotaDeVoz", () => {
     await expect(paraNotaDeVoz({ bytes: new Uint8Array([1]), mime: "audio/wav" })).rejects.toBeInstanceOf(FalaError);
   });
 });
+
+describe("só a voz da Órbita (nota de voz e bom dia)", () => {
+  it("falha passageira é sobrecarga, limite, servidor ou rede; sem chave e 400 não são", async () => {
+    const { falhaPassageira } = await import("./sintetizar");
+    expect(falhaPassageira('gemini_tts_503: {"error":"high demand"}')).toBe(true);
+    expect(falhaPassageira("gemini_tts_429: quota")).toBe(true);
+    expect(falhaPassageira("fetch failed")).toBe(true);
+    expect(falhaPassageira("gemini_tts_400: bad voice")).toBe(false);
+    expect(falhaPassageira("gemini_tts_sem_chave")).toBe(false);
+  });
+
+  it("sobrecarregado duas vezes, na terceira sai, e NUNCA cai para outra voz", async () => {
+    gemini.mockRejectedValueOnce(new Error("gemini_tts_503: high demand")).mockRejectedValueOnce(new Error("gemini_tts_503: high demand")).mockResolvedValueOnce(Buffer.from([7]));
+    const f = await sintetizarFala("bom dia", { userId: "u1", preferirGemini: true, soAVozPreferida: { tentativas: 4, esperaInicialMs: 1 } });
+    expect(f.servico).toBe("gemini-tts");
+    expect(gemini).toHaveBeenCalledTimes(3);
+    expect(edge).not.toHaveBeenCalled();
+  });
+
+  it("esgotou as tentativas: lança, sem Edge nem Piper (quem chama manda em texto)", async () => {
+    gemini.mockRejectedValue(new Error("gemini_tts_503: high demand"));
+    globalThis.fetch = vi.fn() as unknown as typeof fetch;
+    await expect(sintetizarFala("bom dia", { preferirGemini: true, soAVozPreferida: { tentativas: 3, esperaInicialMs: 1 } })).rejects.toBeInstanceOf(FalaError);
+    expect(gemini).toHaveBeenCalledTimes(3);
+    expect(edge).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    gemini.mockReset();
+  });
+
+  it("falha que não passa (pedido recusado) não repete", async () => {
+    gemini.mockRejectedValueOnce(new Error("gemini_tts_400: voz inexistente"));
+    await expect(sintetizarFala("oi", { soAVozPreferida: { tentativas: 4, esperaInicialMs: 1 } })).rejects.toBeInstanceOf(FalaError);
+    expect(gemini).toHaveBeenCalledTimes(1);
+  });
+});

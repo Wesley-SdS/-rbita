@@ -76,6 +76,17 @@ export function limparSchemaParaGemini(schema: unknown): Record<string, unknown>
     if (tipos.length !== saida.type.length) saida.nullable = true;
     saida.type = tipos[0] ?? "string";
   }
+  // O Gemini só aceita enum de TEXTO. `z.literal(true)` vira `enum: [true]` e
+  // derrubava a sessão inteira com 1007 ("Invalid value at ...enum[0] (TYPE_STRING)"):
+  // como a voz recebe TODAS as tools, uma declaração torta deixava o tempo
+  // real surdo, sem erro na tela (05/10/2026, `apagar_tudo_financas`). Sem
+  // valor de texto, o enum sai e fica só o tipo; quem garante o valor é o zod
+  // da tool, que roda de novo no servidor ao executar.
+  if (Array.isArray(saida.enum)) {
+    const textos = (saida.enum as unknown[]).filter((v): v is string => typeof v === "string");
+    if (textos.length) saida.enum = textos;
+    else delete saida.enum;
+  }
   // um enum sem tipo é recusado; o caso real é sempre string
   if (saida.enum && !saida.type) saida.type = "string";
 

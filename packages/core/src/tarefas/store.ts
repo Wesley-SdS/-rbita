@@ -13,7 +13,7 @@ import { camposDaEdicao, dataDeVencimento, edicaoVazia, type EdicaoDeTarefa } fr
 
 /** De onde a tarefa veio. O título fica COPIADO para o vínculo sobreviver ao apagar da origem. */
 export interface OrigemDaTarefa {
-  tipo: "reuniao" | "documento" | "chat";
+  tipo: "reuniao" | "documento" | "chat" | "email";
   id?: string | null;
   titulo?: string | null;
   /** o trecho que gerou a tarefa: é o "por que eu fiquei de fazer isso" */

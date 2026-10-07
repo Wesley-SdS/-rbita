@@ -60,6 +60,9 @@ vi.mock("../../connectors/microsoft", () => ({
 }));
 
 vi.mock("../../connectors/jira", () => ({
+  // sem a lista de sites do token, vale o site gravado na conexão (o `externalId`)
+  sitesDoToken: async (_t: string, _chave: string, reserva: string) => [{ cloudId: reserva, nome: "Jira", url: "" }],
+  sitesSemRepetir: <T,>(x: T[]) => x,
   minhasIssues: async (token: string, cloudId: string) => {
     chamadas.push({ fn: "minhasIssues", args: [token, cloudId] });
     return [{ chave: "ORB-1", titulo: "fazer" }];

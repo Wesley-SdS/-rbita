@@ -10,14 +10,36 @@ import { BlocoObservado } from "@/lib/use-visible";
 import { useRecursos } from "@/lib/dados/recurso";
 import { ESTADO_DO_MODO, Nucleo } from "./nucleo";
 import { ESTADOS_NUCLEO } from "./estados";
+import { PropostaCard } from "./proposta-card";
+import { FontesPilha } from "./fontes-pilha";
 import { useConsoleDeVoz } from "@/components/console/use-console-voz";
 import { capturarUmQuadro } from "@/lib/camera/aparelho";
+import { useAbastecerMesa } from "@/lib/mesa/use-abastecer-mesa";
+import { Markdown } from "@/components/markdown";
 
 /* "Meus cards": o que o dono fixou para olhar todo dia. É o painel mais ligado
    à ideia de visão geral, então mora aqui e não atrás de uma aba. */
 const Widgets = dynamic(() => import("@/components/widgets").then((m) => m.Widgets), {
   ssr: false,
   loading: () => <div className="panel empty-state">Carregando seus cards…</div>,
+});
+
+/* Os e-mails de todas as caixas, já separados: o que pede você vem primeiro. */
+const EmailsPainel = dynamic(() => import("./emails-painel").then((m) => m.EmailsPainel), {
+  ssr: false,
+  loading: () => <div className="panel empty-state">Carregando seus e-mails…</div>,
+});
+
+/* Jira (todos), GitHub e Slack: as pendências de trabalho num lugar só. */
+const TrabalhoPainel = dynamic(() => import("./trabalho-painel").then((m) => m.TrabalhoPainel), {
+  ssr: false,
+  loading: () => <div className="panel empty-state">Carregando o seu trabalho…</div>,
+});
+
+/* Notícias dos temas que o dono segue: carrega só quando chega perto da vista. */
+const NoticiasPainel = dynamic(() => import("./noticias-painel").then((m) => m.NoticiasPainel), {
+  ssr: false,
+  loading: () => <div className="panel empty-state">Carregando as notícias…</div>,
 });
 
 const DIAS = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
@@ -38,6 +60,10 @@ export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
   // ela era preciso sair da tela que a mostra. Agora o "Ei Órbita" funciona
   // aqui, e o núcleo reage ao que está acontecendo.
   const assistente = useConsoleDeVoz();
+  // o que ela consultou falando abre na mesa de cartões (por cima da tela)
+  useAbastecerMesa(assistente.mensagens);
+  const [escondida, setEscondida] = useState<string | null>(null);
+  const [fontesEscondidas, setFontesEscondidas] = useState<string | null>(null);
   const estado = ESTADO_DO_MODO[assistente.mode];
 
   /** Captura UM quadro e repete a pergunta, agora com o que olhar. */
@@ -193,9 +219,35 @@ export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
               </div>
             </div>
           ) : (assistente.erro || assistente.ultima) ? (
-            <p className={`visao-fala ${assistente.erro ? "erro" : ""}`} aria-live="polite">
-              {assistente.erro ?? assistente.ultima?.content}
-            </p>
+            /* a fala vem em markdown (negrito no valor, lista): crua, aparecia "**R$ 391,90**" */
+            <div className={`visao-fala ${assistente.erro ? "erro" : ""}`} aria-live="polite">
+              {assistente.erro ? <p>{assistente.erro}</p> : <Markdown>{assistente.ultima?.content ?? ""}</Markdown>}
+            </div>
+          ) : null}
+
+          {/* O canto: o que a Órbita deixou para você ver, fora da última fala.
+              Fechar só esconde daqui; a proposta continua na fila (Atividade). */}
+          {(assistente.propostaPendente && assistente.propostaPendente.id !== escondida) ||
+          (!casca.mesa.naVoz && assistente.fontes && assistente.fontes[0]?.url !== fontesEscondidas) ? (
+            <aside className="orbita-doca" aria-label="O que a Órbita deixou para você ver">
+              {assistente.propostaPendente && assistente.propostaPendente.id !== escondida ? (
+                <div className="orbita-doca-item">
+                  <PropostaCard key={assistente.propostaPendente.id} proposta={assistente.propostaPendente} aoDecidir={assistente.decidirProposta} />
+                  <button type="button" className="orbita-doca-fechar" aria-label="Esconder a proposta" onClick={() => setEscondida(assistente.propostaPendente!.id)}>
+                    <Icone nome="close" />
+                  </button>
+                </div>
+              ) : null}
+              {/* com a mesa ligada, as fontes são um cartão dela; o canto fica só para a proposta */}
+              {!casca.mesa.naVoz && assistente.fontes && assistente.fontes[0]?.url !== fontesEscondidas ? (
+                <div className="orbita-doca-item">
+                  <FontesPilha fontes={assistente.fontes} para="cima" />
+                  <button type="button" className="orbita-doca-fechar" aria-label="Esconder as fontes" onClick={() => setFontesEscondidas(assistente.fontes![0]!.url)}>
+                    <Icone nome="close" />
+                  </button>
+                </div>
+              ) : null}
+            </aside>
           ) : null}
 
           <div className="presence-foot">
@@ -264,6 +316,26 @@ export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
 
       <div className="section-heading quick-heading">
         <div>
+          <h2>Seus e-mails</h2>
+          <p>Todas as caixas, separadas: o que pede você, o que vale ler e o ruído.</p>
+        </div>
+      </div>
+      <BlocoObservado>
+        <EmailsPainel />
+      </BlocoObservado>
+
+      <div className="section-heading quick-heading">
+        <div>
+          <h2>Seu trabalho</h2>
+          <p>Pendências dos seus Jiras, o que chegou nas suas PRs e quem te chamou no Slack.</p>
+        </div>
+      </div>
+      <BlocoObservado>
+        <TrabalhoPainel />
+      </BlocoObservado>
+
+      <div className="section-heading quick-heading">
+        <div>
           <h2>Seus cards</h2>
           <p>O que você quis ter sempre à mão.</p>
         </div>
@@ -272,6 +344,16 @@ export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
           geral é longa. Fora da vista, a atualização pausa. */}
       <BlocoObservado>
         <Widgets />
+      </BlocoObservado>
+
+      <div className="section-heading quick-heading">
+        <div>
+          <h2>Notícias do seu interesse</h2>
+          <p>Todo dia a Órbita percorre a web e traz o que saiu sobre os seus temas.</p>
+        </div>
+      </div>
+      <BlocoObservado>
+        <NoticiasPainel />
       </BlocoObservado>
 
       <div className="section-heading quick-heading">

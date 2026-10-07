@@ -212,4 +212,44 @@ export const lerExtrato: JobDef = {
     }),
 };
 
-registerJobs([recalcularVoz, recalcularRosto, transcreverReuniao, resumirReuniao, resumirConversa, indexarArquivo, indexarTexto, reindexarAcervo, extrairMemoria, lerCupom, lerExtrato]);
+/** Busca na web o que saiu de novo sobre os temas do dono (um, ou todos os ativos). */
+export const buscarNoticias: JobDef = {
+  kind: "noticias.buscar",
+  title: (p) => (typeof p.tema === "string" && p.tema ? `Buscando notícias sobre "${p.tema}"` : "Buscando notícias dos seus temas"),
+  maxAttempts: 2,
+  run: async (ctx) => {
+    const { atualizarNoticias } = await import("../noticias/servico");
+    const temaId = typeof ctx.payload.temaId === "string" ? ctx.payload.temaId : null;
+    const dia = typeof ctx.payload.dia === "string" ? ctx.payload.dia : null;
+    return { ...(await atualizarNoticias(ctx.userId, { temaId, dia }, ctx.progresso)) };
+  },
+};
+
+/**
+ * "Atualizar agora" dos e-mails. A volta de rotina roda no laço do processo
+ * vivo, sem passar pela fila: uma linha a cada 5 minutos enterraria os
+ * trabalhos do dono na tela, como aconteceria com o WhatsApp.
+ */
+export const triarEmails: JobDef = {
+  kind: "emails.triar",
+  title: () => "Separando seus e-mails",
+  maxAttempts: 2,
+  run: async (ctx) => {
+    const { triarCaixas } = await import("../emails/servico");
+    await ctx.progresso(0, null, "lendo as caixas");
+    return { ...(await triarCaixas(ctx.userId)) };
+  },
+};
+
+/** "Atualizar agora" do GitHub e do Slack (a volta de rotina roda no laço `trabalho`). */
+export const vigiarTrabalho: JobDef = {
+  kind: "trabalho.vigiar",
+  title: () => "Olhando GitHub e Slack",
+  maxAttempts: 2,
+  run: async (ctx) => {
+    const m = await import("../trabalho/servico");
+    return { ...(await m.vigiarTrabalho(ctx.userId)) };
+  },
+};
+
+registerJobs([vigiarTrabalho, triarEmails, buscarNoticias, recalcularVoz, recalcularRosto, transcreverReuniao, resumirReuniao, resumirConversa, indexarArquivo, indexarTexto, reindexarAcervo, extrairMemoria, lerCupom, lerExtrato]);

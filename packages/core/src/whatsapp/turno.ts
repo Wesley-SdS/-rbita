@@ -180,9 +180,12 @@ export async function turnoDoDono(userId: string, meuJid: string, m: WaMensagem)
   if (novas.length) {
     const varias = novas.length > 1;
     const lista = novas.map((n, i) => (varias ? `${i + 1}. ` : "") + n.resumo).join("\n");
-    // o resumo real vai SEMPRE; a instrução, só se o modelo não a deu (repetir cansa)
-    const instrucao = /\bmanda\b/i.test(texto) && !varias ? "" : `\n\nPara enviar, responda *manda*${varias ? " 1, *manda* 2…" : ""}. Para desistir, *cancela*.`;
-    texto += `\n\n${varias ? "Propostas" : "Proposta"}:\n${lista}${instrucao}`;
+    // O resumo real e a instrução vão SEMPRE. A instrução era omitida quando a
+    // resposta tinha a palavra "manda" em qualquer lugar ("manda o valor dele"),
+    // e o dono ficava com "Proposta:" e nenhuma pista de como aprovar
+    // (05/10/2026). "Confirmar", e não "enviar": nem toda proposta é envio.
+    const como = varias ? "*manda 1*, *manda 1 e 2* ou *manda tudo*" : "*manda* ou *aprovado*";
+    texto += `\n\n*Esperando você confirmar:*\n${lista}\n\nPara confirmar, responda ${como}. Para desistir, *cancela*.`;
   }
 
   await db.insert(message).values({ conversationId: convId, role: "assistant", content: texto });

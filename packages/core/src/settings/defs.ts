@@ -74,6 +74,9 @@ export const SETTING_GROUPS = {
   whatsapp: { label: "WhatsApp", order: 71 },
   telegram: { label: "Telegram (o canal da Órbita)", order: 71.5 },
   finance: { label: "Finanças", order: 75 },
+  noticias: { label: "Notícias dos seus temas", order: 76 },
+  emails: { label: "E-mails: ação, úteis e ruído", order: 74 },
+  trabalho: { label: "Trabalho: Jira, GitHub e Slack", order: 75 },
   limits: { label: "Limites", order: 80 },
   graph: { label: "Grafo de conhecimento", order: 85 },
   identity: { label: "Identidade e biometria", order: 66 },
@@ -139,6 +142,8 @@ export const SETTING_DEFS = {
   "presenca.focoMinutos": num("presenca", "Duração do modo foco", "Quanto tempo dura um bloco de foco, do início até o aviso de fim.", 25, 1, 180, { unit: "minutos", integer: true }),
   "presenca.intensidade": num("presenca", "Intensidade da presença", "Quanto o núcleo se move e brilha. Menor é mais discreto, maior é mais expressivo.", 85, 15, 100, { unit: "%", integer: true }),
   "presenca.movimentoReduzido": bool("presenca", "Movimento reduzido", "Mantém o núcleo praticamente parado e conta o estado por cor e texto. O sistema operacional também pode pedir isso sozinho.", false),
+  "presenca.mesaNaVoz": bool("presenca", "Cartões na tela durante a voz", "Quando a Órbita consulta e-mails, agenda, clima, notícias ou finanças falando com você, ela abre o que achou em cartões na tela, que dá para arrastar, minimizar e fechar. No chat escrito eles ficam dentro da mensagem.", true),
+  "presenca.mesaMaxAbertos": num("presenca", "Cartões abertos ao mesmo tempo", "Passando disso, os mais antigos vão para a bandeja (minimizados, não fechados).", 4, 1, 12),
   // ── motor do chat (api/chat/route.ts) ──
   "chat.historyWindow": num("chat", "Janela de histórico", "Quantas mensagens anteriores da conversa vão para o modelo a cada turno.", 24, 1, 200, { unit: "mensagens" }),
   "chat.ragTimeoutMs": num("chat", "Timeout do RAG", "Tempo máximo que o turno espera pela busca de contexto antes de começar a responder sem ela.", 3500, 0, 15000, { unit: "ms" }),
@@ -460,6 +465,34 @@ export const SETTING_DEFS = {
   "finance.mesesMedia": num("finance", "Meses na média de gasto livre", "Meses completos usados para projetar o saldo na previsão.", 3, 1, 24, { unit: "meses" }),
   "finance.mesesSemeados": num("finance", "Contas fixas criadas à frente", "Contas que repetem todo mês ficam cadastradas em aberto até tantos meses à frente.", 2, 0, 24, { unit: "meses" }),
   "finance.mesesPrevisao": num("finance", "Meses na previsão", "Quantos meses à frente a tela de previsão projeta.", 12, 1, 60, { unit: "meses" }),
+  // ── notícias sobre os temas do dono ──
+  // ── triagem dos e-mails ──
+  "emails.triagem": bool("emails", "Separar os e-mails", "A Órbita lê as caixas conectadas (todos os Gmails e o Outlook) e separa em ação, úteis e ruído, na tela inicial. Desligado, volta o aviso só do que o Gmail marcou como importante.", true),
+  "emails.criarTarefas": bool("emails", "E-mail que pede ação vira tarefa", "Quando um e-mail pede algo a você, a tarefa é criada na hora, para o dia (ou para o prazo que o e-mail disser), ligada ao e-mail.", true),
+  "emails.lancarAutomatico": bool("emails", "Lançar movimentação do banco sozinho", "Pix recebido, pagamento e compra viram lançamento em Finanças, mas só de um banco da lista abaixo, com o e-mail autenticado pelo domínio do banco e com a conta certa sem dúvida. Fora disso, o lançamento fica pronto com um botão.", true),
+  // vem com os bancos mais comuns para o automático funcionar sem cadastro; a
+  // assinatura DKIM do domínio continua exigida, então e-mail falso não passa
+  "emails.bancos": list("emails", "Bancos que lançam sozinhos", "Domínios dos seus bancos. Pix, pagamento, boleto e fatura deles entram sozinhos em Finanças, desde que o e-mail venha assinado pelo próprio banco. O botão \"Confiar neste banco\" de um e-mail acrescenta aqui.", ["c6bank.com.br", "itau.com.br", "itaucard.com.br", "nubank.com.br", "bancointer.com.br", "inter.co", "santander.com.br", "bradesco.com.br", "bb.com.br", "caixa.gov.br", "btgpactual.com", "mercadopago.com", "picpay.com", "sicredi.com.br", "sicoob.com.br", "original.com.br", "neon.com.br", "xpi.com.br", "nuinvest.com.br", "pagbank.com.br"]),
+  "emails.porVolta": num("emails", "E-mails lidos por conta a cada volta", "O resto vem na volta seguinte.", 25, 5, 100),
+  "emails.janelaInicialHoras": num("emails", "Ao conectar, olhar para trás", "Quanto da caixa a primeira leitura de uma conta pega (sem avisar, só para a tela não começar vazia).", 24, 0, 168, { unit: "h" }),
+  "emails.diasGuardar": num("emails", "Guardar a triagem por", "A triagem mais antiga sai da tela (o e-mail continua na sua caixa).", 30, 1, 365, { unit: "dias" }),
+  // ── trabalho: Jira, GitHub e Slack ──
+  "trabalho.avisar": bool("trabalho", "Avisar o que chegou", "Review e comentário nas suas PRs, pedido de review, menção e mensagem direta no Slack viram um aviso (um por volta, agrupado).", true),
+  "trabalho.intervaloMinutos": num("trabalho", "Olhar GitHub e Slack a cada", "De quanto em quanto tempo a Órbita procura novidades.", 5, 1, 60, { unit: "min" }),
+  "trabalho.diasOlhar": num("trabalho", "Olhar para trás", "Quanto a primeira leitura de uma conta pega, e por quanto tempo uma novidade não vista continua na tela.", 7, 1, 60, { unit: "dias" }),
+  "trabalho.diasGuardar": num("trabalho", "Guardar o histórico por", "Novidades mais antigas que isto são apagadas.", 60, 7, 365, { unit: "dias" }),
+  "noticias.ativo": bool("noticias", "Buscar notícias todo dia", "Uma vez por dia a Órbita percorre a web e traz o que saiu de novo sobre os temas que você segue (painel da tela inicial).", true),
+  "noticias.horario": {
+    ...text("noticias", "Horário da busca", "Hora da busca diária no formato HH:MM, no fuso da casa (Conectores, fuso horário).", "07:00", 5, false, 4),
+    type: { kind: "text", maxLength: 5, minLength: 4, pattern: "^([01]?\\d|2[0-3]):[0-5]\\d$", formato: "HH:MM, por exemplo 07:00" },
+  },
+  "noticias.porTema": num("noticias", "Notícias novas por tema", "Quantas notícias novas, no máximo, entram por tema a cada busca.", 5, 1, 20),
+  "noticias.diasGuardar": num("noticias", "Guardar notícias por", "Notícias mais antigas que isto saem do painel.", 14, 1, 365, { unit: "dias" }),
+  "noticias.fontes": list("noticias", "Onde buscar", "Fontes na ordem em que são consultadas, até juntar o bastante: bing e google (Notícias, só matérias, com data e veículo) e web (a pesquisa comum, que traz muita página de seção).", ["bing", "google", "web"]),
+  "noticias.diasRecentes": num("noticias", "Só notícias dos últimos", "Matéria publicada antes disso não entra, mesmo que seja inédita no painel.", 3, 1, 30, { unit: "dias" }),
+  "noticias.resumir": bool("noticias","Resumir e filtrar com o modelo", "Um modelo escreve uma frase sobre cada notícia e descarta o que não é do tema. Desligado, fica o trecho que a busca trouxe.", true),
+  "finance.perguntarRepetido": bool("finance", "Perguntar antes de lançar repetido", "Como o banco faz num Pix repetido: lançamento igual a um que já existe (mesmo valor, data perto, descrição parecida) só entra depois de você confirmar.", true),
+  "finance.diasRepetido": num("finance", "Folga de data para repetido", "Dois lançamentos iguais com até tantos dias de diferença contam como repetidos. Zero compara só o mesmo dia.", 2, 0, 30, { unit: "dias" }),
   "finance.repeticoesAtalho": num("finance", "Repetições para sugerir atalho", "Um gasto que se repete tantas vezes vira sugestão de atalho de um toque.", 3, 2, 50, { unit: "vezes" }),
 
   // ── limites de entrada ──
@@ -568,7 +601,9 @@ export const SETTING_DEFS = {
   "casa.cidade": text("home", "Cidade da casa", "Usada no clima (\"vai chover amanhã?\") e no briefing quando ninguém diz a cidade.", "", 120),
   "casa.endereco": { ...text("home", "Endereço da casa", "Ponto de partida das rotas (\"quanto tempo até o escritório?\"). Para achar a posição e o caminho, o endereço vai ao Photon e ao Nominatim (OpenStreetMap); as coordenadas vão ao OSRM e, com a chave configurada, ao TomTom (trânsito).", "", 200), sensitive: true },
   "web.timeoutMs": num("tools", "Espera máxima de cada serviço da internet", "Quanto a pesquisa, a cotação e a rota esperam por cada serviço antes de tentar o próximo.", 8000, 2000, 30000, { unit: "ms" }),
+  "casa.trabalhoPorDia": list("home", "Onde você trabalha em cada dia", "Um por linha, no formato \"dias: lugar\" (ex.: \"ter, qui: Companhia de Estágios\"). O lugar é um dos Lugares com nome. O bom dia da manhã traz o trânsito até o trabalho DAQUELE dia.", []),
   "casa.lugares": list("home", "Lugares com nome", "Um por linha, no formato \"Nome: endereço\" (ex.: \"Trabalho: Rua Estrela, 96, São Paulo\"). A rota entende o nome (\"quanto tempo até o trabalho?\").", [], { sensitive: true }),
+  "tools.turnosDeContexto": num("tools", "Mensagens anteriores na escolha das ferramentas", "Além do pedido atual, quantas mensagens recentes da conversa ajudam a escolher as ferramentas. É o que faz \"atualiza essa\" achar a tarefa da mensagem anterior. Zero usa só o pedido atual.", 2, 0, 10),
   "tools.maxPerTurn": num("tools", "Ferramentas por turno", "Acima disso, só as mais relevantes para o pedido vão ao modelo (seleção por palavras, sem LLM). Muitas ferramentas pioram custo e precisão.", 30, 5, 200),
 
   "meetings.sttCloud": sel(
@@ -980,6 +1015,7 @@ export const SETTING_DEFS = {
     ...text("whatsapp", "Horário do briefing", "Hora do briefing no formato HH:MM, no fuso da casa (Conectores, fuso horário).", "07:00", 5, false, 4),
     type: { kind: "text", maxLength: 5, minLength: 4, pattern: "^([01]?\\d|2[0-3]):[0-5]\\d$", formato: "HH:MM, por exemplo 07:00" },
   },
+  "whatsapp.briefingAudio": bool("whatsapp", "Bom dia em áudio", "O briefing chega como nota de voz, com a voz da Órbita, em vez de texto. Se o áudio falhar, vai em texto.", true),
   "whatsapp.briefingDias": sel("whatsapp", "Dias do briefing", "Em quais dias o briefing é mandado.", "todos", [
     { value: "todos", label: "Todos os dias" },
     { value: "uteis", label: "Só de segunda a sexta" },
@@ -988,7 +1024,7 @@ export const SETTING_DEFS = {
     "whatsapp",
     "O que vai no briefing",
     "O pedido que a Órbita segue para montar o briefing. Ela usa só ferramentas de leitura.",
-    "Monte o briefing desta manhã para o dono, curto e no formato de WhatsApp (sem títulos, no máximo 12 linhas): a agenda de hoje, as contas que vencem nos próximos 7 dias, as tarefas pendentes de hoje ou atrasadas, quanto ele pode gastar hoje, a previsão do tempo e quem faz aniversário hoje ou amanhã. Use as ferramentas para buscar cada coisa. O que não estiver disponível, pule sem comentar.",
+    "Dê bom dia ao dono e monte um panorama de como vai ser o dia dele, começando pelo que exige atenção. Traga: as reuniões e compromissos de hoje, de todas as agendas, e para cada reunião de trabalho procure com buscar_conhecimento o que ficou combinado da última vez sobre aquele assunto ou com aquelas pessoas, em uma frase, se houver; a hora de sair de casa quando for dia de trabalho (se a agenda tiver um evento de saída, use-o; senão parta do primeiro compromisso de trabalho, desconte o tempo da rota e uns 10 minutos de folga); os e-mails que pedem ação dele (meus_emails, aba ação); as tarefas de hoje e as atrasadas; as pendências de trabalho no Jira, no GitHub e no Slack (meu_trabalho), se houver algo conectado; as contas que vencem nos próximos 7 dias; uma ou duas notícias dos temas que ele acompanha (noticias_dos_meus_temas); quem faz aniversário hoje ou amanhã (aniversarios); e a previsão do tempo. Não fale de saldo, de sobra nem de quanto ele pode gastar. Use as ferramentas para buscar cada coisa; o que não estiver disponível ou vier vazio, pule sem comentar.",
     2000,
     true,
   ),
@@ -1020,8 +1056,10 @@ export const SETTING_DEFS = {
     { value: "igual_tempo_real", label: "A mesma da conversa em tempo real (Gemini)" },
     { value: "padrao", label: "A voz padrão do app (Edge)" },
   ]),
+  "whatsapp.notaSoComAVozDaOrbita": bool("whatsapp", "Nota de voz só com a voz da Órbita", "Se a voz do Gemini estiver sobrecarregada, a Órbita espera e tenta de novo em vez de mandar com outra voz. Se mesmo assim não der, o bom dia vai em texto.", true),
+  "whatsapp.vozTentativas": num("whatsapp", "Tentativas da voz da Órbita", "Quantas vezes tentar a voz da Órbita antes de desistir (a espera cresce: 5 s, 15 s, 45 s…).", 4, 1, 8),
   "whatsapp.historicoConversa": num("whatsapp", "Histórico da conversa \"Eu\"", "Quantas mensagens anteriores a Órbita relê a cada pedido pelo WhatsApp.", 16, 0, 100),
-  "whatsapp.frasesConfirmar": list("whatsapp", "Frases que aprovam", "Dita logo depois de uma proposta, qualquer uma destas envia. Vale só para a SUA fala e só para a proposta que acabou de ser feita. Evite palavras genéricas como \"sim\": elas também respondem a outras perguntas.", ["manda", "pode mandar", "envia", "pode enviar", "confirmo", "confirma"]),
+  "whatsapp.frasesConfirmar": list("whatsapp", "Frases que aprovam", "Dita logo depois de uma proposta, qualquer uma destas envia. Vale só para a SUA fala e só para a proposta que acabou de ser feita. Evite palavras genéricas como \"sim\": elas também respondem a outras perguntas.", ["manda", "pode mandar", "envia", "pode enviar", "confirmo", "confirma", "aprovado", "aprova", "aprovo", "pode fazer", "pode apagar", "pode excluir", "exclui", "apaga", "pode"]),
   "whatsapp.frasesCancelar": list("whatsapp", "Frases que cancelam", "Dita logo depois de uma proposta, cancela. Evite \"não\" sozinho, pelo mesmo motivo.", ["cancela", "não manda", "não envia", "esquece", "deixa pra lá"]),
   "whatsapp.automaticoPorHora": num("whatsapp", "Respostas automáticas por hora (por contato)", "Acima disto o automático daquele contato pausa e você é avisado.", 10, 1, 120),
   "whatsapp.automaticoSeguidas": num("whatsapp", "Trocas instantâneas seguidas", "Se o contato responde à Órbita em segundos, tantas vezes seguidas, é provável que do outro lado também seja um robô: o automático pausa.", 4, 1, 50),

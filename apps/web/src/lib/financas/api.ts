@@ -30,21 +30,38 @@ export function invalidarFinancas(): void {
   invalidar(...VISTAS.map((v) => `/api/financas/${v}`));
 }
 
-async function postar<T>(url: string, corpo: unknown): Promise<Resposta<T>> {
+async function postar<T>(url: string, corpo: unknown): Promise<Resposta<T> & { repetido?: { novos: number } }> {
   let r: Response;
   try {
     r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
   } catch {
     return { ok: false, erro: "Sem conexão com o servidor." };
   }
-  const dado = (await r.json().catch(() => null)) as (T & { error?: string }) | null;
+  const dado = (await r.json().catch(() => null)) as (T & { error?: string; repetido?: boolean; novos?: number }) | null;
+  if (r.status === 409 && dado?.repetido) return { ok: false, erro: dado.error ?? "Já tem um lançamento igual.", repetido: { novos: dado.novos ?? 0 } };
   if (!r.ok || !dado) return { ok: false, erro: dado?.error ?? "Não consegui salvar agora." };
   return { ok: true, dado };
 }
 
-/** Manda um comando e, se deu certo, marca as vistas como velhas. */
+/**
+ * Manda um comando e, se deu certo, marca as vistas como velhas.
+ *
+ * Lançamento igual a um que já existe volta como PERGUNTA (409), como o banco
+ * faz num Pix repetido: aqui ela vira a confirmação do sistema (§6.0.8) e, se
+ * a pessoa disser que sim, o comando vai de novo com `repetir`. No lote
+ * (ditado) dá para escolher lançar só os que não estavam lançados.
+ */
 export async function enviarComando(cmd: { tipo: string } & Record<string, unknown>): Promise<Resposta<Resultado>> {
-  const r = await postar<Resultado>("/api/financas", cmd);
+  let r = await postar<Resultado>("/api/financas", cmd);
+  if (!r.ok && r.repetido && typeof window !== "undefined") {
+    if (window.confirm(`${r.erro}\n\nOK lança de novo. Cancelar não lança${r.repetido.novos ? " os repetidos" : ""}.`)) {
+      r = await postar<Resultado>("/api/financas", { ...cmd, repetir: true });
+    } else if (r.repetido.novos && window.confirm(`Lançar só os outros ${r.repetido.novos}, que ainda não estavam lançados?`)) {
+      r = await postar<Resultado>("/api/financas", { ...cmd, pularRepetidos: true });
+    } else {
+      return { ok: false, erro: "Nada foi lançado." };
+    }
+  }
   if (r.ok) invalidarFinancas();
   return r;
 }

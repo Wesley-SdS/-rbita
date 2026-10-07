@@ -1,5 +1,6 @@
 import { diasEntre, diasNoMes, mesDe, partes, somarDias, somarMeses, type Ym, type Ymd } from "./calendario";
 import type { Centavos, Compromisso, Conta, EstadoFinanceiro, Lancamento, Limiares } from "./tipos";
+import { lugarDaDescricao } from "./lugares";
 
 /**
  * Os números do mês (PRD §5.1 a §5.11 e §5.17). Tudo que a tela mostra e tudo
@@ -56,6 +57,28 @@ export function gastoPorCategoria(ls: Lancamento[], ym: Ym): { categoriaId: stri
     else if (estorno(l)) acc.set(k, (acc.get(k) ?? 0) - l.valor);
   }
   return [...acc.entries()].filter(([, t]) => t > 0).map(([categoriaId, total]) => ({ categoriaId, total })).sort((a, b) => b.total - a.total);
+}
+
+/**
+ * O gasto por LUGAR em cada mês pedido (`lugares.ts` diz qual é o lugar de
+ * cada descrição). Mesma regra do gasto do mês: transferência não conta e
+ * estorno abate, para a soma dos lugares bater com o total do painel.
+ */
+export function gastoPorLugar(ls: Lancamento[], meses: Ym[]): { lugar: string; total: Centavos; vezes: number; porMes: Centavos[] }[] {
+  const indice = new Map(meses.map((m, i) => [m, i]));
+  const acc = new Map<string, { lugar: string; total: Centavos; vezes: number; porMes: Centavos[] }>();
+  for (const l of ls) {
+    const i = indice.get(mesDe(l.data));
+    if (i === undefined || !(saidaReal(l) || estorno(l))) continue;
+    const lugar = lugarDaDescricao(l.descricao);
+    const item = acc.get(lugar) ?? { lugar, total: 0, vezes: 0, porMes: new Array<Centavos>(meses.length).fill(0) };
+    const v = saidaReal(l) ? l.valor : -l.valor;
+    item.total += v;
+    item.porMes[i]! += v;
+    if (saidaReal(l)) item.vezes++;
+    acc.set(lugar, item);
+  }
+  return [...acc.values()].filter((x) => x.total > 0).sort((a, b) => b.total - a.total);
 }
 
 /** Gasto de cada dia do mês e o acumulado (índice 0 = dia 1). */

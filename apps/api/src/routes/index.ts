@@ -26,6 +26,7 @@ import * as models from "./models";
 import * as connectors from "./connectors";
 import * as connectorsProvider from "./connectors-provider";
 import * as connectorsProviderConnect from "./connectors-provider-connect";
+import * as connectorsProviderToken from "./connectors-provider-token";
 import * as mcp from "./mcp";
 import * as actions from "./actions";
 import * as pushSubscribe from "./push-subscribe";
@@ -70,6 +71,9 @@ import * as meetingLive from "./meeting-live";
 import * as gestao from "./gestao";
 import * as ingest from "./ingest";
 import * as financas from "./financas";
+import * as noticias from "./noticias";
+import * as emails from "./emails";
+import * as trabalho from "./trabalho";
 import * as financeReceipt from "./finance-receipt";
 import * as financeStatement from "./finance-statement";
 import * as upload from "./upload";
@@ -144,6 +148,16 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/models", models),
   // dia a dia
   webRoute("api/todos", todos),
+  webRoute("api/trabalho", { GET: trabalho.GET }),
+  webRoute("api/trabalho/atualizar", { POST: trabalho.POST_ATUALIZAR }),
+  webRoute("api/trabalho/visto", { POST: trabalho.POST_VISTO }),
+  webRoute("api/emails", { GET: emails.GET }),
+  webRoute("api/emails/atualizar", { POST: emails.POST_ATUALIZAR }),
+  webRoute("api/emails/acao", { POST: emails.POST_ACAO }),
+  webRoute("api/noticias", { GET: noticias.GET }),
+  webRoute("api/noticias/temas", { POST: noticias.POST_TEMA, DELETE: noticias.DELETE_TEMA }),
+  webRoute("api/noticias/atualizar", { POST: noticias.POST_ATUALIZAR }),
+  webRoute("api/noticias/lida", { POST: noticias.POST_LIDA }),
   webRoute("api/financas", { POST: financas.POST }),
   webRoute("api/financas/fotos", { GET: financas.GET_FOTOS }),
   webRoute("api/financas/entrada", { POST: financas.POST_ENTRADA }),
@@ -174,6 +188,7 @@ export const ROUTE_CONTROLLERS = [
   // gerência de contas viraria um "conector desconhecido"
   webRoute("api/connectors/contas", connectorAccounts),
   webRoute("api/connectors/:provider/connect", connectorsProviderConnect),
+  webRoute("api/connectors/:provider/token", connectorsProviderToken),
   webRoute("api/connectors/:provider", connectorsProvider),
   // conta, uso e voz
   webRoute("api/account", account),

@@ -129,7 +129,7 @@ export const editar_tarefa: ToolDef<
   description:
     "Muda uma tarefa existente (texto, vencimento, lembrete, anotações ou para quem). Use para 'adia o lembrete para as 17h'. Só mande os campos que devem mudar; mande null para limpar um campo.",
   risk: "escrita",
-  keywords: ["editar", "mudar", "alterar", "adiar", "remarcar", "corrigir", "tarefa"],
+  keywords: ["editar", "mudar", "alterar", "atualiza", "renomear", "nome", "adiar", "remarcar", "corrigir", "tarefa"],
   inputSchema: z.object({
     id: z.string(),
     texto: z.string().optional(),

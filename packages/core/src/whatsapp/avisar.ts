@@ -2,7 +2,7 @@ import { settings } from "../settings";
 import { log } from "../observability/logger";
 import { sessaoDe } from "./sessao";
 import { normalizarJid } from "./traduzir";
-import { enviarTexto } from "./enviar";
+import { enviarTexto, enviarDocumento } from "./enviar";
 import { registrarNoHistorico } from "./conversa";
 import { agoraLocal, noSilencio } from "./horario";
 
@@ -27,6 +27,19 @@ export interface OpcoesDoAviso {
 
 export type ResultadoDoAviso = "enviado" | "desligado" | "sem_whatsapp" | "silencio" | "teto" | "falhou";
 
+/**
+ * Um arquivo para o PRÓPRIO dono, na conversa "Eu" ("me manda o extrato em
+ * PDF"). Não passa pelo teto nem pelo silêncio dos avisos: foi ele que pediu,
+ * agora. Devolve false sem WhatsApp pessoal conectado.
+ */
+export async function mandarArquivoAoDono(userId: string, arquivo: { bytes: Uint8Array; mime: string; nome: string }, legenda: string): Promise<boolean> {
+  const sessao = await sessaoDe(userId);
+  if (!sessao || sessao.status !== "conectado" || !sessao.jid) return false;
+  // a conversa "Eu" é do próprio dono: aprovação humana por definição
+  await enviarDocumento(userId, normalizarJid(sessao.jid), arquivo, legenda, { aprovacaoHumana: true });
+  return true;
+}
+
 export async function avisarNoWhatsapp(userId: string, titulo: string, corpo: string, opts: OpcoesDoAviso = {}): Promise<ResultadoDoAviso> {
   try {
     const tipo = opts.tipo ?? "aviso";
@@ -45,7 +58,8 @@ export async function avisarNoWhatsapp(userId: string, titulo: string, corpo: st
     // outros, e lendo a conta só depois do envio uma rajada inteira passava
     if (tipo === "aviso") enviadosNaHora.set(userId, { hora, n: n + 1 });
 
-    const texto = titulo.trim() ? `*${titulo.trim()}*\n${corpo.trim()}` : corpo.trim();
+    // título, linha em branco e o corpo: colados, o aviso vira um bloco só no celular
+    const texto = titulo.trim() ? `*${titulo.trim()}*\n\n${corpo.trim()}` : corpo.trim();
     try {
       // a conversa "Eu" é do próprio dono: aprovação humana por definição
       await enviarTexto(userId, normalizarJid(sessao.jid), texto.slice(0, 4000), { aprovacaoHumana: true });

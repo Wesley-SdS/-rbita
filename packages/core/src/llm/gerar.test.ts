@@ -18,11 +18,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const buildModelChain = vi.fn<(pedido: string) => string[]>();
 const cadeiaDaCasa = vi.fn<() => string[]>();
 const fallbackModelKey = vi.fn<() => Promise<string>>();
+const discoverModels = vi.fn<() => Promise<unknown[]>>();
 
 vi.mock("@orbita/llm", () => ({
   buildModelChain: (p: string) => buildModelChain(p),
   cadeiaDaCasa: () => cadeiaDaCasa(),
   fallbackModelKey: () => fallbackModelKey(),
+  discoverModels: () => discoverModels(),
   recordProviderResult: vi.fn(),
   resolveModel: (k: string) => ({ modelId: k }),
   statusDoErro: () => undefined,
@@ -36,6 +38,8 @@ beforeEach(() => {
   buildModelChain.mockReset();
   cadeiaDaCasa.mockReset();
   fallbackModelKey.mockReset();
+  discoverModels.mockReset();
+  discoverModels.mockResolvedValue([]);
   fallbackModelKey.mockResolvedValue("local/qwen2.5:7b");
   buildModelChain.mockImplementation((pedido) => [pedido, "gateway/outro"]);
 });
@@ -61,6 +65,23 @@ describe("candidatosDaCasa", () => {
     cadeiaDaCasa.mockReturnValue(["claude/claude-opus-5"]);
     expect(await candidatosDaCasa("local/qwen2.5:7b")).toEqual(["local/qwen2.5:7b", "gateway/outro"]);
     expect(cadeiaDaCasa).not.toHaveBeenCalled();
+  });
+
+  it("logo depois de subir, espera a descoberta em vez de responder sem modelo", async () => {
+    // a busca de notícias pedida 2 s depois do boot caiu em SEM_MODELO (06/10/2026)
+    cadeiaDaCasa.mockReturnValueOnce([]).mockReturnValue(["claude/claude-opus-5"]);
+    expect(await candidatosDaCasa()).toEqual(["claude/claude-opus-5"]);
+    expect(discoverModels).toHaveBeenCalledTimes(1);
+    expect(fallbackModelKey).not.toHaveBeenCalled();
+  });
+
+  it("com a cadeia pronta, não pergunta de novo; descoberta que falha não derruba", async () => {
+    cadeiaDaCasa.mockReturnValue(["claude/claude-opus-5"]);
+    await candidatosDaCasa();
+    expect(discoverModels).not.toHaveBeenCalled();
+    cadeiaDaCasa.mockReturnValue([]);
+    discoverModels.mockRejectedValue(new Error("fora do ar"));
+    expect(await candidatosDaCasa()).toEqual(["local/qwen2.5:7b", "gateway/outro"]);
   });
 
   it("descoberta vazia (primeiro boot) cai no reserva", async () => {

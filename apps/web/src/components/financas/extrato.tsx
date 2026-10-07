@@ -9,6 +9,7 @@ import { DocumentosDaFila } from "./documentos-fila";
 import { plural } from "@/lib/financas/apresentacao";
 import type { Extrato as TExtrato } from "@/lib/financas/tipos";
 import { ErrorRetry } from "@/components/ui";
+import { Icone } from "@/components/presenca/icones";
 
 /** Espera da busca enquanto digita (§6.2.1): filtra sem uma requisição por tecla. */
 const ESPERA_DA_BUSCA_MS = 260;
@@ -37,6 +38,15 @@ export function Extrato() {
     onde: filtros.onde || null,
   });
   const cad = f.cad;
+  // o PDF sai com o MESMO mês e os mesmos filtros da tela: quem baixa leva o que está vendo
+  const linkDoPdf = (() => {
+    const q = new URLSearchParams({ formato: "pdf", mes: f.mes });
+    if (filtros.q.trim()) q.set("q", filtros.q.trim());
+    if (filtros.natureza) q.set("natureza", filtros.natureza);
+    if (filtros.categoria) q.set("categoria", filtros.categoria);
+    if (filtros.onde) q.set("onde", filtros.onde);
+    return `/api/financas/exportar?${q.toString()}`;
+  })();
 
   return (
     <div className="fin-pilha">
@@ -67,6 +77,10 @@ export function Extrato() {
         </div>
         {e && (
           <div className="fin-resumo">
+            <a className="button secondary compacto fin-resumo-pdf" href={linkDoPdf} download={`extrato-${f.mes}.pdf`}>
+              <Icone nome="download" />
+              Baixar PDF
+            </a>
             <p>
               <span>{e.resumo.n} {plural(e.resumo.n, "lançado", "lançados")}</span>
               <span className="fin-tom-saida">saídas {brl(e.resumo.saidas)}</span>

@@ -9,6 +9,8 @@ import { criarSessaoRealtime, type SessaoRealtime } from "@/lib/voice/realtime";
 import { getRecognitionCtor, LocalWake, type RecognitionCtor, type RecognitionLike } from "@/lib/voice/speech";
 import { diagnosticarVoz, type JanelaSuficiente } from "@/lib/voice/contexto-seguro";
 import { identityLimits } from "@/lib/identity-limits";
+import { fontesDoResultado, propostaDoResultado } from "@orbita/core/chat/cartoes";
+import { cartoesDoResultado } from "@orbita/core/chat/cartoes-da-tela";
 
 /** Controle mínimo de um wake listener (Render ou local): o que o toggle usa. */
 type WakeCtl = { stop: () => void; active: boolean; pause?: () => void; resume?: () => void };
@@ -293,7 +295,7 @@ export function useVoice(p: Params) {
     let propostaAte = 0;
     const rt = criarSessaoRealtime({
       onState: (s) => p.setMode(s === "speaking" ? "speaking" : s === "connecting" ? "connecting" : s === "listening" ? "listening" : "standby"),
-      onError: () => { p.setError("Falha no modo tempo real."); rt.stop(); rtRef.current = null; setRealtimeOn(false); },
+      onError: (msg) => { p.setError(msg || "Falha no modo tempo real."); rt.stop(); rtRef.current = null; setRealtimeOn(false); },
       onTranscript: (role, text) => {
         p.setMessages((m) => [...m, { role, content: text }]);
         if (role !== "user" || Date.now() > propostaAte) return;
@@ -310,6 +312,17 @@ export function useVoice(p: Params) {
               lista: "Há mais de uma proposta pendente; a lista está na tela. Peça ao dono para dizer o número, como \"manda 1\".",
               falhou: "O dono aprovou, mas o envio falhou; o motivo está na tela.",
             };
+            // aprovou ou cancelou FALANDO: o cartão do canto para de pedir ação
+            if (d.estado === "enviado" || d.estado === "cancelado") {
+              const estado = d.estado === "enviado" ? "confirmada" : "descartada";
+              p.setMessages((m) => {
+                const i = m.map((x) => Boolean(x.proposta && !x.proposta.estado)).lastIndexOf(true);
+                if (i < 0) return m;
+                const c = [...m];
+                c[i] = { ...c[i]!, proposta: { ...c[i]!.proposta!, estado, resultado: d.resposta } };
+                return c;
+              });
+            }
             if (d.estado && aviso[d.estado]) {
               // tratada: acabou a janela (a lista continua esperando o número)
               if (d.estado !== "lista") propostaAte = 0;
@@ -319,12 +332,26 @@ export function useVoice(p: Params) {
           .catch(() => undefined);
       },
       // B7.2: mostra no log que a voz acionou uma ferramenta (mesmo gate do chat de texto).
-      onToolCall: (name, result) => {
-        const proposta = result && typeof result === "object" && (result as { aguardando_aprovacao?: boolean }).aguardando_aprovacao ? (result as { resumo?: string }) : null;
+      onToolCall: (name, result, args) => {
+        // a MESMA regra do chat de texto (`chat/cartoes.ts`): proposta vira o
+        // cartão de aprovação e busca vira a pilha de fontes. Antes a voz só
+        // escrevia "⚙ Proposta" e a tela inicial, que mostra a última fala,
+        // escondia isso atrás da resposta falada que vinha logo depois
+        const proposta = propostaDoResultado(name, result, args);
+        const fontes = fontesDoResultado(result);
+        // a mesma regra do chat: o que ela consultou vira cartão (a tela decide onde mostrar)
+        const cartoes = cartoesDoResultado(name, result, args);
         if (proposta) propostaAte = Date.now() + 5 * 60_000;
         // proposta: a tela mostra o resumo GRAVADO na fila (destino e texto reais),
         // não só o que o modelo falou sobre ela
-        p.setMessages((m) => [...m, { role: "assistant", content: proposta?.resumo ? `⚙ Proposta: ${proposta.resumo}. Diga "manda" ou "cancela".` : `⚙ ${name}`, steps: [{ name, done: true }] }]);
+        p.setMessages((m) => [...m, {
+          role: "assistant",
+          content: proposta?.resumo ? `⚙ Proposta: ${proposta.resumo}. Diga "manda" ou "cancela".` : `⚙ ${name}`,
+          steps: [{ name, done: true }],
+          ...(proposta ? { proposta } : {}),
+          ...(fontes.length ? { fontes } : {}),
+          ...(cartoes.length ? { cartoes } : {}),
+        }]);
       },
     });
     try {
@@ -563,15 +590,29 @@ export function useVoice(p: Params) {
         p.setMode("standby");
         // mesma guarda da via antiga: sem ela, uma fala que termina depois de
         // a pessoa já ter começado outra coisa reabriria o microfone por cima
-        if (wakeRef.current?.active && p.modeRef.current === "standby") void voiceCommand();
+        if (wakeRef.current?.active && p.modeRef.current === "standby") ouvirContinuacao();
       },
     });
+  }
+
+  /**
+   * Depois de a Órbita falar, escuta a resposta SEM "Ei Órbita", pelo MESMO
+   * caminho do "Ei Órbita": o ditado do navegador. Era o gravador próprio
+   * (`voiceCommand`), e o detector de fala dele não percebia a resposta: três
+   * gravações seguidas bateram o teto de 12 s e voltaram sem texto (05/10/2026),
+   * e o dono tinha de chamar a Órbita de novo para responder a pergunta dela.
+   * O gravador fica só para navegador sem ditado.
+   */
+  function ouvirContinuacao() {
+    const C = getRecognitionCtor();
+    if (C) startDictation(C);
+    else void voiceCommand();
   }
 
   function handleAssistantResponse(text: string): boolean {
     if (!voiceOn) return false;
     void speak(text).then(() => {
-      if (wakeRef.current?.active && p.modeRef.current === "standby") void voiceCommand();
+      if (wakeRef.current?.active && p.modeRef.current === "standby") ouvirContinuacao();
     });
     return true;
   }

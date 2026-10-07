@@ -83,5 +83,20 @@ export function useConsoleDeVoz(opcoes: { modelKey?: string } = {}) {
    */
   const ultima = [...mensagens].reverse().find((m) => m.content.trim() || m.escolha || m.pedidoCamera) ?? null;
 
-  return { mode, mensagens, ultima, erro, chat, voz, silenciar };
+  /**
+   * O que fica no CANTO da tela, separado da última fala.
+   *
+   * A proposta e as fontes chegam ANTES da resposta falada (a tool roda
+   * primeiro), e a tela inicial mostra só a última mensagem: o cartão de
+   * aprovação ficava escondido atrás de "deixei pronta, é só dizer manda".
+   * A proposta vale enquanto não for decidida; as fontes, enquanto forem do
+   * assunto atual (uma das últimas mensagens), senão a notícia de ontem
+   * continuaria no canto da conversa de hoje.
+   */
+  const propostaPendente = [...mensagens].reverse().find((m) => m.proposta && !m.proposta.estado)?.proposta ?? null;
+  const fontes = [...mensagens.slice(-4)].reverse().find((m) => m.fontes?.length)?.fontes ?? null;
+  const decidirProposta = (id: string, estado: "confirmada" | "descartada", resultado?: string) =>
+    setMensagens((m) => m.map((msg) => (msg.proposta?.id === id ? { ...msg, proposta: { ...msg.proposta, estado, resultado } } : msg)));
+
+  return { mode, mensagens, ultima, erro, chat, voz, silenciar, propostaPendente, fontes, decidirProposta };
 }

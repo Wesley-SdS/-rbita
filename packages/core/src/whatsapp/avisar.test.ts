@@ -52,8 +52,9 @@ describe("avisarNoWhatsapp", () => {
 
   it("manda na conversa 'Eu' com o título em negrito e guarda no histórico", async () => {
     expect(await avisarNoWhatsapp("u1", "Contas a vencer (1)", "Internet R$ 99,90 amanhã")).toBe("enviado");
-    expect(enviarTexto).toHaveBeenCalledWith("u1", "5511900000000@s.whatsapp.net", "*Contas a vencer (1)*\nInternet R$ 99,90 amanhã", { aprovacaoHumana: true });
-    expect(registrarNoHistorico).toHaveBeenCalledWith("u1", "aviso", "*Contas a vencer (1)*\nInternet R$ 99,90 amanhã");
+    // título, linha em branco e corpo: colados viravam um bloco só no celular
+    expect(enviarTexto).toHaveBeenCalledWith("u1", "5511900000000@s.whatsapp.net", "*Contas a vencer (1)*\n\nInternet R$ 99,90 amanhã", { aprovacaoHumana: true });
+    expect(registrarNoHistorico).toHaveBeenCalledWith("u1", "aviso", "*Contas a vencer (1)*\n\nInternet R$ 99,90 amanhã");
   });
 
   it("desligado, sem WhatsApp conectado", async () => {

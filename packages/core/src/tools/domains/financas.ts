@@ -3,10 +3,11 @@ import { registerTools, type ToolDef } from "../registry";
 import { carregar, hojeDoServidor, type DadosFinanceiros } from "../../finance/store";
 import { limiaresDaConfig } from "../../finance/config";
 import { executar, type Comando, type Resultado } from "../../finance/comandos";
-import { RegraFinanceiraError } from "../../finance/operacoes";
+import { RegraFinanceiraError, RepetidoError } from "../../finance/operacoes";
 import { acharPorNome, normalizar } from "../../finance/nomes";
 import { palpitarCategoria } from "../../finance/palpite";
-import { proporDitado } from "../../finance/entradas";
+import { proporDitado, extratoPdfDosDados } from "../../finance/entradas";
+import { mandarArquivoAoDono } from "../../whatsapp/avisar";
 import { brl, dataLonga, mesLongo, centavosDe } from "../../finance/formato";
 import { mesDe, somarDias, type Ymd } from "../../finance/calendario";
 import { billsDueFor } from "../../finance/bill-due";
@@ -42,10 +43,22 @@ async function contexto(userId: string): Promise<Ctx> {
 }
 
 /** Roda o comando e devolve a frase do resultado; erro do dono vira `erro` (o modelo lê e explica). */
-async function rodar(userId: string, cmd: Comando): Promise<Resultado | { erro: string }> {
+async function rodar(userId: string, cmd: Comando): Promise<Resultado | { erro: string; repetido?: true; pergunte_ao_dono?: string; se_ele_confirmar?: string }> {
   try {
     return await executar(userId, cmd, hojeDoServidor());
   } catch (e) {
+    // repetido não é erro, é PERGUNTA (como o banco num Pix repetido): o
+    // modelo pergunta ao dono e só chama de novo com `repetir` se ele confirmar
+    if (e instanceof RepetidoError) {
+      return {
+        erro: e.message,
+        repetido: true,
+        pergunte_ao_dono: e.message,
+        se_ele_confirmar: e.novos
+          ? "chame de novo com repetir: true (lança tudo) ou so_os_novos: true (pula os repetidos)"
+          : "chame de novo com repetir: true",
+      };
+    }
     if (e instanceof RegraFinanceiraError) return { erro: e.message };
     throw e;
   }
@@ -188,6 +201,8 @@ export const resumo_financeiro: ToolDef<typeof Consulta> = {
           mediaPorMes: brl(h.media),
           meses: h.meses.filter((m) => m.temMovimento).map((m) => ({ mes: mesLongo(m.mes), gasto: brl(m.gasto), entrada: brl(m.entrada) })),
           categoriasQueMaisMudaram: h.comparacao.map((c) => ({ categoria: c.categoria?.nome ?? "Sem categoria", media: brl(c.media), agora: brl(c.agora), variacao: `${c.pct >= 0 ? "+" : ""}${Math.round(c.pct)}%` })),
+          // "onde eu mais gasto?": por LUGAR (iFood, mercado), nos 12 meses
+          ondeMaisGasta: h.periodos[h.periodos.length - 1]!.lugares.map((l) => ({ lugar: l.lugar, total: brl(l.total), vezes: l.vezes, ticketMedio: brl(l.ticketMedio), ultimoMesContraOsTresAnteriores: l.pctUltimoMes === null ? null : `${l.pctUltimoMes >= 0 ? "+" : ""}${l.pctUltimoMes}%` })),
         };
       }
       case "saldos": {
@@ -220,6 +235,7 @@ const Gasto = z.object({
   parcelas: z.number().int().min(1).max(48).optional().describe("só compra no cartão"),
   data: DATA,
   guardar_como_atalho: z.boolean().optional(),
+  repetir: z.boolean().optional().describe("true SÓ depois de o dono confirmar que quer lançar de novo um igual a um que já existe"),
 });
 export const registrar_gasto: ToolDef<typeof Gasto> = {
   name: "registrar_gasto",
@@ -238,12 +254,16 @@ export const registrar_gasto: ToolDef<typeof Gasto> = {
     const categoriaId = resolverCategoria(dados, i.tipo === "estorno" ? "despesa" : natureza, i.categoria, i.descricao);
     return rodar(userId, {
       tipo: "lancar", natureza, valor: centavosDe(i.valor), data: i.data ?? hoje, descricao: i.descricao ?? null, categoriaId,
-      contaId: onde.contaId, cartaoId: onde.cartaoId, estorno: i.tipo === "estorno", parcelas: i.parcelas, guardarAtalho: i.guardar_como_atalho,
+      contaId: onde.contaId, cartaoId: onde.cartaoId, estorno: i.tipo === "estorno", parcelas: i.parcelas, guardarAtalho: i.guardar_como_atalho, repetir: i.repetir,
     });
   },
 };
 
-const Frase = z.object({ frase: z.string().min(3).max(1000).describe("o que o dono disse, do jeito que disse") });
+const Frase = z.object({
+  frase: z.string().min(3).max(1000).describe("o que o dono disse, do jeito que disse"),
+  repetir: z.boolean().optional().describe("true SÓ depois de o dono confirmar que quer lançar de novo o que já estava lançado"),
+  so_os_novos: z.boolean().optional().describe("true quando o dono pediu para lançar só os que ainda não estavam lançados"),
+});
 export const lancar_por_frase: ToolDef<typeof Frase> = {
   name: "lancar_por_frase",
   domain: "financas",
@@ -252,7 +272,7 @@ export const lancar_por_frase: ToolDef<typeof Frase> = {
   risk: "escrita",
   keywords: ["gastei", "paguei", "comprei", "recebi", "saquei", "estornaram", "depois", "lançar", "ditado"],
   inputSchema: Frase,
-  run: async ({ frase }, { userId }) => {
+  run: async ({ frase, repetir, so_os_novos }, { userId }) => {
     const { dados, hoje } = await contexto(userId);
     let propostas: ReturnType<typeof proporDitado>;
     try {
@@ -267,7 +287,7 @@ export const lancar_por_frase: ToolDef<typeof Frase> = {
         : { tipo: "lancar" as const, natureza: p.tipo, valor: p.valor, data: p.data, descricao: p.descricao, categoriaId: p.categoriaId, contaId: p.contaId, cartaoId: p.cartaoId, estorno: p.estorno, parcelas: p.cartaoId ? p.parcelas : undefined },
     ).filter((x) => x.tipo === "lancar" || (x.origemId && x.destinoId));
     if (!itens.length) return { erro: "Para um saque ou transferência preciso de duas contas cadastradas." };
-    const r = await rodar(userId, { tipo: "lancar_varios", itens, origem: "chat" });
+    const r = await rodar(userId, { tipo: "lancar_varios", itens, origem: "chat", repetir, pularRepetidos: so_os_novos });
     if ("erro" in r) return r;
     const cat = new Map(dados.categorias.map((c) => [c.id, c.nome]));
     return {
@@ -611,6 +631,105 @@ export const cadastrar_carteira: ToolDef<typeof Carteira> = {
   },
 };
 
+// ── extrato em PDF ─────────────────────────────────────────────────────────
+
+const ExtratoPdf = z.object({
+  mes: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("YYYY-MM; sem mês = o atual"),
+  so: z.enum(["saidas", "entradas"]).optional().describe("só saídas ou só entradas"),
+  categoria: z.string().max(60).optional(),
+  onde: z.string().max(60).optional().describe("só uma conta ou um cartão"),
+  busca: z.string().max(80).optional().describe("só lançamentos com esse texto"),
+});
+/**
+ * O extrato em PDF entregue ONDE o dono está: no WhatsApp, o arquivo chega na
+ * conversa "Eu"; na tela e na voz, vai o link para baixar. É leitura: o
+ * arquivo só vai para o próprio dono, nunca para terceiro.
+ */
+export const extrato_em_pdf: ToolDef<typeof ExtratoPdf> = {
+  name: "extrato_em_pdf",
+  domain: "financas",
+  description: "Gera o extrato do mês em PDF (para guardar, imprimir ou mandar ao contador), com filtros opcionais. No WhatsApp manda o arquivo na conversa; no chat e na voz devolve o link para baixar.",
+  risk: "leitura",
+  keywords: ["extrato", "pdf", "exportar", "relatório", "baixar", "imprimir", "contador", "arquivo"],
+  inputSchema: ExtratoPdf,
+  run: async (i, ctx) => {
+    const { dados, hoje } = await contexto(ctx.userId);
+    const ym = i.mes ?? mesDe(hoje);
+    let onde: string | null = null;
+    if (i.onde) {
+      const o = resolverOnde(dados, i.onde, true);
+      if ("erro" in o) return o;
+      onde = o.cartaoId ? `cartao:${o.cartaoId}` : `conta:${o.contaId}`;
+    }
+    const natureza = i.so === "saidas" ? ("despesa" as const) : i.so === "entradas" ? ("receita" as const) : null;
+    const cat = i.categoria ? acharPorNome(dados.categorias, i.categoria, (c) => c.nome) : null;
+    const categoriaId = cat?.tipo === "um" ? cat.item.id : null;
+    const filtros = { natureza, categoriaId, onde, busca: i.busca ?? null };
+    const nome = `extrato-${ym}.pdf`;
+    if (ctx.canal === "whatsapp") {
+      const pdf = await extratoPdfDosDados(dados, ym, hoje, await limiaresDaConfig(), filtros);
+      const foi = await mandarArquivoAoDono(ctx.userId, { bytes: pdf, mime: "application/pdf", nome }, `Extrato de ${mesLongo(ym)}`);
+      if (foi) return { mensagem: `Mandei o PDF do extrato de ${mesLongo(ym)} aqui na conversa.`, arquivo: nome };
+    }
+    const q = new URLSearchParams({ formato: "pdf", mes: ym });
+    if (natureza) q.set("natureza", natureza);
+    if (categoriaId) q.set("categoria", categoriaId);
+    if (onde) q.set("onde", onde);
+    if (i.busca) q.set("q", i.busca);
+    const link = `/api/financas/exportar?${q.toString()}`;
+    return { mensagem: `O extrato de ${mesLongo(ym)} em PDF está pronto: [baixar o PDF](${link})`, link, arquivo: nome };
+  },
+};
+
+// ── corrigir ───────────────────────────────────────────────────────────────
+
+const Editar = z.object({
+  lancamento: z.string().min(1).max(120).describe("descrição do lançamento a corrigir, como está hoje"),
+  data: DATA.describe("data do lançamento a corrigir, se o dono disse"),
+  nova_descricao: z.string().max(120).optional(),
+  valor: z.number().positive().max(10_000_000_000).optional().describe("novo valor em reais"),
+  categoria: z.string().max(60).optional(),
+  onde: z.string().max(60).optional().describe("nova conta ou cartão"),
+  nova_data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+/**
+ * Corrigir sem apagar. Sem ela, "atualize esse de 100, foi abastecimento"
+ * virava apagar (com aprovação) e lançar de novo, e o dono ficou mandando
+ * "manda" para uma exclusão que nunca saía (05/10/2026). Corrigir o próprio
+ * lançamento é escrita interna, como lançar: não passa pelo gate.
+ */
+export const editar_lancamento: ToolDef<typeof Editar> = {
+  name: "editar_lancamento",
+  domain: "financas",
+  description: "Corrige um lançamento já registrado: descrição, valor, categoria, data ou conta/cartão (\"esse de 100 foi abastecimento\", \"o mercado foi 45, não 54\"). Use em vez de apagar e lançar de novo.",
+  risk: "escrita",
+  keywords: ["corrigir", "corrige", "atualiza", "atualize", "mudar", "muda", "editar", "errado", "foi", "lançamento"],
+  inputSchema: Editar,
+  run: async (i, { userId }) => {
+    const { dados, hoje } = await contexto(userId);
+    const desde = somarDias(hoje, -120);
+    const recentes = dados.lancamentos.filter((l) => (i.data ? l.data === i.data : l.data >= desde) && !l.transferencia);
+    const a = acharPorNome(recentes, i.lancamento, (l) => l.descricao ?? "");
+    if (a.tipo === "nenhum") return { erro: `Não achei lançamento "${i.lancamento}".` };
+    const alvo = a.tipo === "um" ? a.item : a.opcoes[0]!; // a lista já vem do mais recente
+    let contaId = alvo.contaId;
+    let cartaoId = alvo.cartaoId;
+    if (i.onde) {
+      const o = resolverOnde(dados, i.onde, alvo.tipo === "despesa");
+      if ("erro" in o) return o;
+      contaId = o.contaId;
+      cartaoId = o.cartaoId;
+    }
+    const descricao = i.nova_descricao ?? alvo.descricao;
+    const categoriaId = i.categoria ? resolverCategoria(dados, alvo.estorno ? "despesa" : alvo.tipo, i.categoria, descricao ?? undefined) : alvo.categoriaId;
+    const r = await rodar(userId, {
+      tipo: "editar_lancamento", id: alvo.id, natureza: alvo.tipo, valor: i.valor ? centavosDe(i.valor) : alvo.valor,
+      data: i.nova_data ?? alvo.data, descricao, categoriaId, contaId, cartaoId, estorno: alvo.estorno,
+    });
+    return "erro" in r ? r : { ...r, antes: `${alvo.descricao ?? "sem descrição"} ${brl(alvo.valor)} de ${dataLonga(alvo.data)}` };
+  },
+};
+
 // ── apagar (com aprovação) ─────────────────────────────────────────────────
 
 const Apagar = z.object({
@@ -620,8 +739,12 @@ const Apagar = z.object({
 export const apagar_lancamento: ToolDef<typeof Apagar> = {
   name: "apagar_lancamento",
   domain: "financas",
-  description: "Apaga um lançamento já registrado (o mais recente com essa descrição). Vai para aprovação do dono antes de apagar. Para o que a Órbita acabou de lançar, prefira desfazer_lancamento.",
-  risk: "perigoso",
+  description: "Apaga um lançamento já registrado (o mais recente com essa descrição). Vai para aprovação do dono antes de apagar. Para CORRIGIR use editar_lancamento; para o que a Órbita acabou de lançar, desfazer_lancamento.",
+  // Continua com aprovação, mas não `perigoso`: perigoso nunca sai por frase
+  // (§5.1, a fechadura não abre por "manda"), e apagar um lançamento não é
+  // isso. Como `perigoso`, o dono mandou "manda" e "aprovado" várias vezes no
+  // WhatsApp e nada saía (05/10/2026). Zerar TUDO continua perigoso.
+  risk: "efeito_externo",
   keywords: ["apagar", "apaga", "remover", "excluir", "lançamento"],
   inputSchema: Apagar,
   summarize: (i) => `Apagar o lançamento "${i.descricao}"${i.data ? ` de ${dataLonga(i.data)}` : ""}`,
@@ -637,19 +760,23 @@ export const apagar_lancamento: ToolDef<typeof Apagar> = {
   },
 };
 
-export const apagar_tudo_financas: ToolDef<z.ZodObject<{ confirmo: z.ZodLiteral<true> }>> = {
+// `confirmo` é booleano e conferido no `run`, não `z.literal(true)`: o literal
+// vira `enum: [true]`, que o Gemini Live recusa, e a sessão de voz INTEIRA
+// deixava de abrir (05/10/2026). A trava de verdade é o risco `perigoso`.
+const ApagarTudo = z.object({ confirmo: z.boolean().describe("true só quando o dono confirmou que quer zerar tudo") });
+export const apagar_tudo_financas: ToolDef<typeof ApagarTudo> = {
   name: "apagar_tudo_financas",
   domain: "financas",
   description: "Apaga TODAS as finanças (lançamentos, contas, cartões, metas) e volta ao início. Só quando o dono pedir explicitamente para zerar tudo. Vai para aprovação.",
   risk: "perigoso",
   keywords: ["apagar tudo", "zerar", "recomeçar", "limpar finanças"],
-  inputSchema: z.object({ confirmo: z.literal(true) }),
+  inputSchema: ApagarTudo,
   summarize: () => "Apagar TODOS os dados financeiros e voltar ao início (não tem volta)",
-  run: async (_i, { userId }) => rodar(userId, { tipo: "apagar_tudo" }),
+  run: async ({ confirmo }, { userId }) => (confirmo ? rodar(userId, { tipo: "apagar_tudo" }) : { erro: "Só apago tudo com a sua confirmação." }),
 };
 
 registerTools([
   resumo_financeiro, contas_a_vencer, registrar_gasto, lancar_por_frase, transferir_dinheiro, usar_atalho, desfazer_lancamento,
   adicionar_conta, pagar_conta, pagar_fatura, registrar_divida, pagar_divida, criar_meta, salvar_item_meta,
-  definir_renda, cadastrar_cartao, cadastrar_carteira, apagar_lancamento, apagar_tudo_financas,
+  definir_renda, cadastrar_cartao, cadastrar_carteira, editar_lancamento, extrato_em_pdf, apagar_lancamento, apagar_tudo_financas,
 ]);

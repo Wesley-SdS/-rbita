@@ -73,3 +73,8 @@ export const meta = pgTable("meta", {
 
 export type Meta = typeof meta.$inferSelect;
 export type NewMeta = typeof meta.$inferInsert;
+
+// notícias sobre os temas do dono (busca diária na web)
+export * from "./noticias-schema";
+export * from "./email-schema";
+export * from "./trabalho-schema";

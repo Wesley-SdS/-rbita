@@ -1,5 +1,5 @@
 import { generateText, stepCountIs, type ModelMessage, type ToolSet } from "ai";
-import { buildModelChain, recordProviderResult, resolveModel, statusDoErro, fallbackModelKey, cadeiaDaCasa, SEM_MODELO } from "@orbita/llm";
+import { buildModelChain, recordProviderResult, resolveModel, statusDoErro, fallbackModelKey, cadeiaDaCasa, discoverModels, SEM_MODELO } from "@orbita/llm";
 import { log } from "../observability/logger";
 import { registrarUso } from "../usage/registrar";
 
@@ -69,7 +69,19 @@ export interface TextoGerado {
 export async function candidatosDaCasa(modeloPreferido?: string): Promise<string[]> {
   const pedido = modeloPreferido?.trim();
   if (pedido) return buildModelChain(pedido);
-  const casa = cadeiaDaCasa();
+  let casa = cadeiaDaCasa();
+  if (!casa.length) {
+    // Logo depois de o api subir a descoberta ainda não voltou, e um trabalho
+    // da fila pedido nesse instante (a busca de notícias, 06/10/2026) caía em
+    // SEM_MODELO com a assinatura de pé. O chat já esperava; agora todos
+    // esperam, e só nesse caso: com a lista em cache isto não é chamado.
+    try {
+      await discoverModels();
+    } catch {
+      // descoberta fora do ar: segue para o reserva, como antes
+    }
+    casa = cadeiaDaCasa();
+  }
   return casa.length ? casa : buildModelChain(await fallbackModelKey());
 }
 

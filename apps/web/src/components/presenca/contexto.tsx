@@ -26,6 +26,8 @@ export interface Casca {
   /** Preferências de interface, já resolvidas pelo servidor. */
   intensidade: number;
   reduzido: boolean;
+  /** a mesa de cartões da voz (`presenca.mesa*`) */
+  mesa: { naVoz: boolean; maxAbertos: number };
 }
 
 const CascaCtx = createContext<Casca | null>(null);

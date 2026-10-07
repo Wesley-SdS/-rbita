@@ -39,6 +39,21 @@ describe("aprovar falando", () => {
     expect(interpretarResposta("cancela 1", CONFIRMAR, CANCELAR)).toEqual({ acao: "cancelar", escolha: 1 });
   });
 
+  it("vários da lista numa mensagem só (o caso real: \"Manda 1 manda 2\")", () => {
+    expect(interpretarResposta("Manda 1 manda 2", CONFIRMAR, CANCELAR)).toEqual({ acao: "confirmar", escolhas: [1, 2] });
+    expect(interpretarResposta("manda 1 e 3", CONFIRMAR, CANCELAR)).toEqual({ acao: "confirmar", escolhas: [1, 3] });
+    expect(interpretarResposta("manda 1, 2", CONFIRMAR, CANCELAR)).toEqual({ acao: "confirmar", escolhas: [1, 2] });
+    expect(interpretarResposta("cancela 2 e 3", CONFIRMAR, CANCELAR)).toEqual({ acao: "cancelar", escolhas: [2, 3] });
+  });
+
+  it("\"manda tudo\" e \"as duas\" pegam a lista inteira", () => {
+    expect(interpretarResposta("manda tudo", CONFIRMAR, CANCELAR)).toEqual({ acao: "confirmar", todas: true });
+    expect(interpretarResposta("manda as duas", CONFIRMAR, CANCELAR)).toEqual({ acao: "confirmar", todas: true });
+    expect(interpretarResposta("cancela tudo", CONFIRMAR, CANCELAR)).toEqual({ acao: "cancelar", todas: true });
+    // pedido novo continua sendo pedido, mesmo com número no meio
+    expect(interpretarResposta("manda 2 mil pra Maria", CONFIRMAR, CANCELAR)).toEqual({ acao: null });
+  });
+
   it("\"não manda\" é cancelar, não confirmar", () => {
     expect(interpretarResposta("não manda", CONFIRMAR, CANCELAR)).toEqual({ acao: "cancelar" });
     expect(interpretarResposta("Não", CONFIRMAR, CANCELAR)).toEqual({ acao: "cancelar" });
@@ -58,6 +73,13 @@ describe("aprovar falando", () => {
     resumo: `proposta ${id}`,
     criadaEm: new Date(agora.getTime() - minAtras * 60_000),
     expiraEm: expiraEmMin === null ? null : new Date(agora.getTime() + expiraEmMin * 60_000),
+  });
+
+  it("escolhidas: os números da lista, tudo, e número fora da lista mostra a lista", () => {
+    const lista = [p("a", 3, 29), p("b", 2, 29), p("c", 1, 29)];
+    expect(escolherProposta(lista, agora, undefined, [1, 3])).toEqual({ tipo: "escolhidas", ids: ["a", "c"] });
+    expect(escolherProposta(lista, agora, undefined, undefined, true)).toEqual({ tipo: "escolhidas", ids: ["a", "b", "c"] });
+    expect(escolherProposta(lista, agora, undefined, [1, 9]).tipo).toBe("fora_da_lista");
   });
 
   it("uma válida: é ela", () => {

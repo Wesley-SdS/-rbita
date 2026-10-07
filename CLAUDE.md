@@ -275,7 +275,15 @@ Antes de considerar qualquer tarefa concluída:
 | Finanças: TODA escrita (tela, chat e voz usam o mesmo executor) | `packages/core/src/finance/comandos.ts` (zod `Comando`) · regras puras em `finance/operacoes.ts` · rota `apps/api/src/routes/financas.ts` |
 | Finanças: o que cada tela mostra (as tools de consulta devolvem o mesmo) | `packages/core/src/finance/visoes.ts` · store `finance/store.ts` · tabelas `fin_*` em `packages/db/src/finance-schema.ts` |
 | Finanças: ditado, boleto, extrato CSV/OFX, palpite de categoria, CSV, backup | `packages/core/src/finance/{ditado,boleto,extrato,palpite,exportar,backup,entradas}.ts` · rota `POST /api/financas/entrada` |
-| Tools de finanças (19) | `packages/core/src/tools/domains/financas.ts` |
+| Finanças: extrato em PDF (a mesma visão da tela, com os filtros) | gerador puro `packages/core/src/finance/extrato-pdf.ts` (pdf-lib) · `GET /api/financas/exportar?formato=pdf` · tool `extrato_em_pdf` manda o arquivo no WhatsApp |
+| Finanças: "já tem um igual, lanço de novo?" (como Pix repetido) | `packages/core/src/finance/duplicados.ts` ← chaves `finance.perguntarRepetido` e `finance.diasRepetido` |
+| Notícias dos temas do dono (RSS do Bing e do Google Notícias, resumo, painel da Visão geral) | `packages/core/src/noticias/{selecao,servico,rss}.ts` · trabalho `noticias.buscar` · laço `noticias` · rotas `routes/noticias.ts` · tela `components/presenca/noticias-painel.tsx` · tools `domains/noticias.ts` ← chaves `noticias.*` |
+| Cartões que a Órbita abre (e-mails, agenda, clima, finanças…): uma regra pura para chat e voz | `packages/core/src/chat/cartoes-da-tela.ts` · evento `cartoes` no stream de `routes/chat.ts` · `onToolCall` em `console/use-voice.ts` · desenho `components/presenca/cartao-da-tela.tsx` |
+| Mesa de cartões da voz (arrastar, minimizar, bandeja; montada na casca, some na Conversa) | `apps/web/src/lib/mesa/{mesa,use-abastecer-mesa}.ts` · `components/presenca/mesa-de-cartoes.tsx` ← chaves `presenca.mesa*` |
+| E-mails em ação, úteis e ruído (todas as caixas, marcador por conta, tarefa e lançamento automáticos) | `packages/core/src/emails/{triagem,banco,servico}.ts` · tabelas `email_triado`/`email_caixa` · laço `gmail` · rotas `routes/emails.ts` · tela `presenca/emails-painel.tsx` · tools `domains/emails.ts` ← chaves `emails.*` |
+| Trabalho consolidado: todos os Jiras ao vivo + eventos do GitHub e do Slack avisados uma vez | `packages/core/src/trabalho/{servico,aviso}.ts` · `connectors/{github,slack,jira}.ts` · tabelas `trabalho_*` · laço `trabalho` · rotas `routes/trabalho.ts` · tela `presenca/trabalho-painel.tsx` · tools `domains/trabalho.ts` ← chaves `trabalho.*` |
+| Conectar colando token (GitHub, Jira, Slack), sem app OAuth | `packages/core/src/connectors/por-token.ts` · `porToken` no registro · `POST /api/connectors/:provider/token` · formulário em `components/connectors-panel.tsx` |
+| Tools de finanças (21) | `packages/core/src/tools/domains/financas.ts` |
 | Rotinas (runner) · contas a vencer · refresh de token | `packages/core/src/routines/run.ts` · `finance/bill-due.ts` · `connectors/refresh.ts` |
 | Processo vivo (cron, poller do outbox, controllers) | `apps/api/src/` (`scheduler/scheduler.service.ts`, `auth/session.guard.ts`) |
 | Roteador de modelos (uma regex, a substituir) | `packages/llm/src/catalog.ts` → `routeModelKey` |
@@ -322,7 +330,9 @@ Antes de considerar qualquer tarefa concluída:
 | WhatsApp: TODA saída (antibanimento, eco, provedor pessoal ou Cloud API) | `packages/core/src/whatsapp/enviar.ts` |
 | Tools de WhatsApp (9, inclui usar arquivo/foto como cupom, extrato, boleto, documento, reunião) | `packages/core/src/tools/domains/whatsapp.ts` |
 | Órbita proativa pelo WhatsApp: todo `notifyUser` vai também à conversa "Eu" (silêncio, teto por hora, histórico embrulhado) | `whatsapp/avisar.ts` · `whatsapp/conversa.ts` · chaves `whatsapp.avisos*` |
-| Briefing da manhã (um por dia, só leitura, fuso da casa) | `whatsapp/briefing.ts` · `whatsapp/horario.ts` · laço `whatsapp-briefing` |
+| Bom dia da manhã (um por dia, só leitura, fuso da casa; em áudio, com o trânsito do trabalho DAQUELE dia) | `whatsapp/briefing.ts` · `whatsapp/bom-dia.ts` · `whatsapp/horario.ts` · laço `whatsapp-briefing` ← chaves `whatsapp.briefing*` e `casa.trabalhoPorDia` |
+| Rotinas com horário pela conversa ("todo dia às 9h me manda…") e o bom dia configurado falando | `packages/core/src/tools/domains/rotinas.ts` (regra `cron` com ação `prompt`) |
+| Para onde vai o dinheiro por LUGAR (iFood, mercado), não só por categoria | `packages/core/src/finance/lugares.ts` · `gastoPorLugar` em `finance/mes.ts` · tela `components/financas/historico.tsx` |
 | Lembrete de tarefa com hora ("me lembra às 15h") | `todo.lembrar_em` · `tarefas/lembretes.ts` · laço `lembretes` · hora local → instante em `core/fuso.ts` |
 | Aviso do resumo de reunião com os compromissos | `meetings/summarize.ts` (`textoDoAvisoDeResumo`) ← chave `meetings.avisarResumo` |
 | Contatos do Google (agenda em memória: e-mail e WhatsApp pelo nome, nome que o dono deu, aniversários) | `packages/core/src/contatos/` · tools `domains/contatos.ts` ← chaves `contatos.*` |
@@ -552,6 +562,38 @@ Antes de considerar qualquer tarefa concluída:
   domínio de tool com dado pessoal, ele NÃO entra nessa lista por padrão.
 - **O Telegram responde 409 quando dois processos ouvem o mesmo bot** (o `tsx watch` reiniciando).
   Não é erro: o outro processo cuida. O cursor (`tg_bot.proximo_update`) só avança depois de gravar.
+- **Buscador comum não acha notícia, acha a página do tema.** Perguntada por "inteligência artificial
+  notícias", a pesquisa web devolveu nove páginas de seção ("Inteligência Artificial | CNN Brasil",
+  "últimas notícias - Exame") e uma matéria (06/10/2026). Notícia vem do RSS do Bing e do Google
+  Notícias (`noticias/rss.ts`, ordem em `noticias.fontes`), que só tem matéria, com data e veículo; a web
+  comum fica por último, filtrada por `pareceMateria`. O link do Bing vem dentro de um rastreador: tirar o
+  `url=` real é o que impede a mesma matéria de voltar todo dia como inédita.
+- **E-mail de banco é de terceiro, e qualquer um escreve "Você recebeu um Pix".** A movimentação é
+  lida por regra (`emails/banco.ts`), nunca pelo modelo, e só é LANÇADA sozinha com as três coisas
+  juntas: domínio na lista `emails.bancos`, DKIM `pass` DESSE domínio no `Authentication-Results`
+  (assinatura de outro domínio não vale: o golpista assina com o dele) e a conta da Órbita sem
+  dúvida (`contaDoBanco`). Faltou uma, fica o botão "Lançar" no cartão.
+- **Caixa de e-mail tem marcador POR CONTA** (`email_caixa`). A vigia antiga guardava um só por dono:
+  com três Gmails, a caixa que recebeu por último empurrava o cursor e e-mail de outra ficava para
+  trás. A linha do e-mail é gravada antes da tarefa e do lançamento (chave única conta+mensagem):
+  cair no meio nunca repete o efeito.
+- **Um login Atlassian enxerga vários sites, e a conexão guardava só o primeiro, sem URL.** Os links
+  saíam `jira.atlassian.com/browse/X` (não abre) e o segundo site nunca era lido. Os sites vêm do
+  próprio token (`sitesDoToken`, cache de 10 min) e o site visto por dois logins não duplica
+  (`sitesSemRepetir`). Jira por token de API fala com o site direto em Basic (`lerAcessoBasico`).
+- **`\b` dentro de string Python vira o caractere de controle 0x08**, e a regex segue "válida" sem
+  casar nada (06/10/2026, `lerMovimentacao` devolvia contraparte vazia). Para regex, ferramenta de
+  edição; depois de script, `grep -cP "\x08"` no arquivo.
+- **Memória não agenda nada.** Pedido de voz "todo dia às 7h me dá bom dia…" (06/10/2026) virou duas
+  memórias e uma resposta de "pronto": não existia tool de rotina, e o modelo usou a mais parecida.
+  Agora há `criar_rotina`, `configurar_bom_dia` e `listar_rotinas`, e a `<honestidade>` do
+  `SYSTEM_PROMPT` proíbe dizer que fez algo sem uma ferramenta confirmar.
+- **Relógio do Windows atrasado derruba a voz em tempo real em silêncio.** Com o relógio 3h atrás, o
+  token efêmero do Gemini nascia vencido ("Token has expired", 1011) e a tela ficava muda. O token não
+  leva mais prazo calculado aqui, e o fechamento com erro vira frase (`motivoDoFechamento`). O Node
+  guarda o relógio de quando subiu: acertou a hora, reinicie o api.
+- **Classe genérica no CSS do Presença colide.** `.entrada` é a tela de login (min-height 100dvh) e
+  esticava as barras do Histórico até a altura da janela. Modificador novo leva o prefixo do bloco.
 - **`apps/mobile` é fácil de esquecer.** Está fora do workspace pnpm, tem npm
   próprio, e ficou quebrado contra o servidor por meses sem ninguém ver (o chat
   virou NDJSON e ele lia bytes crus). Agora `apps/mobile/lib` roda no `vitest`.

@@ -18,6 +18,7 @@
     "drizzle-orm": "^0.45.2",
     "duck-duck-scrape": "^2.2.7",
     "gpt-tokenizer": "^4.0.0",
+    "pdf-lib": "^1.17.1",
     "tesseract.js": "^7.0.0",
     "unpdf": "^1.6.2",
     "web-push": "^3.6.7",

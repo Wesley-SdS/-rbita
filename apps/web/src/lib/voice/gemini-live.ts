@@ -71,6 +71,14 @@ interface RespostaSessao {
   error?: string;
 }
 
+/** O motivo de o Gemini fechar a sessão, em linguagem de gente. Puro. */
+export function motivoDoFechamento(codigo: number, motivo: string): string {
+  if (/expired/i.test(motivo)) return "O Gemini recusou a sessão de voz: o token chegou vencido. Confira se o relógio deste computador está certo.";
+  if (codigo === 1007) return `O Gemini recusou a configuração da sessão de voz: ${motivo.slice(0, 160) || "formato inválido"}.`;
+  if (/quota|exhausted|rate/i.test(motivo)) return "O Gemini recusou a sessão de voz por limite de uso. Tente de novo em alguns minutos.";
+  return `A sessão de voz caiu (${codigo})${motivo ? `: ${motivo.slice(0, 160)}` : ""}.`;
+}
+
 export class GeminiLiveSession implements SessaoRealtime {
   private ws: WebSocket | null = null;
   private micCtx: AudioContext | null = null;
@@ -126,8 +134,12 @@ export class GeminiLiveSession implements SessaoRealtime {
       };
       ws.onerror = () => reject(new Error("não consegui abrir a sessão de voz"));
       ws.onmessage = (e) => void this.receber(e.data);
-      ws.onclose = () => {
-        if (!this.fechando) this.cb.onState?.("closed");
+      ws.onclose = (e) => {
+        if (this.fechando) return;
+        // o Gemini diz por que recusou (token vencido, ferramenta em formato que
+        // ele não aceita) no fechamento; ignorar isso deixava a tela muda
+        if (e.code !== 1000) this.cb.onError?.(motivoDoFechamento(e.code, e.reason));
+        this.cb.onState?.("closed");
       };
     });
 
@@ -295,7 +307,7 @@ export class GeminiLiveSession implements SessaoRealtime {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ toolResponse: { functionResponses: [{ id, name: nome, response: { result: saida } }] } }));
     }
-    this.cb.onToolCall?.(nome, saida);
+    this.cb.onToolCall?.(nome, saida, args);
   }
 
   /**

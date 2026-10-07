@@ -40,6 +40,12 @@ export interface RequestOrigin {
 
 export interface ToolContext {
   userId: string;
+  /**
+   * Por onde o pedido chegou. Uma tool que ENTREGA algo (o extrato em PDF)
+   * entrega onde o dono está: no WhatsApp, o arquivo vai na conversa; na tela
+   * e na voz, vai o link.
+   */
+  canal?: "tela" | "whatsapp" | "voz" | "telegram";
   /** dispositivo de origem, resolvido uma vez por turno (preguiçoso como o requester) */
   origin?: () => Promise<RequestOrigin | null>;
   /**

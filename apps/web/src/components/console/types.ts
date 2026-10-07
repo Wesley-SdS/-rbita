@@ -37,6 +37,10 @@ export interface Msg {
   escolha?: PerguntaDeProvedor;
   pedidoCamera?: PedidoDeCamera;
   proposta?: PropostaPendente;
+  /** de onde veio o que a Órbita contou (busca na web): vira a pilha de cards */
+  fontes?: FonteDaWeb[];
+  /** o que ela consultou (e-mails, agenda, clima…): no chat, dentro da mensagem; na voz, na mesa */
+  cartoes?: CartaoDaTela[];
   /** o quadro que a Órbita olhou para responder: quem autorizou o olhar vê o que ela viu */
   olhou?: string;
 }
@@ -53,6 +57,9 @@ export interface ModelInfo {
  * stale-closure nos callbacks assíncronos (wake word/TTS).
  */
 import type { FluxoDeFala } from "@/lib/voice/engine";
+import type { FonteDaWeb } from "@orbita/core/chat/cartoes";
+import type { CartaoDaTela } from "@orbita/core/chat/cartoes-da-tela";
+export type { FonteDaWeb, CartaoDaTela };
 
 export type VoiceBridge = {
   /** Fala a resposta e re-arma a escuta; retorna true se a voz assumiu o pós-resposta. */

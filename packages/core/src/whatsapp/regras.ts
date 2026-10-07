@@ -63,7 +63,16 @@ export interface RespostaInterpretada {
   acao: "confirmar" | "cancelar" | null;
   /** "manda a 2": qual da lista (1-based) */
   escolha?: number;
+  /** "manda 1 manda 2", "manda 1 e 3": mais de uma da lista */
+  escolhas?: number[];
+  /** "manda tudo", "aprova os dois" */
+  todas?: boolean;
 }
+
+// "manda tudo", "aprova as duas", "pode apagar ambos"
+const TODAS = new Set(["tudo", "todas", "todos", "ambos", "ambas", "dois", "duas", "tres"]);
+// o que pode ficar ENTRE os números sem mudar o sentido ("manda 1 e 2", "1, 2")
+const LIGACAO = new Set(["e", "as", "os", "mais"]);
 
 /**
  * A mensagem do dono é uma resposta a uma proposta? Estrito DE PROPÓSITO: a
@@ -76,6 +85,8 @@ export function interpretarResposta(texto: string, confirmar: readonly string[],
   const t = normalizarFrase(texto);
   if (!t || t.split(" ").length > 8) return { acao: null };
 
+  // as palavras das próprias frases podem se repetir: "manda 1 manda 2"
+  const daFrase = (frases: readonly string[]) => new Set(frases.flatMap((f) => normalizarFrase(f).split(" ")));
   const casa = (frases: readonly string[]): { resto: string[] } | null => {
     // a frase mais longa primeiro: "nao manda" antes de "nao", "pode mandar" antes de "pode"
     for (const f of [...frases].map(normalizarFrase).filter(Boolean).sort((a, b) => b.length - a.length)) {
@@ -84,17 +95,25 @@ export function interpretarResposta(texto: string, confirmar: readonly string[],
     }
     return null;
   };
-  const avaliar = (m: { resto: string[] } | null, acao: "confirmar" | "cancelar"): RespostaInterpretada | null => {
+  const avaliar = (m: { resto: string[] } | null, acao: "confirmar" | "cancelar", repetiveis: Set<string>): RespostaInterpretada | null => {
     if (!m) return null;
-    let escolha: number | undefined;
-    for (const w of m.resto) {
-      if (/^\d{1,2}$/.test(w) && escolha === undefined) escolha = Number(w);
-      else if (!ENCHIMENTO.has(w)) return null;
+    const numeros: number[] = [];
+    let todas = false;
+    // Mais de um número numa mensagem só: "Manda 1 manda 2" não era entendido
+    // (o segundo "manda" derrubava a leitura), caía no modelo, e ele, que não
+    // pode aprovar, só repetia a lista (05/10/2026).
+    for (const w of m.resto.join(" ").replace(/,/g, " ").split(" ").filter(Boolean)) {
+      if (/^\d{1,2}$/.test(w)) {
+        if (!numeros.includes(Number(w))) numeros.push(Number(w));
+      } else if (TODAS.has(w)) todas = true;
+      else if (!ENCHIMENTO.has(w) && !LIGACAO.has(w) && !repetiveis.has(w)) return null;
     }
-    return escolha ? { acao, escolha } : { acao };
+    if (todas && !numeros.length) return { acao, todas: true };
+    if (numeros.length > 1) return { acao, escolhas: numeros };
+    return numeros.length ? { acao, escolha: numeros[0] } : { acao };
   };
   // cancelar é avaliado primeiro: "não manda" começa com "nao", não com "manda"
-  return avaliar(casa(cancelar), "cancelar") ?? avaliar(casa(confirmar), "confirmar") ?? { acao: null };
+  return avaliar(casa(cancelar), "cancelar", daFrase(cancelar)) ?? avaliar(casa(confirmar), "confirmar", daFrase(confirmar)) ?? { acao: null };
 }
 
 export interface PropostaPendente {
@@ -103,16 +122,28 @@ export interface PropostaPendente {
   criadaEm: Date;
   expiraEm: Date | null;
 }
-export type Escolha = { tipo: "uma"; id: string } | { tipo: "varias"; lista: PropostaPendente[] } | { tipo: "nenhuma" } | { tipo: "fora_da_lista"; lista: PropostaPendente[] };
+export type Escolha =
+  | { tipo: "uma"; id: string }
+  | { tipo: "escolhidas"; ids: string[] }
+  | { tipo: "varias"; lista: PropostaPendente[] }
+  | { tipo: "nenhuma" }
+  | { tipo: "fora_da_lista"; lista: PropostaPendente[] };
 
 /**
  * Qual proposta a frase aprova. Vencida não conta: um "manda" solto horas
  * depois não pode disparar nada. Com mais de uma válida e sem número, a
  * resposta é a LISTA, nunca um palpite.
  */
-export function escolherProposta(pendentes: readonly PropostaPendente[], agora: Date, escolha?: number): Escolha {
+export function escolherProposta(pendentes: readonly PropostaPendente[], agora: Date, escolha?: number, escolhas?: number[], todas?: boolean): Escolha {
   const validas = pendentes.filter((p) => !p.expiraEm || p.expiraEm.getTime() > agora.getTime()).sort((a, b) => a.criadaEm.getTime() - b.criadaEm.getTime());
   if (!validas.length) return { tipo: "nenhuma" };
+  if (todas) return { tipo: "escolhidas", ids: validas.map((p) => p.id) };
+  if (escolhas?.length) {
+    // um número fora da lista invalida o pedido inteiro: aprovar só parte do
+    // que o dono disse seria pior do que mostrar a lista de novo
+    if (escolhas.some((n) => !validas[n - 1])) return { tipo: "fora_da_lista", lista: validas };
+    return { tipo: "escolhidas", ids: escolhas.map((n) => validas[n - 1]!.id) };
+  }
   if (escolha !== undefined) {
     const p = validas[escolha - 1];
     return p ? { tipo: "uma", id: p.id } : { tipo: "fora_da_lista", lista: validas };

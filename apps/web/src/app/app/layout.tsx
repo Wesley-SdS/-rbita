@@ -30,6 +30,8 @@ export default async function LayoutDoApp({ children }: { children: React.ReactN
       "presenca.focoMinutos",
       "presenca.intensidade",
       "presenca.movimentoReduzido",
+      "presenca.mesaNaVoz",
+      "presenca.mesaMaxAbertos",
       "cache.recursoTtlMs",
       "cache.recursoTtlLentoMs",
       "cache.offlineLeitura",
@@ -38,6 +40,8 @@ export default async function LayoutDoApp({ children }: { children: React.ReactN
       "presenca.focoMinutos": 25,
       "presenca.intensidade": 85,
       "presenca.movimentoReduzido": false,
+      "presenca.mesaNaVoz": true,
+      "presenca.mesaMaxAbertos": 4,
       "cache.recursoTtlMs": 20_000,
       "cache.recursoTtlLentoMs": 300_000,
       "cache.offlineLeitura": true,
@@ -49,6 +53,7 @@ export default async function LayoutDoApp({ children }: { children: React.ReactN
       focoMinutos={prefs["presenca.focoMinutos"]}
       intensidade={prefs["presenca.intensidade"]}
       reduzido={prefs["presenca.movimentoReduzido"]}
+      mesa={{ naVoz: prefs["presenca.mesaNaVoz"], maxAbertos: prefs["presenca.mesaMaxAbertos"] }}
       cacheTtlMs={prefs["cache.recursoTtlMs"]}
       cacheTtlLentoMs={prefs["cache.recursoTtlLentoMs"]}
       offlineLeitura={prefs["cache.offlineLeitura"]}

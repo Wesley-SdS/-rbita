@@ -1,3 +1,4 @@
+import { remetenteLegivel, resumirEmail } from "./aviso-de-email";
 import { eq } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { gmailWatchState } from "@orbita/db/meeting-schema";
@@ -38,7 +39,10 @@ export async function emitImportantEmails(): Promise<{ verificados: number; avis
       for (const m of novas) {
         // a conta vai no evento: "chegou um e-mail importante" sem dizer em
         // qual caixa faz o dono procurar na errada
-        await events.emit("gmail.important_received", { messageId: m.id, de: m.from, assunto: m.subject, trecho: m.snippet, conta: m.conta }, { userId });
+        // `remetente` e `resumo` são o aviso em linguagem de gente; `de`,
+        // `assunto` e `trecho` continuam para as regras que o dono escreveu
+        const resumo = await resumirEmail(userId, { de: m.from, assunto: m.subject, trecho: m.snippet });
+        await events.emit("gmail.important_received", { messageId: m.id, de: m.from, assunto: m.subject, trecho: m.snippet, conta: m.conta, remetente: remetenteLegivel(m.from), resumo }, { userId });
         avisados++;
       }
 

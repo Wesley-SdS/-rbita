@@ -9,6 +9,7 @@ import { TELAS, telaDoCaminho } from "./navegacao";
 import { Busca } from "./busca";
 import { Atividade } from "./atividade";
 import { ModoFoco } from "./modo-foco";
+import { MesaDeCartoes } from "./mesa-de-cartoes";
 import { PreviaDaCameraNoCanto } from "@/components/previa-da-camera";
 import { ProvedorCasca } from "./contexto";
 import { signOut } from "@/lib/auth-client";
@@ -108,6 +109,7 @@ export function Casca({
   cacheTtlMs = 20_000,
   cacheTtlLentoMs = 300_000,
   offlineLeitura = true,
+  mesa = { naVoz: true, maxAbertos: 4 },
 }: {
   nomeUsuario: string;
   children: React.ReactNode;
@@ -120,6 +122,8 @@ export function Casca({
   cacheTtlLentoMs?: number;
   /** guardar no aparelho a última leitura conhecida (`cache.offlineLeitura`) */
   offlineLeitura?: boolean;
+  /** a mesa de cartões da voz (`presenca.mesa*`) */
+  mesa?: { naVoz: boolean; maxAbertos: number };
 }) {
   const caminho = usePathname() ?? "/app";
   const atual = telaDoCaminho(caminho);
@@ -230,6 +234,7 @@ export function Casca({
           registrarPausaDeVoz,
           intensidade,
           reduzido: movimentoReduzido,
+          mesa,
         }}
       >
         <a href="#conteudo" className="skip-link">
@@ -354,6 +359,8 @@ export function Casca({
         {/* a câmera abre do chat, da voz e do Presença: a prévia mora na casca
             para o dono ver em qualquer tela que ela acendeu */}
         <PreviaDaCameraNoCanto />
+        {/* o que a Órbita abriu falando: por cima de qualquer tela, inclusive do foco */}
+        {mesa.naVoz ? <MesaDeCartoes maxAbertos={mesa.maxAbertos} /> : null}
       </ProvedorCasca>
     </ProvedorCacheDados>
   );

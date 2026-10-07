@@ -58,9 +58,11 @@ describe("aprovar por frase", () => {
     expect(aprovarAcao).not.toHaveBeenCalled();
   });
 
-  it("risco PERIGOSO nunca sai por frase (portão, fechadura, alarme): só pela tela", async () => {
+  it("risco PERIGOSO nunca sai por frase (portão, fechadura, alarme): só pela tela, e ela DIZ isso", async () => {
     pendentes = [p("portao", "voz", 20, -1, "casa_acionar_com_aprovacao")];
-    expect(await aprovarPorFrase("u1", "voz", "manda")).toBeNull();
+    expect(await aprovarPorFrase("u1", "voz", "manda")).toMatchObject({ estado: "so_na_tela" });
+    // cancelar falando também não mexe na perigosa: ela fica na tela
+    expect(await aprovarPorFrase("u1", "voz", "cancela")).toBeNull();
     expect(aprovarAcao).not.toHaveBeenCalled();
   });
 
@@ -84,6 +86,21 @@ describe("aprovar por frase", () => {
   it("só vencidas: a frase segue como pedido (e não vira aviso eterno)", async () => {
     pendentes = [p("velha", "whatsapp", -60, -90)];
     expect(await aprovarPorFrase("u1", "whatsapp", "manda")).toBeNull();
+    expect(aprovarAcao).not.toHaveBeenCalled();
+  });
+
+  it("'manda 1 manda 2' aprova as duas, mesmo criadas antes da fala anterior (a lista que ela mostrou)", async () => {
+    pendentes = [p("a", "whatsapp", 20, -10), p("b", "whatsapp", 20, -9)];
+    const r = await aprovarPorFrase("u1", "whatsapp", "Manda 1 manda 2", daqui(-5));
+    expect(aprovarAcao.mock.calls.map((c) => c[1])).toEqual(["a", "b"]);
+    expect(r?.estado).toBe("enviado");
+    expect(r?.texto).toContain("Responder a");
+    expect(r?.texto).toContain("Responder b");
+  });
+
+  it("'manda' SEM número continua só para proposta depois da fala anterior", async () => {
+    pendentes = [p("velha", "whatsapp", 20, -10)];
+    expect(await aprovarPorFrase("u1", "whatsapp", "manda", daqui(-5))).toBeNull();
     expect(aprovarAcao).not.toHaveBeenCalled();
   });
 

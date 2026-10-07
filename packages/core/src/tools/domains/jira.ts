@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { contaParaEscrever, lerDeTodasAsContas } from "../../connectors/multi";
-import { buscarIssues, comentarIssue, criarIssue, minhasIssues, mudarStatus } from "../../connectors/jira";
+import { buscarIssues, comentarIssue, criarIssue, minhasIssues, mudarStatus, sitesDoToken, sitesSemRepetir, type JiraIssue, type SiteDoJira } from "../../connectors/jira";
 import { registerTools, type ToolDef } from "../registry";
 
 /**
@@ -22,6 +22,21 @@ async function escrever(userId: string, conta?: string) {
   return r;
 }
 
+/**
+ * A mesma leitura em todos os sites de todas as contas, consolidada: o dono
+ * conecta dois Jiras e quer UMA lista de pendências, dizendo de onde é cada
+ * issue. Site que falha vira linha em `falhas`, sem derrubar os outros.
+ */
+export async function lerEmTodosOsSites(userId: string, ler: (token: string, site: SiteDoJira) => Promise<JiraIssue[]>) {
+  const r = await lerDeTodasAsContas("jira", userId, async (t, c) => {
+    const sites = await sitesDoToken(t, c.id, c.externalId);
+    return Promise.all(sites.map(async (site) => ({ site, issues: await ler(t, site).catch(() => null) })));
+  });
+  const unicos = sitesSemRepetir(r.itens);
+  const issues = unicos.flatMap((x) => (x.issues ?? []).map((i) => ({ ...i, site: x.site.nome })));
+  return { contas: r.contas, sites: unicos.length, issues, falhas: [...r.falhas, ...unicos.filter((x) => !x.issues).map((x) => x.site.nome)] };
+}
+
 export const jira_minhas_tarefas: ToolDef<z.ZodObject<{ quantidade: z.ZodDefault<z.ZodNumber> }>> = {
   name: "jira_minhas_tarefas",
   domain: "jira",
@@ -31,9 +46,9 @@ export const jira_minhas_tarefas: ToolDef<z.ZodObject<{ quantidade: z.ZodDefault
   requires: { connector: "jira" },
   inputSchema: z.object({ quantidade: z.number().int().min(1).max(25).default(10) }),
   run: async ({ quantidade }, { userId }) => {
-    const r = await lerDeTodasAsContas("jira", userId, (t, c) => minhasIssues(t, c.externalId, quantidade));
+    const r = await lerEmTodosOsSites(userId, (t, s) => minhasIssues(t, s.cloudId, quantidade, s.url));
     if (r.contas === 0) return { erro: "Jira não conectado" };
-    return { issues: r.itens, workspaces_lidos: r.contas, workspaces_que_falharam: r.falhas };
+    return { issues: r.issues, workspaces_lidos: r.sites, workspaces_que_falharam: r.falhas };
   },
 };
 
@@ -47,9 +62,9 @@ export const jira_buscar: ToolDef<z.ZodObject<{ jql: z.ZodString; quantidade: z.
   requires: { connector: "jira" },
   inputSchema: z.object({ jql: z.string().min(1).max(500), quantidade: z.number().int().min(1).max(25).default(10) }),
   run: async ({ jql, quantidade }, { userId }) => {
-    const r = await lerDeTodasAsContas("jira", userId, (t, c) => buscarIssues(t, c.externalId, jql, quantidade));
+    const r = await lerEmTodosOsSites(userId, (t, s) => buscarIssues(t, s.cloudId, jql, quantidade, s.url));
     if (r.contas === 0) return { erro: "Jira não conectado" };
-    return { issues: r.itens, workspaces_lidos: r.contas, workspaces_que_falharam: r.falhas };
+    return { issues: r.issues, workspaces_lidos: r.sites, workspaces_que_falharam: r.falhas };
   },
 };
 

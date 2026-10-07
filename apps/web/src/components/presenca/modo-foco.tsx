@@ -6,6 +6,7 @@ import { ESTADO_DO_MODO, Nucleo } from "./nucleo";
 import { ESTADOS_NUCLEO } from "./estados";
 import { useConsoleDeVoz } from "@/components/console/use-console-voz";
 import { capturarUmQuadro } from "@/lib/camera/aparelho";
+import { useAbastecerMesa } from "@/lib/mesa/use-abastecer-mesa";
 
 const formatar = (segundos: number) =>
   `${String(Math.floor(segundos / 60)).padStart(2, "0")}:${String(segundos % 60).padStart(2, "0")}`;
@@ -52,7 +53,8 @@ export function ModoFoco({
   const prazo = useRef(0);
 
   // ── voz própria ───────────────────────────────────────────────────────────
-  const { mode, ultima, erro, voz, chat, silenciar } = useConsoleDeVoz();
+  const { mode, ultima, erro, voz, chat, silenciar, mensagens } = useConsoleDeVoz();
+  useAbastecerMesa(mensagens);
 
   /** Captura UM quadro e repete a pergunta, agora com o que olhar. */
   async function deixarOlhar(pergunta: string) {

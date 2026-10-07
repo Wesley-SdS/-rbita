@@ -1,22 +1,24 @@
 import { z } from "zod";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@orbita/db";
 import {
   finPerfil, finConta, finCartao, finCategoria, finLancamento, finCompromisso, finPagamentoFatura,
   finDivida, finDividaPagamento, finDividaRolagem, finMeta, finMetaItem, finMetaFoto, finAtalho, finRegra, finDesfazer,
   expense,
 } from "@orbita/db/finance-schema";
-import { mesDe, partes, type Ymd } from "./calendario";
+import { mesDe, partes, somarDias, type Ymd } from "./calendario";
 import { faturasDoCartao } from "./cartao";
 import { saldoDevedor } from "./divida";
 import { propagarEdicao } from "./recorrentes";
 import {
   lancamentosDoPedido, pernasDaTransferencia, lancamentoDaQuitacao, planoDePagarFatura, planoDePagarDivida,
-  lancamentosDoItem, RegraFinanceiraError, type NovoLancamento,
+  lancamentosDoItem, RegraFinanceiraError, RepetidoError, type NovoLancamento,
 } from "./operacoes";
 import { CATEGORIA_SISTEMA, JUROS_ROTATIVO_PADRAO, categoriaDaMeta, corDaVez, itensDoModelo, MODELOS_DE_META, type ModeloDeMeta } from "./padroes";
 import { categoriaDoSistema, desfazer, inserirLancamentos, registrarDesfazer, semearInicio, garantirInicio, type Tx } from "./store";
-import { brl } from "./formato";
+import { brl, dataCurta } from "./formato";
+import { acharRepetidos, type LancamentoComparavel } from "./duplicados";
+import { settings } from "../settings";
 import { dividirEmParcelas } from "./parcelas";
 
 /**
@@ -50,6 +52,8 @@ const Lancar = z.object({
   estorno: z.boolean().optional(),
   parcelas: z.number().int().min(1).max(48).optional(),
   guardarAtalho: z.boolean().optional(),
+  /** o dono confirmou que quer lançar de novo um igual a um que já existe */
+  repetir: z.boolean().optional(),
 });
 
 const EditarLancamento = z.object({
@@ -207,7 +211,13 @@ export const Comando = z.discriminatedUnion("tipo", [
   z.object({ tipo: z.literal("apagar_cartao"), id: Id }),
   SalvarRegra,
   z.object({ tipo: z.literal("apagar_regra"), id: Id }),
-  z.object({ tipo: z.literal("lancar_varios"), itens: z.array(z.union([Lancar, Transferir])).min(1).max(100), origem: z.enum(["ditado", "chat"]).default("ditado") }),
+  z.object({
+    tipo: z.literal("lancar_varios"), itens: z.array(z.union([Lancar, Transferir])).min(1).max(100), origem: z.enum(["ditado", "chat"]).default("ditado"),
+    /** confirmou: lança tudo, inclusive o que parece repetido */
+    repetir: z.boolean().optional(),
+    /** confirmou "só os novos": o que parece repetido fica de fora */
+    pularRepetidos: z.boolean().optional(),
+  }),
   z.object({
     tipo: z.literal("importar"), linhas: z.array(LinhaImportada).min(1).max(5000),
     contaId: Id.nullish(), cartaoId: Id.nullish(), lembrar: z.boolean().default(true),
@@ -365,7 +375,7 @@ async function executarNa(tx: Tx, userId: string, cmd: Exclude<Comando, { tipo: 
     case "lancar_atalho": {
       const [a] = await tx.select().from(finAtalho).where(and(eq(finAtalho.id, cmd.id), eq(finAtalho.userId, userId)));
       if (!a) falha("Atalho não encontrado.");
-      const r = await lancar(tx, userId, { tipo: "lancar", natureza: "despesa", valor: a!.valor, data: hoje, descricao: a!.rotulo, categoriaId: a!.categoriaId, contaId: a!.contaId, cartaoId: a!.cartaoId }, hoje);
+      const r = await lancar(tx, userId, { tipo: "lancar", natureza: "despesa", valor: a!.valor, data: hoje, descricao: a!.rotulo, categoriaId: a!.categoriaId, contaId: a!.contaId, cartaoId: a!.cartaoId, repetir: true }, hoje);
       return { ...r, mensagem: `${a!.rotulo}: ${brl(a!.valor)} lançado.`, mes: mesDe(hoje) };
     }
 
@@ -575,9 +585,20 @@ async function executarNa(tx: Tx, userId: string, cmd: Exclude<Comando, { tipo: 
       return { mensagem: "Regra apagada." };
 
     case "lancar_varios": {
+      // a frase inteira lançada e depois cada item de novo foi como outubro
+      // entrou em dobro: a trava olha o lote todo antes de gravar qualquer um
+      let itens = cmd.itens;
+      if (!cmd.repetir) {
+        const lancaveis = itens.map((it, i) => ({ it, i })).filter((x): x is { it: z.infer<typeof Lancar>; i: number } => x.it.tipo === "lancar" && x.it.valor > 0);
+        const contaPadrao = await primeiraConta(tx, userId);
+        const rep = await repetidosDe(tx, userId, lancaveis.map(({ it }) => comparavel(it, contaPadrao, hoje)));
+        const indicesRepetidos = new Set(rep.map((r) => lancaveis[r.indice]!.i));
+        if (indicesRepetidos.size && cmd.pularRepetidos) itens = itens.filter((_, i) => !indicesRepetidos.has(i));
+        else if (indicesRepetidos.size) lancarRepetido(rep.map((r) => r.igual), itens.length - indicesRepetidos.size);
+      }
       const ids: string[] = [];
       let n = 0;
-      for (const item of cmd.itens) {
+      for (const item of itens) {
         if (item.tipo === "transferir") {
           // transferência com origem igual a destino é pulada, não derruba o resto (§8.1.4)
           if (item.origemId === item.destinoId || item.valor <= 0) continue;
@@ -585,7 +606,7 @@ async function executarNa(tx: Tx, userId: string, cmd: Exclude<Comando, { tipo: 
           ids.push(...(r.ids ?? []));
         } else {
           if (item.valor <= 0) continue;
-          const r = await lancar(tx, userId, item, hoje, false);
+          const r = await lancar(tx, userId, { ...item, repetir: true }, hoje, false);
           ids.push(...(r.ids ?? []));
         }
         n++;
@@ -612,6 +633,45 @@ async function executarNa(tx: Tx, userId: string, cmd: Exclude<Comando, { tipo: 
 
 type ResultadoComIds = Resultado & { ids?: string[] };
 
+/** O pedido de lançamento no formato da comparação de repetidos. */
+function comparavel(
+  it: { natureza: "despesa" | "receita"; valor: number; data?: string | null; descricao?: string | null; contaId?: string | null; cartaoId?: string | null },
+  contaPadrao: string | null,
+  hoje: Ymd,
+  valor = it.valor,
+  cartaoId: string | null | undefined = it.natureza === "despesa" ? it.cartaoId : null,
+): LancamentoComparavel {
+  return { tipo: it.natureza, valor, data: it.data || hoje, descricao: it.descricao ?? null, contaId: cartaoId ? null : (it.contaId ?? contaPadrao), cartaoId: cartaoId ?? null };
+}
+
+/** Os repetidos de um lote contra o que já está gravado, com a folga da config. Vazio se a trava estiver desligada. */
+async function repetidosDe(tx: Tx, userId: string, candidatos: LancamentoComparavel[]) {
+  if (!candidatos.length) return [];
+  const [ligada, dias] = await Promise.all([settings.get("finance.perguntarRepetido"), settings.get("finance.diasRepetido")]);
+  if (!ligada) return [];
+  const datas = candidatos.map((c) => c.data).sort();
+  const existentes = await tx
+    .select({ tipo: finLancamento.tipo, data: finLancamento.data, valor: finLancamento.valor, descricao: finLancamento.descricao, contaId: finLancamento.contaId, cartaoId: finLancamento.cartaoId })
+    .from(finLancamento)
+    .where(and(
+      eq(finLancamento.userId, userId),
+      inArray(finLancamento.valor, [...new Set(candidatos.map((c) => c.valor))]),
+      gte(finLancamento.data, somarDias(datas[0]!, -dias)),
+      lte(finLancamento.data, somarDias(datas[datas.length - 1]!, dias)),
+    ));
+  return acharRepetidos(candidatos, existentes, dias);
+}
+
+/** Para a gravação com a pergunta do banco: "já tem um igual, lanço de novo?". */
+function lancarRepetido(iguais: LancamentoComparavel[], novos: number): never {
+  const lista = iguais.map((e) => ({ descricao: e.descricao?.trim() || "sem descrição", valor: e.valor, data: e.data }));
+  const um = lista[0]!;
+  const texto = lista.length === 1
+    ? `Já tem um lançamento igual: ${um.descricao}, ${brl(um.valor)} em ${dataCurta(um.data)}. Quer lançar de novo?`
+    : `Estes já estão lançados: ${lista.map((l) => `${l.descricao} (${brl(l.valor)} em ${dataCurta(l.data)})`).join("; ")}. Quer lançar de novo${novos ? `, ou só os outros ${novos}` : ""}?`;
+  throw new RepetidoError(texto, lista, novos);
+}
+
 async function lancar(tx: Tx, userId: string, cmd: z.infer<typeof Lancar>, hoje: Ymd, desfazivel = true): Promise<ResultadoComIds> {
   if (cmd.valor <= 0) falha("Informe um valor maior que zero.");
   const noCartao = cmd.natureza === "despesa" && !!cmd.cartaoId;
@@ -621,6 +681,11 @@ async function lancar(tx: Tx, userId: string, cmd: z.infer<typeof Lancar>, hoje:
     { tipo: cmd.natureza, valor: cmd.valor, data: cmd.data || hoje, descricao: cmd.descricao, categoriaId: cmd.categoriaId ?? null, categoriaNome: await nomeDaCategoria(tx, cmd.categoriaId), contaId, cartaoId: noCartao ? cmd.cartaoId : null, estorno: cmd.estorno, parcelas: cmd.parcelas },
     () => crypto.randomUUID(),
   );
+  if (!cmd.repetir) {
+    // compra parcelada repetida aparece na PRIMEIRA parcela: as outras são do mesmo pedido
+    const rep = await repetidosDe(tx, userId, [comparavel({ ...cmd, descricao: cmd.descricao ?? null }, contaId, hoje, novos[0]!.valor, noCartao ? cmd.cartaoId : null)]);
+    if (rep.length) lancarRepetido(rep.map((r) => r.igual), 0);
+  }
   const ids = await inserirLancamentos(tx, userId, novos);
   if (cmd.guardarAtalho && cmd.natureza === "despesa" && novos.length === 1) {
     await tx.insert(finAtalho).values({ userId, rotulo: cmd.descricao?.trim() || (await nomeDaCategoria(tx, cmd.categoriaId)) || "Atalho", valor: cmd.valor, categoriaId: cmd.categoriaId ?? null, contaId, cartaoId: noCartao ? cmd.cartaoId! : null, ordem: Date.now() % 1_000_000_000 });

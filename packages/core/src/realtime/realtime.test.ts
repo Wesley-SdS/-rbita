@@ -58,6 +58,31 @@ describe("esquema de função para o Gemini", () => {
     expect(limpo.type).toBe("string");
   });
 
+  it("enum que não é texto sai: o Gemini recusa a sessão INTEIRA por ele", () => {
+    // o caso real: z.literal(true) derrubou o tempo real com 1007 (05/10/2026)
+    expect(limparSchemaParaGemini({ type: "boolean", enum: [true] })).toEqual({ type: "boolean" });
+    expect(limparSchemaParaGemini({ type: "boolean", const: true })).toEqual({ type: "boolean" });
+    expect(limparSchemaParaGemini({ type: "number", enum: [1, 2] })).toEqual({ type: "number" });
+    // misto: fica só o que é texto
+    expect(limparSchemaParaGemini({ enum: ["a", 3] })).toEqual({ enum: ["a"], type: "string" });
+  });
+
+  it("nenhuma tool registrada gera enum que o Gemini recusa", async () => {
+    // a voz recebe TODAS as tools: uma declaração torta deixa o tempo real surdo
+    const { listRegisteredTools } = await import("../tools/registry");
+    await import("../tools/domains/financas");
+    const { z } = await import("zod");
+    const ruins: string[] = [];
+    const anda = (nome: string, x: unknown): void => {
+      if (!x || typeof x !== "object") return;
+      const o = x as Record<string, unknown>;
+      if (Array.isArray(o.enum) && o.enum.some((v) => typeof v !== "string")) ruins.push(nome);
+      for (const v of Object.values(o)) anda(nome, v);
+    };
+    for (const d of listRegisteredTools()) anda(d.name, limparSchemaParaGemini(z.toJSONSchema(d.inputSchema)));
+    expect(ruins).toEqual([]);
+  });
+
   it("limpa em profundidade: dentro de items e de anyOf", () => {
     const limpo = limparSchemaParaGemini({
       type: "array",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { brl, mesCurto, valorSemPrefixo } from "@orbita/core/finance/formato";
+import { brl } from "@orbita/core/finance/formato";
 import { diasNoMes } from "@orbita/core/finance/calendario";
 import { area, caminho, escalaDoRitmo, pontos } from "@/lib/financas/grafico";
 import { largura } from "@/lib/financas/apresentacao";
@@ -71,38 +71,6 @@ export function BarraEmpilhada({ partes, escala }: { partes: Parte[]; escala: nu
       {visiveis.map((p) => (
         <i key={p.nome} className={p.classe} style={{ width: `${largura(p.valor, escala)}%` }} />
       ))}
-    </div>
-  );
-}
-
-const CW = 540;
-const CH = 170;
-const BASE = 146;
-
-/** Colunas do histórico (§6.7): gasto e entrada por mês, mesma escala; mês atual tracejado. */
-export function ColunasHistorico({ meses }: { meses: { mes: string; gasto: number; entrada: number; atual: boolean }[] }) {
-  const max = Math.max(1, ...meses.flatMap((m) => [m.gasto, m.entrada]));
-  const passo = CW / Math.max(1, meses.length);
-  const bw = Math.min(14, passo / 3);
-  const altura = (v: number) => (Math.max(0, v) / max) * (BASE - 8);
-  return (
-    <div className="fin-colunas">
-      <svg viewBox={`0 0 ${CW} ${CH}`} role="img" aria-label="Saídas e entradas dos últimos 12 meses">
-        {meses.map((m, i) => {
-          const cx = passo * i + passo / 2;
-          const hg = altura(m.gasto);
-          const he = altura(m.entrada);
-          return (
-            <g key={m.mes}>
-              <title>{`${mesCurto(m.mes)}: saídas ${valorSemPrefixo(m.gasto)}, entradas ${valorSemPrefixo(m.entrada)}`}</title>
-              {m.atual && <rect x={cx - passo / 2 + 3} y={2} width={passo - 6} height={BASE + 20} rx={6} className="fin-coluna-atual" />}
-              <rect x={cx - bw - 1} y={BASE - hg} width={bw} height={hg} rx={2} className="fin-coluna fin-col-saida" />
-              <rect x={cx + 1} y={BASE - he} width={bw} height={he} rx={2} className="fin-coluna fin-col-entrada" />
-              <text x={cx} y={BASE + 16} textAnchor="middle" className="fin-coluna-rotulo">{mesCurto(m.mes)}</text>
-            </g>
-          );
-        })}
-      </svg>
     </div>
   );
 }

@@ -365,6 +365,27 @@
       "when": 1790616753881,
       "tag": "0051_notificacao_origem",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1791314256129,
+      "tag": "0052_noticias_por_tema",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1791318570836,
+      "tag": "0053_emails_triados",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1791319785238,
+      "tag": "0054_novidades_de_trabalho",
+      "breakpoints": true
     }
   ]
 }

@@ -9,6 +9,16 @@ import { buildCsp, hstsValue, origemDe, securityHeaders } from "./headers";
 describe("CSP", () => {
   const prod = buildCsp({ dev: false, voiceWs: "ws://localhost:8001/ws/wake" });
 
+  it("sem VOICE_PUBLIC_WS_URL, libera o mesmo wake que o voice-config manda usar", () => {
+    // a API manda o navegador conectar em ws://localhost:8001 quando a variável
+    // não existe; a CSP de produção sem o mesmo padrão matava o "Ei Órbita"
+    const csp = securityHeaders({}, false).find((h) => h.key === "Content-Security-Policy")!.value;
+    expect(csp).toMatch(/connect-src[^;]*ws:\/\/localhost:8001/);
+    const outro = securityHeaders({ VOICE_PUBLIC_WS_URL: "wss://voz.casa.com" }, false).find((h) => h.key === "Content-Security-Policy")!.value;
+    expect(outro).toContain("wss://voz.casa.com");
+    expect(outro).not.toContain("ws://localhost:8001");
+  });
+
   it("libera o que a Órbita usa de fato", () => {
     expect(prod).toContain("connect-src 'self' https://api.openai.com wss://generativelanguage.googleapis.com ws://localhost:8001");
     expect(prod).toContain("media-src 'self' data: blob:");

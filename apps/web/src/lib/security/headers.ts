@@ -88,6 +88,9 @@ export function hstsValue(baseUrl: string | undefined, maxAgeEnv: string | undef
   return segundos > 0 ? `max-age=${segundos}` : null;
 }
 
+/** Onde o navegador escuta o "Ei Órbita" quando `VOICE_PUBLIC_WS_URL` não existe (o mesmo do `voice-config`). */
+export const VOZ_WS_PADRAO = "ws://localhost:8001";
+
 export function securityHeaders(env: Record<string, string | undefined>, dev: boolean): { key: string; value: string }[] {
   const headers = [
     { key: "X-Content-Type-Options", value: "nosniff" },
@@ -100,7 +103,12 @@ export function securityHeaders(env: Record<string, string | undefined>, dev: bo
   ];
   const modo = (env.CSP_MODE ?? "enforce").trim().toLowerCase();
   if (modo !== "off") {
-    const csp = buildCsp({ dev, voiceWs: env.VOICE_PUBLIC_WS_URL, extraConnect: env.CSP_CONNECT_EXTRA });
+    // O padrão TEM de ser o mesmo do `apps/api/src/routes/voice-config.ts`, que
+    // manda o navegador conectar no wake em `ws://localhost:8001` quando a
+    // variável não existe. Sem o mesmo padrão aqui, a CSP de produção não
+    // liberava esse endereço e o "Ei Órbita" morria calado (em dev passava,
+    // porque o modo dev libera qualquer `ws:`).
+    const csp = buildCsp({ dev, voiceWs: env.VOICE_PUBLIC_WS_URL ?? VOZ_WS_PADRAO, extraConnect: env.CSP_CONNECT_EXTRA });
     headers.push({ key: modo === "report-only" ? "Content-Security-Policy-Report-Only" : "Content-Security-Policy", value: csp });
   }
   const hsts = hstsValue(env.BETTER_AUTH_URL, env.HSTS_MAX_AGE);

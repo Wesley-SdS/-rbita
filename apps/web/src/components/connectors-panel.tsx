@@ -24,6 +24,71 @@ interface Conector {
   accountLabel: string | null;
   /** Uma linha por CONTA: o Google deixou de ser "conectado ou não". */
   contas: Conta[];
+  /** conecta colando um token (GitHub, Jira, Slack), com ou sem app OAuth */
+  porToken: { campos: { nome: string; rotulo: string; tipo: string; exemplo?: string }[]; ajuda: string; link: string } | null;
+}
+
+/**
+ * Conectar colando um token. O servidor confere no serviço antes de guardar,
+ * e a resposta diz de quem é a conta: o dono vê na hora se entrou a certa.
+ * Os campos voltam vazios depois, para o token não ficar na tela.
+ */
+function FormularioDeToken({ conector, aoConectar }: { conector: Conector; aoConectar: (msg: string) => void }) {
+  const [aberto, setAberto] = useState(false);
+  const [valores, setValores] = useState<Record<string, string>>({});
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+  const pt = conector.porToken!;
+
+  async function enviar(e: React.FormEvent) {
+    e.preventDefault();
+    setOcupado(true);
+    setErro(null);
+    const r = await fetch(`/api/connectors/${conector.id}/token`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ valores }) });
+    const d = await r.json().catch(() => ({}));
+    setOcupado(false);
+    if (!r.ok) return setErro(d.error ?? "Não consegui conectar.");
+    setValores({});
+    setAberto(false);
+    aoConectar(`${conector.label}: ${d.label ?? "conta"} conectada.`);
+  }
+
+  if (!aberto) {
+    return (
+      <button type="button" className={`button ${conector.connected || conector.configured ? "secondary" : "primary"} compacto`} onClick={() => setAberto(true)}>
+        <Icone nome="plus" />
+        {conector.connected ? "Outra conta por token" : "Conectar com token"}
+      </button>
+    );
+  }
+  return (
+    <form className="token-form" onSubmit={(e) => void enviar(e)}>
+      <p className="token-ajuda">
+        {pt.ajuda}{" "}
+        <a href={pt.link} target="_blank" rel="noopener noreferrer">Abrir onde gerar</a>
+      </p>
+      {pt.campos.map((c) => (
+        <label key={c.nome} className="token-campo">
+          <span>{c.rotulo}</span>
+          <input
+            className="inline-input"
+            type={c.tipo}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={c.exemplo}
+            value={valores[c.nome] ?? ""}
+            onChange={(e) => setValores((v) => ({ ...v, [c.nome]: e.target.value }))}
+            required
+          />
+        </label>
+      ))}
+      {erro && <p className="token-erro" role="alert">{erro}</p>}
+      <div className="conta-botoes">
+        <button type="submit" className="button primary compacto" disabled={ocupado}>{ocupado ? "Conferindo…" : "Conectar"}</button>
+        <button type="button" className="button secondary compacto" onClick={() => { setAberto(false); setErro(null); }}>Cancelar</button>
+      </div>
+    </form>
+  );
 }
 
 /**
@@ -134,7 +199,17 @@ export function ConnectorsPanel() {
                 </ul>
               )}
 
-              {!c.configured ? (
+              {c.porToken ? (
+                <div className="conta-botoes">
+                  {c.configured && (
+                    <a className={`button ${c.connected ? "secondary" : "primary"} compacto`} href={`/api/connectors/${c.id}/connect`}>
+                      <Icone nome={c.connected ? "plus" : "link"} />
+                      {c.connected ? "Conectar outra conta" : "Conectar"}
+                    </a>
+                  )}
+                  <FormularioDeToken conector={c} aoConectar={(m) => { setRecado(m); invalidar("/api/connectors"); setTimeout(() => setRecado(null), 6000); }} />
+                </div>
+              ) : !c.configured ? (
                 <div className="notice" style={{ margin: "16px 0 0" }}>
                   Faltam as credenciais deste serviço no servidor. Sem elas a Órbita não tem como pedir acesso em seu nome.
                 </div>

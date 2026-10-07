@@ -7,11 +7,11 @@ import { sessionOf } from "../http/web-route";
 import { carregar, hojeDoServidor } from "@orbita/core/finance/store";
 import { limiaresDaConfig } from "@orbita/core/finance/config";
 import { Comando, executar } from "@orbita/core/finance/comandos";
-import { RegraFinanceiraError } from "@orbita/core/finance/operacoes";
+import { RegraFinanceiraError, RepetidoError } from "@orbita/core/finance/operacoes";
 import * as visoes from "@orbita/core/finance/visoes";
 import { mesDe } from "@orbita/core/finance/calendario";
 import { log } from "@orbita/core/observability/logger";
-import { proporDitado, lerBoleto, prepararImportacao, csvDoFinanceiro } from "@orbita/core/finance/entradas";
+import { proporDitado, lerBoleto, prepararImportacao, csvDoFinanceiro, extratoPdfDosDados } from "@orbita/core/finance/entradas";
 import { lerDataUrl } from "@orbita/core/arquivos";
 import { lerPdf } from "@orbita/core/ocr/pdf";
 import { backupDoDono, restaurarBackup } from "@orbita/core/finance/restauracao";
@@ -49,15 +49,8 @@ export async function GET(req: Request, ctx: RouteCtx) {
   const corpo = await (async () => {
     switch (vista.data) {
       case "painel": return visoes.painel(dados, mes, hoje, lim);
-      case "extrato": {
-        const natureza = z.enum(["despesa", "receita"]).safeParse(url.searchParams.get("natureza"));
-        return visoes.extrato(dados, mes, hoje, lim, {
-          busca: url.searchParams.get("q")?.slice(0, 120) ?? null,
-          natureza: natureza.success ? natureza.data : null,
-          categoriaId: z.string().uuid().safeParse(url.searchParams.get("categoria")).data ?? null,
-          onde: z.string().regex(/^(conta|cartao):[0-9a-f-]{36}$/).safeParse(url.searchParams.get("onde")).data ?? null,
-        });
-      }
+      case "extrato":
+        return visoes.extrato(dados, mes, hoje, lim, filtrosDaUrl(url));
       case "contas": return visoes.contas(dados, mes, hoje, lim);
       case "cartoes": return visoes.cartoes(dados, hoje);
       case "metas": return visoes.metas(dados, hoje);
@@ -100,6 +93,8 @@ export async function POST(req: Request, ctx: RouteCtx) {
     const r = await executar(session.user.id, parsed.data, hojeDoServidor());
     return Response.json(r);
   } catch (e) {
+    // repetido é PERGUNTA, não erro: 409 com o que já existe, e a tela confirma
+    if (e instanceof RepetidoError) return Response.json({ error: e.message, repetido: true, repetidos: e.repetidos, novos: e.novos }, { status: 409 });
     // erro do DONO (valor zero, conta com lançamentos): mensagem do PRD, 400
     if (e instanceof RegraFinanceiraError) return Response.json({ error: e.message }, { status: 400 });
     log.error("financas.comando", { tipo: parsed.data.tipo, error: e instanceof Error ? e.message : String(e) });
@@ -152,7 +147,18 @@ export async function POST_ENTRADA(req: Request, ctx: RouteCtx) {
   }
 }
 
-/** GET /api/financas/exportar?formato=csv|backup: arquivo para baixar (§9.1, §9.2). */
+/** Os filtros do extrato na query, validados (os mesmos da tela e do PDF). */
+function filtrosDaUrl(url: URL) {
+  const natureza = z.enum(["despesa", "receita"]).safeParse(url.searchParams.get("natureza"));
+  return {
+    busca: url.searchParams.get("q")?.slice(0, 120) ?? null,
+    natureza: natureza.success ? natureza.data : null,
+    categoriaId: z.string().uuid().safeParse(url.searchParams.get("categoria")).data ?? null,
+    onde: z.string().regex(/^(conta|cartao):[0-9a-f-]{36}$/).safeParse(url.searchParams.get("onde")).data ?? null,
+  };
+}
+
+/** GET /api/financas/exportar?formato=csv|backup|pdf: arquivo para baixar (§9.1, §9.2; pdf = o extrato do mês com os filtros da tela). */
 export async function GET_EXPORTAR(req: Request, ctx: RouteCtx) {
   const session = sessionOf(ctx);
   if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
@@ -162,6 +168,14 @@ export async function GET_EXPORTAR(req: Request, ctx: RouteCtx) {
   if (formato === "csv") {
     return new Response(csvDoFinanceiro(dados), {
       headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="lancamentos.csv"', "Cache-Control": "no-store" },
+    });
+  }
+  if (formato === "pdf") {
+    const url = new URL(req.url);
+    const mes = Mes.safeParse(url.searchParams.get("mes")).data ?? mesDe(hoje);
+    const pdf = await extratoPdfDosDados(dados, mes, hoje, await limiaresDaConfig(), filtrosDaUrl(url), session.user.name ?? null);
+    return new Response(Buffer.from(pdf), {
+      headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="extrato-${mes}.pdf"`, "Cache-Control": "no-store" },
     });
   }
   if (formato === "backup") {

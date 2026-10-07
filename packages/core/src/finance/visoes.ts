@@ -2,7 +2,7 @@ import { diasEntre, diasNoMes, mesDe, partes, somarMeses, type Ym, type Ymd } fr
 import { faturaAberta, faturasDoCartao, limiteDoCartao, type Fatura } from "./cartao";
 import { projetarQuitacao, saldoDevedor, type Quitacao } from "./divida";
 import {
-  classificarGasto, farol, gastoDiario, gastoDoMes, gastoPorCategoria, janela, previstoDoMes, saldoDaConta, saldoTotal,
+  classificarGasto, farol, gastoDiario, gastoDoMes, gastoPorCategoria, gastoPorLugar, janela, previstoDoMes, saldoDaConta, saldoTotal,
   situacaoDaConta, baseDoMes, entradaDoMes, type Farol, type Situacao,
 } from "./mes";
 import { preverMeses, type Previsao } from "./previsao";
@@ -407,12 +407,53 @@ export function historico(d: DadosFinanceiros, hoje: Ymd, meses = 12) {
     .sort((a, b) => Math.abs(b.diferenca) - Math.abs(a.diferenca))
     .slice(0, 10);
 
+  // cada mês com as categorias dele contra o normal (a média dos 3 meses
+  // anteriores daquela categoria): é o que a tela mostra ao tocar no mês
+  const CATEGORIAS_NA_ROSCA = 6;
+  const mesesComCategorias = serie.map((s) => {
+    const doMes = gastoPorCategoria(m.lancamentos, s.mes);
+    const antes = [1, 2, 3].map((i) => porMes(somarMeses(s.mes, -i)));
+    const linha = (categoriaId: string | null, total: Centavos) => {
+      const base = antes.reduce((acc, mp) => acc + (mp.get(categoriaId) ?? 0), 0) / 3;
+      return { categoriaId, categoria: ctx.pastilha(categoriaId), total, pctDoNormal: base > 0 ? Math.round(((total - base) / base) * 100) : null };
+    };
+    const principais = doMes.slice(0, CATEGORIAS_NA_ROSCA).map((g) => linha(g.categoriaId, g.total));
+    const resto = doMes.slice(CATEGORIAS_NA_ROSCA).reduce((acc, g) => acc + g.total, 0);
+    return { ...s, categorias: resto > 0 ? [...principais, { categoriaId: "__outras", categoria: { nome: "Outras categorias", cor: "#c7cfc2", iniciais: "OC" }, total: resto, pctDoNormal: null }] : principais };
+  });
+
+  // o resumo e os lugares para cada período que a tela oferece; os números
+  // saem daqui, e a tela só escolhe qual mostrar
+  const resumoDe = (n: number) => {
+    const janelaDoPeriodo = serie.slice(-n);
+    const comMovimento = janelaDoPeriodo.filter((x) => x.temMovimento);
+    const div = Math.max(1, comMovimento.length);
+    const pesado = [...comMovimento].sort((a, b) => b.gasto - a.gasto)[0] ?? null;
+    const lugares = gastoPorLugar(m.lancamentos, janelaDoPeriodo.map((x) => x.mes))
+      .slice(0, 8)
+      .map((l) => {
+        const ultimo = l.porMes[l.porMes.length - 1] ?? 0;
+        const anteriores = l.porMes.slice(-4, -1);
+        const base = anteriores.length ? anteriores.reduce((a, b) => a + b, 0) / anteriores.length : 0;
+        return { ...l, ticketMedio: l.vezes ? Math.round(l.total / l.vezes) : 0, pctUltimoMes: base > 0 ? Math.round(((ultimo - base) / base) * 100) : null };
+      });
+    return {
+      meses: n,
+      gastoMedio: Math.round(comMovimento.reduce((a, x) => a + x.gasto, 0) / div),
+      entradaMedia: Math.round(comMovimento.reduce((a, x) => a + x.entrada, 0) / div),
+      sobra: janelaDoPeriodo.reduce((a, x) => a + x.entrada - x.gasto, 0),
+      maisPesado: pesado ? { mes: pesado.mes, gasto: pesado.gasto } : null,
+      lugares,
+    };
+  };
+
   return {
-    meses: serie,
+    meses: mesesComCategorias,
     media,
     maisCaro: comMov.length >= 2 ? ordenados[0]! : null,
     maisLeve: comMov.length >= 2 ? ordenados[ordenados.length - 1]! : null,
     comparacao,
+    periodos: [resumoDe(6), resumoDe(meses)],
   };
 }
 

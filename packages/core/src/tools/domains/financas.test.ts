@@ -19,6 +19,7 @@ import type { DadosFinanceiros } from "../../finance/dados";
 
 const comandos: Record<string, unknown>[] = [];
 let erroDoExecutor: string | null = null;
+let repetidoNoExecutor = false;
 
 const conta = (id: string, nome: string) => ({ id, userId: "u1", nome, tipo: "corrente" as const, saldoInicial: 0, cor: "#000000", ordem: 0 });
 const cartao = (id: string, nome: string) => ({ id, userId: "u1", nome, limite: 500000, fechamento: 5, vencimento: 12, contaPagamentoId: "c1", cor: "#000000", ordem: 0 });
@@ -53,10 +54,24 @@ vi.mock("../../finance/comandos", () => ({
   executar: async (_u: string, cmd: Record<string, unknown>) => {
     const { RegraFinanceiraError } = await import("../../finance/operacoes");
     if (erroDoExecutor) throw new RegraFinanceiraError(erroDoExecutor);
+    if (repetidoNoExecutor && !cmd.repetir) {
+      const { RepetidoError } = await import("../../finance/operacoes");
+      throw new RepetidoError("Já tem um lançamento igual: Abastecimento, R$ 100,00 em 05/10. Quer lançar de novo?", [{ descricao: "Abastecimento", valor: 10000, data: "2026-10-05" }], 0);
+    }
     comandos.push(cmd);
     return { mensagem: "ok", desfazerId: "d1" };
   },
 }));
+const arquivosAoDono: { nome: string; mime: string; tamanho: number }[] = [];
+let whatsappConectado = true;
+vi.mock("../../whatsapp/avisar", () => ({
+  mandarArquivoAoDono: async (_u: string, a: { bytes: Uint8Array; mime: string; nome: string }) => {
+    if (!whatsappConectado) return false;
+    arquivosAoDono.push({ nome: a.nome, mime: a.mime, tamanho: a.bytes.length });
+    return true;
+  },
+}));
+
 vi.mock("../../finance/bill-due", () => ({
   billsDueFor: async (_u: string, dias: number) => [{ descricao: "Luz", valor: 250.5, tipo: "a_pagar", vencimento: "2026-09-30", vencida: false, dias }],
 }));
@@ -73,8 +88,8 @@ const gate = {
   },
 } as unknown as Parameters<typeof toToolSet>[2];
 
-function executar(nome: string, input: unknown = {}) {
-  const set = toToolSet([getTool(nome)!], ctx, gate);
+function executar(nome: string, input: unknown = {}, canal?: "tela" | "whatsapp" | "voz") {
+  const set = toToolSet([getTool(nome)!], canal ? { ...ctx, canal } : ctx, gate);
   const tool = set[nome] as { execute: (i: unknown, o: unknown) => Promise<unknown> };
   return tool.execute(input, { toolCallId: "c1", messages: [] }) as Promise<Record<string, unknown>>;
 }
@@ -84,6 +99,7 @@ beforeEach(() => {
   comandos.length = 0;
   propostas.length = 0;
   erroDoExecutor = null;
+  repetidoNoExecutor = false;
 });
 
 describe("tools de finanças", () => {
@@ -211,8 +227,55 @@ describe("tools de finanças", () => {
     expect(r.contas).toHaveLength(1);
   });
 
+  it("repetido vira PERGUNTA para o dono; confirmado, vai com repetir", async () => {
+    repetidoNoExecutor = true;
+    const r = await executar("registrar_gasto", { valor: 100, descricao: "Abastecimento" });
+    expect(r).toMatchObject({ repetido: true, pergunte_ao_dono: expect.stringContaining("Quer lançar de novo?") });
+    expect(comandos).toHaveLength(0);
+    await executar("registrar_gasto", { valor: 100, descricao: "Abastecimento", repetir: true });
+    expect(comandos[0]).toMatchObject({ tipo: "lancar", repetir: true });
+  });
+
+  it("corrigir um lançamento não apaga: edita mantendo o que não foi dito", async () => {
+    dados.lancamentos = [{
+      id: "l9", userId: "u1", tipo: "despesa", data: "2026-10-05", valor: 10000, descricao: "Abastecendo $ 29 cachorro quente", categoriaId: "out", contaId: "c1", cartaoId: null,
+      transferencia: false, grupoTransferencia: null, fixo: false, estorno: false, grupoParcela: null, parcelaN: null, parcelaDe: null,
+      metaId: null, metaItemId: null, compromissoId: null, importado: false, criadoEm: new Date(),
+    }];
+    const r = await executar("editar_lancamento", { lancamento: "abastecendo", nova_descricao: "Abastecimento" });
+    expect(comandos[0]).toEqual({
+      tipo: "editar_lancamento", id: "l9", natureza: "despesa", valor: 10000, data: "2026-10-05", descricao: "Abastecimento",
+      categoriaId: "out", contaId: "c1", cartaoId: null, estorno: false,
+    });
+    expect(r.antes).toContain("R$ 100,00");
+    expect(mod.editar_lancamento.risk).toBe("escrita");
+    expect(propostas).toEqual([]);
+  });
+
+  it("extrato em PDF: na tela vem o link com os filtros que o dono disse", async () => {
+    const r = await executar("extrato_em_pdf", { mes: "2026-10", so: "saidas", onde: "nubank", categoria: "mercado" }, "tela");
+    expect(r.link).toBe("/api/financas/exportar?formato=pdf&mes=2026-10&natureza=despesa&categoria=mer&onde=cartao%3Anu");
+    expect(String(r.mensagem)).toContain("[baixar o PDF](");
+    expect(arquivosAoDono).toEqual([]);
+  });
+
+  it("extrato em PDF: no WhatsApp o arquivo vai na conversa; sem WhatsApp conectado, cai no link", async () => {
+    arquivosAoDono.length = 0;
+    const r = await executar("extrato_em_pdf", { mes: "2026-10" }, "whatsapp");
+    expect(arquivosAoDono).toHaveLength(1);
+    expect(arquivosAoDono[0]).toMatchObject({ nome: "extrato-2026-10.pdf", mime: "application/pdf" });
+    expect(arquivosAoDono[0]!.tamanho).toBeGreaterThan(500);
+    expect(String(r.mensagem)).toContain("Mandei o PDF");
+    whatsappConectado = false;
+    const sem = await executar("extrato_em_pdf", { mes: "2026-10" }, "whatsapp");
+    whatsappConectado = true;
+    expect(sem.link).toContain("formato=pdf");
+    expect(mod.extrato_em_pdf.risk).toBe("leitura");
+  });
+
   it("APAGAR não executa sozinha: vai para o gate humano", async () => {
-    expect(mod.apagar_lancamento.risk).toBe("perigoso");
+    // apagar UM lançamento passa pela aprovação mas sai por "manda"; zerar tudo é perigoso
+    expect(mod.apagar_lancamento.risk).toBe("efeito_externo");
     expect(mod.apagar_tudo_financas.risk).toBe("perigoso");
     await executar("apagar_lancamento", { descricao: "café" });
     await executar("apagar_tudo_financas", { confirmo: true });

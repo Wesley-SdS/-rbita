@@ -38,8 +38,11 @@ describe("registry de conectores", () => {
     delete process.env.ZOOM_CLIENT_ID;
     const { listConnectors } = await import("./registry");
     const list = listConnectors();
-    expect(list.map((c) => c.id).sort()).toEqual(["google", "jira", "microsoft", "notion", "slack", "zoom"]);
+    expect(list.map((c) => c.id).sort()).toEqual(["github", "google", "jira", "microsoft", "notion", "slack", "zoom"]);
     expect(list.every((c) => c.configured === false)).toBe(true);
+    // sem app OAuth, GitHub, Jira e Slack ainda conectam por token (decisão do dono, 06/10/2026)
+    expect(list.filter((c) => c.porToken).map((c) => c.id).sort()).toEqual(["github", "jira", "slack"]);
+    expect(list.find((c) => c.id === "jira")!.porToken!.campos.map((c) => c.nome)).toEqual(["site", "email", "token"]);
   });
 
   it("o conector novo acende sozinho quando a credencial aparece", async () => {

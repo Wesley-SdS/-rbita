@@ -126,6 +126,47 @@ export async function listRecentMessages(token: string, max = 5, busca?: string)
   return r.value.map(paraEmail);
 }
 
+interface GraphMensagemDaCaixa extends GraphMessage {
+  webLink?: string;
+  inferenceClassification?: "focused" | "other";
+  internetMessageHeaders?: { name: string; value: string }[];
+}
+
+export interface MensagemDoOutlook {
+  id: string;
+  from: string;
+  subject: string;
+  snippet: string;
+  recebidaEm: Date;
+  webLink: string | null;
+  outros: boolean;
+  listUnsubscribe: boolean;
+  authResults: string;
+}
+
+/** A caixa de entrada desde um instante, da mais antiga para a mais nova (a mesma regra do Gmail). */
+export async function listarCaixaDesde(token: string, desde: Date, max = 25): Promise<MensagemDoOutlook[]> {
+  const campos = "$select=id,subject,bodyPreview,receivedDateTime,from,webLink,inferenceClassification,internetMessageHeaders";
+  const filtro = `$filter=${encodeURIComponent(`receivedDateTime ge ${desde.toISOString()}`)}`;
+  const r = await graph<GraphList<GraphMensagemDaCaixa>>(token, `/me/mailFolders/inbox/messages?$top=${max}&${campos}&${filtro}&$orderby=receivedDateTime asc`);
+  return r.value.map((m) => {
+    const base = paraEmail(m);
+    const hs = m.internetMessageHeaders ?? [];
+    const h = (n: string) => hs.filter((x) => x.name.toLowerCase() === n).map((x) => x.value);
+    return {
+      id: base.id,
+      from: base.from,
+      subject: base.subject,
+      snippet: base.snippet,
+      recebidaEm: new Date(base.date || Date.now()),
+      webLink: m.webLink ?? null,
+      outros: m.inferenceClassification === "other",
+      listUnsubscribe: h("list-unsubscribe").length > 0,
+      authResults: h("authentication-results").join("; "),
+    };
+  });
+}
+
 function corpoDeMensagem(to: string, subject: string, body: string) {
   return {
     subject,

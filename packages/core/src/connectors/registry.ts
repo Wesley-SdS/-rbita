@@ -7,7 +7,9 @@
  * e o conector acende sozinho, sem mudança de código.
  */
 
-export type ConnectorId = "google" | "notion" | "slack" | "microsoft" | "jira" | "zoom";
+import type { CampoDeToken } from "./por-token";
+
+export type ConnectorId = "google" | "notion" | "slack" | "microsoft" | "jira" | "zoom" | "github";
 
 export interface ConnectorDef {
   id: ConnectorId;
@@ -50,6 +52,12 @@ export interface ConnectorDef {
    * inclui o cloudid.
    */
   descobrirConta?: (accessToken: string) => Promise<{ externalId: string; label: string | null }>;
+  /**
+   * Conectar colando um token, sem aplicativo OAuth (`por-token.ts`). Quem tem
+   * os dois mostra os dois: o botão de login quando as credenciais estão no
+   * ambiente, e o campo do token sempre.
+   */
+  porToken?: { campos: CampoDeToken[]; ajuda: string; link: string };
 }
 
 const G_ID = process.env.GOOGLE_CLIENT_ID;
@@ -119,6 +127,12 @@ const DEFS: Record<ConnectorId, ConnectorDef> = {
     tokenUrl: "https://slack.com/api/oauth.v2.access",
     // escopos de usuário: postar como você e ler histórico.
     scopes: ["chat:write", "channels:read", "channels:history"],
+    porToken: {
+      campos: [{ nome: "token", rotulo: "Token de usuário (xoxp-…)", tipo: "password", exemplo: "xoxp-…" }],
+      ajuda:
+        "Crie um app no seu workspace (api.slack.com/apps, \"From scratch\"). Em OAuth & Permissions, acrescente em User Token Scopes: search:read, users:read, im:read, im:history, channels:history, groups:history e chat:write. Instale no workspace e copie o User OAuth Token.",
+      link: "https://api.slack.com/apps",
+    },
     clientId: S_ID,
     clientSecret: S_SECRET,
   },
@@ -169,6 +183,15 @@ const DEFS: Record<ConnectorId, ConnectorDef> = {
     // `audience` é obrigatório no 3LO do Atlassian, e `prompt=consent` é o que
     // faz o refresh_token vir (sem ele a conexão morre em uma hora).
     authorizeParams: { audience: "api.atlassian.com", prompt: "consent" },
+    porToken: {
+      campos: [
+        { nome: "site", rotulo: "Endereço do Jira", tipo: "text", exemplo: "suaempresa.atlassian.net" },
+        { nome: "email", rotulo: "E-mail da conta Atlassian", tipo: "email" },
+        { nome: "token", rotulo: "Token de API", tipo: "password" },
+      ],
+      ajuda: "Gere um token de API em id.atlassian.com (Segurança, Tokens de API) com a conta que acessa este Jira. Cada Jira é uma conexão: conecte quantos quiser.",
+      link: "https://id.atlassian.com/manage-profile/security/api-tokens",
+    },
     tokenAsJson: true,
     descobrirConta: async (accessToken: string) => {
       const res = await fetch("https://api.atlassian.com/oauth/token/accessible-resources", {
@@ -184,6 +207,22 @@ const DEFS: Record<ConnectorId, ConnectorDef> = {
     },
     clientId: J_ID,
     clientSecret: J_SECRET,
+  },
+  github: {
+    id: "github",
+    label: "GitHub",
+    icon: "🐙",
+    blurb: "Comentários e reviews nas suas PRs, e as PRs que esperam o seu review.",
+    // só por token: a Órbita apenas LÊ, e um aplicativo OAuth seria burocracia sem ganho
+    authorizeUrl: "",
+    tokenUrl: "",
+    scopes: [],
+    porToken: {
+      campos: [{ nome: "token", rotulo: "Token do GitHub", tipo: "password", exemplo: "github_pat_… ou ghp_…" }],
+      ajuda:
+        "Um token fine-grained com leitura de Pull requests e Metadata, por organização (dá para conectar um de cada), ou um token clássico com o escopo repo. A Órbita só lê: nada é comentado nem aprovado por ela.",
+      link: "https://github.com/settings/personal-access-tokens/new",
+    },
   },
   zoom: {
     id: "zoom",
@@ -214,10 +253,10 @@ export function getConnector(id: string): ConnectorDef | undefined {
   return DEFS[id as ConnectorId];
 }
 
-/** Um conector está "configurado" quando tem clientId + clientSecret no ambiente. */
+/** O login OAuth está disponível: clientId + clientSecret no ambiente. */
 export function isConfigured(id: ConnectorId): boolean {
   const d = DEFS[id];
-  return Boolean(d?.clientId && d?.clientSecret);
+  return Boolean(d?.authorizeUrl && d?.clientId && d?.clientSecret);
 }
 
 /** URL de callback pública deste conector. */
@@ -230,6 +269,6 @@ export function redirectUri(id: ConnectorId): string {
 export function listConnectors() {
   return CONNECTOR_IDS.map((id) => {
     const d = DEFS[id];
-    return { id: d.id, label: d.label, icon: d.icon, blurb: d.blurb, configured: isConfigured(id) };
+    return { id: d.id, label: d.label, icon: d.icon, blurb: d.blurb, configured: isConfigured(id), porToken: d.porToken ?? null };
   });
 }

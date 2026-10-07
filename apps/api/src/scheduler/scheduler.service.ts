@@ -19,7 +19,7 @@ import { purgeExpiredVisualObjects } from "@orbita/core/vision/objects";
 import { installCameraIdentityListener } from "@orbita/core/identity/camera-listener";
 import { tickGuidedTasks } from "@orbita/core/guided/watch";
 import { purgeOldGuidedTasks } from "@orbita/core/guided/task";
-import { onJobEnqueued, purgeJobs, recoverZombies } from "@orbita/core/jobs/queue";
+import { enqueueJob, onJobEnqueued, purgeJobs, recoverZombies } from "@orbita/core/jobs/queue";
 import { drainJobs, jobsEmExecucao } from "@orbita/core/jobs/runner";
 import { closeIdleMcpConnections } from "@orbita/core/mcp/client";
 import { rotularVetoresLegados } from "@orbita/core/rag/modelo-dos-vetores";
@@ -174,6 +174,27 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     });
     // a Órbita toma a iniciativa: lembrete na hora marcada e briefing da manhã
     this.loop("lembretes", () => settings.get("routines.lembretesSegundos").then((s) => s * 1000), () => dispararLembretes());
+    // notícias dos temas do dono: uma busca por dia, na hora da casa, pela fila
+    // GitHub e Slack: o que chegou nas PRs e as menções, avisado uma vez só
+    this.loop("trabalho", () => settings.get("trabalho.intervaloMinutos").then((m) => m * 60_000), async () => {
+      const { donosComTrabalho, vigiarTrabalho, podarTrabalho } = await import("@orbita/core/trabalho/servico");
+      for (const userId of await donosComTrabalho()) {
+        const r = await vigiarTrabalho(userId).catch((e) => {
+          log.warn("trabalho.volta_falhou", { erro: e instanceof Error ? e.message : String(e) });
+          return null;
+        });
+        if (r?.novas) log.info("trabalho.novidades", r);
+        await podarTrabalho(userId).catch(() => undefined);
+      }
+    });
+    this.loop("noticias", async () => 60_000, async () => {
+      const { donosComBuscaDevida } = await import("@orbita/core/noticias/servico");
+      for (const { userId, dia } of await donosComBuscaDevida()) {
+        await enqueueJob(userId, { kind: "noticias.buscar", payload: { dia }, dedupKey: `noticias:${userId}:${dia}` }).catch((e) =>
+          log.warn("noticias.nao_enfileirada", { erro: e instanceof Error ? e.message : String(e) }),
+        );
+      }
+    });
     this.loop("whatsapp-briefing", async () => 60_000, async () => {
       // quem tem WhatsApp OU o bot do Telegram: o briefing escolhe o canal
       const donos = new Set([...(await usuariosComSessao()), ...(await todosOsBots()).map((b) => b.userId)]);
@@ -276,7 +297,23 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     if (r.arquivadas) log.info("conhecimento.arquivadas", r);
   }
 
+  /**
+   * A triagem dos e-mails substitui a vigia antiga quando está ligada: as
+   * duas lendo a mesma caixa avisariam o mesmo e-mail duas vezes.
+   */
   private async tickGmail() {
+    if (await settings.get("emails.triagem")) {
+      const { donosComCaixa, triarCaixas, podarEmails } = await import("@orbita/core/emails/servico");
+      for (const userId of await donosComCaixa()) {
+        const r = await triarCaixas(userId).catch((e) => {
+          log.warn("emails.volta_falhou", { erro: e instanceof Error ? e.message : String(e) });
+          return null;
+        });
+        if (r?.novos) log.info("emails.triagem", r);
+        await podarEmails(userId).catch(() => undefined);
+      }
+      return;
+    }
     const r = await emitImportantEmails();
     if (r.avisados) log.info("meetings.gmail_watch", r);
   }

@@ -76,17 +76,47 @@ export const BUILTIN_RULES: (RuleInput & { builtinKey: string })[] = [
     enabled: true,
     trigger: { kind: "event", type: "gmail.important_received" },
     conditions: [],
-    actions: [{ kind: "notify", title: "E-mail importante de {{payload.de}}", body: "{{payload.assunto}}: {{payload.trecho}}" }],
+    actions: [{ kind: "notify", title: "E-mail de {{payload.remetente}}", body: "{{payload.resumo}}" }],
   },
 ];
+
+/**
+ * Moldes padrão que já mudaram. A regra padrão é gravada UMA vez por dono, e
+ * a troca do molde (o aviso de e-mail colava o e-mail cru, 05/10/2026) não
+ * chegaria a quem já tinha a regra. Só é trocada a ação que ainda é IGUAL ao
+ * molde antigo: se o dono editou a regra, a edição dele vale.
+ */
+const MOLDES_ANTIGOS: Record<string, string> = {
+  "gmail.important_received": JSON.stringify([{ kind: "notify", title: "E-mail importante de {{payload.de}}", body: "{{payload.assunto}}: {{payload.trecho}}" }]),
+};
+
+/**
+ * JSON com as chaves em ordem. O Postgres (jsonb) devolve as chaves em ordem
+ * alfabética, e comparar com `JSON.stringify` do objeto do código nunca batia:
+ * a troca do molde do aviso de e-mail não chegava a ninguém. Pura.
+ */
+export function jsonCanonico(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(jsonCanonico).join(",")}]`;
+  if (v && typeof v === "object") {
+    return `{${Object.keys(v as Record<string, unknown>).sort().map((k) => `${JSON.stringify(k)}:${jsonCanonico((v as Record<string, unknown>)[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v);
+}
 
 /** Garante as regras padrão para todos os usuários (idempotente por builtinKey). */
 export async function ensureBuiltinRules(): Promise<number> {
   const users = await db.select({ id: user.id }).from(user);
   let criadas = 0;
   for (const u of users) {
-    const existing = await db.select({ builtinKey: automationRule.builtinKey }).from(automationRule).where(eq(automationRule.userId, u.id));
+    const existing = await db.select({ id: automationRule.id, builtinKey: automationRule.builtinKey, actions: automationRule.actions }).from(automationRule).where(eq(automationRule.userId, u.id));
     const have = new Set(existing.map((r) => r.builtinKey));
+    for (const r of existing) {
+      const antigo = r.builtinKey ? MOLDES_ANTIGOS[r.builtinKey] : undefined;
+      const novo = BUILTIN_RULES.find((b) => b.builtinKey === r.builtinKey);
+      if (antigo && novo && jsonCanonico(r.actions) === jsonCanonico(JSON.parse(antigo))) {
+        await db.update(automationRule).set({ actions: novo.actions }).where(eq(automationRule.id, r.id));
+      }
+    }
     for (const r of BUILTIN_RULES) {
       if (have.has(r.builtinKey)) continue;
       await db.insert(automationRule).values({

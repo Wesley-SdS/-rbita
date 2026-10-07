@@ -18,7 +18,8 @@ export interface RealtimeCallbacks {
   onError?: (msg: string) => void;
   onTranscript?: (role: "user" | "assistant", text: string) => void;
   /** uma tool foi chamada durante a conversa por voz (B7.2 — ver packages/core/src/tools/index.ts:runRealtimeTool). */
-  onToolCall?: (name: string, result: unknown) => void;
+  /** `args` vai junto: são os campos que o cartão de aprovação mostra para conferir */
+  onToolCall?: (name: string, result: unknown, args?: unknown) => void;
 }
 
 /**
@@ -152,7 +153,7 @@ export class RealtimeSession implements SessaoRealtime {
     }
     this.dc?.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify(output) } }));
     this.dc?.send(JSON.stringify({ type: "response.create" }));
-    this.cb.onToolCall?.(name, output);
+    this.cb.onToolCall?.(name, output, args);
   }
 
   /** Soma o que a OpenAI cobrou por esta resposta, separando áudio de texto (US$ 32/M contra US$ 4/M). */

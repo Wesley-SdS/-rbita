@@ -4,8 +4,12 @@ import { lerExtrato, regraAprendida, separarDuplicatas } from "./extrato";
 import { lancamentosCsv } from "./exportar";
 import { palpitarCategoria } from "./palpite";
 import { RegraFinanceiraError } from "./operacoes";
-import type { DadosFinanceiros } from "./dados";
-import type { Ymd } from "./calendario";
+import { paraMotor, type DadosFinanceiros } from "./dados";
+import { extrato, type FiltrosDoExtrato } from "./visoes";
+import { saldoTotal } from "./mes";
+import { gerarExtratoPdf } from "./extrato-pdf";
+import type { Limiares } from "./tipos";
+import type { Ym, Ymd } from "./calendario";
 import type { Centavos } from "./tipos";
 
 /**
@@ -90,6 +94,21 @@ export function prepararImportacao(d: DadosFinanceiros, conteudo: string): { lin
     })),
     repetidas: repetidas.length,
   };
+}
+
+/**
+ * O extrato do mês em PDF, com os MESMOS filtros da tela (§6.2.1). A visão é a
+ * da tela (`visoes.extrato`), e o gerador só desenha.
+ */
+export async function extratoPdfDosDados(d: DadosFinanceiros, ym: Ym, hoje: Ymd, lim: Limiares, f: FiltrosDoExtrato, titular?: string | null): Promise<Uint8Array> {
+  const e = extrato(d, ym, hoje, lim, f);
+  const filtros = [
+    f.natureza === "despesa" ? "Só saídas" : f.natureza === "receita" ? "Só entradas" : null,
+    f.categoriaId ? d.categorias.find((c) => c.id === f.categoriaId)?.nome : null,
+    f.onde?.startsWith("cartao:") ? `Cartão ${d.cartoes.find((c) => `cartao:${c.id}` === f.onde)?.nome ?? ""}` : f.onde ? d.contas.find((c) => `conta:${c.id}` === f.onde)?.nome : null,
+    f.busca ? `contém "${f.busca}"` : null,
+  ].filter(Boolean).join(" · ");
+  return gerarExtratoPdf({ mes: ym, hoje, resumo: e.resumo, previstos: e.previstos, dias: e.dias, saldoContas: saldoTotal(d.contas, paraMotor(d).lancamentos, hoje), filtros, titular });
 }
 
 /** "lancamentos.csv" com todos os lançamentos (§9.1). */

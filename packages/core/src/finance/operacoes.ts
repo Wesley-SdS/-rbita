@@ -253,3 +253,15 @@ export class RegraFinanceiraError extends Error {
     this.name = "RegraFinanceiraError";
   }
 }
+
+/**
+ * "Já tem um igual, lanço de novo?" (`finance/duplicados.ts`). Não é erro: é
+ * PERGUNTA. A tela confirma e reenvia com `repetir`; o chat, a voz e o
+ * WhatsApp perguntam ao dono e só repetem se ele disser que sim.
+ */
+export class RepetidoError extends RegraFinanceiraError {
+  constructor(message: string, readonly repetidos: { descricao: string; valor: number; data: string }[], readonly novos: number) {
+    super(message);
+    this.name = "RepetidoError";
+  }
+}

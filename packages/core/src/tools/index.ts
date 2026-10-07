@@ -17,6 +17,10 @@ import {
 import "./domains/tempo";
 import "./domains/memoria";
 import "./domains/financas";
+import "./domains/noticias";
+import "./domains/emails";
+import "./domains/trabalho";
+import "./domains/rotinas";
 import "./domains/tarefas";
 import "./domains/widgets";
 import "./domains/clima";
@@ -151,7 +155,7 @@ export async function buildToolSet(userId: string, query = "", requester?: ToolC
   // dono pede "tudo" por ali, e a seleção por palavras deixava de fora a tool
   // certa quando o pedido não repetia o vocabulário dela
   const chosen = todas ? doDominio : selectRelevant(doDominio, query, max);
-  return toToolSet(chosen, { userId, requester, origin, voiceRef }, { overrides, enqueue: enqueueFor(userId, canal) });
+  return toToolSet(chosen, { userId, requester, origin, voiceRef, canal }, { overrides, enqueue: enqueueFor(userId, canal) });
 }
 
 /**
@@ -197,7 +201,7 @@ export async function runRealtimeTool(userId: string, name: string, rawInput: un
   const parsed = def.inputSchema.safeParse(rawInput ?? {});
   if (!parsed.success) return { erro: "Entrada inválida para a ferramenta." };
 
-  const ctx: ToolContext = { userId, requester, origin };
+  const ctx: ToolContext = { userId, requester, origin, canal: "voz" };
   const negado = def.authorize ? await def.authorize(parsed.data, ctx) : null;
   if (negado) return { permitido: false, erro: negado };
   const entrada = def.preparar ? await def.preparar(parsed.data, ctx) : parsed.data;

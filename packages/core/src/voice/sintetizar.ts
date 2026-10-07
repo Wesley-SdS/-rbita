@@ -24,6 +24,26 @@ export class FalaError extends Error {
   }
 }
 
+/**
+ * Falha que passa se esperar: limite (429), sobrecarga (503), erro do servidor
+ * ou a rede. "Sem chave" e pedido recusado (400) não passam: repetir é gastar
+ * tempo à toa. Pura.
+ */
+export function falhaPassageira(mensagem: string): boolean {
+  const status = /_(\d{3})\b/.exec(mensagem)?.[1];
+  if (status) return status === "429" || status.startsWith("5");
+  return /timeout|timed out|fetch failed|ECONNRESET|ETIMEDOUT|socket|network/i.test(mensagem);
+}
+
+const dormir = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((ok, falha) => {
+    const t = setTimeout(ok, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(t);
+      falha(new FalaError("interrompida", 499));
+    });
+  });
+
 export interface Fala {
   bytes: Uint8Array;
   mime: string;
@@ -51,9 +71,37 @@ export async function sintetizarFala(
     vozGemini?: string;
     /** o Gemini já falhou neste pedido: a cadeia não tenta de novo (seria outra chamada com o mesmo 429) */
     semGemini?: boolean;
+    /**
+     * SÓ a voz do Gemini, com novas tentativas, e nunca outra voz. É para o que
+     * ninguém está esperando ao vivo (a nota de voz, o bom dia): a primeira
+     * falha caía no Piper, uma voz robótica e acelerada que o dono estranhou
+     * (06/10/2026, Gemini 503 e Edge fora). Esgotadas as tentativas, lança, e
+     * quem chama manda em texto.
+     */
+    soAVozPreferida?: { tentativas: number; esperaInicialMs?: number };
   } = {},
 ): Promise<Fala> {
   const provider = process.env.TTS_PROVIDER ?? "auto";
+  if (opts.soAVozPreferida && geminiTtsAvailable()) {
+    const tentativas = Math.max(1, opts.soAVozPreferida.tentativas);
+    let espera = opts.soAVozPreferida.esperaInicialMs ?? 5_000;
+    for (let i = 1; ; i++) {
+      const comecou = Date.now();
+      try {
+        const buf = await synthesizeGemini(texto, opts.signal, opts.vozGemini);
+        registrarFala(opts.userId, "gemini-tts", texto, comecou);
+        return { bytes: new Uint8Array(buf), mime: "audio/wav", servico: "gemini-tts" };
+      } catch (e) {
+        if (opts.signal?.aborted) throw new FalaError("interrompida", 499);
+        const msg = e instanceof Error ? e.message : String(e);
+        registrarFala(opts.userId, "gemini-tts", texto, comecou, msg.slice(0, 200));
+        log.warn("tts.voz_da_orbita_falhou", { tentativa: i, de: tentativas, erro: msg.slice(0, 160) });
+        if (i >= tentativas || !falhaPassageira(msg)) throw new FalaError("A voz da Órbita não respondeu", 503);
+        await dormir(espera, opts.signal);
+        espera *= 3;
+      }
+    }
+  }
   if (opts.preferirGemini && provider === "auto" && geminiTtsAvailable()) {
     const comecou = Date.now();
     try {

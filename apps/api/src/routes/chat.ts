@@ -13,6 +13,9 @@ import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { retrieveContext, type RagHit } from "@orbita/core/rag/retrieve";
 import { buildAllTools, SYSTEM_PROMPT, buildTemporalContext, buildPersonaContext } from "@orbita/core/chat/tools";
+import { consultaDasTools } from "@orbita/core/tools/consulta";
+import { fontesDoResultado } from "@orbita/core/chat/cartoes";
+import { cartoesDoResultado } from "@orbita/core/chat/cartoes-da-tela";
 import { composeSystem, type Chunk } from "@orbita/core/chat/compose";
 import { comBuscaNativa, configDaBusca } from "@orbita/core/chat/busca-nativa";
 import { log } from "@orbita/core/observability/logger";
@@ -78,7 +81,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
     "rag.topK", "identity.commandClipMaxKB",
     "chat.fastPathEnabled", "chat.fastPathMaxChars", "chat.fastPathHistory",
     "chat.summaryEnabled", "chat.summaryMaxPending", "prompt.prioritySummary",
-    "llm.quandoFalhar",
+    "llm.quandoFalhar", "tools.turnosDeContexto",
   ]);
   await applyLlmSettings();
   const OUT_CAP: Record<string, number> = { small: cfg["chat.outputCapSmall"], medium: cfg["chat.outputCapMedium"], large: cfg["chat.outputCapLarge"] };
@@ -233,7 +236,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
 
   const [personaCtx, toolsRes, ragHits, busca] = await Promise.all([
     rapido ? Promise.resolve("") : buildPersonaContext(userId).catch(() => ""),
-    buildAllTools(userId, content, quemPede.resolve, quemPede.origin, quemPede.voiceRef, rapido ? { dominios: ["casa"] } : {}),
+    buildAllTools(userId, consultaDasTools(content, history, cfg["tools.turnosDeContexto"]), quemPede.resolve, quemPede.origin, quemPede.voiceRef, rapido ? { dominios: ["casa"] } : {}),
     ragTask,
     configDaBusca(),
   ]);
@@ -418,6 +421,32 @@ export async function POST(req: Request, ctx: RouteCtx) {
                     payload: (part as { input?: unknown }).input ?? {},
                   };
                   gotText ? send(ev) : buffered.push(ev);
+                }
+
+                // DE ONDE VEIO A NOTÍCIA. A busca na web respondia com o texto
+                // e mais nada; os resultados (título, site, link) viram cards
+                // na tela, para o dono conferir a fonte e abrir a matéria.
+                const fontes = fontesDoResultado((part as { output?: unknown }).output);
+                if (fontes.length) {
+                  const evFontes = { t: "fontes", itens: fontes };
+                  gotText ? send(evFontes) : buffered.push(evFontes);
+                }
+
+                // o que ela consultou vira cartão dentro da mensagem: os
+                // e-mails, a agenda, o clima (a mesma regra da voz)
+                const cartoes = cartoesDoResultado(part.toolName, (part as { output?: unknown }).output, (part as { input?: unknown }).input);
+                if (cartoes.length) {
+                  const evCartoes = { t: "cartoes", itens: cartoes };
+                  gotText ? send(evCartoes) : buffered.push(evCartoes);
+                }
+              } else if (part.type === "source") {
+                // a citação que o Claude faz ao usar a busca nativa: cada uma
+                // vira um card (a tela junta e tira repetido pelo link)
+                const s = part as { sourceType?: string; url?: string; title?: string };
+                const fontes = s.sourceType === "url" ? fontesDoResultado([{ url: s.url, title: s.title ?? s.url }]) : [];
+                if (fontes.length) {
+                  const evFontes = { t: "fontes", itens: fontes };
+                  gotText ? send(evFontes) : buffered.push(evFontes);
                 }
               } else if (part.type === "error") {
                 if (!gotText) {

@@ -5,6 +5,8 @@ import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { Icone } from "./icones";
 import { PropostaCard } from "@/components/presenca/proposta-card";
+import { FontesPilha } from "@/components/presenca/fontes-pilha";
+import { CartaoDaTelaView } from "@/components/presenca/cartao-da-tela";
 import { SeletorDeModelo } from "./seletor-modelo";
 import { capturarUmQuadro } from "@/lib/camera/aparelho";
 import { useCasca } from "./contexto";
@@ -52,6 +54,10 @@ const NOMES_DE_FERRAMENTA: Record<string, string> = {
   definir_renda: "guardando a renda",
   cadastrar_cartao: "cadastrando o cartão",
   cadastrar_carteira: "cadastrando a conta",
+  noticias_dos_meus_temas: "lendo as notícias dos seus temas",
+  seguir_tema_de_noticias: "passando a acompanhar o tema",
+  deixar_de_seguir_tema: "parando de acompanhar o tema",
+  buscar_noticias_agora: "buscando notícias",
   criar_tarefa: "criando a tarefa",
   listar_tarefas: "lendo suas tarefas",
   lembrar: "guardando na memória",
@@ -140,6 +146,21 @@ const Bolha = memo(function Bolha({
             <PropostaCard proposta={m.proposta} aoDecidir={aoDecidirProposta ?? (() => {})} />
           </div>
         )}
+        {m.cartoes?.length ? (
+          /* o que ela consultou (e-mails, agenda, clima): na conversa, o cartão
+             fica junto da resposta, em vez de flutuar por cima do chat */
+          <div className="mensagem-cartoes">
+            {m.cartoes.map((c) => (
+              <CartaoDaTelaView key={c.id} cartao={c} />
+            ))}
+          </div>
+        ) : null}
+        {m.fontes?.length && !m.cartoes?.some((c) => c.tipo === "noticias") ? (
+          /* de onde veio o que ela contou: a pilha abre em leque no mouse */
+          <div className="mensagem-fontes">
+            <FontesPilha fontes={m.fontes} para="cima" />
+          </div>
+        ) : null}
         {estado && (
           <div className="message-status">
             <span className="typing-dot" />

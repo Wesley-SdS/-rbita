@@ -97,15 +97,17 @@ describe("turnoDoDono", () => {
     await turnoDoDono("u1", EU, texto("responde a Maria que ok"));
     const enviado = String(enviarTexto.mock.calls[0][2]);
     expect(enviado).toContain("Vou responder ok para a Maria.");
-    expect(enviado).toContain('Proposta:\nResponder no WhatsApp para Estranho (5511955554444): "meus dados"');
-    expect(enviado).toContain("responda *manda*");
+    expect(enviado).toContain('*Esperando você confirmar:*\nResponder no WhatsApp para Estranho (5511955554444): "meus dados"');
+    expect(enviado).toContain("responda *manda* ou *aprovado*");
   });
 
   it("duas propostas: lista numerada", async () => {
     propostasNovas = [{ resumo: "A" }, { resumo: "B" }];
     await turnoDoDono("u1", EU, texto("manda oi pra Ana e pro João"));
     const enviado = String(enviarTexto.mock.calls[0][2]);
-    expect(enviado).toContain("Propostas:\n1. A\n2. B");
+    expect(enviado).toContain("*Esperando você confirmar:*\n1. A\n2. B");
+    // a instrução vai mesmo quando o pedido já tem a palavra "manda"
+    expect(enviado).toContain("Para confirmar, responda *manda 1*");
   });
 
   it("pediu por áudio: responde em áudio (espelhar)", async () => {
