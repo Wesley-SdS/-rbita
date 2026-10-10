@@ -14,6 +14,9 @@ export interface Casca {
   abrirFoco: () => void;
   abrirBusca: () => void;
   abrirAtividade: () => void;
+  /** recolher e abrir a barra lateral (a Conversa tem o botão no próprio cabeçalho) */
+  alternarLateral: () => void;
+  lateralRecolhida: boolean;
   /**
    * A tela deixa aqui como soltar o microfone dela.
    *

@@ -1,12 +1,13 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import dynamic from "next/dynamic";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Icone } from "./icones";
 import { PropostaCard } from "@/components/presenca/proposta-card";
 import { FontesPilha } from "@/components/presenca/fontes-pilha";
-import { CartaoDaTelaView } from "@/components/presenca/cartao-da-tela";
+import { CartaoAtalho, PainelDeCartoes } from "@/components/presenca/painel-de-cartoes";
+import { Tema } from "./tema";
+import { useRecurso } from "@/lib/dados/recurso";
 import { SeletorDeModelo } from "./seletor-modelo";
 import { capturarUmQuadro } from "@/lib/camera/aparelho";
 import { useCasca } from "./contexto";
@@ -18,7 +19,6 @@ import { useConversations } from "@/components/console/use-conversations";
 import { useChatStream } from "@/components/console/use-chat-stream";
 import { useVoice } from "@/components/console/use-voice";
 
-const ActionsPanel = dynamic(() => import("@/components/actions-panel").then((m) => m.ActionsPanel), { ssr: false });
 
 /**
  * O núcleo antigo tinha 6 estados; o do Presença tem 10. Os seis casam, e os
@@ -63,6 +63,27 @@ const NOMES_DE_FERRAMENTA: Record<string, string> = {
   lembrar: "guardando na memória",
 };
 
+/**
+ * No pé do histórico, só o LEMBRETE das aprovações: a fila inteira, com o texto
+ * de cada proposta, espremia a coluna e empurrava as conversas para fora da
+ * tela (09/10/2026). Ler e decidir é na gaveta do sino, que tem espaço.
+ */
+function LembreteDeAprovacoes({ aoAbrir }: { aoAbrir: () => void }) {
+  const { dado } = useRecurso<{ actions: unknown[] }>("/api/actions");
+  const n = dado?.actions?.length ?? 0;
+  if (!n) return null;
+  return (
+    <button type="button" className="chat-history-aprovacoes" onClick={aoAbrir}>
+      <span className="chat-history-aprovacoes-n">{n}</span>
+      <span>
+        <strong>{n === 1 ? "1 ação esperando você" : `${n} ações esperando você`}</strong>
+        <small>Ver e aprovar</small>
+      </span>
+      <Icone nome="arrow-right" />
+    </button>
+  );
+}
+
 const rotuloDaFerramenta = (nome: string) => NOMES_DE_FERRAMENTA[nome] ?? nome.replace(/_/g, " ");
 
 /**
@@ -72,13 +93,20 @@ const rotuloDaFerramenta = (nome: string) => NOMES_DE_FERRAMENTA[nome] ?? nome.r
  */
 const Bolha = memo(function Bolha({
   m,
+  indice,
   estado,
+  cartaoAberto,
+  aoAbrirCartao,
   aoEscolherProvedor,
   aoDeixarOlhar,
   aoDecidirProposta,
 }: {
   m: Msg;
+  indice: number;
   estado: string | null;
+  /** o cartão DESTA mensagem que está no painel lateral, se algum */
+  cartaoAberto: string | null;
+  aoAbrirCartao: (indice: number, id: string) => void;
   aoEscolherProvedor?: (classe: "assinatura" | "local" | "paga", pergunta: string) => void;
   aoDeixarOlhar?: (pergunta: string) => void;
   aoDecidirProposta?: (id: string, estado: "confirmada" | "descartada", resultado?: string) => void;
@@ -147,11 +175,12 @@ const Bolha = memo(function Bolha({
           </div>
         )}
         {m.cartoes?.length ? (
-          /* o que ela consultou (e-mails, agenda, clima): na conversa, o cartão
-             fica junto da resposta, em vez de flutuar por cima do chat */
+          /* o que ela consultou (e-mails, agenda, chamados): na mensagem fica só o
+             atalho; o cartão abre no painel ao lado, com espaço (pedido do dono,
+             09/10/2026: dentro da bolha as abas e a lista ficavam espremidas) */
           <div className="mensagem-cartoes">
             {m.cartoes.map((c) => (
-              <CartaoDaTelaView key={c.id} cartao={c} />
+              <CartaoAtalho key={c.id} cartao={c} aberto={cartaoAberto === c.id} aoAbrir={() => aoAbrirCartao(indice, c.id)} />
             ))}
           </div>
         ) : null}
@@ -188,6 +217,12 @@ export function Conversa({
   const [modelos] = useState<ModelInfo[]>(modelosIniciais);
   const [chaveModelo, setChaveModelo] = useState(modeloPadrao || modelosIniciais[0]?.key || "");
   const [erro, setErro] = useState<string | null>(null);
+  // o painel lateral: qual mensagem e qual cartão dela
+  const [painel, setPainel] = useState<{ msg: number; id: string } | null>(null);
+  const abrirCartao = useCallback((msg: number, id: string) => setPainel({ msg, id }), []);
+  const fecharPainel = useCallback(() => setPainel(null), []);
+  // a resposta cujo painel o dono fechou não reabre sozinha
+  const fechadoPara = useRef<number | null>(null);
   const [modoLocal, setModoLocal] = useState(false);
   const [maisAberto, setMaisAberto] = useState(false);
   const imagemRef = useRef<HTMLInputElement | null>(null);
@@ -207,6 +242,49 @@ export function Conversa({
   const { mode, setMode, modeRef } = useOrbMode();
   const { messages, setMessages, convs, activeId, convId, loadConvs, loadConversation, newConversation, deleteConv } =
     useConversations(conversasIniciais);
+
+  // As conversas anteriores: abertas ou recolhidas, lembrado neste navegador
+  // (conveniência de quem olha, não dado: sem localStorage, abre aberto).
+  const [historicoAberto, setHistoricoAberto] = useState(true);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("orbita.conversa.historico") === "recolhido") setHistoricoAberto(false);
+    } catch {
+      /* navegação privada ou armazenamento bloqueado: fica aberto */
+    }
+  }, []);
+  const mudarHistorico = useCallback((aberto: boolean) => {
+    setHistoricoAberto(aberto);
+    try {
+      localStorage.setItem("orbita.conversa.historico", aberto ? "aberto" : "recolhido");
+    } catch {
+      /* idem */
+    }
+  }, []);
+  const [buscaConversa, setBuscaConversa] = useState("");
+  const conversasFiltradas = useMemo(() => {
+    const q = buscaConversa.trim().toLowerCase();
+    return q ? convs.filter((c) => c.title.toLowerCase().includes(q)) : convs;
+  }, [convs, buscaConversa]);
+  const tituloDaConversa = convs.find((c) => c.id === activeId)?.title ?? "Nova conversa";
+
+  // os cartões da mensagem que está no painel (sumiu a mensagem, some o painel)
+  const cartoesDoPainel = painel ? messages[painel.msg]?.cartoes ?? null : null;
+  // trocar de conversa fecha o painel: o índice da mensagem é de OUTRA conversa
+  useEffect(() => {
+    setPainel(null);
+    fechadoPara.current = null;
+  }, [activeId]);
+  // a resposta que está CHEGANDO e traz cartões abre o primeiro no painel, como
+  // o artefato no Adalink; só enquanto ela responde (abrir uma conversa antiga
+  // não abre nada sozinho) e nunca a resposta cujo painel o dono fechou
+  const ultima = messages.length - 1;
+  const primeiroDaUltima = messages[ultima]?.role === "assistant" ? messages[ultima]?.cartoes?.[0]?.id ?? null : null;
+  const respondendo = mode !== "standby";
+  useEffect(() => {
+    if (!respondendo || !primeiroDaUltima || fechadoPara.current === ultima) return;
+    setPainel((atual) => (atual?.msg === ultima ? atual : { msg: ultima, id: primeiroDaUltima }));
+  }, [respondendo, primeiroDaUltima, ultima]);
 
   const pontesVoz = useRef<VoiceBridge | null>(null);
   const enviarRef = useRef<((conteudo: string) => void) | null>(null);
@@ -511,78 +589,90 @@ export function Conversa({
         }}
       />
 
-      <div className="view-heading">
-        <div>
-          <span className="eyebrow">UM PENSAMENTO PUXA O OUTRO</span>
-          <h1>
-            Vamos conversar<span className="mint-period">.</span>
-          </h1>
-          <p>Uma conversa que pode virar memória, plano ou próximo passo.</p>
-        </div>
-        <button className="button secondary" onClick={casca.abrirFoco}>
-          <Icone nome="expand" />
-          Modo foco
-        </button>
-      </div>
-
-      <div className="chat-layout">
-        <aside className="panel chat-history">
-          <button className="button secondary full-width" onClick={() => { newConversation(); setErro(null); }}>
-            <Icone nome="plus" />
-            Nova conversa
-          </button>
-
-          <div className="panel-label">ESPAÇOS DE CONVERSA</div>
-          {convs.length === 0 && <div className="empty-state">Nenhuma conversa ainda.</div>}
-          {convs.map((c) => (
-            <div key={c.id} className="history-row">
-              <button className={`history-item ${activeId === c.id ? "active" : ""}`} onClick={() => loadConversation(c.id)}>
-                <Icone nome="chat" />
-                <span>{c.title}</span>
+      <div className={`chat-layout${cartoesDoPainel ? " com-painel" : ""}${historicoAberto ? "" : " sem-historico"}`}>
+        {historicoAberto && (
+          <aside className="chat-history" aria-label="Conversas anteriores">
+            <div className="chat-history-topo">
+              <button className="button secondary" onClick={() => { newConversation(); setErro(null); }}>
+                <Icone nome="plus" />
+                Nova conversa
               </button>
-              <button className="icon-button" onClick={() => deleteConv(c.id)} aria-label={`Apagar ${c.title}`} title="Apagar">
-                <Icone nome="close" />
+              <button type="button" className="icon-button" onClick={() => mudarHistorico(false)} aria-label="Recolher as conversas anteriores" title="Recolher">
+                <Icone nome="sidebar" />
               </button>
             </div>
-          ))}
-
-          <div className="panel-label">O CÉREBRO DA RESPOSTA</div>
-          {/* Com o gateway ligado a descoberta traz centenas de modelos: um
-              <select> nativo com tudo dentro travava a tela. Ver
-              components/presenca/seletor-modelo.tsx. */}
-          <SeletorDeModelo
-            modelos={modoLocal ? modelos.filter((m) => m.provider === "local") : modelos}
-            valor={modoLocal ? (grupos.porProvedor.get("local")?.[0]?.key ?? chaveModelo) : chaveModelo}
-            aoEscolher={setChaveModelo}
-            desabilitado={modoLocal}
-          />
-          <label className="switch-row">
-            <input type="checkbox" checked={modoLocal} onChange={(e) => setModoLocal(e.target.checked)} />
-            <span>
-              <Icone nome="lock" />
-              Modo local: nada sai da máquina
-            </span>
-          </label>
-
-          <ActionsPanel />
-        </aside>
-
-        <article className="panel chat-main">
-          <div className="chat-top">
-            <span className="mini-orb" />
-            <div>
-              <h2>Uma presença para pensar junto</h2>
-              <p>Seu contexto. Seu ritmo. Sua escolha.</p>
+            <label className="chat-history-busca">
+              <Icone nome="search" />
+              <input type="search" value={buscaConversa} onChange={(e) => setBuscaConversa(e.target.value)} placeholder="Buscar conversa" aria-label="Buscar conversa" />
+            </label>
+            <div className="chat-history-lista">
+              {convs.length === 0 && <div className="empty-state">Nenhuma conversa ainda.</div>}
+              {conversasFiltradas.map((c) => (
+                <div key={c.id} className="history-row">
+                  <button className={`history-item ${activeId === c.id ? "active" : ""}`} onClick={() => loadConversation(c.id)}>
+                    <span>{c.title}</span>
+                  </button>
+                  <button className="icon-button" onClick={() => deleteConv(c.id)} aria-label={`Apagar ${c.title}`} title="Apagar">
+                    <Icone nome="close" />
+                  </button>
+                </div>
+              ))}
             </div>
-            {modoLocal && (
-              <span className="tag green">
-                <Icone nome="shield" />
-                LOCAL
-              </span>
+            <LembreteDeAprovacoes aoAbrir={casca.abrirAtividade} />
+          </aside>
+        )}
+
+        <article className="chat-main">
+          {/* o cabeçalho fino faz o papel da barra do topo e do bloco "Vamos
+              conversar" (redesenho de 09/10/2026: a conversa ganha a altura) */}
+          <header className="chat-top">
+            {!historicoAberto && (
+              <button type="button" className="icon-button" onClick={() => mudarHistorico(true)} aria-label="Mostrar as conversas anteriores" title="Conversas anteriores">
+                <Icone nome="sidebar" />
+              </button>
             )}
-          </div>
+            <div className="chat-titulo">
+              <strong>{tituloDaConversa}</strong>
+              <span>{messages.length ? `${messages.length} ${messages.length === 1 ? "mensagem" : "mensagens"}` : "Fale pelo microfone ou escreva abaixo"}</span>
+            </div>
+            <span className="chat-top-espaco" />
+            {/* Com o gateway ligado a descoberta traz centenas de modelos: um
+                <select> nativo com tudo dentro travava a tela. Ver
+                components/presenca/seletor-modelo.tsx. */}
+            <div className="chat-top-modelo">
+              <SeletorDeModelo
+                modelos={modoLocal ? modelos.filter((m) => m.provider === "local") : modelos}
+                valor={modoLocal ? (grupos.porProvedor.get("local")?.[0]?.key ?? chaveModelo) : chaveModelo}
+                aoEscolher={setChaveModelo}
+                desabilitado={modoLocal}
+              />
+            </div>
+            <label className="chat-top-local" title="Modo local: nada sai da máquina">
+              <input type="checkbox" checked={modoLocal} onChange={(e) => setModoLocal(e.target.checked)} />
+              <Icone nome="lock" />
+              <span>Modo local</span>
+            </label>
+            {!historicoAberto && (
+              <button type="button" className="button secondary compacto" onClick={() => { newConversation(); setErro(null); }}>
+                <Icone nome="plus" />
+                Nova conversa
+              </button>
+            )}
+            <button type="button" className="icon-button" onClick={casca.abrirFoco} aria-label="Modo foco" title="Modo foco">
+              <Icone nome="expand" />
+            </button>
+            <span className="chat-top-divisor" />
+            <Tema />
+            <button type="button" className="icon-button" onClick={casca.abrirAtividade} aria-label="Abrir atividade e aprovações" title="Atividade e aprovações">
+              <Icone nome="bell" />
+            </button>
+            <button type="button" className="icon-button" onClick={casca.alternarLateral} aria-label={casca.lateralRecolhida ? "Expandir o menu" : "Recolher o menu"} title={casca.lateralRecolhida ? "Expandir o menu" : "Recolher o menu"}>
+              <Icone nome="menu" />
+            </button>
+          </header>
 
           <div className="chat-messages" ref={chat.logRef} role="log" aria-live="polite">
+            <div className="chat-coluna">
             {messages.length === 0 && (
               <div className="empty-state">Converse com a Órbita. Fale pelo microfone ou escreva abaixo.</div>
             )}
@@ -590,6 +680,9 @@ export function Conversa({
               <Bolha
                 key={i}
                 m={m}
+                indice={i}
+                cartaoAberto={painel?.msg === i ? painel.id : null}
+                aoAbrirCartao={abrirCartao}
                 estado={
                   m.role === "assistant" && !m.content && ocupado && i === messages.length - 1
                     ? `${ROTULO_DO_MODO[mode]}${chat.elapsed > 0 ? ` · ${chat.elapsed}s` : ""}`
@@ -600,6 +693,7 @@ export function Conversa({
                 aoDecidirProposta={decidirProposta}
               />
             ))}
+            </div>
           </div>
 
           {erro && (
@@ -610,6 +704,18 @@ export function Conversa({
 
           {composicao}
         </article>
+
+        {cartoesDoPainel && painel ? (
+          <PainelDeCartoes
+            cartoes={cartoesDoPainel}
+            ativo={painel.id}
+            aoEscolher={(id) => setPainel({ msg: painel.msg, id })}
+            aoFechar={() => {
+              fechadoPara.current = painel.msg;
+              fecharPainel();
+            }}
+          />
+        ) : null}
       </div>
 
     </section>

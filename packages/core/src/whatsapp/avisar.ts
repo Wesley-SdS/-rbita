@@ -2,9 +2,10 @@ import { settings } from "../settings";
 import { log } from "../observability/logger";
 import { sessaoDe } from "./sessao";
 import { normalizarJid } from "./traduzir";
-import { enviarTexto, enviarDocumento } from "./enviar";
+import { enviarAudio, enviarTexto, enviarDocumento } from "./enviar";
 import { registrarNoHistorico } from "./conversa";
 import { agoraLocal, noSilencio } from "./horario";
+import { chaveDoTelefone } from "../contatos/casar";
 
 /**
  * A Órbita tomando a iniciativa pelo WhatsApp (item 1 da proativa): o aviso
@@ -38,6 +39,28 @@ export async function mandarArquivoAoDono(userId: string, arquivo: { bytes: Uint
   // a conversa "Eu" é do próprio dono: aprovação humana por definição
   await enviarDocumento(userId, normalizarJid(sessao.jid), arquivo, legenda, { aprovacaoHumana: true });
   return true;
+}
+
+/**
+ * Uma nota de voz para o PRÓPRIO dono, na conversa "Eu" ("me manda um áudio
+ * falando dos meus e-mails"). Como o arquivo: foi ele que pediu, agora, e o
+ * destino é fixado aqui, nunca pelo modelo. Devolve false sem WhatsApp pessoal.
+ */
+export async function mandarAudioAoDono(userId: string, texto: string): Promise<boolean> {
+  const sessao = await sessaoDe(userId);
+  if (!sessao || sessao.status !== "conectado" || !sessao.jid) return false;
+  await enviarAudio(userId, normalizarJid(sessao.jid), texto, { aprovacaoHumana: true });
+  return true;
+}
+
+/** O destino é o próprio dono? (com ou sem o nono dígito: a conta antiga do WhatsApp guarda sem) */
+export async function ehOProprioDono(userId: string, jid: string): Promise<boolean> {
+  const sessao = await sessaoDe(userId);
+  if (!sessao?.jid) return false;
+  const meu = normalizarJid(sessao.jid);
+  if (meu === jid) return true;
+  const numero = (j: string) => (j.endsWith("@s.whatsapp.net") ? j.split("@")[0]!.split(":")[0]! : "");
+  return Boolean(numero(meu) && numero(jid)) && chaveDoTelefone(numero(meu)) === chaveDoTelefone(numero(jid));
 }
 
 export async function avisarNoWhatsapp(userId: string, titulo: string, corpo: string, opts: OpcoesDoAviso = {}): Promise<ResultadoDoAviso> {

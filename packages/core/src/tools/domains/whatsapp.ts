@@ -4,6 +4,7 @@ import { settings } from "../../settings";
 import { enviarAudio, enviarImagem, enviarTexto, jidDoDestino } from "../../whatsapp/enviar";
 import * as store from "../../whatsapp/store";
 import { sessaoDe } from "../../whatsapp/sessao";
+import { ehOProprioDono, mandarAudioAoDono } from "../../whatsapp/avisar";
 import { lerMidia, tamanhoDaMidia } from "../../whatsapp/midia";
 import { log } from "../../observability/logger";
 import { normalizarJid } from "../../whatsapp/traduzir";
@@ -413,17 +414,49 @@ const Audio = z.object({
 export const enviar_audio_whatsapp: ToolDef<typeof Audio> = {
   name: "enviar_audio_whatsapp",
   domain: "whatsapp",
-  description: "Propõe mandar uma NOTA DE VOZ no WhatsApp, com a voz da Órbita falando o texto. Use quando o dono pedir resposta em áudio. Não envia direto: o dono aprova.",
+  description: "Propõe mandar uma NOTA DE VOZ para OUTRA pessoa no WhatsApp, com a voz da Órbita falando o texto. Não envia direto: o dono aprova. Áudio para o próprio dono (\"me manda um áudio...\") é responder_em_audio, que vai na hora.",
   risk: "efeito_externo",
   keywords: ["whatsapp", "zap", "audio", "voz", "falar", "nota"],
   requires: { whatsappPessoal: true },
   inputSchema: Audio,
   summarize: (i) => resumoDe("Mandar áudio no WhatsApp", i, i.texto),
-  authorize: conferirDestino,
+  // o dono pediu áudio para ELE e o modelo pegou esta tool: pedia o número dele
+  // e depois aprovação para falar com ele mesmo (08/10/2026). Recusar aqui faz o
+  // modelo usar a certa, sem fila nem "manda"
+  authorize: async (input, ctx) => {
+    const erro = await conferirDestino(input, ctx);
+    if (erro) return erro;
+    const alvo = await resolverChat(ctx.userId, input.para);
+    return alvo.ok && (await ehOProprioDono(ctx.userId, alvo.jid)) ? "Esse número é o do próprio dono: use responder_em_audio, que manda a nota de voz na conversa dele na hora, sem aprovação." : null;
+  },
   preparar: fixarDestino,
   run: async ({ para, texto }, { userId }) => {
     const r = await enviarAudio(userId, await destino(userId, para), texto, { aprovacaoHumana: true });
     return `Áudio enviado (id ${r.id}).`;
+  },
+};
+
+const AudioAoDono = z.object({
+  texto: z.string().min(1).max(2000).describe("O que a Órbita vai FALAR na nota de voz, escrito como se fala (sem markdown, sem lista)."),
+});
+
+/**
+ * Áudio para o PRÓPRIO dono, na conversa dele ("me manda um áudio falando dos
+ * meus e-mails"). Sem aprovação e sem precisar de número: o destino é fixado
+ * pelo código na conversa "Eu" (`mandarAudioAoDono`), então nem um texto de
+ * terceiro consegue desviar para outra pessoa. É o mesmo caminho do bom dia.
+ */
+export const responder_em_audio: ToolDef<typeof AudioAoDono> = {
+  name: "responder_em_audio",
+  domain: "whatsapp",
+  description: "Responde ao DONO em áudio: manda uma nota de voz, com a voz da Órbita, na conversa dele mesmo no WhatsApp. Use quando ele pedir \"me manda um áudio\", \"fala comigo por áudio\", \"me explica em áudio\". Vai na hora, sem aprovação e sem pedir número. Para mandar áudio a outra pessoa, é enviar_audio_whatsapp.",
+  risk: "escrita",
+  keywords: ["audio", "áudio", "voz", "nota de voz", "falando", "me manda", "me mande", "fala", "ouvir"],
+  requires: { whatsappPessoal: true },
+  inputSchema: AudioAoDono,
+  run: async ({ texto }, { userId }) => {
+    const ok = await mandarAudioAoDono(userId, texto);
+    return ok ? "Nota de voz enviada na sua conversa do WhatsApp." : { erro: "O WhatsApp pessoal não está conectado agora, então não consegui mandar o áudio." };
   },
 };
 
@@ -451,4 +484,4 @@ export const enviar_imagem_whatsapp: ToolDef<typeof Imagem> = {
   },
 };
 
-registerTools([whatsapp_conversas_recentes, ler_whatsapp, buscar_whatsapp, ver_imagem_whatsapp, usar_arquivo_whatsapp, enviar_whatsapp, responder_whatsapp, enviar_audio_whatsapp, enviar_imagem_whatsapp]);
+registerTools([whatsapp_conversas_recentes, ler_whatsapp, buscar_whatsapp, ver_imagem_whatsapp, usar_arquivo_whatsapp, enviar_whatsapp, responder_whatsapp, enviar_audio_whatsapp, responder_em_audio, enviar_imagem_whatsapp]);

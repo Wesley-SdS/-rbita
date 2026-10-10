@@ -52,6 +52,28 @@ describe("Jira por token de API", () => {
     await expect(validarToken("jira", { site: "e.atlassian.net", email: "sem-arroba", token: "t" })).rejects.toThrow(/e-mail/);
   });
 
+  it("token COM ESCOPO: o site recusa, o mesmo token vale pelo gateway, e as chamadas seguintes vão por ele", async () => {
+    const chamadas: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      chamadas.push(String(url));
+      if (String(url).startsWith("https://empresa.atlassian.net/rest/")) return new Response("{}", { status: 401 });
+      if (String(url).endsWith("/_edge/tenant_info")) return new Response(JSON.stringify({ cloudId: "abc-123-def-456" }));
+      if (String(url).includes("api.atlassian.com/ex/jira/abc-123-def-456/rest/api/3/myself")) return new Response(JSON.stringify({ accountId: "u1" }));
+      return new Response(JSON.stringify({ issues: [] }));
+    }));
+    const c = await validarToken("jira", { site: "empresa.atlassian.net", email: "w@empresa.com", token: "ATATTescopo123" });
+    expect(lerAcessoBasico(c.segredo)).toMatchObject({ site: "https://empresa.atlassian.net", cloudId: "abc-123-def-456" });
+
+    const { buscarIssues } = await import("./jira");
+    await buscarIssues(c.segredo, "ignorado", "assignee = currentUser()", 5, "https://empresa.atlassian.net");
+    expect(chamadas[chamadas.length - 1]).toContain("https://api.atlassian.com/ex/jira/abc-123-def-456/rest/api/3/search/jql");
+  });
+
+  it("token recusado no site E no gateway continua sendo recusado, com o motivo", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => (String(url).endsWith("/_edge/tenant_info") ? new Response(JSON.stringify({ cloudId: "abc-123-def-456" })) : new Response("{}", { status: 401 }))));
+    await expect(validarToken("jira", { site: "empresa.atlassian.net", email: "w@empresa.com", token: "ATATTerrado12" })).rejects.toThrow(/recusou o token/);
+  });
+
   it("segredo de OAuth comum não é confundido com acesso básico", () => {
     expect(lerAcessoBasico("eyJhbGciOi.token.oauth")).toBeNull();
     expect(lerAcessoBasico('{"modo":"outro"}')).toBeNull();

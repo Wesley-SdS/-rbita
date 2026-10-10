@@ -1,6 +1,7 @@
 import { settings } from "../settings";
 import { effectiveRisk, getTool, loadToolOverrides } from "../tools/index";
 import { escolherProposta, interpretarResposta } from "../whatsapp/regras";
+import { MCP_ACTION_KIND } from "../mcp/pool-rules";
 import { aprovarAcao, cancelarAcao, pendentesDoCanal } from "./aprovar";
 
 /**
@@ -34,8 +35,15 @@ export async function aprovarPorFrase(userId: string, canal: "whatsapp" | "voz" 
   if (!r.acao) return null;
 
   const overrides = await loadToolOverrides();
-  const naoPerigosa = (kind: string) => {
-    const def = getTool(kind);
+  const naoPerigosa = (p: { kind: string; payload: unknown }) => {
+    // tool MCP não está no registro: o risco dela foi gravado na proposta pelo
+    // código que a enfileirou (`mcp/client.ts`), nunca pelo modelo. Proposta
+    // MCP antiga, sem risco gravado, só sai pela tela
+    if (p.kind === MCP_ACTION_KIND) {
+      const risco = (p.payload as { risco?: unknown } | null)?.risco;
+      return risco === "efeito_externo";
+    }
+    const def = getTool(p.kind);
     return def ? effectiveRisk(def, overrides) !== "perigoso" : false;
   };
   // Com NÚMERO ("manda 1") ou "tudo", o dono aponta para a lista que a Órbita
@@ -44,7 +52,7 @@ export async function aprovarPorFrase(userId: string, canal: "whatsapp" | "voz" 
   // que não pode aprovar uma proposta antiga que ele nem viu.
   const apontou = r.escolha !== undefined || Boolean(r.escolhas?.length) || Boolean(r.todas);
   const doCanal = (await pendentesDoCanal(userId, canal)).filter((p) => apontou || !desde || p.createdAt.getTime() >= desde.getTime());
-  const pendentes = doCanal.filter((p) => naoPerigosa(p.kind));
+  const pendentes = doCanal.filter(naoPerigosa);
   if (!pendentes.length) {
     // Só sobrou proposta PERIGOSA: a frase continua sem aprovar nada, mas a
     // resposta agora é dita na hora. Antes ela caía no modelo, que improvisava

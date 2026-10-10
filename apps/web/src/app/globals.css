@@ -67,6 +67,9 @@
   /* estado */
   --color-danger: #a05343;
   --color-danger-soft: #f8e9e2;
+  /* reta final de um prazo (painel "Com você na Adalink"): o meio-termo entre o verde e o vermelho */
+  --color-alerta: #8a5a0b;
+  --color-alerta-soft: #fbefd6;
   /* texto POR CIMA do vermelho, pelo mesmo motivo de `accent-ink`: no escuro o
      vermelho clareia e o texto branco sumiria. */
   --color-danger-ink: #fdf3ef;
@@ -125,6 +128,8 @@
 
   --color-danger: #e0a091;
   --color-danger-soft: #3a2a26;
+  --color-alerta: #e6c27a;
+  --color-alerta-soft: #3a3222;
   --color-danger-ink: #3a2118;
   --color-good: #a8c692;
 

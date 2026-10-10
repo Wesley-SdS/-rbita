@@ -30,6 +30,7 @@ export const ICONE_DO_TIPO: Record<TipoDeCartao, string> = {
   presenca: "home",
   trabalho: "flow",
   fontes: "search",
+  externo: "flow",
 };
 
 function Item({ item }: { item: ItemDeCartao }) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conexaoOciosa, impressaoDoServidor, podeRepetirChamada, precisaBuscarCatalogo } from "./pool-rules";
+import { conexaoOciosa, impressaoDoServidor, podeRepetirChamada, precisaBuscarCatalogo, riscoDaTool } from "./pool-rules";
 
 describe("quando buscar o catálogo de tools", () => {
   const agora = Date.parse("2026-09-18T12:00:00Z");
@@ -30,5 +30,23 @@ describe("conexão e repetição", () => {
   it("mudar URL ou cabeçalho é outra conexão", () => {
     expect(impressaoDoServidor("https://a", { x: 1 })).not.toBe(impressaoDoServidor("https://a", { x: 2 }));
     expect(impressaoDoServidor("https://a", null)).toBe(impressaoDoServidor("https://a", undefined));
+  });
+});
+
+describe("risco de cada tool MCP", () => {
+  it("sem escolha do dono, a leitura declarada pelo servidor executa direto e o resto pede aprovação", () => {
+    expect(riscoDaTool("efeito_externo", true, undefined)).toBe("leitura");
+    expect(riscoDaTool("efeito_externo", false, undefined)).toBe("efeito_externo");
+    expect(riscoDaTool("efeito_externo", undefined, undefined)).toBe("efeito_externo");
+  });
+  it("servidor perigoso ignora a marcação dele; servidor 'tudo direto' vale para todas", () => {
+    expect(riscoDaTool("perigoso", true, undefined)).toBe("perigoso");
+    expect(riscoDaTool("leitura", false, undefined)).toBe("leitura");
+  });
+  it("a escolha do dono vence tudo, e 'escrita' (que pularia o gate) nunca sai daqui", () => {
+    expect(riscoDaTool("perigoso", false, "leitura")).toBe("leitura");
+    expect(riscoDaTool("efeito_externo", true, "perigoso")).toBe("perigoso");
+    expect(riscoDaTool("escrita", false, undefined)).toBe("efeito_externo");
+    expect(riscoDaTool("efeito_externo", false, "escrita")).toBe("efeito_externo");
   });
 });

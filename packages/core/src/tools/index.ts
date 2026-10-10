@@ -20,6 +20,8 @@ import "./domains/financas";
 import "./domains/noticias";
 import "./domains/emails";
 import "./domains/trabalho";
+import "./domains/comigo";
+import "./domains/quadro";
 import "./domains/rotinas";
 import "./domains/tarefas";
 import "./domains/widgets";

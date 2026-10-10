@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * da fala anterior do dono, e NUNCA risco perigoso (decisão 9.5).
  */
 
-type Pendente = { id: string; kind: string; summary: string; createdAt: Date; expiraEm: Date | null; canal: string };
+type Pendente = { id: string; kind: string; summary: string; createdAt: Date; expiraEm: Date | null; canal: string; payload?: unknown };
 let pendentes: Pendente[] = [];
 const aprovarAcao = vi.fn(async (..._a: unknown[]) => ({ ok: true as const, resultado: "ok" }));
 const cancelarAcao = vi.fn(async (..._a: unknown[]) => undefined);
@@ -63,6 +63,20 @@ describe("aprovar por frase", () => {
     expect(await aprovarPorFrase("u1", "voz", "manda")).toMatchObject({ estado: "so_na_tela" });
     // cancelar falando também não mexe na perigosa: ela fica na tela
     expect(await aprovarPorFrase("u1", "voz", "cancela")).toBeNull();
+    expect(aprovarAcao).not.toHaveBeenCalled();
+  });
+
+  it("proposta de servidor MCP sai pelo risco que o código gravou nela; perigosa ou sem risco, só pela tela", async () => {
+    const mcp = (id: string, risco?: string): Pendente => ({ ...p(id), kind: "mcp_call", payload: { tool: "tickets_create", ...(risco ? { risco } : {}) } });
+    pendentes = [mcp("criar", "efeito_externo")];
+    expect(await aprovarPorFrase("u1", "whatsapp", "manda")).toMatchObject({ estado: "enviado" });
+    expect(aprovarAcao).toHaveBeenCalledWith("u1", "criar");
+
+    aprovarAcao.mockClear();
+    pendentes = [mcp("apagar", "perigoso")];
+    expect(await aprovarPorFrase("u1", "whatsapp", "manda")).toMatchObject({ estado: "so_na_tela" });
+    pendentes = [mcp("antiga")];
+    expect(await aprovarPorFrase("u1", "whatsapp", "manda")).toMatchObject({ estado: "so_na_tela" });
     expect(aprovarAcao).not.toHaveBeenCalled();
   });
 

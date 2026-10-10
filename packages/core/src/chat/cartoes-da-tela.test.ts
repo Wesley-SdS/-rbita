@@ -114,3 +114,46 @@ describe("quando legível", () => {
     expect(quandoLegivel("2026-10-06", AGORA)).toBe("hoje");
   });
 });
+
+describe("cartão de servidor MCP (formato genérico)", () => {
+  const bloco = (o: unknown) => [{ type: "text", text: JSON.stringify(o) }];
+
+  it("lista de chamados: código, status traduzido, prazo do SLA e o total", () => {
+    const [c] = cartoesDoResultado("tickets__tickets_list", bloco({
+      total: 51,
+      tickets: [{ code: "TCK-0056", title: "Agente Importação", status: "open", priority: "high", organization: { name: "Adalink" }, sla: { deadline: "2026-10-10T18:29:39Z" } }],
+    }));
+    expect(c).toMatchObject({ id: "externo:tickets__tickets_list", tipo: "externo", titulo: "list · tickets", destaque: { valor: "51" }, resumo: "1 de 51" });
+    expect(c!.itens[0]).toMatchObject({ titulo: "Agente Importação", detalhe: "TCK-0056 · aberto · Adalink", quando: "2026-10-10T18:29:39Z", marca: "importante" });
+  });
+
+  it("o nome do cartão vem da descrição da ferramenta, não do nome técnico", () => {
+    const [c] = cartoesDoResultado("adalink_gestao__get_my_day", bloco({ doing: [] }), {}, new Date(), "MEU DIA: o kanban pessoal do dia");
+    expect(c!.titulo).toBe("Meu dia · adalink gestao");
+    const [l] = cartoesDoResultado("tickets__tickets_list", bloco({ tickets: [] }), {}, new Date(), "Lista chamados de todas as organizações (ou de uma), do mais novo");
+    expect(l!.titulo).toBe("Lista chamados de todas as organizações · tickets");
+  });
+
+  it("meu dia da gestão: cada lista vira uma aba, atrasado aparece marcado", () => {
+    const [c] = cartoesDoResultado("adalink_gestao__get_my_day", bloco({
+      date: "2026-10-07",
+      backlog: [],
+      doing: [{ name: "Levantamento de requisitos", projectName: "Sistema de Bugs", endDate: "2026-09-17", overdue: true, column: "doing" }],
+    }));
+    expect(c!.grupos).toEqual([{ id: "backlog", rotulo: "Backlog", total: 0 }, { id: "doing", rotulo: "Em andamento", total: 1 }]);
+    expect(c!.itens[0]).toMatchObject({ titulo: "Levantamento de requisitos", marca: "atrasado", grupo: "doing", quando: "2026-09-17" });
+  });
+
+  it("na voz o resultado vem embrulhado e em texto; proposta e erro não viram cartão", () => {
+    const [c] = cartoesDoResultado("usar_ferramenta_externa", { ferramenta: "tickets__tickets_stats", descricao: "Números agregados: total, por status", resultado: JSON.stringify({ total: 51, byStatus: [{ status: "open", count: 5 }] }) });
+    expect(c!.titulo).toBe("Números agregados · tickets");
+    expect(c!.itens[0]).toMatchObject({ titulo: "aberto", valor: "5" });
+    expect(cartoesDoResultado("usar_ferramenta_externa", { ferramenta: "tickets__tickets_create", resultado: { proposta_enfileirada: true } })).toEqual([]);
+    expect(cartoesDoResultado("tickets__tickets_list", { erro: "O servidor tickets não respondeu" })).toEqual([]);
+  });
+
+  it("texto que não é JSON vira um cartão de texto", () => {
+    const [c] = cartoesDoResultado("tickets__tickets_ask", [{ type: "text", text: "Há 2 chamados críticos.\nDetalhes..." }]);
+    expect(c!.itens[0]).toMatchObject({ titulo: "Há 2 chamados críticos." });
+  });
+});

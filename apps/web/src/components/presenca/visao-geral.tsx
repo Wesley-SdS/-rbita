@@ -36,6 +36,12 @@ const TrabalhoPainel = dynamic(() => import("./trabalho-painel").then((m) => m.T
   loading: () => <div className="panel empty-state">Carregando o seu trabalho…</div>,
 });
 
+/* Gestão e chamados da Adalink: o que está com o dono e o que atrasou na equipe. */
+const ComigoPainel = dynamic(() => import("./comigo-painel").then((m) => m.ComigoPainel), {
+  ssr: false,
+  loading: () => <div className="panel empty-state">Carregando o que está com você…</div>,
+});
+
 /* Notícias dos temas que o dono segue: carrega só quando chega perto da vista. */
 const NoticiasPainel = dynamic(() => import("./noticias-painel").then((m) => m.NoticiasPainel), {
   ssr: false,
@@ -332,6 +338,16 @@ export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
       </div>
       <BlocoObservado>
         <TrabalhoPainel />
+      </BlocoObservado>
+
+      <div className="section-heading quick-heading">
+        <div>
+          <h2>Com você na Adalink</h2>
+          <p>O que está com você na gestão e nos chamados, com prazo, e os chamados atrasados da equipe.</p>
+        </div>
+      </div>
+      <BlocoObservado>
+        <ComigoPainel />
       </BlocoObservado>
 
       <div className="section-heading quick-heading">

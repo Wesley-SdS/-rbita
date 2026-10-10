@@ -81,7 +81,9 @@ describe("esquema de função para o Gemini", () => {
     };
     for (const d of listRegisteredTools()) anda(d.name, limparSchemaParaGemini(z.toJSONSchema(d.inputSchema)));
     expect(ruins).toEqual([]);
-  });
+    // o import puxa o registro inteiro de tools e cresce a cada domínio novo:
+    // passou de 30 s nesta máquina (como o casa.test.ts)
+  }, 120_000);
 
   it("limpa em profundidade: dentro de items e de anyOf", () => {
     const limpo = limparSchemaParaGemini({

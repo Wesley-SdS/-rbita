@@ -91,3 +91,26 @@ describe("credencial e endereço", () => {
     await expect(c.enviarTexto("dev1", "5511@s.whatsapp.net", "oi")).rejects.toMatchObject({ motivo: "tempo" });
   });
 });
+
+describe("baixar mídia recebida", () => {
+  it("a rota de download devolve ONDE gravou: segue o caminho e traz o áudio de verdade (08/10/2026)", async () => {
+    const pedidos: string[] = [];
+    globalThis.fetch = vi.fn(async (u: RequestInfo | URL) => {
+      const url = String(u);
+      pedidos.push(url.replace("http://127.0.0.1:3011", ""));
+      if (url.includes("/download?")) {
+        return new Response(JSON.stringify({ code: "SUCCESS", results: { media_type: "audio", file_path: "statics/media/5511942330608/2026-10-08/1791468321-x", file_size: 3 } }), { headers: { "content-type": "application/json; charset=utf-8" } });
+      }
+      return new Response(new Uint8Array([79, 103, 103]), { headers: { "content-type": "audio/ogg" } });
+    }) as typeof fetch;
+    const m = await c.baixarMidia("dev1", { path: null, externalId: "3A87", mime: null, chat: "5511942330608@s.whatsapp.net" }, 1000);
+    expect(pedidos).toEqual(["/message/3A87/download?phone=5511942330608%40s.whatsapp.net", "/statics/media/5511942330608/2026-10-08/1791468321-x"]);
+    expect([...m.bytes]).toEqual([79, 103, 103]);
+    expect(m.mime).toBe("audio/ogg");
+  });
+
+  it("JSON sem caminho é falha da ponte, nunca vira mídia", async () => {
+    globalThis.fetch = vi.fn(async () => new Response('{"code":"SUCCESS","results":{}}', { headers: { "content-type": "application/json" } })) as typeof fetch;
+    await expect(c.baixarMidia("dev1", { path: null, externalId: "x", mime: "audio/ogg", chat: "1@s.whatsapp.net" }, 1000)).rejects.toThrow(/não disse onde/);
+  });
+});

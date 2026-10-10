@@ -386,6 +386,20 @@
       "when": 1791319785238,
       "tag": "0054_novidades_de_trabalho",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1791376014373,
+      "tag": "0055_mcp_risco_por_tool",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1791376074373,
+      "tag": "0056_comigo_avisos",
+      "breakpoints": true
     }
   ]
 }

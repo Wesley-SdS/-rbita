@@ -78,3 +78,4 @@ export type NewMeta = typeof meta.$inferInsert;
 export * from "./noticias-schema";
 export * from "./email-schema";
 export * from "./trabalho-schema";
+export * from "./comigo-schema";

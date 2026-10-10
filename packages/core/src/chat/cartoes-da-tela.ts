@@ -1,5 +1,6 @@
 import type { FonteDaWeb } from "./cartoes";
 import { brl } from "../finance/formato";
+import { quadroDeChamados, quadroParaOModelo } from "../quadro/regras";
 
 /**
  * O que a Órbita ABRE NA TELA enquanto conversa: "seus e-mails", "sua agenda",
@@ -32,7 +33,8 @@ export type TipoDeCartao =
   | "aniversarios"
   | "presenca"
   | "trabalho"
-  | "fontes";
+  | "fontes"
+  | "externo";
 
 export interface ItemDeCartao {
   titulo: string;
@@ -133,6 +135,76 @@ function trabalho(r: Obj, hoje: string): CartaoDaTela | null {
     { id: "slack", rotulo: "Slack", total: lista(r.slack).length, conectado: Number(conectados.slack) > 0 },
   ].filter((g) => g.conectado).map(({ conectado: _, ...g }) => g);
   return { id: "trabalho", tipo: "trabalho", titulo: "Seu trabalho", resumo: plural(grupos.reduce((s, g) => s + g.total, 0), "pendência", "pendências"), itens, grupos, vazio: "Nada pendente por aqui.", abrir: "/app" };
+}
+
+/** O que está com o dono na Adalink (`o_que_esta_comigo`): uma aba para o que é dele, uma para cada tipo de atraso da equipe. */
+function comigo(r: Obj): CartaoDaTela | null {
+  if (!Array.isArray(r.atividades_comigo) && !Array.isArray(r.chamados_comigo)) return null;
+  // o prazo vem dito em gente pelo servidor (`comigo/regras.ts`): o cartão só o repete
+  const prazo = (p: unknown, rotulo: string) => (txt(obj(p)?.texto) ? `${rotulo}: ${txt(obj(p)?.texto)}` : "");
+  const marcaDo = (p: unknown, critica = false): ItemDeCartao["marca"] =>
+    obj(p)?.estado === "atrasado" ? "atrasado" : obj(p)?.estado === "perto" || critica ? "importante" : undefined;
+  const chamado = (c: Obj, grupo: string): ItemDeCartao => ({
+    titulo: juntar(txt(c.codigo), txt(c.titulo)) ?? txt(c.titulo),
+    detalhe: opcional([txt(c.status), txt(c.responsavel) ? `com ${txt(c.responsavel)}` : "", txt(c.organizacao)].filter(Boolean).join(" · ")),
+    texto: opcional([prazo(c.prazoSolucao, "Prazo do SLA"), prazo(c.primeiraResposta, "1ª resposta")].filter(Boolean).join(" · ")),
+    quando: opcional(txt(c.vencidoEm) || txt(c.prazo)),
+    marca: c.motivo ? "atrasado" : marcaDo(c.prazoOrdem),
+    grupo,
+  });
+  const atividades = lista(r.atividades_comigo).map((a): ItemDeCartao => ({
+    titulo: txt(a.titulo),
+    detalhe: opcional([txt(a.projeto), txt(a.empresa), txt(a.coluna)].filter(Boolean).join(" · ")),
+    texto: opcional(prazo(a.prazo, "Prazo para finalizar")),
+    quando: opcional(txt(a.fim)),
+    marca: a.atrasada === true ? "atrasado" : marcaDo(a.prazo, a.critica === true),
+    grupo: "comigo",
+  }));
+  const meus = [...atividades, ...lista(r.chamados_comigo).map((c) => chamado(c, "comigo"))];
+  const semTratativa = lista(r.atrasados_sem_tratativa).map((c) => chamado(c, "sem_tratativa"));
+  const comDev = lista(r.atrasados_com_desenvolvedor).map((c) => chamado(c, "dev_atrasado"));
+  const atrasos = semTratativa.length + comDev.length;
+  return {
+    id: "comigo",
+    tipo: "trabalho",
+    titulo: "Com você na Adalink",
+    resumo: [plural(meus.length, "item com você", "itens com você"), atrasos ? plural(atrasos, "chamado atrasado", "chamados atrasados") : ""].filter(Boolean).join(" · "),
+    itens: [...meus.slice(0, MAX_ITENS), ...semTratativa.slice(0, MAX_ITENS), ...comDev.slice(0, MAX_ITENS)],
+    grupos: [
+      { id: "comigo", rotulo: "Com você", total: meus.length },
+      { id: "sem_tratativa", rotulo: "Sem tratativa", total: semTratativa.length },
+      { id: "dev_atrasado", rotulo: "Com dev, atrasados", total: comDev.length },
+    ],
+    vazio: "Nada por aqui.",
+    abrir: "/app",
+  };
+}
+
+/** O quadro da Adalink (`ver_quadro`): uma aba por coluna, como o kanban de lá. */
+function quadro(r: Obj): CartaoDaTela | null {
+  const colunas = lista(r.colunas);
+  if (!colunas.length) return null;
+  const qual = txt(r.quadro) === "gestao" ? "gestão" : "chamados";
+  const itens: ItemDeCartao[] = colunas.flatMap((col, i) =>
+    lista(col.cards).slice(0, MAX_ITENS).map((k) => ({
+      titulo: juntar(txt(k.codigo), txt(k.titulo)) ?? txt(k.titulo),
+      detalhe: opcional([txt(k.onde), txt(k.com) ? `com ${txt(k.com)}` : "", txt(k.prioridade)].filter(Boolean).join(" · ")),
+      texto: opcional(txt(k.prazo)),
+      marca: k.atrasado === true ? ("atrasado" as const) : undefined,
+      grupo: `c${i}`,
+    })),
+  );
+  return {
+    // o id diz QUAL quadro: o painel do chat abre o quadro de verdade (colunas, arrastar) por ele
+    id: `quadro:${txt(r.quadro) === "gestao" ? "gestao" : "chamados"}`,
+    tipo: "trabalho",
+    titulo: `Quadro de ${qual}`,
+    resumo: plural(colunas.reduce((s, c) => s + (typeof c.total === "number" ? c.total : 0), 0), "card", "cards"),
+    itens,
+    grupos: colunas.map((c, i) => ({ id: `c${i}`, rotulo: txt(c.coluna), total: typeof c.total === "number" ? c.total : lista(c.cards).length })),
+    vazio: "Nenhum card nesta coluna.",
+    abrir: "/app/quadro",
+  };
 }
 
 /** Os e-mails já triados (`meus_emails`): um cartão só, com as abas que vieram. */
@@ -420,13 +492,148 @@ function deTexto(tool: string, texto: string, args: Obj | null): CartaoDaTela | 
   return null;
 }
 
+// ── ferramentas de servidores MCP ───────────────────────────────────────────
+//
+// O formato de cada servidor é dele, então o cartão é GENÉRICO: o JSON que o
+// servidor devolve é lido pelos nomes de campo comuns (title, name, status,
+// deadline...). Toda lista de objetos vira uma aba ("doing", "backlog" do
+// gestão), e uma ferramenta nova de qualquer servidor ganha cartão sem código.
+
+const ROTULOS_EXTERNOS: Record<string, string> = {
+  open: "aberto", in_progress: "em andamento", waiting: "aguardando", resolved: "resolvido", closed: "fechado",
+  doing: "Em andamento", backlog: "Backlog", suggestedToday: "Sugeridas para hoje", done: "Feitas", todo: "A fazer",
+  tickets: "Chamados", activities: "Atividades", projects: "Projetos", items: "Itens", results: "Resultados",
+  byStatus: "Por status", byPriority: "Por prioridade", byScope: "Por alcance", byImpact: "Por impacto", byCategory: "Por categoria",
+  low: "baixa", medium: "média", high: "alta", critical: "crítica", doneToday: "Feitas hoje",
+};
+const rotuloExterno = (s: string) => ROTULOS_EXTERNOS[s] ?? s;
+const primeiro = (o: Obj, campos: string[]): string => {
+  for (const c of campos) {
+    const v = o[c];
+    const t = txt(v) || txt(obj(v)?.name);
+    if (t) return t;
+  }
+  return "";
+};
+const FEITO = new Set(["done", "resolved", "closed", "concluido", "concluída", "finalizado"]);
+
+function itemExterno(o: Obj, grupo?: string): ItemDeCartao | null {
+  const codigo = txt(o.code) || txt(o.key) || txt(o.codigo);
+  const titulo = primeiro(o, ["title", "name", "titulo", "nome", "summary", "subject", "label", "status", "priority", "scope", "impact", "category"]) || codigo;
+  if (!titulo) return null;
+  const status = txt(o.status) || txt(o.column);
+  const detalhe = [titulo === codigo ? "" : codigo, status ? rotuloExterno(status) : "", primeiro(o, ["projectName", "companyName", "organization", "project", "company", "assignee"])]
+    .filter(Boolean)
+    .join(" · ");
+  const quando = txt(obj(o.sla)?.deadline) || primeiro(o, ["deadline", "dueDate", "endDate", "expectedResolutionAt", "vencimento", "date", "createdAt"]);
+  const contagem = typeof o.count === "number" ? o.count : typeof o.total === "number" ? o.total : null;
+  const prioridade = txt(o.priority);
+  const marca: ItemDeCartao["marca"] =
+    o.overdue === true ? "atrasado" : FEITO.has(status.toLowerCase()) ? "feito" : o.isCritical === true || prioridade === "critical" || prioridade === "high" ? "importante" : undefined;
+  return {
+    titulo: rotuloExterno(titulo),
+    detalhe: opcional(detalhe),
+    texto: opcional(txt(o.description).slice(0, 200)),
+    quando: opcional(quando),
+    valor: contagem !== null ? String(contagem) : undefined,
+    url: urlSegura(o.url ?? o.link),
+    marca,
+    grupo,
+  };
+}
+
+/** O JSON dentro do resultado MCP (`content: [{type:"text", text}]`), ou o texto puro. */
+function lerConteudoMcp(conteudo: unknown): unknown {
+  const texto = Array.isArray(conteudo)
+    ? conteudo.map((b) => (obj(b)?.type === "text" ? txt(obj(b)?.text) : "")).join("\n").trim()
+    : typeof conteudo === "string" ? conteudo.trim() : "";
+  if (!texto) return obj(conteudo) ?? null;
+  try {
+    return JSON.parse(texto) as unknown;
+  } catch {
+    return texto;
+  }
+}
+
+/**
+ * O nome do cartão vem da DESCRIÇÃO que o servidor dá à ferramenta, até a
+ * primeira pausa: "MEU DIA: o kanban pessoal..." vira "Meu dia". O nome técnico
+ * ("get_my_day") só fica quando não há descrição.
+ */
+function tituloDaDescricao(descricao: string): string {
+  const curto = descricao.split(/[:.(\n]|, /)[0]!.trim().slice(0, 48);
+  if (curto.length < 3) return "";
+  return curto === curto.toUpperCase() ? curto.charAt(0) + curto.slice(1).toLowerCase() : curto;
+}
+
+/** Cartão de uma ferramenta MCP. `chave` é `servidor__tool`. */
+export function cartaoExterno(chave: string, conteudo: unknown, descricao = ""): CartaoDaTela | null {
+  // o quadro cru da central vira o MESMO cartão do `ver_quadro`: o modelo escolhe
+  // um ou outro para "como estão os chamados?", e o dono via um cartão genérico
+  // com cinco linhas soltas no lugar do quadro (09/10/2026)
+  if (/__tickets_board$/.test(chave)) {
+    const dado = lerConteudoMcp(conteudo);
+    if (obj(dado)) return quadro(quadroParaOModelo(quadroDeChamados(dado, "")));
+  }
+  const [servidor = "", tool = chave] = chave.split("__");
+  const nome = tituloDaDescricao(descricao) || tool.replace(new RegExp(`^${servidor}_`), "").replace(/_/g, " ");
+  const titulo = `${nome} · ${servidor.replace(/_/g, " ")}`;
+  const base = { id: `externo:${chave}`, tipo: "externo" as const, titulo };
+  const dado = lerConteudoMcp(conteudo);
+  if (dado === null) return null;
+  if (typeof dado === "string") {
+    return { ...base, itens: [{ titulo: dado.split("\n")[0]!.slice(0, 140), texto: opcional(dado.slice(0, 600)) }] };
+  }
+  if (Array.isArray(dado)) {
+    const itens = lista(dado).map((o) => itemExterno(o)).filter((x): x is ItemDeCartao => Boolean(x));
+    return { ...base, resumo: `${itens.length} ${itens.length === 1 ? "item" : "itens"}`, itens: itens.slice(0, MAX_ITENS), vazio: "Nada por aqui." };
+  }
+  const o = obj(dado);
+  if (!o || "erro" in o || "error" in o || o.proposta_enfileirada) return null;
+  // toda propriedade que é lista de objetos vira uma aba; vazia também conta,
+  // para a tela dizer "0" em vez de sumir com a coluna
+  const grupos = Object.entries(o).filter(([, v]) => Array.isArray(v) && v.every((x) => obj(x)));
+  const itens: ItemDeCartao[] = [];
+  for (const [nome, v] of grupos) {
+    for (const x of lista(v).slice(0, MAX_ITENS)) {
+      const i = itemExterno(x, grupos.length > 1 ? nome : undefined);
+      if (i) itens.push(i);
+    }
+  }
+  if (!itens.length && !grupos.length) {
+    // objeto sem lista (detalhe de UM chamado, uma atividade): ele mesmo é o item
+    const i = itemExterno(o);
+    return i ? { ...base, itens: [i] } : null;
+  }
+  const total = typeof o.total === "number" ? o.total : null;
+  return {
+    ...base,
+    resumo: total !== null && total > itens.length ? `${itens.length} de ${total}` : undefined,
+    destaque: total !== null ? { valor: String(total), rotulo: "no total" } : undefined,
+    itens,
+    vazio: "Nada por aqui.",
+    grupos: grupos.length > 1 ? grupos.map(([nome, v]) => ({ id: nome, rotulo: rotuloExterno(nome), total: (v as unknown[]).length })) : undefined,
+  };
+}
+
 /**
  * Os cartões de UM resultado de tool. A maioria é escolhida pelo nome da tool
  * (cada uma tem formato próprio); o que vem em texto só vira cartão nas tools
  * em que o texto É a resposta (cotação, trajeto, aniversários).
  */
-export function cartoesDoResultado(tool: string, resultado: unknown, argumentos?: unknown, agora = new Date()): CartaoDaTela[] {
+export function cartoesDoResultado(tool: string, resultado: unknown, argumentos?: unknown, agora = new Date(), descricao?: string): CartaoDaTela[] {
   const args = obj(argumentos);
+  // servidor MCP: no chat a tool se chama `servidor__tool`; na voz o resultado
+  // chega embrulhado pela função `usar_ferramenta_externa` (`mcp/voz.ts`)
+  if (tool.includes("__")) {
+    const c = cartaoExterno(tool, resultado, descricao);
+    return c ? [c] : [];
+  }
+  if (tool === "usar_ferramenta_externa") {
+    const r = obj(resultado);
+    const c = txt(r?.ferramenta) ? cartaoExterno(txt(r?.ferramenta), r?.resultado, txt(r?.descricao)) : null;
+    return c ? [c] : [];
+  }
   if (typeof resultado === "string") {
     const c = deTexto(tool, resultado, args);
     return c ? [c] : [];
@@ -438,6 +645,8 @@ export function cartoesDoResultado(tool: string, resultado: unknown, argumentos?
   switch (tool) {
     case "meus_emails": c = emailsTriados(r); break;
     case "meu_trabalho": c = trabalho(r, hoje); break;
+    case "o_que_esta_comigo": c = comigo(r); break;
+    case "ver_quadro": c = quadro(r); break;
     case "ler_emails": c = emails(r, "google"); break;
     case "outlook_ler_emails": c = emails(r, "outlook"); break;
     case "listar_eventos": c = agenda(r, "google"); break;

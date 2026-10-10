@@ -74,6 +74,8 @@ import * as financas from "./financas";
 import * as noticias from "./noticias";
 import * as emails from "./emails";
 import * as trabalho from "./trabalho";
+import * as comigo from "./comigo";
+import * as quadro from "./quadro";
 import * as financeReceipt from "./finance-receipt";
 import * as financeStatement from "./finance-statement";
 import * as upload from "./upload";
@@ -151,6 +153,9 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/trabalho", { GET: trabalho.GET }),
   webRoute("api/trabalho/atualizar", { POST: trabalho.POST_ATUALIZAR }),
   webRoute("api/trabalho/visto", { POST: trabalho.POST_VISTO }),
+  webRoute("api/comigo", { GET: comigo.GET }),
+  webRoute("api/quadro", { GET: quadro.GET }),
+  webRoute("api/quadro/mover", { POST: quadro.POST_MOVER }),
   webRoute("api/emails", { GET: emails.GET }),
   webRoute("api/emails/atualizar", { POST: emails.POST_ATUALIZAR }),
   webRoute("api/emails/acao", { POST: emails.POST_ACAO }),

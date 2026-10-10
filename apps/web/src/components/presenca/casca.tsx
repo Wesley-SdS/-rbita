@@ -1,6 +1,6 @@
 "use client";
 
-import { COOKIE_LATERAL, COOKIE_TEMA, gravarPreferencia, migrarDoLocalStorage } from "@/lib/preferencias-visuais";
+import { COOKIE_LATERAL, gravarPreferencia } from "@/lib/preferencias-visuais";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
@@ -12,6 +12,7 @@ import { ModoFoco } from "./modo-foco";
 import { MesaDeCartoes } from "./mesa-de-cartoes";
 import { PreviaDaCameraNoCanto } from "@/components/previa-da-camera";
 import { ProvedorCasca } from "./contexto";
+import { Tema } from "./tema";
 import { signOut } from "@/lib/auth-client";
 import { limparCache, ProvedorCacheDados } from "@/lib/dados/recurso";
 
@@ -63,40 +64,6 @@ async function sair() {
     /* sem Cache Storage (navegação privada, http sem TLS): nada a limpar */
   }
   location.assign("/login");
-}
-
-function Tema() {
-  const [tema, setTema] = useState<"claro" | "escuro">("claro");
-
-  useEffect(() => {
-    // quem já usava a Órbita tem a escolha no localStorage e nenhum cookie: sem
-    // esta migração o tema escuro "sumiria" na primeira carga depois da
-    // mudança, e a pessoa acharia que a preferência foi esquecida
-    migrarDoLocalStorage();
-    setTema(document.documentElement.dataset.theme === "dark" ? "escuro" : "claro");
-  }, []);
-
-  function alternar() {
-    const proximo = tema === "escuro" ? "claro" : "escuro";
-    setTema(proximo);
-    // O padrão é o Mineral claro: só o escuro grava atributo e preferência.
-    if (proximo === "escuro") document.documentElement.dataset.theme = "dark";
-    else delete document.documentElement.dataset.theme;
-    // cookie e não localStorage: é o servidor que precisa ler isto para
-    // mandar o HTML já com o tema certo (ver `lib/preferencias-visuais.ts`)
-    gravarPreferencia(COOKIE_TEMA, proximo);
-  }
-
-  return (
-    <button
-      className="icon-button"
-      onClick={alternar}
-      aria-label={tema === "escuro" ? "Usar o tema claro" : "Usar o tema escuro"}
-      title="Alternar tema"
-    >
-      <Icone nome={tema === "escuro" ? "sun" : "moon"} />
-    </button>
-  );
 }
 
 export function Casca({
@@ -160,11 +127,29 @@ export function Casca({
     setRecolhida(document.documentElement.dataset.lateral === "recolhida");
   }, []);
 
+  // Na Conversa a barra começa RECOLHIDA (redesenho de 09/10/2026: a conversa
+  // perdia largura para o menu). Abrir ali vale só para aquela visita e não
+  // mexe na preferência das outras telas.
+  const naConversa = atual.slug === "conversa";
+  const [abertaNaConversa, setAbertaNaConversa] = useState(false);
+  const recolhidaAgora = naConversa ? !abertaNaConversa : recolhida;
+  useEffect(() => {
+    if (recolhidaAgora) document.documentElement.dataset.lateral = "recolhida";
+    else delete document.documentElement.dataset.lateral;
+  }, [recolhidaAgora]);
+  // a tela atual no documento: o CSS da Conversa esconde a barra do topo e usa a
+  // altura inteira (os controles dela vão para o cabeçalho da própria conversa)
+  useEffect(() => {
+    document.documentElement.dataset.tela = atual.slug;
+  }, [atual.slug]);
+
   function alternarLateral() {
+    if (naConversa) {
+      setAbertaNaConversa((v) => !v);
+      return;
+    }
     const proxima = !recolhida;
     setRecolhida(proxima);
-    if (proxima) document.documentElement.dataset.lateral = "recolhida";
-    else delete document.documentElement.dataset.lateral;
     gravarPreferencia(COOKIE_LATERAL, proxima ? "recolhida" : "aberta");
   }
 
@@ -231,6 +216,8 @@ export function Casca({
           abrirFoco: () => setFocoAberto(true),
           abrirBusca: () => setBuscaAberta(true),
           abrirAtividade: () => setAtividadeAberta(true),
+          alternarLateral,
+          lateralRecolhida: recolhidaAgora,
           registrarPausaDeVoz,
           intensidade,
           reduzido: movimentoReduzido,
@@ -318,11 +305,11 @@ export function Casca({
               <button
                 className="icon-button recolher-lateral"
                 onClick={alternarLateral}
-                aria-label={recolhida ? "Expandir a navegação" : "Recolher a navegação"}
-                aria-pressed={recolhida}
-                title={recolhida ? "Expandir a navegação" : "Recolher a navegação"}
+                aria-label={recolhidaAgora ? "Expandir a navegação" : "Recolher a navegação"}
+                aria-pressed={recolhidaAgora}
+                title={recolhidaAgora ? "Expandir a navegação" : "Recolher a navegação"}
               >
-                <Icone nome={recolhida ? "arrow-right" : "menu"} />
+                <Icone nome={recolhidaAgora ? "arrow-right" : "menu"} />
               </button>
               <span className="breadcrumb-universe">Meu universo</span>
               <span className="slash">/</span>

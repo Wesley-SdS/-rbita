@@ -28,6 +28,18 @@ describe("aprovar falando", () => {
     expect(normalizarFrase("  Não, MANDA!! ")).toBe("nao manda");
   });
 
+  it("\"Mande o áudio\" e \"manda pra mim\" aprovam; \"não mande\" cancela (08/10/2026, com as frases padrão)", async () => {
+    const { SETTING_DEFS } = await import("../settings/defs");
+    const confirmar = SETTING_DEFS["whatsapp.frasesConfirmar"].default as string[];
+    const cancelar = SETTING_DEFS["whatsapp.frasesCancelar"].default as string[];
+    expect(interpretarResposta("Mande o áudio", confirmar, cancelar)).toEqual({ acao: "confirmar" });
+    expect(interpretarResposta("manda pra mim", confirmar, cancelar)).toEqual({ acao: "confirmar" });
+    expect(interpretarResposta("envie a mensagem", confirmar, cancelar)).toEqual({ acao: "confirmar" });
+    expect(interpretarResposta("Não mande o áudio", confirmar, cancelar)).toEqual({ acao: "cancelar" });
+    // pedido novo continua sendo conversa, não aprovação
+    expect(interpretarResposta("me mande um áudio falando dos e-mails", confirmar, cancelar)).toEqual({ acao: null });
+  });
+
   it("a frase sozinha ou com enchimento aprova", () => {
     expect(interpretarResposta("manda", CONFIRMAR, CANCELAR)).toEqual({ acao: "confirmar" });
     expect(interpretarResposta("Pode mandar sim!", CONFIRMAR, CANCELAR)).toEqual({ acao: "confirmar" });

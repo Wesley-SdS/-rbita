@@ -261,6 +261,19 @@ export async function baixarMidia(deviceId: string, ref: { path: string | null; 
   // com o arquivo local), mas a RECUPERADA do histórico só tem a URL cifrada do
   // WhatsApp, e todo áudio recuperado se perdia (28/09/2026).
   const res = await executar({ method: "GET", path: `/message/${enc(ref.externalId)}/download?phone=${encodeURIComponent(ref.chat)}`, deviceId });
+  // A rota NÃO devolve o arquivo: devolve um JSON dizendo onde o gravou
+  // (`results.file_path`). Esse JSON ia como se fosse o áudio, a AssemblyAI
+  // recusava ("File type application/json") e a transcrição se perdia
+  // (08/10/2026). Segue o caminho e baixa o arquivo de verdade.
+  if ((res.headers.get("content-type") ?? "").includes("application/json")) {
+    const corpo = (await res.json().catch(() => null)) as { results?: { file_path?: string } } | null;
+    const arquivo = corpo?.results?.file_path?.trim();
+    if (!arquivo) throw new PonteError("A ponte do WhatsApp não disse onde gravou a mídia.", "instavel");
+    const real = await executar({ method: "GET", path: `/${arquivo.replace(/^\/+/, "")}`, deviceId });
+    const bytes = await lerComTeto(real, maxBytes);
+    const tipo = real.headers.get("content-type") ?? "";
+    return { bytes, mime: ref.mime || (tipo && !tipo.includes("json") ? tipo : "application/octet-stream") };
+  }
   return { bytes: await lerComTeto(res, maxBytes), mime: ref.mime || res.headers.get("content-type") || "application/octet-stream" };
 }
 

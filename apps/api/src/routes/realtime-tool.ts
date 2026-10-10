@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runRealtimeTool } from "@orbita/core/tools/index";
+import { ehFuncaoMcpDeVoz, executarFuncaoMcpDeVoz } from "@orbita/core/mcp/voz";
 import { requesterResolver } from "@orbita/core/identity/requester";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
@@ -22,7 +23,11 @@ export async function POST(req: Request, ctx: RouteCtx) {
   // sem trecho de voz aqui (o áudio vai direto à OpenAI por WebRTC): vale a conta,
   // mas a permissão por pessoa e cômodo do registro continua sendo aplicada
   const quem = requesterResolver(session.user.id, null, parsed.data.deviceId ?? null);
-  const result = await runRealtimeTool(session.user.id, parsed.data.name, parsed.data.arguments, quem.resolve, quem.origin);
+  // as funções do MCP não estão no registro: o risco e a aprovação vêm do
+  // catálogo do servidor, no mesmo caminho do chat (`executarFerramentaMcp`)
+  const result = ehFuncaoMcpDeVoz(parsed.data.name)
+    ? await executarFuncaoMcpDeVoz(session.user.id, parsed.data.name, parsed.data.arguments)
+    : await runRealtimeTool(session.user.id, parsed.data.name, parsed.data.arguments, quem.resolve, quem.origin);
   // o NOME da tool no log: sem ele, "POST /api/realtime/tool 200" não diz nada
   // e diagnosticar uma conversa por voz vira adivinhação
   log.info("realtime.tool", { userId: session.user.id, tool: parsed.data.name });

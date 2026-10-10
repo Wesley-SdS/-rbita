@@ -57,7 +57,9 @@ export function normalizarFrase(s: string): string {
 }
 
 // palavras que podem acompanhar a frase sem mudar o sentido ("manda sim", "pode mandar a 2")
-const ENCHIMENTO = new Set(["sim", "ai", "ja", "entao", "por", "favor", "ok", "isso", "a", "o", "numero", "opcao", "essa", "esse", "la", "vai"]);
+// o OBJETO do pedido também é enchimento: "mande o áudio" e "manda pra mim"
+// caíam no modelo, que só repetia "responde manda" (08/10/2026)
+const ENCHIMENTO = new Set(["sim", "ai", "ja", "entao", "por", "favor", "ok", "isso", "a", "o", "numero", "opcao", "essa", "esse", "la", "vai", "audio", "audios", "mensagem", "msg", "email", "pra", "para", "mim", "me", "agora", "aqui", "logo", "ele", "ela"]);
 
 export interface RespostaInterpretada {
   acao: "confirmar" | "cancelar" | null;

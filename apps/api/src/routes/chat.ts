@@ -434,7 +434,9 @@ export async function POST(req: Request, ctx: RouteCtx) {
 
                 // o que ela consultou vira cartão dentro da mensagem: os
                 // e-mails, a agenda, o clima (a mesma regra da voz)
-                const cartoes = cartoesDoResultado(part.toolName, (part as { output?: unknown }).output, (part as { input?: unknown }).input);
+                // a descrição só importa à tool de servidor MCP: é dela que sai o nome do cartão
+                const descricao = tools[part.toolName]?.description;
+                const cartoes = cartoesDoResultado(part.toolName, (part as { output?: unknown }).output, (part as { input?: unknown }).input, new Date(), typeof descricao === "string" ? descricao : undefined);
                 if (cartoes.length) {
                   const evCartoes = { t: "cartoes", itens: cartoes };
                   gotText ? send(evCartoes) : buffered.push(evCartoes);

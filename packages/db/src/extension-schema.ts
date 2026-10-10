@@ -35,7 +35,9 @@ export const mcpServer = pgTable("mcp_server", {
     .references(() => user.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   url: text("url").notNull(), // endpoint HTTP streamable do servidor MCP
-  headers: jsonb("headers"), // headers opcionais (ex: Authorization)
+  // cabeçalhos de autenticação, cifrados (`core/mcp/cabecalhos.ts`); o
+  // formato antigo, em texto puro, ainda é lido até o servidor ser salvo de novo
+  headers: jsonb("headers"),
   enabled: boolean("enabled").notNull().default(true),
   // Risco das tools deste servidor (decisão da Onda 1): "efeito_externo" por
   // padrão, ou seja, toda tool MCP passa pelo gate humano até o dono marcar o
@@ -45,7 +47,13 @@ export const mcpServer = pgTable("mcp_server", {
   // permite NÃO conectar a cada mensagem: o modelo vê as tools pelo catálogo,
   // e a conexão só acontece quando uma delas é de fato chamada (se o servidor
   // caiu, a reconexão é nessa hora, não antes).
-  toolsCatalog: jsonb("tools_catalog").$type<{ name: string; description?: string; inputSchema?: unknown }[]>(),
+  // `somenteLeitura` é o `readOnlyHint` que o próprio servidor declara
+  toolsCatalog: jsonb("tools_catalog").$type<{ name: string; description?: string; inputSchema?: unknown; somenteLeitura?: boolean }[]>(),
+  // Risco escolhido pelo dono para UMA tool, por nome. Vence a marcação do
+  // servidor e o risco do servidor: há servidor que não marca nada (o gestão
+  // da Adalink tem 64 tools sem marcação) e ler "meu dia" não pode pedir
+  // aprovação a cada vez.
+  toolRisks: jsonb("tool_risks").$type<Record<string, string>>(),
   catalogAt: timestamp("catalog_at"),
   /** último erro de conexão, para a tela mostrar por que o servidor está fora */
   lastError: text("last_error"),

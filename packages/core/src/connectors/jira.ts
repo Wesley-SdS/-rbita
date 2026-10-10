@@ -16,7 +16,8 @@ import { lerAcessoBasico } from "./por-token";
  */
 function destino(token: string, cloudId: string): { base: string; auth: string } {
   const b = lerAcessoBasico(token);
-  if (b) return { base: `${b.site}/rest/api/3`, auth: `Basic ${Buffer.from(`${b.email}:${b.token}`).toString("base64")}` };
+  // token com escopo só vale pelo gateway; o clássico, direto no site
+  if (b) return { base: b.cloudId ? `https://api.atlassian.com/ex/jira/${encodeURIComponent(b.cloudId)}/rest/api/3` : `${b.site}/rest/api/3`, auth: `Basic ${Buffer.from(`${b.email}:${b.token}`).toString("base64")}` };
   return { base: `https://api.atlassian.com/ex/jira/${encodeURIComponent(cloudId)}/rest/api/3`, auth: `Bearer ${token}` };
 }
 

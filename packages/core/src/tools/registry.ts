@@ -203,8 +203,9 @@ const tokenize = (s: string) =>
  * fica com as `max` melhores. Sem LLM no caminho quente. Sem pedido (rotinas),
  * devolve as primeiras `max` na ordem de registro (estável).
  */
-export function selectRelevant(defs: AnyToolDef[], query: string, max: number): AnyToolDef[] {
-  if (defs.length <= max) return defs;
+/** `porRelevancia`: devolve da mais para a menos ligada ao pedido (para quem vai LER a lista, como a busca da voz). */
+export function selectRelevant<T extends { name: string; description: string; keywords?: string[] }>(defs: T[], query: string, max: number, porRelevancia = false): T[] {
+  if (defs.length <= max && !porRelevancia) return defs;
   const q = new Set(tokenize(query));
   if (!q.size) return defs.slice(0, max);
   // radical simples: "manda" casa "mandar", "reuniões" casa "reuniao" (sem stemmer)
@@ -224,7 +225,7 @@ export function selectRelevant(defs: AnyToolDef[], query: string, max: number): 
   return scored
     .sort((a, b) => b.score - a.score || a.i - b.i)
     .slice(0, max)
-    .sort((a, b) => a.i - b.i)
+    .sort((a, b) => (porRelevancia ? 0 : a.i - b.i))
     .map((x) => x.d);
 }
 

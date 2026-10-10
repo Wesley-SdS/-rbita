@@ -40,6 +40,24 @@ export interface AcessoBasicoDoJira {
   site: string;
   email: string;
   token: string;
+  /**
+   * Só no token COM ESCOPO: ele é recusado no endereço do site e só vale pelo
+   * gateway `api.atlassian.com/ex/jira/<cloudId>`. O token clássico (sem
+   * escopo) fala com o site direto e não guarda isto.
+   */
+  cloudId?: string;
+}
+
+/** O `cloudId` do site, por um endereço público do próprio Jira (não pede login). */
+async function cloudIdDoSite(site: string): Promise<string | null> {
+  try {
+    const r = await comPrazo(`${site}/_edge/tenant_info`, { headers: { Accept: "application/json" } });
+    if (!r.ok) return null;
+    const d = (await r.json()) as { cloudId?: string };
+    return d.cloudId && /^[\w-]{8,64}$/.test(d.cloudId) ? d.cloudId : null;
+  } catch {
+    return null;
+  }
 }
 
 export function lerAcessoBasico(segredo: string): AcessoBasicoDoJira | null {
@@ -93,13 +111,24 @@ export async function validarToken(cid: ConnectorId, valores: Record<string, str
     const token = valores.token?.trim() ?? "";
     if (!site) throw new TokenRecusado("Informe o endereço do Jira, como suaempresa.atlassian.net.");
     if (!email.includes("@") || token.length < 10) throw new TokenRecusado("Informe o e-mail da conta Atlassian e o token de API.");
-    const basico = Buffer.from(`${email}:${token}`).toString("base64");
-    const eu = await json<{ accountId?: string; displayName?: string }>(
-      await comPrazo(`${site}/rest/api/3/myself`, { headers: { Authorization: `Basic ${basico}`, Accept: "application/json" } }),
-      "Jira",
-    );
+    const cabecalhos = { Authorization: `Basic ${Buffer.from(`${email}:${token}`).toString("base64")}`, Accept: "application/json" };
+    // token clássico: o site responde; token com escopo: o site recusa, e o
+    // mesmo token vale pelo gateway com o cloudId do site
+    let cloudId: string | undefined;
+    let resposta = await comPrazo(`${site}/rest/api/3/myself`, { headers: cabecalhos });
+    if (resposta.status === 401 || resposta.status === 403) {
+      const id = await cloudIdDoSite(site);
+      if (id) {
+        const peloGateway = await comPrazo(`https://api.atlassian.com/ex/jira/${id}/rest/api/3/myself`, { headers: cabecalhos });
+        if (peloGateway.ok) {
+          resposta = peloGateway;
+          cloudId = id;
+        }
+      }
+    }
+    const eu = await json<{ accountId?: string; displayName?: string }>(resposta, "Jira");
     if (!eu.accountId) throw new TokenRecusado("O Jira não disse de quem é o token.");
-    const segredo: AcessoBasicoDoJira = { modo: "basico", site, email, token };
+    const segredo: AcessoBasicoDoJira = { modo: "basico", site, email, token, ...(cloudId ? { cloudId } : {}) };
     return { externalId: new URL(site).hostname, label: new URL(site).hostname.replace(/\.atlassian\.net$/, ""), segredo: JSON.stringify(segredo) };
   }
 

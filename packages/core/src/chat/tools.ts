@@ -135,7 +135,7 @@ export async function buildAllTools(
   }
   const [base, mcp, skillInstructions] = await Promise.all([
     buildToolSet(userId, query, requester, origin, voiceRef, undefined, opts.canal ?? "tela", false, Boolean(opts.todas)),
-    buildMcpTools(userId),
+    buildMcpTools(userId, { canal: opts.canal, query: opts.todas ? undefined : query }),
     getSkillInstructions(userId, query),
   ]);
   return { tools: comTeto(base, mcp.tools, opts.todas ? await settings.get("tools.maxTodas") : Infinity), cleanup: mcp.cleanup, skillInstructions };

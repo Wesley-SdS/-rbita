@@ -187,6 +187,18 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
         await podarTrabalho(userId).catch(() => undefined);
       }
     });
+    // gestão e chamados da Adalink: o que chegou para o dono e o que passou a atrasar
+    this.loop("comigo", () => settings.get("comigo.intervaloMinutos").then((m) => m * 60_000), async () => {
+      const { donosComComigo, vigiarComigo, podarComigo } = await import("@orbita/core/comigo/servico");
+      for (const userId of await donosComComigo()) {
+        const r = await vigiarComigo(userId).catch((e) => {
+          log.warn("comigo.volta_falhou", { erro: e instanceof Error ? e.message : String(e) });
+          return null;
+        });
+        if (r?.novas) log.info("comigo.novidades", r);
+        await podarComigo(userId).catch(() => undefined);
+      }
+    });
     this.loop("noticias", async () => 60_000, async () => {
       const { donosComBuscaDevida } = await import("@orbita/core/noticias/servico");
       for (const { userId, dia } of await donosComBuscaDevida()) {

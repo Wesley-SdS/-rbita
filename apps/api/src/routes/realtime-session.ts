@@ -3,12 +3,16 @@ import { z } from "zod";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { SYSTEM_PROMPT } from "@orbita/core/chat/tools";
-import { toolDefsForRealtime, type ToolDef } from "@orbita/core/tools/index";
+import { toolDefsForRealtime } from "@orbita/core/tools/index";
+import { funcoesMcpDeVoz } from "@orbita/core/mcp/voz";
 import { log } from "@orbita/core/observability/logger";
 import { settings } from "@orbita/core/settings/index";
 import { escolherProvedorRealtime, type ChavesRealtime } from "@orbita/core/realtime/provider";
 import { montarSetupGemini, urlSessaoGemini, type FuncaoDeclarada } from "@orbita/core/realtime/gemini";
 import { criarTokenEfemeroGemini } from "@orbita/core/realtime/token";
+
+/** O que vira função declarada na sessão: tool nativa do registro ou função do MCP. */
+type Declaravel = { name: string; description: string; inputSchema: z.ZodType };
 
 /** Quais provedores de voz em tempo real têm credencial. Exportada para a rota de config não repetir a regra. */
 export function chavesRealtime(): ChavesRealtime {
@@ -56,7 +60,9 @@ export async function POST(_req: Request, ctx: RouteCtx) {
   // sem isso, o modo realtime só conversa, não aciona a casa nem mexe em
   // nada (briefing §7.2). O gate humano continua: uma tool arriscada
   // enfileira em vez de executar (ver runRealtimeTool em packages/core).
-  const defs: ToolDef[] = await toolDefsForRealtime(session.user.id);
+  // mais as duas funções que dão acesso aos servidores MCP do dono (`mcp/voz.ts`)
+  const [nativas, externas] = await Promise.all([toolDefsForRealtime(session.user.id), funcoesMcpDeVoz(session.user.id)]);
+  const defs: Declaravel[] = [...nativas, ...externas];
   const instrucoes = SYSTEM_PROMPT + INSTRUCAO_DE_VOZ;
 
   if (provider === "gemini") return sessaoGemini(defs, instrucoes, cfg["realtime.geminiModel"], cfg["realtime.geminiVoice"], session.user.id);
@@ -80,7 +86,7 @@ export async function POST(_req: Request, ctx: RouteCtx) {
  *    (o caminho comum responde "unregistered callers"), e só pela query
  *    `access_token`, porque o WebSocket do navegador não manda header.
  */
-async function sessaoGemini(defs: ToolDef[], instrucoes: string, modelo: string, voz: string, userId: string) {
+async function sessaoGemini(defs: Declaravel[], instrucoes: string, modelo: string, voz: string, userId: string) {
   const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
   const funcoes: FuncaoDeclarada[] = defs.map((d) => ({
     name: d.name,
@@ -110,9 +116,9 @@ async function sessaoGemini(defs: ToolDef[], instrucoes: string, modelo: string,
  * duração volta para o browser, que abre o WebRTC direto com a OpenAI — a
  * chave real (OPENAI_API_KEY) nunca sai do servidor.
  */
-async function sessaoOpenAI(defs: ToolDef[], instrucoes: string, modelo: string, voz: string, userId: string) {
+async function sessaoOpenAI(defs: Declaravel[], instrucoes: string, modelo: string, voz: string, userId: string) {
   const key = process.env.OPENAI_API_KEY;
-  const tools = defs.map((d: ToolDef) => ({
+  const tools = defs.map((d) => ({
     type: "function" as const,
     name: d.name,
     description: d.description,

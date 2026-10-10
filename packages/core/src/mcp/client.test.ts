@@ -7,18 +7,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * a primeira pode ter executado.
  */
 
-type Srv = { id: string; userId: string; name: string; url: string; headers: null; enabled: boolean; risk: string; toolsCatalog: unknown; catalogAt: Date | null; lastError: null; lastErrorAt: null; createdAt: Date };
+type Srv = { id: string; userId: string; name: string; url: string; headers: unknown; enabled: boolean; risk: string; toolsCatalog: unknown; toolRisks?: Record<string, string> | null; catalogAt: Date | null; lastError: null; lastErrorAt: null; createdAt: Date };
 let servidores: Srv[] = [];
 let conexoes = 0;
 let falharConexao = false;
 let falharChamadas = 0;
 let falharPing = false;
 const chamadas: string[] = [];
+const inseridos: Record<string, unknown>[] = [];
+const cabecalhosEnviados: unknown[] = [];
+let maxPorTurno = 15;
 
 vi.mock("@orbita/db", () => {
   const cadeia = (): Record<string, unknown> => {
     const p: Record<string, unknown> = {};
-    for (const k of ["select", "from", "where", "update", "set", "insert", "values", "returning"]) p[k] = () => p;
+    for (const k of ["select", "from", "where", "update", "set", "insert", "returning"]) p[k] = () => p;
+    p.values = (v: Record<string, unknown>) => (inseridos.push(v), p);
     p.limit = async () => servidores.slice(0, 1);
     p.then = (ok: (v: unknown) => void) => ok(servidores);
     p.catch = () => Promise.resolve();
@@ -29,12 +33,18 @@ vi.mock("@orbita/db", () => {
 vi.mock("../settings", () => ({
   settings: {
     get: async (k: string) =>
-      ({ "mcp.connectTimeoutMs": 100, "mcp.callTimeoutMs": 100, "mcp.idleMinutes": 15, "mcp.catalogRefreshHours": 24, "mcp.retryAfterSeconds": 60 })[k],
+      ({ "mcp.connectTimeoutMs": 100, "mcp.callTimeoutMs": 100, "mcp.idleMinutes": 15, "mcp.catalogRefreshHours": 24, "mcp.retryAfterSeconds": 60, "mcp.maxPerTurn": maxPorTurno })[k],
   },
 }));
 vi.mock("../net/ssrf", () => ({ assertPublicUrl: async () => undefined }));
 vi.mock("../events/index", () => ({ events: { emit: async () => undefined } }));
-vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({ StreamableHTTPClientTransport: class {} }));
+vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
+  StreamableHTTPClientTransport: class {
+    constructor(_url: URL, o: { requestInit?: { headers?: unknown } }) {
+      cabecalhosEnviados.push(o.requestInit?.headers);
+    }
+  },
+}));
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
   Client: class {
     async connect() {
@@ -60,6 +70,7 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
 }));
 
 import { buildMcpTools, callMcpTool, forgetMcpServer } from "./client";
+import { guardarCabecalhos } from "./cabecalhos";
 
 const jira = (over: Partial<Srv> = {}): Srv => ({
   id: "jira", userId: "dono", name: "jira", url: "https://jira.exemplo.com/mcp", headers: null, enabled: true, risk: "leitura",
@@ -69,6 +80,14 @@ const jira = (over: Partial<Srv> = {}): Srv => ({
 const executar = async (tools: Record<string, unknown>, nome: string) =>
   (tools[nome] as { execute: (a: unknown, o: unknown) => Promise<unknown> }).execute({}, { toolCallId: "1", messages: [] });
 
+/** Servidor como o de tickets da Adalink: marca as leituras, não marca o que altera. */
+const tickets = (over: Partial<Srv> = {}): Srv =>
+  jira({
+    id: "jira", name: "tickets", risk: "efeito_externo",
+    toolsCatalog: [{ name: "tickets_list", description: "Lista chamados", somenteLeitura: true }, { name: "tickets_create", description: "Abre um chamado", somenteLeitura: false }],
+    ...over,
+  });
+
 beforeEach(async () => {
   await forgetMcpServer("jira");
   conexoes = 0;
@@ -76,6 +95,9 @@ beforeEach(async () => {
   falharChamadas = 0;
   falharPing = false;
   chamadas.length = 0;
+  inseridos.length = 0;
+  cabecalhosEnviados.length = 0;
+  maxPorTurno = 15;
   servidores = [jira()];
 });
 
@@ -143,5 +165,96 @@ describe("efeito externo nunca é repetido", () => {
     falharChamadas = 1;
     await expect(callMcpTool("dono", { serverId: "jira", tool: "buscar_ticket", args: {} })).rejects.toThrow();
     expect(chamadas).toHaveLength(1);
+  });
+});
+
+describe("risco por ferramenta", () => {
+  it("a leitura que o servidor declara executa direto; a que altera vira proposta do MESMO canal", async () => {
+    servidores = [tickets()];
+    const { tools } = await buildMcpTools("dono", { canal: "whatsapp" });
+    await executar(tools, "tickets__tickets_list");
+    expect(chamadas).toEqual(["tickets_list"]);
+
+    const r = (await executar(tools, "tickets__tickets_create")) as { proposta_enfileirada?: boolean };
+    expect(r.proposta_enfileirada).toBe(true);
+    expect(chamadas).toEqual(["tickets_list"]); // não chamou o servidor
+    // o canal é o que deixa o "manda" do WhatsApp achar a proposta; o risco
+    // gravado é o que o por-frase confere (tool MCP não está no registro)
+    expect(inseridos[0]).toMatchObject({ kind: "mcp_call", canal: "whatsapp", payload: { tool: "tickets_create", risco: "efeito_externo" } });
+  });
+
+  it("a escolha do dono vence a marcação do servidor, para os dois lados", async () => {
+    servidores = [tickets({ toolRisks: { tickets_create: "leitura", tickets_list: "perigoso" } })];
+    const { tools } = await buildMcpTools("dono");
+    await executar(tools, "tickets__tickets_create");
+    expect(chamadas).toEqual(["tickets_create"]);
+    await executar(tools, "tickets__tickets_list");
+    expect(inseridos[0]).toMatchObject({ canal: "tela", payload: { risco: "perigoso" } });
+  });
+
+  it("servidor sem marcação nenhuma (como o gestão): tudo pede aprovação até o dono escolher", async () => {
+    servidores = [tickets({ toolsCatalog: [{ name: "get_my_day", description: "meu dia" }] })];
+    const { tools } = await buildMcpTools("dono");
+    await executar(tools, "tickets__get_my_day");
+    expect(chamadas).toEqual([]);
+    expect(inseridos).toHaveLength(1);
+  });
+});
+
+describe("cabeçalho cifrado no banco, decifrado só na conexão", () => {
+  it("o token chega ao servidor como foi digitado", async () => {
+    process.env.CONNECTORS_ENC_KEY ??= "chave-de-teste-com-tamanho-suficiente-123";
+    const guardado = guardarCabecalhos({ "x-ada-token": "ada_segredo" });
+    expect(JSON.stringify(guardado)).not.toContain("ada_segredo");
+    servidores = [jira({ headers: guardado })];
+    await executar((await buildMcpTools("dono")).tools, "jira__buscar_ticket");
+    expect(cabecalhosEnviados).toEqual([{ "x-ada-token": "ada_segredo" }]);
+  });
+});
+
+describe("seleção por relevância", () => {
+  it("com o pedido, só as ferramentas ligadas a ele vão ao modelo, até o teto", async () => {
+    maxPorTurno = 1;
+    servidores = [tickets()];
+    expect(Object.keys((await buildMcpTools("dono", { query: "abre um chamado novo" })).tools)).toEqual(["tickets__tickets_create"]);
+    // a busca da voz lê a lista: a mais ligada ao pedido vem primeiro
+    const { escolherFerramentasMcp, ferramentasMcpDoDono } = await import("./client");
+    maxPorTurno = 15;
+    expect((escolherFerramentasMcp(await ferramentasMcpDoDono("dono"), "abre um chamado novo", 2, true))[0]!.tool).toBe("tickets_create");
+    // sem pedido (conversa "Eu", que quer todas): vão todas, quem corta é o teto geral
+    expect(Object.keys((await buildMcpTools("dono")).tools)).toHaveLength(2);
+  });
+});
+
+describe("leitura por código (painel e laço)", () => {
+  it("ferramenta de leitura devolve o conteúdo da resposta (texto, quando não é JSON)", async () => {
+    const { lerFerramentaMcp } = await import("./client");
+    servidores = [tickets()];
+    expect(await lerFerramentaMcp("dono", "tickets", "tickets_list")).toBe("ok");
+    expect(chamadas).toEqual(["tickets_list"]);
+  });
+
+  it("ferramenta marcada para pedir aprovação não é lida por fora, e nada é chamado", async () => {
+    const { lerFerramentaMcp } = await import("./client");
+    servidores = [tickets({ toolRisks: { tickets_list: "efeito_externo" } })];
+    await expect(lerFerramentaMcp("dono", "tickets", "tickets_list")).rejects.toThrow(/aprovação/);
+    await expect(lerFerramentaMcp("dono", "tickets", "nao_existe")).rejects.toThrow(/não tem a ferramenta/);
+    expect(chamadas).toEqual([]);
+  });
+});
+
+describe("automação ligada pelo dono (comentário de recebi)", () => {
+  it("chama a ferramenta que escreve uma vez só, mesmo que ela peça aprovação no chat", async () => {
+    const { chamarFerramentaMcpPorAutomacao } = await import("./client");
+    servidores = [tickets()];
+    await chamarFerramentaMcpPorAutomacao("dono", "tickets", "tickets_create", { titulo: "x" });
+    expect(chamadas).toEqual(["tickets_create"]);
+  });
+
+  it("ferramenta marcada como perigosa nunca roda por automação", async () => {
+    const { chamarFerramentaMcpPorAutomacao } = await import("./client");
+    servidores = [tickets({ toolRisks: { tickets_create: "perigoso" } })];
+    await expect(chamarFerramentaMcpPorAutomacao("dono", "tickets", "tickets_create", {})).rejects.toThrow(/perigosa/);
+    expect(chamadas).toEqual([]);
   });
 });

@@ -54,7 +54,7 @@ vi.mock("../../whatsapp/enviar", () => ({
   enviarImagem,
   jidDoDestino: (d: string) => d.replace(/\D/g, "") + "@s.whatsapp.net",
 }));
-vi.mock("../../whatsapp/sessao", () => ({ sessaoDe: async () => ({ jid: "5511900000000@s.whatsapp.net" }) }));
+vi.mock("../../whatsapp/sessao", () => ({ sessaoDe: async () => ({ jid: "5511900000000@s.whatsapp.net", status: "conectado" }) }));
 let tamanho: number | null = 1000;
 vi.mock("../../whatsapp/midia", () => ({ lerMidia: async () => new Uint8Array([1, 2, 3]), tamanhoDaMidia: async () => tamanho }));
 vi.mock("../../cameras/narrate", () => ({ narrateSnapshot: narrate }));
@@ -331,5 +331,23 @@ describe("agenda do Google no WhatsApp", () => {
     } finally {
       contatos[1].apelido = apelido;
     }
+  });
+});
+
+describe("áudio para o próprio dono (08/10/2026)", () => {
+  it("responder_em_audio manda na conversa do dono, sem fila e sem pedir número", async () => {
+    expect(t.responder_em_audio.risk).toBe("escrita");
+    enviarAudio.mockClear();
+    const r = await t.responder_em_audio.run({ texto: "Você tem 9 e-mails pedindo ação." }, ctx);
+    expect(enviarAudio).toHaveBeenCalledWith("u1", "5511900000000@s.whatsapp.net", "Você tem 9 e-mails pedindo ação.", { aprovacaoHumana: true });
+    expect(r).toBe("Nota de voz enviada na sua conversa do WhatsApp.");
+  });
+
+  it("áudio para o número do próprio dono pela tool de contato é recusado, apontando a certa", async () => {
+    // com e sem o nono dígito: "11960924734" e o JID guardado são o mesmo dono
+    expect(await t.enviar_audio_whatsapp.authorize!({ para: "5511900000000", texto: "oi" }, ctx as never)).toContain("responder_em_audio");
+    expect(await t.enviar_audio_whatsapp.authorize!({ para: "551100000000", texto: "oi" }, ctx as never)).toContain("responder_em_audio");
+    // para outra pessoa continua valendo (e continua pedindo aprovação)
+    expect(await t.enviar_audio_whatsapp.authorize!({ para: "mãe", texto: "oi" }, ctx as never)).toBeNull();
   });
 });
