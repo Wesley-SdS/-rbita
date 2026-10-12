@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Cron } from "croner";
+import { semEmbrulho } from "../texto/dado-externo";
 
 /**
  * MOTOR DE REGRAS PROATIVAS — parte pura (sem banco, sem LLM), testável.
@@ -130,7 +131,8 @@ export function renderTemplate(template: string, context: unknown, opts: { wrapV
     const v = getPath(context, path);
     if (v === undefined || v === null) return "";
     const s = typeof v === "object" ? JSON.stringify(v).slice(0, 500) : String(v);
-    return opts.wrapValues ? `<dado_externo>${s}</dado_externo>` : s;
+    // o valor é de fora: um `</dado_externo>` no título de um convite fecharia o bloco (I1 da auditoria)
+    return opts.wrapValues ? `<dado_externo>${semEmbrulho(s)}</dado_externo>` : s;
   });
 }
 

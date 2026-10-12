@@ -258,22 +258,26 @@ OGG_MAX_BYTES = 25 * 1024 * 1024
 _ogg_vagas = asyncio.Semaphore(2)
 
 
-def _to_ogg_opus(data: bytes) -> bytes:
+def _to_ogg_opus(data: bytes, max_segundos: int = OGG_MAX_SEGUNDOS) -> bytes:
     """Qualquer áudio (MP3 do Edge, WAV do Piper) -> OGG/Opus mono 48 kHz.
 
     É o formato da NOTA DE VOZ do WhatsApp: mandado em MP3, o áudio chega como
     arquivo anexo, sem a forma de onda. O PyAV já vem com o faster-whisper e
     traz o libopus embutido, então não há ffmpeg para instalar na máquina.
+    Também é o que separa o áudio de um VÍDEO anexado (`/extrair/audio`): o
+    decodificador pega a trilha de áudio de qualquer contêiner.
     """
     import av
 
     out = io.BytesIO()
     with av.open(io.BytesIO(data)) as src, av.open(out, mode="w", format="ogg") as dst:
+        if not src.streams.audio:
+            raise ValueError("sem trilha de áudio")
         stream = dst.add_stream("libopus", rate=48000, layout="mono")
         stream.bit_rate = 32000
         resampler = av.AudioResampler(format="s16", layout="mono", rate=48000)
         for frame in src.decode(audio=0):
-            if frame.time is not None and frame.time > OGG_MAX_SEGUNDOS:
+            if frame.time is not None and frame.time > max_segundos:
                 break
             for f in resampler.resample(frame):
                 for pkt in stream.encode(f):
@@ -304,6 +308,96 @@ async def converter_ogg(file: UploadFile = File(...)) -> Response:
             print(json.dumps({"level": "warn", "msg": f"converter/ogg falhou: {e!r}"}))
             raise HTTPException(status_code=422, detail="Não consegui converter o áudio.") from e
     return Response(content=ogg, media_type="audio/ogg; codecs=opus")
+
+
+# Vídeo anexado a e-mail (PRD de anexos, C3): a Órbita transcreve a fala e, se
+# o dono quiser, manda alguns quadros para o modelo de visão. Os tetos aqui são
+# de engenharia, sobrescrevíveis por ambiente; o teto do DONO (tamanho do anexo)
+# já foi aplicado no apps/api antes de o vídeo chegar.
+EXTRAIR_MAX_BYTES = int(os.environ.get("VOICE_EXTRAIR_MAX_MB", "200")) * 1024 * 1024
+EXTRAIR_MAX_SEGUNDOS = int(os.environ.get("VOICE_EXTRAIR_MAX_SEGUNDOS", "10800"))
+QUADROS_MAX = 10
+QUADRO_LARGURA_MAX = 1024
+
+
+async def _ler_upload(file: UploadFile, teto: int) -> bytes:
+    if file.size is not None and file.size > teto:
+        raise HTTPException(status_code=413, detail="Arquivo grande demais.")
+    data = await file.read(teto + 1)
+    if not data:
+        raise HTTPException(status_code=400, detail="Arquivo vazio.")
+    if len(data) > teto:
+        raise HTTPException(status_code=413, detail="Arquivo grande demais.")
+    return data
+
+
+@app.post("/extrair/audio")
+async def extrair_audio(file: UploadFile = File(...)) -> Response:
+    """A trilha de áudio de um vídeo (ou áudio em qualquer contêiner) em OGG/Opus."""
+    data = await _ler_upload(file, EXTRAIR_MAX_BYTES)
+    async with _ogg_vagas:
+        try:
+            ogg = await asyncio.to_thread(_to_ogg_opus, data, EXTRAIR_MAX_SEGUNDOS)
+        except Exception as e:
+            print(json.dumps({"level": "warn", "msg": f"extrair/audio falhou: {e!r}"}))
+            raise HTTPException(status_code=422, detail="Não consegui tirar o áudio deste arquivo.") from e
+    return Response(content=ogg, media_type="audio/ogg; codecs=opus")
+
+
+def _quadro_jpeg(frame) -> bytes:
+    """Um quadro em JPEG pelo próprio PyAV (sem depender do Pillow), reduzido para a visão."""
+    import av
+
+    largura = min(QUADRO_LARGURA_MAX, frame.width)
+    altura = max(2, int(frame.height * largura / frame.width) // 2 * 2)
+    largura = max(2, largura // 2 * 2)
+    out = io.BytesIO()
+    with av.open(out, mode="w", format="mjpeg") as dst:
+        s = dst.add_stream("mjpeg", rate=1)
+        s.width = largura
+        s.height = altura
+        s.pix_fmt = "yuvj420p"
+        f = frame.reformat(width=largura, height=altura, format="yuvj420p")
+        for pkt in s.encode(f):
+            dst.mux(pkt)
+        for pkt in s.encode(None):
+            dst.mux(pkt)
+    return out.getvalue()
+
+
+def _quadros(data: bytes, quantos: int) -> list[str]:
+    """`quantos` quadros espalhados pela duração, como data URL JPEG."""
+    import av
+    import base64
+
+    out: list[str] = []
+    with av.open(io.BytesIO(data)) as src:
+        if not src.streams.video:
+            return out
+        v = src.streams.video[0]
+        duracao = (src.duration / av.time_base) if src.duration else (float(v.duration * v.time_base) if v.duration else 0.0)
+        momentos = [duracao * (i + 0.5) / quantos for i in range(quantos)] if duracao > 0 else [0.0]
+        for t in momentos:
+            if t > 0 and v.time_base:
+                src.seek(int(t / v.time_base), stream=v, any_frame=False, backward=True)
+            for frame in src.decode(video=0):
+                out.append("data:image/jpeg;base64," + base64.b64encode(_quadro_jpeg(frame)).decode("ascii"))
+                break
+    return out
+
+
+@app.post("/extrair/quadros")
+async def extrair_quadros(quantos: int = 3, file: UploadFile = File(...)) -> dict:
+    if quantos < 1 or quantos > QUADROS_MAX:
+        raise HTTPException(status_code=400, detail=f"Peça de 1 a {QUADROS_MAX} quadros.")
+    data = await _ler_upload(file, EXTRAIR_MAX_BYTES)
+    async with _ogg_vagas:
+        try:
+            quadros = await asyncio.to_thread(_quadros, data, quantos)
+        except Exception as e:
+            print(json.dumps({"level": "warn", "msg": f"extrair/quadros falhou: {e!r}"}))
+            raise HTTPException(status_code=422, detail="Não consegui tirar quadros deste vídeo.") from e
+    return {"quadros": quadros}
 
 
 @app.websocket("/ws/wake")

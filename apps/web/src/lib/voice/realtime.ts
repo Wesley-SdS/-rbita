@@ -1,4 +1,5 @@
 import { getOwnDeviceId } from "@/lib/device-id";
+import { comMiniatura } from "@orbita/core/controle/imagem";
 
 /** O que a tela precisa de uma sessão de voz, seja qual for o provedor. */
 export interface SessaoRealtime {
@@ -143,17 +144,20 @@ export class RealtimeSession implements SessaoRealtime {
     let args: unknown = {};
     try { args = JSON.parse(argsJson); } catch { /* argumentos vazios ou inválidos viram {} */ }
     let output: unknown;
+    let miniatura: string | null = null;
     try {
       // deviceId: aparelho registrado em Casa → Aparelhos (Onda 12), diz "daqui" é onde.
       const r = await fetch("/api/realtime/tool", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, arguments: args, deviceId: getOwnDeviceId() ?? undefined }) });
       const d = await r.json().catch(() => ({}));
       output = r.ok ? d.result : { erro: d.error ?? "falha ao executar" };
+      miniatura = r.ok && typeof d.miniatura === "string" ? d.miniatura : null;
     } catch {
       output = { erro: "falha ao contatar o servidor" };
     }
     this.dc?.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify(output) } }));
     this.dc?.send(JSON.stringify({ type: "response.create" }));
-    this.cb.onToolCall?.(name, output, args);
+    // a miniatura do cartão volta só para a TELA: o modelo recebeu a saída sem ela
+    this.cb.onToolCall?.(name, comMiniatura(output, miniatura), args);
   }
 
   /** Soma o que a OpenAI cobrou por esta resposta, separando áudio de texto (US$ 32/M contra US$ 4/M). */

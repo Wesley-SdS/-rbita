@@ -128,6 +128,9 @@ export async function eraseAccount(userId: string): Promise<{ limpezaExplicita: 
   // teste de schema, que não precisa da ponte nem do disco.
   const whatsapp = await import("../whatsapp/apagar");
   const midias = await whatsapp.antesDeApagarConta(userId).catch(() => [] as string[]);
+  // o perfil dedicado do Chrome (cookies e logins que o DONO fez lá) mora numa pasta, fora do banco:
+  // perguntado antes, porque depois de apagar a linha do usuário não dá mais para saber se era o dono
+  const eraODono = await import("../owner").then((m) => m.isOwner(userId)).catch(() => false);
   await db.transaction(async (tx) => {
     // filhas antes dos pais: a subconsulta da filha precisa do pai ainda lá
     for (const t of [...semCascade].reverse()) await tx.delete(t.table).where(ownedWhere(t, userId));
@@ -138,6 +141,7 @@ export async function eraseAccount(userId: string): Promise<{ limpezaExplicita: 
   await whatsapp.depoisDeApagarConta(midias).catch(() => undefined);
   // a agenda do Google mora em memória (nunca no banco): some junto com a conta
   await import("../contatos/agenda").then((m) => m.esquecerAgenda(userId)).catch(() => undefined);
+  if (eraODono) await import("../navegador/dedicado").then((m) => m.apagarPerfilDedicado("conta apagada")).catch(() => undefined);
   await events.emit("account.erased", { tabelas: semCascade.map((t) => t.name) }, { userId: null }).catch(() => undefined);
   return { limpezaExplicita: semCascade.map((t) => t.name) };
 }

@@ -38,9 +38,11 @@ vi.mock("../finance/documents", async () => {
 vi.mock("../rag/files", () => ({ indexFile: async () => ({}) }));
 vi.mock("../rag/ingest", () => ({ ingestDocument: async () => ({ chunks: 0, documentId: null }) }));
 vi.mock("../rag/reindex", () => ({ reindexarTudo: async (_u: string, modo: string) => ({ documentos: 2, trechos: 7, memorias: 1, recortados: modo === "recortar" ? 2 : 0, semTextoOriginal: 0 }) }));
+const lerAnexoEmSegundoPlano = vi.fn(async (..._a: unknown[]) => ({ resumo: "PDF de 2 páginas.", lido: true }));
+vi.mock("../anexos/ler", () => ({ lerAnexoEmSegundoPlano: (...a: unknown[]) => lerAnexoEmSegundoPlano(...a) }));
 vi.mock("../memory/candidates", () => ({ extrairDaConversa: async () => ({ propostos: 3, salvos: 1, pendentes: 1, descartados: 1, duplicados: 0 }) }));
 
-import { transcreverReuniao, lerCupom, resumirReuniao, reindexarAcervo, extrairMemoria } from "./handlers";
+import { transcreverReuniao, lerCupom, resumirReuniao, reindexarAcervo, extrairMemoria, lerAnexoDoEmail } from "./handlers";
 import { JobPermanentError } from "./queue";
 
 const ctx = (over: Partial<Parameters<typeof transcreverReuniao.run>[0]> = {}) => ({
@@ -116,5 +118,20 @@ describe("reindexar e aprender com a conversa", () => {
 
   it("extrair memória sem conversa é permanente: não adianta tentar de novo", async () => {
     await expect(extrairMemoria.run(ctx({ payload: {} }))).rejects.toBeInstanceOf(JobPermanentError);
+  });
+});
+
+describe("anexo de e-mail lido em segundo plano", () => {
+  const payload = { servico: "outlook", conexaoId: "conn-1", mensagemId: "AAMk", anexoId: "A1", nome: "contrato.pdf", assunto: "Contrato", de: "f@x.com", tipo: "application/pdf" };
+
+  it("lê com o pedido inteiro e devolve o resumo", async () => {
+    const r = (await lerAnexoDoEmail.run(ctx({ payload, input: null }))) as Record<string, unknown>;
+    expect(r).toEqual({ resumo: "PDF de 2 páginas.", lido: true });
+    expect(lerAnexoEmSegundoPlano.mock.calls[0]![1]).toMatchObject({ servico: "outlook", conexaoId: "conn-1", mensagemId: "AAMk", anexoId: "A1" });
+  });
+
+  it("pedido incompleto é permanente: não há o que tentar de novo", async () => {
+    await expect(lerAnexoDoEmail.run(ctx({ payload: { ...payload, anexoId: "" }, input: null }))).rejects.toBeInstanceOf(JobPermanentError);
+    await expect(lerAnexoDoEmail.run(ctx({ payload: { ...payload, servico: "yahoo" }, input: null }))).rejects.toBeInstanceOf(JobPermanentError);
   });
 });

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Página que foge</title>
+<script>
+  // I-12 da auditoria: no instante da captura (quando a máscara da Órbita entra), a página vai para outro site.
+  // O destino vem na consulta (?para=…): o teste aponta para um endereço bloqueado.
+  const para = new URLSearchParams(location.search).get("para");
+  new MutationObserver(() => {
+    if (para && document.getElementById("__orbita_mascara")) location.replace(para);
+  }).observe(document.documentElement, { childList: true, subtree: true });
+</script></head>
+<body><main><h1>Nada aqui</h1><p>Esta página muda de endereço quando é fotografada.</p></main></body>
+</html>

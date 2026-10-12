@@ -27,13 +27,17 @@ interface Group { id: string; label: string; settings: Item[] }
 
 const dim = { color: "var(--color-ink-dim)" } as const;
 
-export function SettingsPanel() {
+/**
+ * `grupos`: só estes grupos, sem o bloco do dono (a aba "Controle do PC" mostra
+ * as chaves dela aqui dentro, com a mesma validação e o mesmo OwnerGuard).
+ */
+export function SettingsPanel({ grupos: soEstes, titulo = "Ajustes" }: { grupos?: readonly string[]; titulo?: string } = {}) {
   // A listagem inteira dos ajustes são 60 kB (a maior resposta do app), e esta
   // aba é a que mais se entra e sai enquanto se configura alguma coisa. Sem
   // `estavel`: quem está aqui está justamente mudando os valores.
   const CHAVE = "/api/settings";
   const { dado, erro: err, recarregar } = useRecurso<{ groups: Group[]; isOwner?: boolean }>(CHAVE);
-  const groups = dado?.groups ?? null;
+  const groups = dado?.groups ? (soEstes ? dado.groups.filter((g) => soEstes.includes(g.id)) : dado.groups) : null;
   const [open, setOpen] = useState<string | null>(null);
   // Ajustes valem para a casa inteira: quem não é o dono só lê (RV.1)
   const isOwner = dado?.isOwner !== false;
@@ -60,20 +64,20 @@ export function SettingsPanel() {
     );
   }
 
-  if (err && !groups) return <Card><PanelTitle className="mb-2">Ajustes</PanelTitle><ErrorRetry message={err} onRetry={recarregar} /></Card>;
+  if (err && !groups) return <Card><PanelTitle className="mb-2">{titulo}</PanelTitle><ErrorRetry message={err} onRetry={recarregar} /></Card>;
 
   const total = groups?.reduce((n, g) => n + g.settings.filter((s) => s.overridden).length, 0) ?? 0;
 
   return (
     <Card>
       <div className="mb-2 flex items-baseline justify-between">
-        <PanelTitle>Ajustes</PanelTitle>
+        <PanelTitle>{titulo}</PanelTitle>
         <span className="text-[14px]" style={dim}>{total ? `${total} alterado${total > 1 ? "s" : ""}` : "tudo no padrão"}</span>
       </div>
       <p className="mb-3 text-[15px]" style={dim}>
         {isOwner ? "Nada aqui é obrigatório. Mudou, valeu em segundos, sem reiniciar." : "Somente leitura: só o dono desta instância altera os ajustes da casa."}
       </p>
-      <OwnerSection />
+      {soEstes ? null : <OwnerSection />}
       {!groups ? (
         <p className="text-[15px]" style={dim}>Carregando…</p>
       ) : (

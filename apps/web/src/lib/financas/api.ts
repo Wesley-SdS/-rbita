@@ -14,6 +14,8 @@ export interface Resultado {
   mes?: string | null;
   id?: string | null;
   aviso?: string | null;
+  /** transferências que uma marcação criou: o "desfazer" delas é `desjuntar_transferencia` */
+  grupos?: string[];
 }
 
 export type Resposta<T> = { ok: true; dado: T } | { ok: false; erro: string };
@@ -23,7 +25,7 @@ export type Resposta<T> = { ok: true; dado: T } | { ok: false; erro: string };
  * `/api/financas/`, porque as FOTOS moram sob o mesmo prefixo e pesam: um
  * lançamento de café não pode rebaixar de novo a galeria da reforma.
  */
-export const VISTAS = ["painel", "extrato", "contas", "cartoes", "metas", "meta", "previsao", "historico", "cadastros"] as const;
+export const VISTAS = ["painel", "extrato", "contas", "cartoes", "metas", "meta", "previsao", "historico", "cadastros", "pares"] as const;
 export type Vista = (typeof VISTAS)[number];
 
 export function invalidarFinancas(): void {

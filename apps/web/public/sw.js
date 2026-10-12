@@ -82,6 +82,11 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
+  // Outro site não passa por aqui. O `fetch` feito DENTRO do worker obedece à
+  // CSP do próprio sw.js (connect-src), e não à da página: o script da Pluggy,
+  // liberado no script-src da página, era refeito aqui e morria com
+  // net::ERR_FAILED, e o "Conectar um banco" não abria nada (12/10/2026).
+  if (url.origin !== self.location.origin) return;
 
   if (url.pathname.startsWith("/api/")) {
     // Rede primeiro, sempre: o cache aqui é rede de segurança para abrir sem

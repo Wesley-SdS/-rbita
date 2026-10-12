@@ -29,7 +29,7 @@ export const ler_emails: ToolDef<z.ZodObject<{ consulta: z.ZodOptional<z.ZodStri
   name: "ler_emails",
   domain: "gmail",
   description:
-    "Lê os e-mails recentes da caixa de entrada do Gmail do usuário, de TODAS as contas conectadas. Use `consulta` para filtrar (sintaxe do Gmail, ex: 'from:cliente is:unread'). Cada e-mail vem marcado com a conta de origem.",
+    "Lê os e-mails recentes da caixa de entrada do Gmail do usuário, de TODAS as contas conectadas. Use `consulta` para filtrar (sintaxe do Gmail, ex: 'from:cliente is:unread', 'has:attachment'). Cada e-mail vem marcado com a conta de origem e diz se tem anexo (`tem_anexo`, `anexos` com os nomes). Para o corpo inteiro use ler_email; para abrir um anexo, ler_anexo.",
   risk: "leitura",
   keywords: ["email", "e-mail", "gmail", "caixa de entrada", "mensagem", "chegou", "não lido"],
   requires: { connector: "google" },
@@ -73,6 +73,8 @@ export const enviar_email: ToolDef<typeof EmailComConta> = {
   keywords: ["enviar", "email", "e-mail", "mandar", "responder"],
   requires: { connector: "google" },
   inputSchema: EmailComConta,
+  // o endereço é o que o preparar achou na agenda e o resumo mostra: no cartão, só assunto e corpo se corrigem
+  camposEditaveis: ["assunto", "corpo"],
   // a conta aparece no resumo da fila: aprovar sem saber por qual conta sai
   // seria aprovar outra coisa
   summarize: (i) => `Enviar e-mail para ${destinoDoEmail(i)}: "${i.assunto}"${i.conta ? ` (conta: ${i.conta})` : ""}`,

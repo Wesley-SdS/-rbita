@@ -2,6 +2,7 @@ import { generateText, stepCountIs, type ModelMessage, type ToolSet } from "ai";
 import { buildModelChain, recordProviderResult, resolveModel, statusDoErro, fallbackModelKey, cadeiaDaCasa, discoverModels, SEM_MODELO } from "@orbita/llm";
 import { log } from "../observability/logger";
 import { registrarUso } from "../usage/registrar";
+import type { TurnoDeContaminacao } from "../controle/contaminacao";
 
 /**
  * Pedir texto a um modelo, com a política da casa e a conta registrada.
@@ -37,6 +38,8 @@ export interface PedidoDeTexto {
    */
   messages?: ModelMessage[];
   tools?: ToolSet;
+  /** o turno das tools (Regra de Dois): com ele, a busca nativa sai depois de uma leitura de dado do dono */
+  turno?: TurnoDeContaminacao;
   maxSteps?: number;
   /** modelo que este fluxo prefere; vazio usa a política da casa */
   modeloPreferido?: string;
@@ -113,7 +116,7 @@ export async function gerarTexto(p: PedidoDeTexto): Promise<TextoGerado> {
         model: resolveModel(modelKey),
         ...(p.system ? { system: p.system } : {}),
         ...(p.messages?.length ? { messages: p.messages } : { prompt: p.prompt }),
-        ...(tools ? { tools } : {}),
+        ...(tools ? { tools, prepareStep: nativa!.semBuscaNativaAposLeituraSensivel(tools, { userId: p.userId, turno: p.turno }) } : {}),
         ...(p.maxSteps ? { stopWhen: stepCountIs(p.maxSteps) } : {}),
         onStepFinish: (passo) => {
           if (passo.toolCalls?.length) rodouTool = true;

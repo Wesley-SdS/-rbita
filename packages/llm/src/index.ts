@@ -6,3 +6,4 @@ export * from "./discovery";
 export * from "./policy";
 export * from "./familias";
 export * from "./politica";
+export * from "./claude-direto";

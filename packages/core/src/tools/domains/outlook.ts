@@ -32,7 +32,7 @@ export const outlook_ler_emails: ToolDef<z.ZodObject<{ busca: z.ZodOptional<z.Zo
   name: "outlook_ler_emails",
   domain: "outlook",
   description:
-    "Lê os e-mails recentes da caixa de entrada do Outlook (Microsoft), de todas as contas conectadas. Use para e-mail corporativo. Para Gmail, use `ler_emails`.",
+    "Lê os e-mails recentes da caixa de entrada do Outlook (Microsoft), de todas as contas conectadas. Use para e-mail corporativo. Para Gmail, use `ler_emails`. Cada e-mail diz se tem anexo (`tem_anexo`, `anexos` com os nomes). Para o corpo inteiro use ler_email; para abrir um anexo, ler_anexo.",
   risk: "leitura",
   keywords: ["outlook", "email", "e-mail", "corporativo", "trabalho", "caixa de entrada", "microsoft"],
   requires: { connector: "microsoft" },
@@ -72,6 +72,8 @@ export const outlook_enviar_email: ToolDef<typeof EmailInput> = {
   keywords: ["outlook", "enviar", "email", "e-mail", "mandar", "responder", "trabalho"],
   requires: { connector: "microsoft" },
   inputSchema: EmailInput,
+  // o endereço é o que o preparar achou na agenda e o resumo mostra: no cartão, só assunto e corpo se corrigem
+  camposEditaveis: ["assunto", "corpo"],
   summarize: (i) => `Enviar e-mail pelo Outlook para ${destinoDoEmail(i)}: "${i.assunto}"${i.conta ? ` (conta: ${i.conta})` : ""}`,
   authorize: conferirEmail,
   preparar: fixarEmail,

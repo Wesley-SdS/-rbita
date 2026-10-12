@@ -1,4 +1,5 @@
 import { decodificarEntidades } from "../texto/entidades";
+import { nomesDeAnexoParaOModelo } from "../texto/dado-externo";
 
 /** Clients REST de Gmail e Google Calendar. Recebem um access token válido. */
 
@@ -19,7 +20,84 @@ interface GmailMsg {
   payload?: { headers?: { name: string; value: string }[] };
 }
 
-export interface EmailSummary { id: string; from: string; subject: string; date: string; snippet: string }
+/** Uma parte MIME do Gmail (`format=full`). Anexo tem `filename` e `body.attachmentId`. */
+export interface GmailParte {
+  partId?: string;
+  mimeType?: string;
+  filename?: string;
+  headers?: { name: string; value: string }[];
+  body?: { size?: number; data?: string; attachmentId?: string };
+  parts?: GmailParte[];
+}
+
+export interface AnexoDoEmail {
+  /**
+   * Id ESTÁVEL do anexo. No Gmail é o `partId` ("1", "0.2"), e não o
+   * `attachmentId`: este muda a cada leitura da mensagem, e um id que muda
+   * faria a mesma pergunta sobre o mesmo anexo baixar e ler tudo de novo.
+   */
+  id: string;
+  nome: string;
+  tipo: string;
+  tamanho: number;
+  /** imagem no corpo (`cid:`), como logo e print colado (C6) */
+  embutido: boolean;
+}
+
+export interface EmailSummary { id: string; from: string; subject: string; date: string; snippet: string; tem_anexo?: boolean; anexos?: string[] }
+
+/** Só a estrutura das partes, sem o conteúdo (o `fields` do Google corta o corpo). */
+const CAMPOS_DAS_PARTES = "partId,mimeType,filename,headers,body/size,body/attachmentId";
+/**
+ * Quantos níveis de partes o `fields` pede. O `fields` do Google não tem
+ * recursão: cada nível é escrito. Cinco deixavam de fora o anexo de um e-mail
+ * encaminhado dentro de encaminhado (aparecia no `ler_email`, que usa o
+ * `format=full`, e o download dizia "não está mais no e-mail"). Doze cobrem o
+ * que existe na prática, e o download ainda tem a reserva do `format=full` (M19).
+ */
+const NIVEIS_DE_PARTES = 12;
+function partesAninhadas(niveis: number): string {
+  let s = CAMPOS_DAS_PARTES;
+  for (let i = 0; i < niveis; i++) s = `${CAMPOS_DAS_PARTES},parts(${s})`;
+  return s;
+}
+const PARTES_SEM_CORPO = `id,snippet,payload(headers,${partesAninhadas(NIVEIS_DE_PARTES)})`;
+
+const cabecalhoDaParte = (p: GmailParte, n: string) => p.headers?.find((h) => h.name.toLowerCase() === n)?.value ?? "";
+
+/** Todas as partes, em profundidade, na ordem do e-mail. PURO. */
+export function todasAsPartes(p: GmailParte | undefined): GmailParte[] {
+  if (!p) return [];
+  return [p, ...(p.parts ?? []).flatMap(todasAsPartes)];
+}
+
+/**
+ * Os anexos de uma mensagem, incluindo a imagem embutida no corpo (C6). PURO.
+ *
+ * É anexo a parte com nome de arquivo, ou a que tem `Content-ID` e conteúdo
+ * separado (a imagem colada no corpo às vezes vem sem nome). Texto do próprio
+ * corpo nunca entra, mesmo quando o Gmail o entrega por `attachmentId`.
+ */
+export function anexosDasPartes(payload: GmailParte | undefined): AnexoDoEmail[] {
+  const out: AnexoDoEmail[] = [];
+  for (const p of todasAsPartes(payload)) {
+    if (!p.partId || p.parts?.length) continue;
+    const disposicao = cabecalhoDaParte(p, "content-disposition").toLowerCase();
+    const cid = cabecalhoDaParte(p, "content-id");
+    const nome = (p.filename ?? "").trim();
+    const corpo = !nome && /^text\/(plain|html)$/i.test(p.mimeType ?? "") && !disposicao.startsWith("attachment");
+    if (corpo) continue;
+    if (!nome && !(cid && p.body?.attachmentId)) continue;
+    out.push({
+      id: p.partId,
+      nome: nome || `embutido-${cid.replace(/[<>]/g, "") || p.partId}`,
+      tipo: (p.mimeType ?? "application/octet-stream").toLowerCase(),
+      tamanho: p.body?.size ?? 0,
+      embutido: Boolean(cid) && !disposicao.startsWith("attachment"),
+    });
+  }
+  return out;
+}
 
 export async function listRecentEmails(token: string, max = 5, query = "in:inbox"): Promise<EmailSummary[]> {
   const list = await gapi<GmailListResp>(
@@ -29,14 +107,110 @@ export async function listRecentEmails(token: string, max = 5, query = "in:inbox
   const ids = (list.messages ?? []).map((m) => m.id);
   const out: EmailSummary[] = [];
   for (const mid of ids) {
-    const msg = await gapi<GmailMsg>(
-      token,
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${mid}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
-    );
+    // `format=full` com `fields`: a estrutura das partes (para dizer se tem anexo
+    // e quais), sem baixar corpo nenhum. O `metadata` não traz as partes.
+    const msg = await gapi<GmailMsg & { payload?: GmailParte }>(token, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${mid}?format=full&fields=${encodeURIComponent(PARTES_SEM_CORPO)}`);
     const h = (n: string) => msg.payload?.headers?.find((x) => x.name.toLowerCase() === n)?.value ?? "";
-    out.push({ id: msg.id, from: h("from"), subject: h("subject"), date: h("date"), snippet: decodificarEntidades(msg.snippet ?? "") });
+    const anexos = anexosDasPartes(msg.payload).filter((a) => !a.embutido);
+    // o nome do anexo é escolha de quem mandou: vai embrulhado como dado (I2 da auditoria)
+    out.push({ id: msg.id, from: h("from"), subject: h("subject"), date: h("date"), snippet: decodificarEntidades(msg.snippet ?? ""), tem_anexo: anexos.length > 0, anexos: nomesDeAnexoParaOModelo(anexos.map((a) => a.nome)) });
   }
   return out;
+}
+
+export interface MensagemCompleta {
+  id: string;
+  de: string;
+  para: string[];
+  cc: string[];
+  data: string;
+  assunto: string;
+  /** texto puro, se a mensagem tiver; senão vazio */
+  textoPuro: string;
+  /** HTML, quando não há texto puro (quem chama converte, sem recurso remoto) */
+  html: string;
+  anexos: AnexoDoEmail[];
+  link: string | null;
+  /** o `Authentication-Results` de cima (o do Gmail): é dele que sai se o From é de verdade */
+  autenticacao?: string;
+}
+
+const separarEnderecos = (v: string) => v.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((s) => s.trim()).filter(Boolean);
+
+/**
+ * Os bytes do corpo no charset que a PARTE declara (`Content-Type: text/plain;
+ * charset=ISO-8859-1`). Antes tudo era lido como UTF-8, e e-mail de banco
+ * brasileiro, que ainda sai muito em Latin-1, chegava com "Ã§" no lugar de "ç"
+ * (M2). Charset desconhecido ou inválido cai no UTF-8 de antes. PURO.
+ */
+export function textoNoCharset(bytes: Buffer, contentType: string): string {
+  const m = /charset\s*=\s*"?([\w.:-]{1,40})"?/i.exec(contentType.slice(0, 500));
+  const charset = (m?.[1] ?? "utf-8").toLowerCase();
+  if (charset === "utf-8" || charset === "utf8" || charset === "us-ascii") return bytes.toString("utf8");
+  try {
+    return new TextDecoder(charset).decode(bytes);
+  } catch {
+    return bytes.toString("utf8");
+  }
+}
+
+function corpoDaParte(p: GmailParte): string {
+  return p.body?.data ? textoNoCharset(Buffer.from(p.body.data, "base64url"), cabecalhoDaParte(p, "content-type")) : "";
+}
+
+/**
+ * Lê UM e-mail inteiro (C1): cabeçalhos, corpo e a lista de anexos.
+ *
+ * A permissão `https://mail.google.com/` que a Órbita já pede cobre isto e o
+ * download do anexo: não precisa reconectar a conta.
+ */
+export async function lerMensagemCompleta(token: string, id: string): Promise<MensagemCompleta> {
+  const msg = await gapi<{ id: string; threadId?: string; payload?: GmailParte }>(token, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=full`);
+  const partes = todasAsPartes(msg.payload);
+  const h = (n: string) => cabecalhoDaParte(msg.payload ?? {}, n);
+  const ehCorpo = (p: GmailParte, tipo: string) => (p.mimeType ?? "").toLowerCase() === tipo && !(p.filename ?? "").trim() && !cabecalhoDaParte(p, "content-disposition").toLowerCase().startsWith("attachment");
+  const texto = partes.filter((p) => ehCorpo(p, "text/plain"));
+  const html = partes.filter((p) => ehCorpo(p, "text/html"));
+  // corpo grande vem por `attachmentId`, mesmo sendo o próprio texto do e-mail
+  const conteudo = async (p: GmailParte) => (p.body?.data ? corpoDaParte(p) : p.body?.attachmentId ? baixarParte(token, msg.id, p.body.attachmentId).then((b) => textoNoCharset(b, cabecalhoDaParte(p, "content-type"))) : "");
+  const textoPuro = (await Promise.all(texto.map(conteudo))).join("\n\n");
+  const htmlTexto = textoPuro.trim() ? "" : (await Promise.all(html.map(conteudo))).join("\n");
+  return {
+    id: msg.id,
+    de: h("from"),
+    para: separarEnderecos(h("to")),
+    cc: separarEnderecos(h("cc")),
+    data: h("date"),
+    assunto: h("subject"),
+    textoPuro,
+    html: htmlTexto,
+    anexos: anexosDasPartes(msg.payload),
+    link: msg.threadId ? `https://mail.google.com/mail/#all/${msg.threadId}` : null,
+    // só o PRIMEIRO: é o que o Gmail escreveu ao receber; os de baixo podem ter vindo prontos do remetente
+    autenticacao: h("authentication-results"),
+  };
+}
+
+async function baixarParte(token: string, mensagemId: string, attachmentId: string): Promise<Buffer> {
+  const r = await gapi<{ data?: string; size?: number }>(token, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(mensagemId)}/attachments/${encodeURIComponent(attachmentId)}`);
+  return Buffer.from(r.data ?? "", "base64url");
+}
+
+/**
+ * Baixa um anexo pelo id ESTÁVEL (o `partId`). Relê a estrutura da mensagem
+ * para achar o `attachmentId` de agora, que o Gmail troca a cada leitura.
+ */
+export async function baixarAnexoGmail(token: string, mensagemId: string, parteId: string): Promise<{ bytes: Buffer; anexo: AnexoDoEmail }> {
+  let msg = await gapi<{ id: string; payload?: GmailParte }>(token, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(mensagemId)}?format=full&fields=${encodeURIComponent(PARTES_SEM_CORPO.replace(/body\/attachmentId/g, "body/attachmentId,body/data"))}`);
+  // a parte mora mais fundo do que o `fields` alcança: pede a mensagem inteira, como o `ler_email` (M19)
+  if (!todasAsPartes(msg.payload).some((p) => p.partId === parteId)) {
+    msg = await gapi<{ id: string; payload?: GmailParte }>(token, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(mensagemId)}?format=full`);
+  }
+  const parte = todasAsPartes(msg.payload).find((p) => p.partId === parteId);
+  const anexo = anexosDasPartes(msg.payload).find((a) => a.id === parteId);
+  if (!parte || !anexo) throw new Error("Esse anexo não está mais no e-mail.");
+  const bytes = parte.body?.attachmentId ? await baixarParte(token, mensagemId, parte.body.attachmentId) : Buffer.from(parte.body?.data ?? "", "base64url");
+  return { bytes, anexo };
 }
 
 export interface ImportantEmail { id: string; from: string; subject: string; snippet: string; internalDate: Date }
@@ -130,6 +304,59 @@ export async function sendEmail(token: string, to: string, subject: string, body
     method: "POST",
     body: JSON.stringify({ raw }),
   });
+}
+
+/** Cabeçalho MIME em UTF-8 sem quebra de linha (quebra num cabeçalho é injeção de cabeçalho). */
+const cabecalhoUtf8 = (s: string) => `=?UTF-8?B?${Buffer.from(s.replace(/[\r\n]+/g, " ")).toString("base64")}?=`;
+const base64EmLinhas = (b: Buffer) => b.toString("base64").replace(/.{76}/g, "$&\r\n");
+
+/**
+ * Monta o e-mail (MIME) com UM arquivo anexado. PURO.
+ *
+ * O destino já vem resolvido pela agenda (`contatos/agenda.ts`); mesmo assim
+ * CR e LF saem dele: um "para" com quebra de linha acrescentaria cabeçalhos
+ * (um Bcc escondido) ao e-mail que o dono aprovou.
+ */
+export function mimeComAnexo(para: string, assunto: string, corpo: string, anexo: { nome: string; mime: string; bytes: Buffer }, fronteira: string): Buffer {
+  const nome = cabecalhoUtf8(anexo.nome);
+  const tipo = /^[\w.+-]+\/[\w.+-]+$/.test(anexo.mime) ? anexo.mime : "application/octet-stream";
+  const linhas = [
+    `To: ${para.replace(/[\r\n]+/g, "")}`,
+    `Subject: ${cabecalhoUtf8(assunto)}`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/mixed; boundary="${fronteira}"`,
+    "",
+    `--${fronteira}`,
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    base64EmLinhas(Buffer.from(corpo, "utf8")),
+    `--${fronteira}`,
+    `Content-Type: ${tipo}; name="${nome}"`,
+    "Content-Transfer-Encoding: base64",
+    `Content-Disposition: attachment; filename="${nome}"`,
+    "",
+    base64EmLinhas(anexo.bytes),
+    `--${fronteira}--`,
+    "",
+  ];
+  return Buffer.from(linhas.join("\r\n"), "utf8");
+}
+
+/**
+ * Manda um e-mail COM um arquivo (encaminhar o anexo, C4). Chamar só depois da
+ * aprovação. Vai pelo endpoint de upload, que aceita a mensagem crua de até
+ * 35 MB; o `messages/send` com JSON para em poucos MB.
+ */
+export async function enviarEmailComAnexo(token: string, para: string, assunto: string, corpo: string, anexo: { nome: string; mime: string; bytes: Buffer }): Promise<{ id: string }> {
+  const mime = mimeComAnexo(para, assunto, corpo, anexo, `orbita-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+  const res = await fetch("https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "message/rfc822" },
+    body: new Uint8Array(mime),
+  });
+  if (!res.ok) throw new Error(`Google API ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  return (await res.json()) as { id: string };
 }
 
 // ---------- Calendar ----------

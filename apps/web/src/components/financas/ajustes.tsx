@@ -5,6 +5,8 @@ import { brl, iniciais, mesCurto } from "@orbita/core/finance/formato";
 import { useFinancas, useVista } from "./contexto";
 import { Bloco, CampoDinheiro, Carregando, Faixa, Link, Pastilha, Vazio } from "./primitivos";
 import { DocumentosDaFila } from "./documentos-fila";
+import { Bancos } from "./bancos";
+import { ParesSugeridos } from "./pares-sugeridos";
 import { plural } from "@/lib/financas/apresentacao";
 import type { Cadastros, Categoria } from "@/lib/financas/tipos";
 import { ErrorRetry } from "@/components/ui";
@@ -56,6 +58,8 @@ export function Ajustes() {
         <ListaCategorias titulo="Saídas" cats={c.categorias.filter((x) => x.natureza === "despesa")} mes={f.mes} />
         <ListaCategorias titulo="Entradas" cats={c.categorias.filter((x) => x.natureza === "receita")} mes={f.mes} />
       </Bloco>
+      <Bancos contas={c.contas} cartoes={c.cartoes} />
+      <ParesSugeridos contas={c.contas} />
       <Bloco titulo="Contas e carteiras" direita={<Link onClick={() => f.abrir({ tipo: "conta" })}>+ nova</Link>}>
         {c.contas.map((x) => (
           <button key={x.id} type="button" className="fin-linha" onClick={() => f.abrir({ tipo: "conta", conta: x })}>

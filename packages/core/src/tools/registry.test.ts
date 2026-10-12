@@ -3,7 +3,9 @@ import { z } from "zod";
 import {
   _resetRegistry, availableFor, effectiveRisk, getTool, isEnabled, listRegisteredTools, needsApproval, registerTools,
   requesterNote, selectRelevant, summaryFor, toToolSet, type Requester, type ToolDef, type ToolOverride,
+  comVisao, executarChamada, maiorRisco, riscoDaChamada, type GuardaSensivel, type ToolRisk,
 } from "./registry";
+import { comImagem } from "../controle/imagem";
 
 const ler: ToolDef<z.ZodObject<{ q: z.ZodString }>> = {
   name: "ler_coisa", domain: "teste", description: "Lê uma coisa do usuário.", risk: "leitura",
@@ -160,5 +162,151 @@ describe("permissão de quem pede (Onda 9)", () => {
   it("nota de quem pediu só para voz", () => {
     expect(requesterNote({ ...anna, via: "conta" })).toBe("");
     expect(requesterNote(null)).toBe("");
+  });
+});
+
+// ── PRD-COMPUTADOR-E-NAVEGADOR F1: risco que sobe pela entrada ──────────────
+describe("risco pelo alvo (elevarRisco)", () => {
+  const execOpts = { toolCallId: "t", messages: [], context: {} } as never;
+  const fila = () => vi.fn(async (_d: unknown, _i: unknown, resumo: string) => ({ proposta_enfileirada: true as const, aguardando_aprovacao: true as const, id: "p1", resumo }));
+  const comando = (elevar: ToolDef<z.ZodObject<{ comando: z.ZodString }>>["elevarRisco"]): ToolDef<z.ZodObject<{ comando: z.ZodString }>> => ({
+    name: "rodar_coisa", domain: "teste", description: "Roda um comando.", risk: "leitura",
+    inputSchema: z.object({ comando: z.string() }),
+    summarize: ({ comando: c }, risco) => `Comando (${risco}): ${c}`,
+    elevarRisco: elevar,
+    run: async ({ comando: c }) => ({ rodou: c }),
+  });
+
+  it("sobe de leitura para perigoso e manda para a fila, com o risco efetivo no payload e no resumo", async () => {
+    const t = comando(async ({ comando: c }) => (c.includes("rm -r") ? "perigoso" : "leitura"));
+    const runSpy = vi.spyOn(t, "run");
+    const enqueue = fila();
+    const set = toToolSet([t], { userId: "u1" }, { enqueue });
+    expect(await set.rodar_coisa!.execute!({ comando: "git status" }, execOpts)).toEqual({ rodou: "git status" });
+    const r = await set.rodar_coisa!.execute!({ comando: "rm -r /" }, execOpts);
+    expect(r).toMatchObject({ proposta_enfileirada: true });
+    expect(runSpy).toHaveBeenCalledTimes(1); // só o git status
+    // o "manda" e o botão do Telegram leem o risco DESTA chamada no payload
+    expect(enqueue.mock.calls[0]![1]).toEqual({ comando: "rm -r /", risco: "perigoso" });
+    expect(enqueue.mock.calls[0]![2]).toBe("Comando (perigoso): rm -r / (só se aprova pela tela)");
+  });
+
+  it("nunca desce: elevarRisco dizendo leitura não tira o gate de uma tool efeito_externo", async () => {
+    const t = { ...enviar, elevarRisco: async () => "leitura" as const };
+    const runSpy = vi.spyOn(t, "run");
+    const enqueue = fila();
+    await toToolSet([t], { userId: "u1" }, { enqueue }).enviar_coisa!.execute!({ para: "x" }, execOpts);
+    expect(runSpy).not.toHaveBeenCalled();
+    expect(enqueue.mock.calls[0]![1]).toEqual({ para: "x", risco: "efeito_externo" });
+    expect(await riscoDaChamada(t, { para: "x" }, { userId: "u1" })).toBe("efeito_externo");
+  });
+
+  it("exceção ou lixo dentro de elevarRisco é perigoso (falha fechada)", async () => {
+    const quebra = comando(async () => {
+      throw new Error("parser caiu");
+    });
+    const runSpy = vi.spyOn(quebra, "run");
+    const enqueue = fila();
+    await toToolSet([quebra], { userId: "u1" }, { enqueue }).rodar_coisa!.execute!({ comando: "ls" }, execOpts);
+    expect(runSpy).not.toHaveBeenCalled();
+    expect(enqueue.mock.calls[0]![1]).toMatchObject({ risco: "perigoso" });
+    expect(await riscoDaChamada(comando(async () => "talvez" as ToolRisk), { comando: "x" }, { userId: "u1" })).toBe("perigoso");
+  });
+
+  it("o override da tela também conta: o maior dos três vence", async () => {
+    const t = comando(async () => "escrita");
+    const overrides = new Map<string, ToolOverride>([["rodar_coisa", { enabled: true, riskOverride: "efeito_externo" }]]);
+    expect(await riscoDaChamada(t, {}, { userId: "u1" }, overrides)).toBe("efeito_externo");
+    expect(await riscoDaChamada(t, {}, { userId: "u1" })).toBe("escrita");
+    expect(maiorRisco("leitura", "perigoso", "escrita")).toBe("perigoso");
+  });
+
+  it("elevarRisco olha a entrada JÁ FIXADA pelo preparar", async () => {
+    const t = { ...comando(async ({ comando: c }) => (c === "FIXADO" ? "efeito_externo" : "leitura")), preparar: async () => ({ comando: "FIXADO" }) };
+    const enqueue = fila();
+    await toToolSet([t], { userId: "u1" }, { enqueue }).rodar_coisa!.execute!({ comando: "qualquer" }, execOpts);
+    expect(enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it("campo de entrada chamado risco é recusado no registro (o payload.risco é do código)", () => {
+    expect(() => registerTools([{ ...ler, name: "com_risco", inputSchema: z.object({ risco: z.string() }) }])).toThrow(/reservado/);
+  });
+});
+
+describe("tools sensíveis passam pela guarda (controle do PC)", () => {
+  const anna: Requester = { personId: "a", name: "Anna", role: "morador", via: "voz", confidence: 0.914 };
+  const execOpts = { toolCallId: "t", messages: [], context: {} } as never;
+  const guarda = () => {
+    const g = {
+      executar: vi.fn(async (c: { run: () => Promise<unknown> }) => c.run()),
+      enfileirada: vi.fn(async (..._a: unknown[]) => undefined),
+      recusada: vi.fn(async (..._a: unknown[]) => undefined),
+    };
+    return g as typeof g & GuardaSensivel;
+  };
+  const term: ToolDef<z.ZodObject<{ comando: z.ZodString }>> = {
+    name: "terminal_x", domain: "terminal", description: "Roda.", risk: "leitura", inputSchema: z.object({ comando: z.string() }),
+    run: async ({ comando: c }) => ({ ok: c }),
+  };
+
+  it("sem guarda, a tool sensível é recusada e nunca roda", async () => {
+    const runSpy = vi.spyOn(term, "run");
+    const r = await executarChamada(term, { comando: "ls" }, { userId: "u1" }, { enqueue: vi.fn() });
+    expect(r).toMatchObject({ permitido: false });
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
+  it("execução direta vai pela guarda; proposta avisa a guarda; recusa também", async () => {
+    const g = guarda();
+    expect(await toToolSet([term], { userId: "u1" }, { enqueue: vi.fn(), guarda: g }).terminal_x!.execute!({ comando: "ls" }, execOpts)).toEqual({ ok: "ls" });
+    expect(g.executar).toHaveBeenCalledTimes(1);
+
+    const enqueue = vi.fn(async (_d: unknown, _i: unknown, resumo: string) => ({ proposta_enfileirada: true as const, aguardando_aprovacao: true as const, id: "a9", resumo }));
+    await executarChamada({ ...term, risk: "efeito_externo" }, { comando: "pnpm i" }, { userId: "u1" }, { enqueue, guarda: g });
+    expect(g.enfileirada).toHaveBeenCalledWith(expect.objectContaining({ acaoId: "a9", risco: "efeito_externo" }));
+
+    await executarChamada({ ...term, authorize: async () => "fora da pasta" }, { comando: "ls" }, { userId: "u1" }, { enqueue, guarda: g });
+    expect(g.recusada).toHaveBeenCalledWith(expect.objectContaining({ motivo: "fora da pasta" }));
+  });
+
+  it("quem não é o dono (voz reconhecida de outra pessoa) é recusado antes de tudo", async () => {
+    const g = guarda();
+    const enqueue = vi.fn();
+    const r = await executarChamada(term, { comando: "ls" }, { userId: "u1", requester: async () => anna }, { enqueue, guarda: g });
+    expect(r).toMatchObject({ permitido: false });
+    expect(g.executar).not.toHaveBeenCalled();
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(g.recusada).toHaveBeenCalledTimes(1);
+  });
+
+  it("domínio de fora com requires.dono também é sensível", async () => {
+    const t = { ...ler, name: "ler_dono", requires: { dono: true } };
+    expect(await executarChamada(t, { q: "x" }, { userId: "u1" }, { enqueue: vi.fn() })).toMatchObject({ permitido: false });
+  });
+});
+
+describe("imagem para o modelo (F5)", () => {
+  const foto: ToolDef<z.ZodObject<Record<string, never>>> = {
+    name: "ver_algo", domain: "teste", description: "Vê.", risk: "leitura", inputSchema: z.object({}),
+    run: async () => comImagem({ janela: "VS Code" }, { base64: "AAAA", mediaType: "image/png", alternativa: { tipo: "arvore", texto: "[1] botão Executar" } }),
+  };
+  type ComSaida = { toModelOutput: (o: { toolCallId: string; input: unknown; output: unknown }) => unknown };
+
+  it("sem visão, o modelo recebe a alternativa e sabe qual foi usada; com visão, recebe a imagem", async () => {
+    const set = toToolSet([foto, ler], { userId: "u1" }, { enqueue: vi.fn() });
+    const saida = await set.ver_algo!.execute!({}, { toolCallId: "t", messages: [], context: {} } as never);
+    const cego = (set.ver_algo as unknown as ComSaida).toModelOutput({ toolCallId: "t", input: {}, output: saida });
+    expect(cego).toEqual({ type: "json", value: { janela: "VS Code", visao_usada: "arvore", arvore: "[1] botão Executar" } });
+    const comOlhos = (comVisao(set, true).ver_algo as unknown as ComSaida).toModelOutput({ toolCallId: "t", input: {}, output: saida }) as { type: string; value: { type: string }[] };
+    expect(comOlhos.type).toBe("content");
+    expect(comOlhos.value.map((v) => v.type)).toEqual(["text", "file"]);
+    // tool sem imagem: igual ao que o AI SDK faria sozinho
+    expect((comVisao(set, true).ler_coisa as unknown as ComSaida).toModelOutput({ toolCallId: "t", input: {}, output: { lido: "x" } })).toEqual({ type: "json", value: { lido: "x" } });
+    expect((set.ler_coisa as unknown as ComSaida).toModelOutput({ toolCallId: "t", input: {}, output: "texto" })).toEqual({ type: "text", value: "texto" });
+  });
+
+  it("tool de fora do registro (MCP, busca nativa) fica como veio", () => {
+    const externa = { description: "mcp", execute: async () => "x" };
+    expect(comVisao({ mcp__x: externa } as never, true).mcp__x).toBe(externa);
   });
 });

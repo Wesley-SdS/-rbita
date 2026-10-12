@@ -1,0 +1,24 @@
+{
+  "name": "@orbita/extensao-chrome",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "ponte:instalar": "node ponte/instalar.mjs",
+    "ponte:remover": "node ponte/instalar.mjs --remover"
+  },
+  "devDependencies": {
+    "@orbita/core": "workspace:*",
+    "@types/chrome": "^0.1.0",
+    "@types/node": "^26.1.1",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.25.12",
+    "gpt-tokenizer": "^4.0.0",
+    "playwright-core": "^1.56.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10",
+    "ws": "^8.21.1"
+  }
+}

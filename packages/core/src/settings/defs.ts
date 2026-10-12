@@ -4,6 +4,9 @@ import { z } from "zod";
 // O `Record` continua garantindo, em tempo de compilação, que a tela ofereça
 // exatamente as ordens que o failover conhece.
 import type { FailoverOrder } from "@orbita/llm";
+// módulo puro e sem import nenhum: o padrão dos sites de banco mora junto das categorias, que o explicam
+import { BANCOS_PADRAO } from "../navegador/categorias";
+import { SUFIXOS_PUBLICOS } from "../controle/envelope";
 
 const FAILOVER_LABEL: Record<FailoverOrder, string> = {
   assinatura_local_paga: "Assinatura, depois local, depois nuvem paga",
@@ -76,6 +79,13 @@ export const SETTING_GROUPS = {
   finance: { label: "Finanças", order: 75 },
   noticias: { label: "Notícias dos seus temas", order: 76 },
   emails: { label: "E-mails: ação, úteis e ruído", order: 74 },
+  anexos: { label: "Anexos e arquivos", order: 74.5 },
+  controle: { label: "Controle do PC: sessão, crítico e parar", order: 77 },
+  maos: { label: "Controle do PC: serviço local (apps/maos)", order: 77.1 },
+  terminal: { label: "Controle do PC: terminal", order: 77.2 },
+  arquivos: { label: "Controle do PC: arquivos", order: 77.3 },
+  computador: { label: "Controle do PC: ver e agir no Windows", order: 77.4 },
+  navegador: { label: "Controle do PC: Chrome", order: 77.5 },
   trabalho: { label: "Trabalho: Jira, GitHub e Slack", order: 75 },
   comigo: { label: "Comigo: gestão e chamados da Adalink", order: 76 },
   limits: { label: "Limites", order: 80 },
@@ -477,6 +487,174 @@ export const SETTING_DEFS = {
   "emails.porVolta": num("emails", "E-mails lidos por conta a cada volta", "O resto vem na volta seguinte.", 25, 5, 100),
   "emails.janelaInicialHoras": num("emails", "Ao conectar, olhar para trás", "Quanto da caixa a primeira leitura de uma conta pega (sem avisar, só para a tela não começar vazia).", 24, 0, 168, { unit: "h" }),
   "emails.diasGuardar": num("emails", "Guardar a triagem por", "A triagem mais antiga sai da tela (o e-mail continua na sua caixa).", 30, 1, 365, { unit: "dias" }),
+  // ── anexos e arquivos de qualquer tipo (o extrator universal) ──
+  "anexos.tamanhoMaxMb": num("anexos", "Anexo máximo para abrir", "Anexo maior que isso não é baixado: a Órbita só diz o nome, o tipo e o tamanho.", 50, 1, 500, { unit: "MB" }),
+  "anexos.esperarSeg": num("anexos", "Esperar a leitura por", "Quanto a resposta espera a leitura de um anexo. Passando disso (PDF escaneado longo, áudio de meia hora), a leitura continua em segundo plano e a Órbita avisa quando terminar.", 8, 0, 60, { unit: "s" }),
+  // teto DURO de uma leitura, que mata a thread do extrator: um arquivo montado para travar o parser não prende o api (B5)
+  "anexos.tetoDaLeituraSeg": num("anexos", "Tempo máximo de uma leitura", "A leitura de um arquivo roda separada do resto da Órbita; passando disso, ela é interrompida e o arquivo fica como não lido. Vale também para a leitura em segundo plano, então deixe folga para PDF escaneado longo e áudio.", 600, 30, 3600, { unit: "s" }),
+  "anexos.caracteresMax": num("anexos", "Texto entregue de uma vez", "Corpo de e-mail e texto de anexo maiores que isso vêm em partes: a Órbita pede a parte seguinte quando precisa.", 40000, 2000, 400000, { unit: "chars" }),
+  "anexos.linhasMax": num("anexos", "Linhas por planilha ou tabela", "Teto de linhas lidas de cada aba de planilha e de cada CSV. O resto é contado, não lido.", 2000, 10, 100000, { unit: "linhas" }),
+  "anexos.zipMaxArquivos": num("anexos", "Arquivos dentro de um compactado", "ZIP com mais arquivos que isso é recusado (proteção contra bomba de compressão).", 200, 1, 10000),
+  // 200 e não 500: o orçamento inteiro pode passar pela memória da thread de leitura (I5 da auditoria)
+  "anexos.zipMaxMb": num("anexos", "Tamanho descompactado máximo", "Soma do que sai de um compactado. Passou, a leitura para ali e o arquivo é recusado.", 200, 1, 5000, { unit: "MB" }),
+  // o orçamento de bytes não segura o TEXTO: TXT repetido comprime mil vezes e virava uma string de 500 MB (I5)
+  "anexos.textoMaxCaracteres": num("anexos", "Texto extraído no total", "Teto do texto que sai de um arquivo, somando tudo o que está dentro dele (ZIP, e-mail anexado). Passou, a Órbita lê só o começo e avisa.", 2_000_000, 10_000, 50_000_000, { unit: "chars" }),
+  // um OOM numa worker sem teto derruba o processo inteiro; com teto, só a leitura morre (I5)
+  "anexos.memoriaDaLeituraMb": num("anexos", "Memória de uma leitura", "Teto de memória da leitura de um arquivo, que roda separada do resto da Órbita. Passou, a leitura é interrompida e o arquivo fica como não lido, sem derrubar nada.", 1024, 256, 8192, { unit: "MB" }),
+  // a falha não é para sempre: o dono instala o 7-Zip, liga a transcrição, a rede volta (I3)
+  "anexos.falhaGuardarMin": num("anexos", "Lembrar que não deu para ler por", "Quando um anexo não pôde ser lido, a resposta fica guardada só por este tempo (ou até mudar algo em Ajustes, Anexos), e depois a Órbita tenta de novo. Zero tenta sempre.", 10, 0, 1440, { unit: "min" }),
+  "anexos.zipProfundidade": num("anexos", "Compactado dentro de compactado", "Quantos níveis de ZIP dentro de ZIP a Órbita abre.", 3, 0, 10, { unit: "níveis" }),
+  "anexos.transcreverAudio": bool("anexos", "Transcrever áudio e vídeo anexados", "Áudio e vídeo anexados viram texto pela transcrição de sempre (a nuvem só se as reuniões permitirem). Desligado, a Órbita só diz o tipo e o tamanho.", true),
+  "anexos.quadrosDoVideo": num("anexos", "Quadros do vídeo para a visão", "Quantos quadros de um vídeo anexado vão para o modelo de visão descrever, além da transcrição. Zero não manda nenhum.", 0, 0, 10, { unit: "quadros" }),
+  "anexos.seteZip": text("anexos", "Caminho do 7-Zip", "Onde está o 7z.exe, para abrir 7Z, RAR e ZIP com criptografia AES. Vazio procura nos lugares de sempre (Arquivos de Programas e o PATH).", "", 400),
+  "anexos.retencaoDias": num("anexos", "Guardar o texto lido por", "O texto extraído de um anexo fica guardado para a segunda pergunta ser instantânea. Mais velho que isto, é apagado. Zero guarda para sempre.", 90, 0, 3650, { unit: "dias" }),
+
+  // ── controle do PC (PRD-COMPUTADOR-E-NAVEGADOR §10): a fundação das frentes A e B ──
+  "controle.ativo": bool("controle", "Deixar a Órbita usar o computador e o Chrome", "Liga o terminal, os arquivos, o Windows e o Chrome. Desligado, essas ferramentas nem aparecem para o modelo, e proposta antiga na fila deixa de executar. Os anexos de e-mail não dependem disto.", false),
+  "controle.canais": list("controle", "Canais que podem controlar o PC", "Por onde você pode pedir para a Órbita mexer no computador. Valem: tela, voz, whatsapp e telegram. Pessoa da casa, regra disparada por mensagem de terceiro e a resposta automática do WhatsApp nunca usam, mesmo com o canal na lista.", ["tela", "voz", "whatsapp"]),
+  "controle.tetoPassos": num("controle", "Passos por sessão (padrão)", "Quantas ações a Órbita faz dentro de uma sessão antes de pausar e pedir mais. A proposta mostra o número e você aprova.", 30, 1, 500, { unit: "passos" }),
+  "controle.tetoMinutos": num("controle", "Duração da sessão (padrão)", "Passado este tempo, a sessão pausa sozinha.", 15, 1, 240, { unit: "min" }),
+  "controle.modeloCritico": text("controle", "Modelo do crítico", "O crítico confere cada ação contra o seu pedido, sem ver a tela. Use um modelo rápido (ex.: claude/claude-haiku-4-5). Vazio usa a ordem da casa.", "", 120),
+  "controle.criticoSeFalhar": sel("controle", "Se o crítico não responder", "Bloquear é o seguro: sem crítico, a ação não acontece. Permitir deixa a Órbita agir sem esse freio.", "bloquear", [
+    { value: "bloquear", label: "Bloquear a ação (recomendado)" },
+    { value: "permitir", label: "Permitir sem o crítico" },
+  ]),
+  "controle.criticoTimeoutMs": num("controle", "Tempo máximo do crítico", "Passou disso sem resposta, vale a regra de cima.", 8000, 1000, 60000, { unit: "ms" }),
+  "controle.criticoTextoMax": num("controle", "Texto a digitar mostrado ao crítico", "O crítico vê o começo do que a Órbita vai digitar, até este tamanho.", 200, 20, 2000, { unit: "chars" }),
+  "controle.vetosParaPausar": num("controle", "Vetos seguidos para pausar", "Com este número de vetos seguidos do crítico, a sessão pausa e você é avisado.", 2, 1, 10, { unit: "vetos" }),
+  "controle.atalhoParar": {
+    ...text("controle", "Atalho de parar", "Tecla que o serviço local do Windows escuta para parar tudo na hora, de qualquer janela.", "Ctrl+Alt+Esc", 40),
+    type: { kind: "text", maxLength: 40, minLength: 3, pattern: "^((Ctrl|Alt|Shift|Win)\\+){1,3}[A-Za-z0-9]{1,6}$", formato: "Modificadores e uma tecla, como Ctrl+Alt+Esc ou Ctrl+Shift+F12" },
+  },
+  "controle.frasesParar": list("controle", "Frases que param tudo", "Dita sozinha na voz, no WhatsApp \"Eu\" ou no Telegram, com uma sessão aberta, a frase para a Órbita na hora. Quem decide é o código, não o modelo.", ["para", "pare", "parar", "para tudo", "pare tudo", "chega", "stop"]),
+  "controle.espelhoTimeoutMs": num("controle", "Espera pelas mãos ao avisar", "Quanto esperar o serviço local e a extensão confirmarem uma mudança de sessão. O parar não espera: corta do lado deles também.", 1500, 100, 10000, { unit: "ms" }),
+  "controle.guardarMiniaturas": bool("controle", "Guardar miniatura de cada passo", "Uma imagem pequena da tela junto de cada passo da trilha. Desligado, a trilha guarda só o texto.", false),
+  "controle.retencaoDias": num("controle", "Guardar a trilha por", "Passos e sessões mais velhos que isto são apagados. Zero guarda para sempre.", 30, 0, 3650, { unit: "dias" }),
+  "controle.telaAtualizarSeg": num("controle", "Atualizar a tela Controle do PC a cada", "Com uma sessão ativa, a trilha na tela se atualiza neste ritmo. Sem sessão, ela não fica perguntando.", 3, 1, 60, { unit: "s" }),
+  "controle.contaminacaoPorTurno": bool("controle", "Ler dado seu trava a saída para a internet", "Depois que a Órbita lê um arquivo do computador, a saída do terminal, a tela ou um e-mail, abrir página, pesquisar na web, usar servidor externo e enviar mensagem pedem a sua aprovação naquele turno. É o que impede um anexo de mandar ler um documento seu e jogar o conteúdo num endereço de fora.", true),
+  "controle.contaminacaoJanelaSeg": num("controle", "Quanto tempo a trava vale", "Na voz e nos laços delegados não há uma mensagem que marque o fim do turno: a trava vale por este tempo depois da última leitura. No chat e no WhatsApp ela vale o turno inteiro.", 180, 10, 3600, { unit: "s" }),
+  "controle.capturaParaNuvem": bool("controle", "Screenshot pode ir para modelo na nuvem", "Ligado, o modelo que enxerga recebe a imagem da tela, com os apps ocultos pintados de preto. Desligado, só modelo local vê imagem, e a nuvem recebe a árvore de acessibilidade.", true),
+
+  "maos.url": text("maos", "Endereço do serviço local", "Onde o apps/maos escuta. Só endereço desta máquina é aceito.", "http://127.0.0.1:8003", 200),
+  "maos.timeoutMs": num("maos", "Tempo máximo por pedido", "Quanto esperar o serviço local responder cada ordem.", 10000, 500, 120000, { unit: "ms" }),
+  "maos.saudeSegundos": num("maos", "Conferir o serviço local a cada", "O processo vivo pergunta ao serviço do Windows se ele está de pé neste ritmo. Desligado, as ferramentas do computador somem do turno em até dois minutos.", 10, 2, 300, { unit: "s" }),
+
+  "terminal.shells": list("terminal", "Terminais liberados", "Quais terminais a Órbita pode usar: pwsh, powershell, gitbash, wsl. Vazio usa os que o serviço local encontrar instalados."),
+  "terminal.shellPadrao": sel("terminal", "Terminal padrão", "Usado quando o pedido não diz qual.", "pwsh", [
+    { value: "pwsh", label: "PowerShell 7" },
+    { value: "powershell", label: "Windows PowerShell 5.1" },
+    { value: "gitbash", label: "Git Bash" },
+    { value: "wsl", label: "WSL" },
+  ]),
+  "terminal.pastas": list("terminal", "Pastas onde comando roda", "Raízes liberadas para o terminal (~ é a sua pasta de usuário). Comando em pasta fora delas só sai pela tela.", ["~/Documents/github"]),
+  "terminal.comandosDeLeitura": list("terminal", "Comandos de leitura", "Só estes rodam sem aprovação, e só quando o comando inteiro é feito deles, sem redirecionamento. É a lista que libera; nenhuma lista de proibidos substitui esta.", [
+    "git status", "git log", "git diff", "git branch", "git show", "git remote -v",
+    "Get-ChildItem", "Get-Content", "Get-Process", "Get-Location", "Get-Date", "Test-Path", "Get-Command", "Get-Volume",
+    "ls", "dir", "cat", "type", "pwd", "whoami", "hostname",
+    "node --version", "pnpm --version", "npm --version", "python --version", "git --version",
+  ]),
+  "terminal.variaveisPermitidas": list("terminal", "Variáveis que o comando herda", "Só estas variáveis de ambiente passam para o processo do comando. Segredo da Órbita nunca passa, mesmo se estiver aqui.", [
+    "PATH", "PATHEXT", "SystemRoot", "SystemDrive", "windir", "TEMP", "TMP", "USERPROFILE", "USERNAME", "HOMEDRIVE", "HOMEPATH",
+    "APPDATA", "LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)", "ProgramData", "ComSpec", "OS", "PROCESSOR_ARCHITECTURE", "NUMBER_OF_PROCESSORS", "LANG",
+  ]),
+  "terminal.esperarSeg": num("terminal", "Esperar o comando por", "Passando disso, o comando continua em segundo plano e a Órbita avisa quando terminar.", 8, 0, 60, { unit: "s" }),
+  "terminal.timeoutMaxSeg": num("terminal", "Tempo máximo de um comando", "Comando que passa disso é encerrado com tudo que ele abriu.", 600, 5, 7200, { unit: "s" }),
+  "terminal.saidaMaxCaracteres": num("terminal", "Saída entregue ao modelo", "A saída maior que isto é cortada no começo e no fim, com o meio contado.", 30000, 1000, 400000, { unit: "chars" }),
+  "terminal.memoriaMaxMb": num("terminal", "Memória máxima de um comando", "O processo que passar disto é encerrado.", 2048, 64, 32768, { unit: "MB" }),
+  "terminal.isolamento": sel("terminal", "Modo isolado", "Para script desconhecido, a Órbita roda isolado, com a rede desligada e a pasta só para leitura. Automático usa o Windows Sandbox se estiver instalado, senão o Docker.", "auto", [
+    { value: "auto", label: "Automático" },
+    { value: "sandbox", label: "Windows Sandbox" },
+    { value: "docker", label: "Docker" },
+  ]),
+  "terminal.imagemIsolada": {
+    ...text("terminal", "Imagem do contêiner isolado", "A imagem do Docker em que o comando isolado roda (sem rede, com a pasta só para leitura).", "alpine:3.20", 200),
+    type: { kind: "text", maxLength: 200, minLength: 1, pattern: "^[a-z0-9][a-z0-9._/:@-]*$", formato: "Nome de imagem do Docker, como alpine:3.20 ou node:22-alpine" },
+  },
+
+  "arquivos.pastas": list("arquivos", "Pastas que a Órbita pode ler", "Raízes liberadas para listar, ler e buscar arquivos (~ é a sua pasta de usuário). Escrever e mandar para a lixeira sempre pedem aprovação.", ["~/Documents", "~/Downloads", "~/Documents/github"]),
+  "arquivos.negados": list("arquivos", "Arquivos sempre negados", "Padrões que nunca são lidos nem escritos, mesmo dentro de uma pasta liberada.", [
+    ".env", ".env.*", "*.pem", "*.key", "*.pfx", "*.p12", "id_rsa*", "id_ed25519*", ".ssh", ".aws", ".gnupg", ".mcp.json",
+    "*/Google/Chrome/User Data", "*/Microsoft/Edge/User Data", "*/BraveSoftware/Brave-Browser/User Data",
+  ]),
+  "arquivos.pastaDosAnexos": text("arquivos", "Onde salvar anexos", "Pasta onde a Órbita grava um anexo que você pediu para baixar. Ela nunca sobrescreve um arquivo que já existe.", "~/Downloads/Órbita", 400),
+  "arquivos.buscaMaxArquivos": num("arquivos", "Arquivos olhados numa busca", "Teto de arquivos que uma busca percorre antes de parar e dizer que cortou.", 5000, 100, 200000, { unit: "arquivos" }),
+
+  "computador.appsOcultos": list("computador", "Apps que a Órbita nunca vê", "Janelas destes apps saem pintadas de preto na imagem e somem da árvore de acessibilidade, antes de qualquer coisa sair do PC. Teams, Meet e Zoom ficam visíveis (decisão de 10/10).", [
+    "1Password", "Bitwarden", "KeePass", "KeePassXC", "LastPass", "Dashlane", "NordPass", "Segurança do Windows", "Windows Security", "SecHealthUI", "Órbita: Identidade",
+  ]),
+  "computador.resolucaoCaptura": {
+    ...text("computador", "Tamanho da captura", "A imagem da tela é reduzida para este tamanho antes de ir ao modelo (a escala é guardada para o clique cair no lugar certo).", "1280x720", 11),
+    type: { kind: "text", maxLength: 11, minLength: 7, pattern: "^\\d{3,4}x\\d{3,4}$", formato: "Largura x altura, como 1280x720" },
+  },
+  "computador.elementosMax": num("computador", "Elementos da tela por leitura", "Teto de elementos da árvore de acessibilidade mandados ao modelo de uma vez.", 300, 20, 3000, { unit: "elementos" }),
+  "computador.rotulosDeEfeito": list("computador", "Botões que pedem aprovação", "Clicar em algo com estes nomes vira proposta, mesmo dentro da sessão.", [
+    "enviar", "send", "publicar", "postar", "comprar", "pagar", "confirmar", "excluir", "apagar", "deletar", "remover", "assinar", "compartilhar", "transferir", "finalizar",
+  ]),
+  "computador.pausaEntrePassosMs": num("computador", "Pausa entre ações seguidas", "Numa sequência de ações (clicar no campo e digitar), a Órbita espera isto entre uma e outra para a janela reagir.", 150, 0, 3000, { unit: "ms" }),
+  "computador.motor": sel("computador", "Quem dirige a tarefa no Windows", "Claude usa o computer use dele (assinatura), olhando a tela. Órbita força as ferramentas próprias, que leem a árvore de acessibilidade com o modelo da casa. As travas são as mesmas nos dois.", "claude", [
+    { value: "claude", label: "Claude (computer use)" },
+    { value: "orbita", label: "Ferramentas próprias da Órbita" },
+  ]),
+  "computador.modeloMotor": text("computador", "Modelo do Claude na tarefa delegada", "Chave do modelo que dirige a tarefa no Windows quando o motor é o Claude.", "claude/claude-sonnet-5-5", 120),
+  "computador.escalarParaOpus": bool("computador", "Chamar o Opus quando o Sonnet errar", "Depois de dois erros seguidos do mesmo tipo (alvo não encontrado, tela diferente do esperado), repete o passo uma vez com o Opus. Custa mais da assinatura.", false),
+  "computador.passosPorTarefa": num("computador", "Ações por tarefa delegada", "Teto de ações de uma tarefa no Windows. A sessão de controle tem o teto dela, e vale o menor.", 40, 5, 300, { unit: "ações" }),
+  "computador.capturasNoContexto": num("computador", "Capturas guardadas na tarefa delegada", "Quantas das últimas imagens da tela ficam inteiras no contexto do Claude; as mais velhas viram uma linha de texto.", 3, 1, 10, { unit: "imagens" }),
+  "computador.contextoMaxTokens": num("computador", "Contexto máximo antes de compactar", "Perto deste tamanho, a tarefa pede ao Claude um resumo do progresso e recomeça com ele e a última captura.", 150000, 20000, 800000, { unit: "tokens" }),
+  "computador.tokensPorTarefa": num("computador", "Tokens por tarefa delegada", "Teto de tokens de uma tarefa no Windows. Ao passar, a sessão pausa e a Órbita avisa em vez de gastar mais.", 600000, 50000, 5000000, { unit: "tokens" }),
+  "computador.esperaAprovacaoMin": num("computador", "Esperar sua aprovação por", "Quando a tarefa delegada para numa ação que precisa de aprovação, ela espera este tempo antes de desistir.", 15, 1, 240, { unit: "min" }),
+  "computador.pausaMaxMs": num("computador", "Espera máxima do \"aguardar\"", "O Claude pode pedir para esperar a tela reagir. Este é o teto de cada espera.", 30000, 500, 300000, { unit: "ms" }),
+  "computador.esperaAbrirMs": num("computador", "Espera depois de abrir um app", "Depois de abrir um aplicativo, a Órbita espera isto antes de olhar a tela, para a janela aparecer.", 2000, 0, 15000, { unit: "ms" }),
+  "computador.travadoSeg": num("computador", "Esperar app que não responde por", "Se uma ação estoura o tempo, a Órbita espera isto e tenta mais uma vez antes de parar e avisar.", 20, 3, 300, { unit: "s" }),
+  "computador.appsRecusados": list("computador", "Apps que a tarefa nunca toca", "A Órbita recusa agir nestes apps mesmo que estejam no envelope. Navegadores ficam aqui: no Chrome o caminho é a tarefa do Chrome, com máscara de senha, sites e crítico próprios.", [
+    "Google Chrome", "chrome", "Microsoft Edge", "msedge", "Firefox", "Brave", "Opera",
+  ]),
+
+  "navegador.motor": sel("navegador", "Quem dirige a tarefa no Chrome", "Claude usa o browser use dele (assinatura). Órbita força as ferramentas próprias. As travas são as mesmas nos dois.", "claude", [
+    { value: "claude", label: "Claude (browser use)" },
+    { value: "orbita", label: "Ferramentas próprias da Órbita" },
+  ]),
+  "navegador.extensaoId": {
+    ...text("navegador", "ID da extensão da Órbita", "O canal da extensão só aceita este ID na origem. Vazio, nenhuma extensão conecta.", "", 32),
+    type: { kind: "text", maxLength: 32, pattern: "^([a-p]{32})?$", formato: "32 letras de a até p, como aparece em chrome://extensions" },
+  },
+  "navegador.padraoSite": sel("navegador", "Site que não está na sua lista", "O que a Órbita pode fazer num site que você não classificou.", "leitura", [
+    { value: "bloqueado", label: "Nada (nem ler)" },
+    { value: "leitura", label: "Só ler" },
+    { value: "escrita", label: "Ler e agir dentro da sessão" },
+  ]),
+  "navegador.categoriasBloqueadas": list("navegador", "Categorias de site bloqueadas", "Sites destas categorias não entram no contexto, nem o título da aba: bancos (os de E-mails, bancos, mais os sites de banco do Chrome), senhas (gerenciadores), webmail, contas (Google e Microsoft) e navegador (a loja de extensões). A própria Órbita e os endereços chrome:// ficam bloqueados sempre, mesmo fora desta lista.", ["bancos", "senhas", "webmail", "contas", "navegador"]),
+  "navegador.sitesDeBanco": list("navegador", "Sites de banco e pagamento", "Endereços de internet banking e carteiras que a Órbita nunca lê nem toca no Chrome (com a categoria bancos marcada), além dos bancos de E-mails. \"internetbanking.*\" vale para qualquer domínio que comece assim.", [...BANCOS_PADRAO]),
+  // verbos no infinitivo e no imperativo inglês: "Enviado" (passado) e "Ver mais" não batem, porque a conferência é por palavra inteira
+  "navegador.rotulosDeEfeito": list("navegador", "Botões que pedem aprovação", "Clicar em algo com estes nomes, enviar formulário e subir arquivo viram proposta, mesmo dentro da sessão.", [
+    "comprar", "pagar", "enviar", "publicar", "postar", "comentar", "excluir", "apagar", "remover", "deletar", "confirmar", "aprovar", "assinar", "compartilhar", "convidar",
+    "finalizar compra", "finalizar pedido", "fechar pedido", "contratar", "doar", "transferir", "sacar", "encaminhar", "cancelar assinatura", "mesclar",
+    "send", "submit", "post", "publish", "comment", "delete", "remove", "approve", "confirm", "pay", "buy", "purchase", "checkout", "check out", "place order",
+    "subscribe", "unsubscribe", "cancel subscription", "transfer", "withdraw", "share", "invite", "merge", "donate",
+  ]),
+  "navegador.modeloMotor": text("navegador", "Modelo do Claude na tarefa delegada", "Chave do modelo que dirige a tarefa no Chrome quando o motor é o Claude.", "claude/claude-sonnet-5-5", 120),
+  "navegador.corDoGrupo": sel("navegador", "Cor do grupo de abas da Órbita", "As abas em que a Órbita age ficam num grupo \"Órbita: objetivo\" desta cor. Arrastar uma aba sua para o grupo põe a aba no escopo da sessão.", "purple", [
+    { value: "purple", label: "Roxo" }, { value: "blue", label: "Azul" }, { value: "cyan", label: "Ciano" }, { value: "green", label: "Verde" }, { value: "yellow", label: "Amarelo" },
+    { value: "orange", label: "Laranja" }, { value: "red", label: "Vermelho" }, { value: "pink", label: "Rosa" }, { value: "grey", label: "Cinza" },
+  ]),
+  "navegador.ordemTimeoutMs": num("navegador", "Tempo máximo por ordem ao Chrome", "Quanto esperar a extensão (ou o perfil dedicado) responder cada leitura ou ação.", 15000, 1000, 120000, { unit: "ms" }),
+  "navegador.keepaliveSeg": num("navegador", "Sinal de vida da extensão", "De quanto em quanto tempo a extensão manda sinal ao api. O Chrome desliga a extensão parada há 30 s, então fica abaixo disso.", 20, 5, 25, { unit: "s" }),
+  "navegador.textoMaxCaracteres": num("navegador", "Texto da página por leitura", "Teto do texto principal que vai ao modelo de uma vez.", 20000, 1000, 100000, { unit: "chars" }),
+  "navegador.elementosMax": num("navegador", "Elementos da página por leitura", "Teto de elementos (botões, links, campos) do retrato de acessibilidade mandados ao modelo de uma vez.", 250, 20, 2000, { unit: "elementos" }),
+  "navegador.capturaLargura": num("navegador", "Largura da captura da aba", "A imagem da aba é reduzida para esta largura antes de ir ao modelo (a escala é guardada para o clique cair no lugar certo).", 1280, 640, 1920, { unit: "px" }),
+  "navegador.passosPorTarefa": num("navegador", "Rodadas do modelo por tarefa delegada", "Teto de idas ao modelo numa tarefa do Chrome. As ações também contam no teto de passos da sessão.", 40, 5, 200, { unit: "rodadas" }),
+  "navegador.capturasNoContexto": num("navegador", "Capturas guardadas na tarefa delegada", "Quantas das últimas imagens da aba ficam inteiras no contexto do Claude; as mais velhas viram uma linha de texto.", 3, 1, 10, { unit: "imagens" }),
+  "navegador.esperaAprovacaoMin": num("navegador", "Esperar sua aprovação por", "Quando a tarefa delegada para numa ação que precisa de aprovação, ela espera este tempo antes de desistir.", 15, 1, 240, { unit: "min" }),
+  "navegador.esperaLoginMin": num("navegador", "Esperar você fazer o login por", "Login, captcha ou segundo fator: a Órbita para, avisa e espera a página mudar por até este tempo. Ela nunca digita senha nem resolve captcha.", 10, 1, 60, { unit: "min" }),
+  "navegador.roteiros": bool("navegador", "Aprender roteiros das tarefas", "Tarefa que deu certo vira roteiro, e a próxima igual roda sem o modelo. Passo com efeito continua pedindo aprovação.", true),
+  "navegador.perfilDedicado": bool("navegador", "Perfil dedicado para rotinas", "Um Chrome separado (pasta própria, sem os seus logins) onde rotinas e regras leem sites sozinhas. No seu Chrome, ordem de rotina é sempre recusada.", false),
+  "navegador.dedicadoChrome": text("navegador", "Chrome do perfil dedicado", "Caminho do chrome.exe. Vazio usa o Chrome instalado.", "", 400),
+  "navegador.dedicadoPasta": text("navegador", "Pasta do perfil dedicado", "Onde o perfil \"Órbita\" guarda cookies e logins. Vazio usa a pasta da Órbita em AppData.", "", 400),
+  "navegador.dedicadoVisivel": bool("navegador", "Mostrar a janela do perfil dedicado", "Desligado, o perfil dedicado roda sem janela. O botão de fazer login abre a janela de qualquer jeito.", false),
+  "navegador.dedicadoOciosoMin": num("navegador", "Fechar o perfil dedicado parado há", "Sem ordem nenhuma por este tempo, o Chrome do perfil dedicado fecha sozinho e libera a memória.", 5, 1, 120, { unit: "min" }),
+  "navegador.agindoMs": num("navegador", "Janela da ação da Órbita", "Clique e tecla da Órbita chegam à página como se fossem do mouse. Por este tempo depois de cada ação dela, o clique na aba não conta como seu; fora dele, um clique seu pausa a sessão.", 800, 200, 5000, { unit: "ms" }),
+  "navegador.timeoutClaudeSeg": num("navegador", "Tempo máximo de cada ida ao Claude", "Na tarefa delegada do Chrome, uma resposta do Claude que demora mais que isto é cortada e a tarefa para com o motivo, em vez de ficar presa.", 120, 10, 600, { unit: "s" }),
+  "navegador.tokenValidadeDias": num("navegador", "Validade do pareamento da extensão", "Depois deste tempo o token da extensão vence e ela pede um código novo. Parear de novo revoga os tokens anteriores da mesma extensão.", 90, 1, 3650, { unit: "dias" }),
+  "navegador.sufixosPublicos": list("navegador", "Sufixos que não são um site", "Um envelope ou uma linha de site com só isto (com.br, github.io, atlassian.net) liberaria milhares de sites de gente diferente, então é recusado. Acrescente aqui outros sufixos assim.", [...SUFIXOS_PUBLICOS]),
   // ── trabalho: Jira, GitHub e Slack ──
   "trabalho.avisar": bool("trabalho", "Avisar o que chegou", "Review e comentário nas suas PRs, pedido de review, menção e mensagem direta no Slack viram um aviso (um por volta, agrupado).", true),
   "trabalho.intervaloMinutos": num("trabalho", "Olhar GitHub e Slack a cada", "De quanto em quanto tempo a Órbita procura novidades.", 5, 1, 60, { unit: "min" }),
@@ -511,6 +689,15 @@ export const SETTING_DEFS = {
   "finance.perguntarRepetido": bool("finance", "Perguntar antes de lançar repetido", "Como o banco faz num Pix repetido: lançamento igual a um que já existe (mesmo valor, data perto, descrição parecida) só entra depois de você confirmar.", true),
   "finance.diasRepetido": num("finance", "Folga de data para repetido", "Dois lançamentos iguais com até tantos dias de diferença contam como repetidos. Zero compara só o mesmo dia.", 2, 0, 30, { unit: "dias" }),
   "finance.repeticoesAtalho": num("finance", "Repetições para sugerir atalho", "Um gasto que se repete tantas vezes vira sugestão de atalho de um toque.", 3, 2, 50, { unit: "vezes" }),
+  // ── Open Finance (Pluggy) ──
+  "pluggy.sincronizar": bool("finance", "Sincronizar os bancos sozinho", "Lê o extrato dos bancos conectados pela Pluggy no intervalo abaixo e lança o que for novo. Desligado, só sincroniza quando você pede.", true),
+  "pluggy.intervaloMinutos": num("finance", "Sincronizar os bancos a cada", "De quanto em quanto tempo a Órbita lê o que a Pluggy já tem. A Pluggy lê o banco por conta própria, em outro ritmo.", 60, 5, 1440, { unit: "min" }),
+  "pluggy.diasIniciais": num("finance", "Histórico na primeira leitura", "Quantos dias de extrato entram quando uma conta é sincronizada pela primeira vez.", 90, 1, 730, { unit: "dias" }),
+  "pluggy.diasRevisao": num("finance", "Dias relidos a cada volta", "Cada leitura volta tantos dias, porque o banco assenta lançamentos com atraso. O que já foi lançado nunca se repete.", 7, 1, 60, { unit: "dias" }),
+  "pluggy.reconhecerTransferencias": bool("finance", "Reconhecer transferência entre minhas contas", "Uma saída numa conta e uma entrada de mesmo valor em outra conta sua viram uma transferência: não contam como gasto nem como renda, só movem o saldo.", true),
+  "pluggy.janelaTransferenciaDias": num("finance", "Folga de data da transferência", "A saída e a entrada podem cair com até tantos dias de diferença (Pix cai na hora, TED e DOC podem levar mais).", 2, 0, 10, { unit: "dias" }),
+  "pluggy.avisar": bool("finance", "Avisar quando os bancos trouxerem lançamentos", "Uma notificação resume o que entrou na volta (lançamentos novos, transferências e faturas pagas). Não vai para o WhatsApp, para não virar ruído de hora em hora.", true),
+  "pluggy.widgetUrl": text("finance", "Endereço do widget de conexão da Pluggy", "O script que a Pluggy publica para conectar ou renovar um banco dentro da Órbita. Só é aceito do domínio cdn.pluggy.ai; qualquer outro endereço é ignorado e vale o padrão.", "https://cdn.pluggy.ai/pluggy-connect/v2.3.1/pluggy-connect.js", 200),
 
   // ── limites de entrada ──
   "limits.uploadMaxMb": num("limits", "Arquivo máximo enviado", "Tamanho máximo de arquivo para indexar, comprovante e extrato. O arquivo fica guardado até o trabalho terminar, e é apagado em seguida.", 25, 1, 200, { unit: "MB" }),
@@ -666,22 +853,13 @@ export const SETTING_DEFS = {
     // conferidas uma a uma contra a API em 21/09/2026: todas abrem sessão
     ["Sulafat", "Zephyr", "Puck", "Charon", "Kore", "Fenrir", "Aoede", "Leda", "Orus", "Callirrhoe", "Autonoe", "Despina", "Erinome", "Laomedeia", "Achernar", "Gacrux"].map((v) => ({ value: v, label: v })),
   ),
-  // A Órbita ASSISTINDO, não fotografando. O quadro sob demanda serve para
-  // "o que estou segurando"; não serve para acompanhar uma palestra, que foi
-  // o caso que o dono trouxe. O Gemini Live aceita vídeo no mesmo canal do
-  // áudio (conferido contra a API em 22/09/2026: descreveu corretamente uma
-  // imagem enviada no meio da sessão).
-  "realtime.videoFps": num(
-    "realtime",
-    "Quadros por segundo quando ela está vendo",
-    "Um por segundo é o que o Gemini Live recomenda e costuma bastar para acompanhar uma cena. Mais quadros custam mais e raramente mudam a resposta.",
-    1,
-    0.2,
-    5,
-    { step: 0.2, unit: "/s" },
-  ),
-  "realtime.videoLargura": num("realtime", "Largura do quadro de vídeo", "O quadro é reduzido para esta largura antes de subir. Maior enxerga texto de slide mais longe e custa mais por minuto.", 768, 320, 1920, { unit: "px" }),
-
+  // `realtime.videoFps` e `realtime.videoLargura` saíram em 11/10/2026: o vídeo
+  // dentro da sessão do Gemini Live nunca foi ligado (nenhum quadro sai do
+  // navegador, CHECKLIST.md), e uma chave na tela que não muda nada engana o
+  // dono (CLAUDE.md §5.6). Voltam junto com o envio dos quadros. O Gemini Live
+  // aceita vídeo no mesmo canal do áudio (conferido em 22/09/2026); 1 quadro
+  // por segundo a 768 px era o ponto de partida medido.
+  "realtime.toolsMax": num("realtime", "Funções por sessão de voz", "A voz declara todas as ferramentas de uma vez, e a OpenAI Realtime recusa a sessão INTEIRA acima de 128 funções (o Gemini aceita mais, mas erra mais). Passou disto, as últimas ferramentas registradas ficam de fora e o log avisa quais; as de despacho (computador e servidores externos) nunca saem.", 128, 10, 512, { unit: "funções" }),
   "realtime.openaiModel": text("realtime", "Modelo da OpenAI Realtime", "O `gpt-realtime-mini` custa por volta de um terço do `gpt-realtime` por minuto, com a mesma integração.", "gpt-realtime", 80),
   "realtime.openaiVoice": text("realtime", "Voz da OpenAI", "Nome da voz do modelo realtime da OpenAI (ex.: marin, cedar, alloy).", "marin", 40),
 

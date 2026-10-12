@@ -9,7 +9,7 @@
 
 import type { CampoDeToken } from "./por-token";
 
-export type ConnectorId = "google" | "notion" | "slack" | "microsoft" | "jira" | "zoom" | "github";
+export type ConnectorId = "google" | "notion" | "slack" | "microsoft" | "jira" | "zoom" | "github" | "pluggy";
 
 export interface ConnectorDef {
   id: ConnectorId;
@@ -222,6 +222,25 @@ const DEFS: Record<ConnectorId, ConnectorDef> = {
       ajuda:
         "Um token fine-grained com leitura de Pull requests e Metadata, por organização (dá para conectar um de cada), ou um token clássico com o escopo repo. A Órbita só lê: nada é comentado nem aprovado por ela.",
       link: "https://github.com/settings/personal-access-tokens/new",
+    },
+  },
+  pluggy: {
+    id: "pluggy",
+    label: "Pluggy (Open Finance)",
+    icon: "🏦",
+    blurb: "Extrato dos seus bancos sincronizado sozinho, com as transferências entre suas contas reconhecidas.",
+    // só por credencial: a Órbita apenas LÊ o extrato, e a autorização do banco é feita na própria Pluggy
+    authorizeUrl: "",
+    tokenUrl: "",
+    scopes: [],
+    porToken: {
+      campos: [
+        { nome: "clientId", rotulo: "Client ID", tipo: "text", exemplo: "00000000-0000-0000-0000-000000000000" },
+        { nome: "clientSecret", rotulo: "Client Secret", tipo: "password" },
+      ],
+      ajuda:
+        "No Pluggy Console crie uma aplicação e copie o Client ID e o Client Secret. Depois conecte seu banco pelo Meu Pluggy e, em Finanças, cole o Item ID de cada banco. A Órbita só lê o extrato: não move dinheiro.",
+      link: "https://dashboard.pluggy.ai",
     },
   },
   zoom: {

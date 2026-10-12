@@ -40,6 +40,7 @@ const NOME_DO_FLUXO: Record<string, string> = {
   whatsapp_automatico: "WhatsApp (resposta automática)",
   telegram: "Telegram",
   briefing: "Briefing da manhã",
+  controle_critico: "Crítico do controle do PC",
 };
 
 const NOME_DA_UNIDADE: Record<string, string> = {

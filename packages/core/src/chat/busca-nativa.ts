@@ -1,6 +1,9 @@
 import type { ToolSet } from "ai";
 import { buscaNativaDoClaude } from "@orbita/llm";
 import { settings } from "../settings";
+import { getTool } from "../tools/registry";
+import { leuNosPassos, type QuemNoTurno } from "../controle/contaminacao";
+import { contaminacaoDaCasa } from "../controle/contaminacao-da-casa";
 
 /**
  * BUSCA NA WEB NATIVA quando quem responde é o Claude.
@@ -33,4 +36,21 @@ export function comBuscaNativa(tools: ToolSet | undefined, modelKey: string, cfg
   if (!tools || !cfg.ativa || !modelKey.startsWith("claude/") || !("pesquisar_web" in tools)) return tools;
   const { pesquisar_web: _raspagem, ...resto } = tools;
   return { ...resto, web_search: buscaNativaDoClaude(cfg.maxUsos) as ToolSet[string] };
+}
+
+/**
+ * O `prepareStep` que tira a busca nativa do passo seguinte quando o turno já
+ * leu dado do dono (Regra de Dois, `controle/contaminacao.ts`). A `pesquisar_web`
+ * passa pelo registro e vira proposta; a nativa roda na Anthropic, sem
+ * `execute` nosso, então o único freio possível é ela não estar disponível.
+ * Vale o objeto do turno (quando quem chama o tem) e, além dele, o que os passos
+ * deste turno já leram: rotina e Telegram não passam o objeto.
+ */
+export function semBuscaNativaAposLeituraSensivel(tools: ToolSet | undefined, quem?: QuemNoTurno) {
+  return async ({ steps }: { steps: ReadonlyArray<{ toolResults: ReadonlyArray<{ toolName: string; input?: unknown; output?: unknown }> }> }): Promise<{ activeTools?: string[] }> => {
+    if (!tools || !("web_search" in tools)) return {};
+    if (!(await contaminacaoDaCasa.ativa())) return {};
+    const leu = (quem ? await contaminacaoDaCasa.consultar(quem) : null) ?? leuNosPassos(steps, (n) => getTool(n)?.domain);
+    return leu ? { activeTools: Object.keys(tools).filter((n) => n !== "web_search") } : {};
+  };
 }

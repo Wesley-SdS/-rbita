@@ -14,8 +14,11 @@ const PushToggle = dynamic(() => import("@/components/side-panels").then((m) => 
 const ToolsPanel = dynamic(() => import("@/components/tools-panel").then((m) => m.ToolsPanel), { ssr: false, loading: Esqueleto });
 const JobsPanel = dynamic(() => import("@/components/jobs-panel").then((m) => m.JobsPanel), { ssr: false, loading: Esqueleto });
 const PrivacyPanel = dynamic(() => import("@/components/privacy-panel").then((m) => m.PrivacyPanel), { ssr: false, loading: Esqueleto });
+const AnexosPanel = dynamic(() => import("@/components/anexos-panel").then((m) => m.AnexosPanel), { ssr: false, loading: Esqueleto });
+const ControlePanel = dynamic(() => import("@/components/controle-panel").then((m) => m.ControlePanel), { ssr: false, loading: Esqueleto });
 
-export function Preferencias({ email }: { email: string }) {
+/** `aba`: abre direto numa aba (o cartão "Órbita no controle" leva a `?aba=controle`). */
+export function Preferencias({ email, aba }: { email: string; aba?: string }) {
   return (
     <section className="view">
       <TituloDaVista
@@ -24,11 +27,14 @@ export function Preferencias({ email }: { email: string }) {
         subtitulo="A experiência se adapta ao seu ritmo, não o contrário."
       />
       <Abas
+        inicial={aba}
         abas={[
           { id: "geral", rotulo: "Ajustes", conteudo: <SettingsPanel /> },
           { id: "persona", rotulo: "Persona", conteudo: <PersonaPanel /> },
           { id: "ferramentas", rotulo: "Ferramentas", conteudo: <ToolsPanel /> },
           { id: "trabalhos", rotulo: "Trabalhos", conteudo: <JobsPanel /> },
+          { id: "anexos", rotulo: "Anexos", conteudo: <AnexosPanel /> },
+          { id: "controle", rotulo: "Controle do PC", conteudo: <ControlePanel /> },
           { id: "economia", rotulo: "Economia", conteudo: <EconomyPanel /> },
           {
             id: "privacidade",

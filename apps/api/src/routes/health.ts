@@ -9,6 +9,8 @@ import { estadoDoServico, ollamaEmUso, vozLocalEmUso } from "@orbita/core/saude/
 import { waSessao } from "@orbita/db/whatsapp-schema";
 import { tgBot } from "@orbita/db/telegram-schema";
 import { ponteConfigurada } from "@orbita/core/whatsapp/gowa/client";
+import { estadoParaOHealth, tokenDasMaos } from "@orbita/core/maos/client";
+import { estadoDaExtensaoParaOHealth } from "@orbita/core/navegador/canal";
 
 async function ping(url: string, ms: number): Promise<boolean> {
   try {
@@ -73,6 +75,14 @@ export async function GET(_req: Request, _ctx: RouteCtx) {
   // ou com erro na última, o canal da Órbita está mudo
   const bots = await db.select({ em: tgBot.ultimoContatoEm, erro: tgBot.ultimoErro }).from(tgBot).catch(() => []);
   checks.telegram = estadoDoServico(bots.length > 0, bots.some((b) => !b.erro && b.em !== null && Date.now() - b.em.getTime() < 120_000));
+
+  // as mãos do Windows (frente A): o último /health que o laço `maos` guardou.
+  // Sem token e com o controle desligado, ninguém usa: "nao_usado", não "down"
+  const controleAtivo = await settings.get("controle.ativo").catch(() => false);
+  checks.maos = !controleAtivo && !tokenDasMaos() ? "nao_usado" : estadoParaOHealth();
+
+  // a extensão do Chrome (frente B, PRD §13): conectada agora, pareada e caída, ou nunca pareada
+  checks.extensao = await estadoDaExtensaoParaOHealth().catch(() => "down");
 
   const status = checks.db === "up" ? "ok" : "error";
   return Response.json(

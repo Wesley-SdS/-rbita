@@ -5,7 +5,7 @@ import type { RelatoDeUso } from "../meetings/structured";
 import { carregar, hojeDoServidor, type DadosFinanceiros } from "./store";
 import { executar } from "./comandos";
 import { palpitarCategoria } from "./palpite";
-import { separarDuplicatas } from "./extrato";
+import { lerExtrato, separarDuplicatas } from "./extrato";
 import { normalizar } from "./nomes";
 import { settings } from "../settings";
 import { log } from "../observability/logger";
@@ -55,7 +55,7 @@ export interface ReceiptResult {
   ocrText: string;
 }
 
-export async function importReceipt(userId: string, dataUrl: string, progresso?: Progresso): Promise<ReceiptResult> {
+export async function importReceipt(userId: string, dataUrl: string, progresso?: Progresso, opts: OpcoesDoDocumento = {}): Promise<ReceiptResult> {
   const arquivo = lerDataUrl(dataUrl);
   if (!arquivo) throw new DocumentoIlegivelError("Imagem inválida.");
 
@@ -66,7 +66,7 @@ export async function importReceipt(userId: string, dataUrl: string, progresso?:
   await progresso?.(0, 3, "lendo o texto da imagem");
   let ocrText = "";
   try {
-    const lido = await lerDocumento(arquivo.bytes, { nome: "comprovante", mime: arquivo.mime, progresso, userId });
+    const lido = await lerDocumento(arquivo.bytes, { nome: "comprovante", mime: arquivo.mime, progresso, userId, senhas: opts.senhas, semRemetente: opts.semRemetente });
     ocrText = lido.textos.join(QUEBRA).trim();
   } catch (e) {
     log.error("finance.receipt.ocr", { error: e instanceof Error ? e.message : String(e) });
@@ -151,19 +151,79 @@ export function splitBlocks(text: string, size: number): string[] {
 export interface StatementResult {
   importados: number;
   lancamentos: { descricao: string; valor: number; tipo: string }[];
+  /** como foi lido: o leitor de OFX/CSV (o número sai do arquivo) ou o modelo (PDF, imagem) */
+  leitor?: "ofx_csv" | "modelo";
+  /** o que a leitura avisou (páginas cortadas, aberto com senha…): antes sumia (I7) */
+  avisos?: string[];
 }
 
-export async function importStatement(userId: string, dataUrl: string, nome: string, progresso?: Progresso): Promise<StatementResult> {
+/** De onde vêm as senhas, quando o arquivo é anexo de e-mail (o trabalho de `usar_anexo`). */
+export interface OpcoesDoDocumento {
+  senhas?: readonly string[];
+  semRemetente?: boolean;
+}
+
+/** Famílias que o leitor determinístico de extrato entende: OFX e CSV são texto, XLSX é planilha. */
+const LIDO_PELO_MOTOR = new Set(["tabela", "texto", "planilha"]);
+
+/**
+ * OFX, CSV e planilha pelo leitor DETERMINÍSTICO (`finance/extrato.ts`), o
+ * mesmo da tela (`entradas.ts`): data, valor e sinal saem do arquivo, nunca do
+ * modelo (CLAUDE.md §9, "número de dinheiro só sai do motor"). Antes o extrato
+ * que chegava por e-mail ou WhatsApp passava inteiro pelo LLM (I8), e o CSV
+ * vinha cortado em `anexos.linhasMax` linhas sem aviso (I7). `null`: não é um
+ * desses formatos, e o PDF ou a imagem seguem para o modelo.
+ */
+async function extratoPeloMotor(userId: string, bytes: Buffer, nome: string, mime: string, progresso: Progresso | undefined, opts: OpcoesDoDocumento): Promise<StatementResult | null> {
+  const { detectarTipo } = await import("../arquivos/detectar");
+  const tipo = await detectarTipo(bytes, nome, mime);
+  if (!LIDO_PELO_MOTOR.has(tipo.familia)) return null;
+  // na thread com teto, como toda leitura de arquivo de terceiro (B5)
+  const { extrairIsolado } = await import("../arquivos/isolado");
+  const ex = await extrairIsolado(bytes, { nome, mimeDeclarado: mime, userId, tipo, comoCsv: true, senhas: opts.senhas, semRemetente: opts.semRemetente ?? !opts.senhas?.length, progresso });
+  if (ex.protegido) throw new DocumentoIlegivelError(ex.protegido.motivo);
+  if (!ex.lido) throw new DocumentoIlegivelError(ex.resumo);
+  // TXT que não é OFX (o extrato "impresso" em texto) é como o texto de um PDF: só o modelo entende
+  if (tipo.familia === "texto" && !/<STMTTRN>/i.test(ex.texto)) return null;
+  const linhas = lerExtrato(ex.texto);
+  if (!linhas.length) throw new DocumentoIlegivelError("Não encontrei lançamentos nesse arquivo: o OFX não tem transações, ou o CSV/planilha não tem colunas de data e valor que eu reconheça.");
+  await progresso?.(1, 2, "cadastrando os lançamentos");
+  const hoje = hojeDoServidor();
+  const dados = await carregar(userId, hoje, 0);
+  const { novas } = separarDuplicatas(linhas, dados.lancamentos.map((l) => ({ data: l.data, valor: l.valor, descricao: l.descricao ?? "" })));
+  const rows = novas.map((l) => ({ ...l, categoriaId: categoriaDoTexto(dados, l.tipo, null, l.descricao) }));
+  if (rows.length) {
+    await executar(userId, {
+      tipo: "importar", lembrar: false, contaId: null, cartaoId: null,
+      linhas: rows.map((r) => ({ natureza: r.tipo, data: r.data, valor: r.valor, descricao: r.descricao, categoriaId: r.categoriaId })),
+    }, hoje);
+  }
+  log.info("finance.statement", { userId, importados: rows.length, leitor: "ofx_csv" });
+  return {
+    importados: rows.length,
+    lancamentos: rows.map((r) => ({ descricao: r.descricao, valor: r.valor / 100, tipo: r.tipo === "receita" ? "entrada" : "saída" })),
+    leitor: "ofx_csv",
+    ...(ex.avisos.length ? { avisos: ex.avisos } : {}),
+  };
+}
+
+export async function importStatement(userId: string, dataUrl: string, nome: string, progresso?: Progresso, opts: OpcoesDoDocumento = {}): Promise<StatementResult> {
   const arquivo = lerDataUrl(dataUrl);
   if (!arquivo) throw new DocumentoIlegivelError("Arquivo inválido.");
 
-  // 1) leitura pelo pipeline do R5: página com texto usa o texto (e a tabela
-  // vira tabela); página escaneada passa pelo OCR. Antes, extrato escaneado
-  // batia num "PDF sem texto extraível" e o dono não tinha o que fazer.
+  // 0) OFX, CSV e planilha: o leitor determinístico, sem modelo nenhum (I8)
   await progresso?.(0, 2, "lendo o arquivo");
+  const peloMotor = await extratoPeloMotor(userId, arquivo.bytes, nome, arquivo.mime, progresso, opts);
+  if (peloMotor) return peloMotor;
+
+  // 1) PDF e imagem: leitura pelo pipeline do R5 (página com texto usa o texto
+  // e a tabela vira tabela; página escaneada passa pelo OCR). Antes, extrato
+  // escaneado batia num "PDF sem texto extraível" e o dono não tinha o que fazer.
   let text = "";
+  let avisosDaLeitura: string[] = [];
   try {
-    const lido = await lerDocumento(arquivo.bytes, { nome, mime: arquivo.mime, progresso, userId });
+    const lido = await lerDocumento(arquivo.bytes, { nome, mime: arquivo.mime, progresso, userId, senhas: opts.senhas, semRemetente: opts.semRemetente });
+    avisosDaLeitura = lido.avisos ?? [];
     // a página vai marcada: um lançamento cortado entre blocos continua
     // rastreável, e o modelo não junta linhas de páginas diferentes sem saber
     text = lido.paginas.map((p) => `--- Página ${p.numero} ---${QUEBRA}${p.texto}`).join(QUEBRA + QUEBRA);
@@ -231,8 +291,13 @@ export async function importStatement(userId: string, dataUrl: string, nome: str
       linhas: rows.map((r) => ({ natureza: r.tipo, data: r.data, valor: r.valor, descricao: r.descricao, categoriaId: r.categoriaId })),
     }, hoje);
   }
-  log.info("finance.statement", { userId, importados: rows.length });
-  return { importados: rows.length, lancamentos: rows.map((r) => ({ descricao: r.descricao, valor: r.valor / 100, tipo: r.tipo === "receita" ? "entrada" : "saída" })) };
+  log.info("finance.statement", { userId, importados: rows.length, leitor: "modelo" });
+  return {
+    importados: rows.length,
+    lancamentos: rows.map((r) => ({ descricao: r.descricao, valor: r.valor / 100, tipo: r.tipo === "receita" ? "entrada" : "saída" })),
+    leitor: "modelo",
+    ...(avisosDaLeitura.length ? { avisos: avisosDaLeitura } : {}),
+  };
 }
 
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

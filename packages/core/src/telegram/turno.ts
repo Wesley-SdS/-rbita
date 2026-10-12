@@ -13,10 +13,11 @@ import { log } from "../observability/logger";
 import { FLUXO } from "../usage/registrar";
 import { enqueueJob } from "../jobs/queue";
 import { aprovarPorFrase } from "../actions/por-frase";
-import { effectiveRisk, getTool, loadToolOverrides, type Requester } from "../tools/index";
+import { loadToolOverrides, type Requester } from "../tools/index";
+import { riscoDaProposta } from "../actions/risco";
 import { getPerson } from "../identity/people";
 import { narrateSnapshot } from "../cameras/narrate";
-import { lerMidia } from "../whatsapp/midia";
+import { extensaoDe, lerMidia } from "../whatsapp/midia";
 import { embrulhar } from "../whatsapp/formatar";
 import { conversaDoContato, mandarProposta, mandarTextoPara, responder } from "./enviar";
 import * as store from "./store";
@@ -45,6 +46,53 @@ const sufixoPessoa = (nome: string, dono: string) =>
   "e não use o que sabe dele para responder a ela. Ajude com a casa e com o que suas ferramentas permitem. " +
   `Ações com efeito (mandar mensagem, destrancar, comprar) viram um pedido que ${dono} aprova: diga isso a ela. Responda curto, como numa conversa de mensagens.`;
 
+/**
+ * O nome do documento, que o `receber` guardou como `name="…"` no tipo. Sem ele
+ * (mensagem de antes, ou o Telegram não mandou), um nome com a extensão do tipo:
+ * "documento" puro perdia a extensão, e o script não ganhava o aviso de script (M16). PURO.
+ */
+export function nomeDoDocumento(m: Pick<TgMensagem, "midiaMime">): string {
+  const mime = m.midiaMime ?? "";
+  const i = mime.toLowerCase().indexOf('name="');
+  if (i >= 0) {
+    const fim = mime.indexOf('"', i + 6);
+    const nome = mime.slice(i + 6, fim === -1 ? undefined : fim).trim();
+    if (nome) return nome.slice(0, 200);
+  }
+  return mime ? `documento.${extensaoDe(mime)}` : "documento";
+}
+
+/**
+ * O documento que chegou pelo Telegram, lido pelo extrator universal com o
+ * prazo de `anexos.esperarSeg`. O texto vai EMBRULHADO (pode ser o contrato de
+ * outra pessoa) e cortado na primeira parte: o turno não é lugar de um livro
+ * inteiro. Arquivo que não se lê (executável, senha, formato) vira a frase que
+ * diz por quê.
+ */
+async function documentoLido(userId: string, m: TgMensagem, quem: string): Promise<string> {
+  // numa thread com teto (B5): o documento é de quem mandou, e um parser preso não pode parar o api
+  const { extrairIsolado: extrair } = await import("../arquivos/isolado");
+  const { partesDoTexto, resumoParaOModelo } = await import("../arquivos/texto");
+  const cfg = await settings.getMany(["anexos.esperarSeg", "anexos.caracteresMax"]);
+  const parar = new AbortController();
+  const relogio = setTimeout(() => parar.abort(), cfg["anexos.esperarSeg"] * 1000);
+  try {
+    const ex = await extrair(Buffer.from(await lerMidia(m.midiaCaminho!)), { nome: nomeDoDocumento(m), mimeDeclarado: m.midiaMime, userId, sinal: parar.signal, semRemetente: true });
+    // o resumo do e-mail anexado, do convite, do ZIP traz texto de DENTRO do arquivo: vai embrulhado (I2)
+    const resumo = resumoParaOModelo({ resumo: ex.resumo, familia: ex.tipo.familia, estruturado: ex.estruturado, arquivos: ex.arquivos }, "telegram");
+    if (!ex.lido) return `[${quem} mandou um documento: ${resumo}]`;
+    const pedacos = partesDoTexto(ex.texto, cfg["anexos.caracteresMax"]);
+    const resto = pedacos.length > 1 ? ` Li a primeira de ${pedacos.length} partes.` : "";
+    return `[${quem} mandou um documento: ${resumo}${resto}]\n${embrulhar([pedacos[0]!])}`;
+  } catch (e) {
+    if (parar.signal.aborted) return `[${quem} mandou um documento longo demais para ler agora. Peça para mandar pelo app, em "guardar no conhecimento", que a Órbita lê em segundo plano.]`;
+    log.warn("telegram.documento_falhou", { erro: e instanceof Error ? e.message.slice(0, 200) : String(e) });
+    return `[${quem} mandou um documento que não consegui ler]`;
+  } finally {
+    clearTimeout(relogio);
+  }
+}
+
 /** O que a pessoa mandou, em texto: o áudio já chega transcrito; a imagem é descrita. */
 async function pedidoDe(userId: string, m: TgMensagem, quem: string): Promise<string> {
   const legenda = m.texto?.trim() ? `\n${m.texto.trim()}` : "";
@@ -57,7 +105,8 @@ async function pedidoDe(userId: string, m: TgMensagem, quem: string): Promise<st
     return `[${quem} mandou uma imagem]` + (descricao ? `\n${embrulhar([descricao])}` : "") + legenda;
   }
   if (m.tipo === "imagem") return `[${quem} mandou uma imagem que não pôde ser baixada]${legenda}`;
-  if (m.tipo === "documento") return `[${quem} mandou um documento${m.midiaMime ? ` (${m.midiaMime})` : ""}; pelo Telegram a Órbita ainda não lê documento: peça para mandar pelo app ou pelo WhatsApp]${legenda}`;
+  if (m.tipo === "documento" && m.midiaCaminho) return `${await documentoLido(userId, m, quem)}${legenda}`;
+  if (m.tipo === "documento") return `[${quem} mandou um documento${m.midiaMime ? ` (${m.midiaMime})` : ""} que não pôde ser baixado]${legenda}`;
   if (m.tipo === "video") return `[${quem} mandou um vídeo]${legenda}`;
   if (m.tipo === "localizacao") return `[${quem} mandou a localização ${m.texto ?? ""}]`;
   if (m.tipo === "contato") return `[${quem} mandou um contato: ${m.texto ?? ""}]`;
@@ -107,7 +156,7 @@ export async function turnoDoTelegram(userId: string, contato: TgContato, m: TgM
       : Promise.resolve([]),
     ehDono
       ? buildAllTools(userId, pedido, async () => requester, undefined, undefined, { canal: "telegram", todas: true })
-      : buildAllTools(userId, pedido, async () => requester, undefined, undefined, { canal: "telegram", dominios: cfg["telegram.dominiosDaFamilia"].length ? cfg["telegram.dominiosDaFamilia"] : ["clima"] }),
+      : buildAllTools(userId, pedido, async () => requester, undefined, undefined, { canal: "telegram", pessoaDaCasa: true, dominios: cfg["telegram.dominiosDaFamilia"].length ? cfg["telegram.dominiosDaFamilia"] : ["clima"] }),
   ]);
   const contexto = rag.length ? "\n\nContexto do usuário (use quando relevante e cite a fonte entre colchetes):\n" + rag.map((h, i) => `[${i + 1}] (${h.source}) ${h.content}`).join("\n\n") : "";
   const donoNome = (await settings.get("meetings.meuNome").catch(() => "")) || "o dono";
@@ -137,7 +186,7 @@ export async function turnoDoTelegram(userId: string, contato: TgContato, m: TgM
   // gravado na fila, com botão. Proposta nascida no turno da Anna vai para o
   // DONO, nunca para ela.
   const novas = await db
-    .select({ id: actionQueue.id, kind: actionQueue.kind, resumo: actionQueue.summary })
+    .select({ id: actionQueue.id, kind: actionQueue.kind, resumo: actionQueue.summary, payload: actionQueue.payload })
     .from(actionQueue)
     .where(and(eq(actionQueue.userId, userId), eq(actionQueue.status, "pending"), eq(actionQueue.canal, "telegram"), gte(actionQueue.createdAt, inicio)))
     .orderBy(asc(actionQueue.createdAt));
@@ -153,13 +202,11 @@ export async function turnoDoTelegram(userId: string, contato: TgContato, m: TgM
   if (novas.length) await entregarPropostas(userId, novas, ehDono ? null : nome);
 }
 
-async function entregarPropostas(userId: string, novas: { id: string; kind: string; resumo: string }[], quemPediu: string | null): Promise<void> {
+async function entregarPropostas(userId: string, novas: { id: string; kind: string; resumo: string; payload?: unknown }[], quemPediu: string | null): Promise<void> {
   const dono = await store.donoNoTelegram(userId);
   const overrides = await loadToolOverrides();
-  const perigosa = (kind: string) => {
-    const def = getTool(kind);
-    return def ? effectiveRisk(def, overrides) === "perigoso" : true;
-  };
+  // o risco gravado na proposta (elevado pelo alvo) conta, não só o da tool
+  const perigosa = (n: { kind: string; payload?: unknown }) => riscoDaProposta({ kind: n.kind, payload: n.payload ?? null }, overrides) === "perigoso";
   if (!dono) {
     // o dono não está no Telegram: o pedido da pessoa espera na tela, e ele é avisado
     if (quemPediu) {
@@ -168,7 +215,7 @@ async function entregarPropostas(userId: string, novas: { id: string; kind: stri
     }
     return;
   }
-  for (const n of novas) await mandarProposta(userId, dono, { id: n.id, resumo: n.resumo, perigosa: perigosa(n.kind) }, quemPediu).catch((e) => log.warn("telegram.proposta_falhou", { erro: String(e).slice(0, 200) }));
+  for (const n of novas) await mandarProposta(userId, dono, { id: n.id, resumo: n.resumo, perigosa: perigosa(n) }, quemPediu).catch((e) => log.warn("telegram.proposta_falhou", { erro: String(e).slice(0, 200) }));
 }
 
 /** Recado curto para quem não conhece a Órbita (UM por pessoa, não um por mensagem). */

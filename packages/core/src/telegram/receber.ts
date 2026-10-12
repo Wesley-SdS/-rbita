@@ -2,7 +2,8 @@ import type { TgBot, TgContato, TgMensagem } from "@orbita/db/telegram-schema";
 import { settings } from "../settings";
 import { log } from "../observability/logger";
 import { aprovarAcao, cancelarAcao, pendentesDoCanal } from "../actions/aprovar";
-import { effectiveRisk, getTool, loadToolOverrides } from "../tools/index";
+import { loadToolOverrides } from "../tools/index";
+import { riscoDaProposta } from "../actions/risco";
 import { transcribeRecording } from "../meetings/transcribe";
 import { nuvemParaTranscrever } from "../whatsapp/processar";
 import { salvarMidia } from "../whatsapp/midia";
@@ -35,6 +36,12 @@ function emSerie(chave: string, fn: () => Promise<void>, aoTerminar: () => Promi
   filaPorChat.set(chave, proxima);
 }
 
+/** "application/pdf" + "Fatura out.pdf" → `application/pdf; name="Fatura out.pdf"`. PURO. */
+export function mimeComNome(mime: string, nome: string | null | undefined): string {
+  const limpo = (nome ?? "").replace(/[\u0000-\u001f";\\]/g, "").trim().slice(0, 120);
+  return limpo ? `${mime.split(";")[0]!.trim()}; name="${limpo}"` : mime;
+}
+
 /** Entrega a mensagem gravada ao turno, com a marca de turno pendente (ver o schema). */
 async function rotear(userId: string, contato: TgContato, m: TgMensagem): Promise<void> {
   await store.marcarTurnoPendente(m.id, new Date());
@@ -43,13 +50,16 @@ async function rotear(userId: string, contato: TgContato, m: TgMensagem): Promis
 }
 
 async function baixarMidia(userId: string, token: string, t: MensagemTraduzida, m: TgMensagem): Promise<TgMensagem> {
-  if (!t.fileId || !["audio", "imagem"].includes(t.tipo)) return m;
+  // documento também: o extrator universal lê PDF, Word, planilha e ZIP no turno (`turno.ts`)
+  if (!t.fileId || !["audio", "imagem", "documento"].includes(t.tipo)) return m;
   const cfg = await settings.getMany(["telegram.midiaMaxMb", "whatsapp.transcricao", "meetings.sttCloud"]);
   try {
     const bytes = await baixarArquivo(token, t.fileId, cfg["telegram.midiaMaxMb"] * 1024 * 1024);
     const mime = t.mime ?? "application/octet-stream";
     const { caminho } = await salvarMidia(bytes, mime);
-    const patch: Partial<TgMensagem> = { midiaCaminho: caminho, midiaMime: mime };
+    // o NOME do documento vai como o parâmetro `name` do tipo (o mesmo do Content-Type de e-mail):
+    // sem ele o extrator recebia "documento", sem extensão, e o script não ganhava o aviso de script (M16)
+    const patch: Partial<TgMensagem> = { midiaCaminho: caminho, midiaMime: t.tipo === "documento" ? mimeComNome(mime, t.nomeArquivo) : mime };
     if (t.tipo === "audio") {
       const nuvem = nuvemParaTranscrever(cfg["whatsapp.transcricao"], cfg["meetings.sttCloud"]);
       if (nuvem !== null) {
@@ -93,8 +103,8 @@ async function tratarBotao(bot: TgBot, token: string, cb: TgCallback): Promise<v
     await cancelarAcao(userId, pendente.id);
     await responderBotao(token, cb.id, "Cancelado.");
   } else {
-    const def = getTool(pendente.kind);
-    if (!def || effectiveRisk(def, await loadToolOverrides()) === "perigoso") {
+    // o risco gravado na proposta (elevado pelo alvo) conta, não só o da tool
+    if (riscoDaProposta(pendente, await loadToolOverrides()) === "perigoso") {
       await responderBotao(token, cb.id, "Isto só se aprova pela tela.");
       return;
     }
@@ -169,8 +179,7 @@ async function listarPendentes(userId: string, dono: TgContato): Promise<void> {
   const { mandarProposta } = await import("./enviar");
   const overrides = await loadToolOverrides();
   for (const p of pendentes.slice(0, 10)) {
-    const def = getTool(p.kind);
-    await mandarProposta(userId, dono, { id: p.id, resumo: p.summary, perigosa: !def || effectiveRisk(def, overrides) === "perigoso" }).catch(() => undefined);
+    await mandarProposta(userId, dono, { id: p.id, resumo: p.summary, perigosa: riscoDaProposta(p, overrides) === "perigoso" }).catch(() => undefined);
   }
 }
 

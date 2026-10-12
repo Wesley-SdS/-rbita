@@ -34,7 +34,8 @@ export type TipoDeCartao =
   | "presenca"
   | "trabalho"
   | "fontes"
-  | "externo";
+  | "externo"
+  | "controle";
 
 export interface ItemDeCartao {
   titulo: string;
@@ -68,6 +69,10 @@ export interface CartaoDaTela {
   abrir?: string;
   /** abas do cartão, na ordem, com quantos itens cada uma tem de verdade (a lista pode vir cortada) */
   grupos?: { id: string; rotulo: string; total: number }[];
+  /** miniatura (data URL de imagem, nunca link de fora): o último passo da Órbita no controle */
+  imagem?: { src: string; alt: string };
+  /** ações que a TELA sabe fazer, por id (o cartão não carrega código nem URL de ação) */
+  botoes?: { id: "parar_controle"; rotulo: string }[];
 }
 
 /** Teto de itens por cartão: o cartão rola por dentro, mas 50 e-mails não são um cartão. */
@@ -616,6 +621,54 @@ export function cartaoExterno(chave: string, conteudo: unknown, descricao = ""):
   };
 }
 
+const DECISAO_LEGIVEL: Record<string, string> = {
+  executando: "em andamento",
+  executado: "feito",
+  vetado: "vetado pelo crítico",
+  recusado: "recusado",
+  na_fila: "esperando sua aprovação",
+  falhou: "falhou",
+};
+
+/**
+ * "Órbita no controle" (PRD-COMPUTADOR F5): objetivo, passo X de Y, último
+ * passo e o botão Parar. Nasce de `{ controle: ResumoDoControle }`, que o
+ * `controle_status` devolve e que qualquer tool de computador ou navegador
+ * pode devolver junto do resultado: o cartão se atualiza a cada passo.
+ */
+function controle(c: Obj): CartaoDaTela | null {
+  const objetivo = txt(c.objetivo);
+  if (!txt(c.sessaoId) || !objetivo) return null;
+  const usados = Number(c.passosUsados) || 0;
+  const teto = Number(c.tetoPassos) || 0;
+  const status = txt(c.status) || "ativa";
+  const ultimo = obj(c.ultimoPasso);
+  const onde = [...(Array.isArray(c.apps) ? c.apps : []), ...(Array.isArray(c.sites) ? c.sites : [])].map(txt).filter(Boolean).join(", ");
+  const itens: ItemDeCartao[] = [{ titulo: objetivo, detalhe: opcional(onde), quando: opcional(status === "ativa" ? txt(c.expiraEm) : "") }];
+  if (ultimo) {
+    const decisao = txt(ultimo.decisao);
+    itens.push({
+      titulo: `Último passo: ${juntar(txt(ultimo.tool).replace(/_/g, " "), txt(ultimo.acao)) ?? ""}`,
+      detalhe: opcional(DECISAO_LEGIVEL[decisao] ?? decisao),
+      quando: opcional(txt(ultimo.quando)),
+      marca: decisao === "vetado" || decisao === "falhou" ? "importante" : decisao === "executado" ? "feito" : undefined,
+    });
+  }
+  const mini = txt(c.miniatura);
+  return {
+    id: "controle",
+    tipo: "controle",
+    titulo: "Órbita no controle",
+    resumo: juntar(`passo ${usados} de ${teto}`, status !== "ativa" && `${status}${txt(c.motivo) ? ` (${txt(c.motivo)})` : ""}`),
+    destaque: { valor: `${usados}/${teto}`, rotulo: "passos" },
+    itens,
+    // só imagem embutida: um link de fora no cartão seria um pedido a um servidor qualquer
+    imagem: /^data:image\/(png|jpeg|webp);base64,/.test(mini) ? { src: mini, alt: "O último passo na tela" } : undefined,
+    botoes: status === "ativa" || status === "pausada" ? [{ id: "parar_controle", rotulo: "Parar" }] : undefined,
+    abrir: "/app/ajustes?aba=controle",
+  };
+}
+
 /**
  * Os cartões de UM resultado de tool. A maioria é escolhida pelo nome da tool
  * (cada uma tem formato próprio); o que vem em texto só vira cartão nas tools
@@ -640,6 +693,12 @@ export function cartoesDoResultado(tool: string, resultado: unknown, argumentos?
   }
   const r = obj(resultado);
   if (!r || "erro" in r || "error" in r || r.permitido === false) return [];
+  // a sessão de controle viaja junto de qualquer resultado de computador e navegador
+  const sessao = obj(r.controle);
+  if (sessao) {
+    const c = controle(sessao);
+    if (c) return [c];
+  }
   const hoje = agora.toISOString().slice(0, 10);
   let c: CartaoDaTela | null = null;
   switch (tool) {

@@ -1,0 +1,8 @@
+{
+  "cliente": "Fulana",
+  "saldo": 123.45,
+  "itens": [
+    "a",
+    "b"
+  ]
+}

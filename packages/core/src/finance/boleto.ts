@@ -97,11 +97,28 @@ export function lerLinhaDigitavel(texto: string, hoje: Ymd): LeituraBoleto | nul
 /** Sequências candidatas: dígitos com pontos, espaços e traços, de 46 a 82 caracteres (PRD §8.2). */
 const CANDIDATO_RE = /[\d.\-\s]{46,82}/g;
 
+const ROTULO_DO_BENEFICIARIO = /cedente|benefici[aá]rio/giu;
+const NOME_DO_BENEFICIARIO = /[\p{L}0-9 .,&'-]{5,41}/uy;
+const ehBranco = (c: string) => /\s/.test(c);
+
+/**
+ * O nome depois de "Cedente" ou "Beneficiário". O separador (espaços, um ":"
+ * ou "-", espaços) é pulado À MÃO: a regex de antes, `\s*[:\-]?\s*` seguida de
+ * uma classe que também casa espaço, voltava atrás em cada branco, e um
+ * "Cedente" seguido de 40 mil tabs travava o laço principal (M1 da auditoria).
+ */
 function acharBeneficiario(textoDoPdf: string): string | null {
-  const m = textoDoPdf.match(/(?:cedente|benefici[aá]rio)\s*[:\-]?\s*([\p{L}0-9 .,&'-]{5,41})/iu);
-  if (!m?.[1]) return null;
-  const nome = m[1].trim();
-  return nome.length >= 5 ? nome : null;
+  ROTULO_DO_BENEFICIARIO.lastIndex = 0;
+  for (let r = ROTULO_DO_BENEFICIARIO.exec(textoDoPdf); r; r = ROTULO_DO_BENEFICIARIO.exec(textoDoPdf)) {
+    let i = r.index + r[0].length;
+    while (i < textoDoPdf.length && ehBranco(textoDoPdf[i]!)) i++;
+    if (textoDoPdf[i] === ":" || textoDoPdf[i] === "-") i++;
+    while (i < textoDoPdf.length && ehBranco(textoDoPdf[i]!)) i++;
+    NOME_DO_BENEFICIARIO.lastIndex = i;
+    const nome = NOME_DO_BENEFICIARIO.exec(textoDoPdf)?.[0]?.trim();
+    if (nome && nome.length >= 5) return nome;
+  }
+  return null;
 }
 
 /**
@@ -111,28 +128,30 @@ function acharBeneficiario(textoDoPdf: string): string | null {
  * começando com "8" (arrecadação). Prefere a primeira leitura válida que
  * tenha vencimento; senão, a primeira válida de qualquer tipo.
  */
-export function acharLinhaNoTexto(textoDoPdf: string, hoje: Ymd): { leitura: LeituraBoleto; beneficiario: string | null } | null {
+export function acharLinhaNoTexto(textoDoPdf: string, hoje: Ymd): { leitura: LeituraBoleto; beneficiario: string | null; linha: string } | null {
   const candidatos = textoDoPdf.match(CANDIDATO_RE) ?? [];
-  let primeiraValida: LeituraBoleto | null = null;
+  // `linha`: os dígitos que foram lidos, para quem vai pagar (e para o dono conferir na aprovação)
+  let primeiraValida: { leitura: LeituraBoleto; linha: string } | null = null;
 
   for (const candidato of candidatos) {
     const digitos = candidato.replace(/\D/g, "");
 
     for (let ini = 0; ini <= 11 && ini + 47 <= digitos.length; ini++) {
-      const leitura = lerLinhaDigitavel(digitos.slice(ini, ini + 47), hoje);
+      const linha = digitos.slice(ini, ini + 47);
+      const leitura = lerLinhaDigitavel(linha, hoje);
       if (!leitura) continue;
-      if (leitura.vencimento) return { leitura, beneficiario: acharBeneficiario(textoDoPdf) };
-      primeiraValida ??= leitura;
+      if (leitura.vencimento) return { leitura, beneficiario: acharBeneficiario(textoDoPdf), linha };
+      primeiraValida ??= { leitura, linha };
     }
 
     for (let ini = 0; ini <= 11 && ini + 48 <= digitos.length; ini++) {
       const janela = digitos.slice(ini, ini + 48);
       if (janela[0] !== "8") continue;
       const leitura = lerLinhaDigitavel(janela, hoje);
-      if (leitura) primeiraValida ??= leitura;
+      if (leitura) primeiraValida ??= { leitura, linha: janela };
     }
   }
 
   if (!primeiraValida) return null;
-  return { leitura: primeiraValida, beneficiario: acharBeneficiario(textoDoPdf) };
+  return { ...primeiraValida, beneficiario: acharBeneficiario(textoDoPdf) };
 }

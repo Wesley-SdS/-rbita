@@ -16,6 +16,8 @@ export interface MensagemTraduzida {
   texto: string | null;
   fileId: string | null;
   mime: string | null;
+  /** o nome do arquivo de um documento (é de quem mandou: dado, nunca instrução) */
+  nomeArquivo?: string | null;
   em: Date;
   /** conversa em grupo: o bot só responde em conversa privada */
   grupo: boolean;
@@ -38,7 +40,7 @@ export function traduzirMensagem(m: TgMensagemApi): MensagemTraduzida | null {
   if (voz) return { ...base, tipo: "audio", texto: legenda, fileId: voz.file_id, mime: voz.mime_type ?? "audio/ogg" };
   // a foto vem em vários tamanhos: a maior é a última
   if (m.photo?.length) return { ...base, tipo: "imagem", texto: legenda, fileId: m.photo[m.photo.length - 1].file_id, mime: "image/jpeg" };
-  if (m.document) return { ...base, tipo: m.document.mime_type?.startsWith("image/") ? "imagem" : "documento", texto: legenda, fileId: m.document.file_id, mime: m.document.mime_type ?? null };
+  if (m.document) return { ...base, tipo: m.document.mime_type?.startsWith("image/") ? "imagem" : "documento", texto: legenda, fileId: m.document.file_id, mime: m.document.mime_type ?? null, nomeArquivo: m.document.file_name ?? null };
   const video = m.video ?? m.video_note;
   if (video) return { ...base, tipo: "video", texto: legenda, fileId: video.file_id, mime: video.mime_type ?? "video/mp4" };
   if (m.sticker) return { ...base, tipo: "figurinha", texto: null, fileId: null, mime: null };

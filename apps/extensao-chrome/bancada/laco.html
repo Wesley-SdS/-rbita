@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Página que trava</title>
+<script>
+  // I-10 da auditoria (perfil dedicado): uma página que trava quem tentar lê-la. O título vira um laço infinito,
+  // e o `page.evaluate` sem prazo segurava a rotina para sempre
+  Object.defineProperty(document, "title", { get() { for (;;) {} } });
+</script></head>
+<body><main><h1>Esta página trava a leitura</h1></main></body>
+</html>

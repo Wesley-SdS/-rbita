@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Reembolso</title></head>
+<body>
+  <main>
+    <h1>Pedido de reembolso</h1>
+    <form id="f" action="/recebido" method="get">
+      <label>Nome <input id="nome" name="nome"></label>
+      <label>Valor <input id="valor" name="valor"></label>
+      <label>Categoria
+        <select id="categoria" name="categoria">
+          <option value="">Escolha</option>
+          <option value="alimentacao">Alimentação</option>
+          <option value="transporte">Transporte</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="aceito" name="aceito"> Declaro que é verdade</label>
+      <label>Senha do portal <input type="password" id="senha" name="senha"></label>
+      <button type="button" id="ajuda">Ver ajuda</button>
+      <button type="submit" id="enviar">Enviar</button>
+    </form>
+    <p id="status">não enviado</p>
+    <script>
+      document.getElementById("f").addEventListener("submit", (e) => { e.preventDefault(); document.getElementById("status").textContent = "ENVIADO"; });
+      document.getElementById("ajuda").addEventListener("click", () => { document.getElementById("status").textContent = "ajuda aberta"; });
+    </script>
+  </main>
+</body>
+</html>

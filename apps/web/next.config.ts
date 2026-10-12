@@ -5,8 +5,14 @@ import { securityHeaders } from "./src/lib/security/headers";
 /**
  * O que NÃO vai para o apps/api: lookahead negativo usado em `rewrites`.
  * Tudo o mais em /api/* já mora no NestJS (migração da Onda 1 concluída).
+ *
+ * O canal da extensão do Chrome (`navegador/canal`) também fica de fora: a
+ * extensão fala direto com 127.0.0.1:3010, e repassado pelo Next o api via a
+ * conexão vindo de 127.0.0.1 (o próprio Next), o que deixava uma máquina da
+ * rede chegar ao canal com `dev:rede` (I-2 da auditoria). O api também recusa
+ * conexão encaminhada; isto é a segunda trava.
  */
-const API_KEPT_IN_NEXT = "(?!auth(?:/|$)|connectors/[^/]+/callback(?:/|$))";
+const API_KEPT_IN_NEXT = "(?!auth(?:/|$)|connectors/[^/]+/callback(?:/|$)|navegador/canal(?:/|$))";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,

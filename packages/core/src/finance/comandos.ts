@@ -6,6 +6,7 @@ import {
   finDivida, finDividaPagamento, finDividaRolagem, finMeta, finMetaItem, finMetaFoto, finAtalho, finRegra, finDesfazer,
   expense,
 } from "@orbita/db/finance-schema";
+import { pluggyConta, pluggyTransacao } from "@orbita/db/pluggy-schema";
 import { mesDe, partes, somarDias, type Ymd } from "./calendario";
 import { faturasDoCartao } from "./cartao";
 import { saldoDevedor } from "./divida";
@@ -159,6 +160,12 @@ const SalvarAtalho = z.object({
 const SalvarCategoria = z.object({ tipo: z.literal("salvar_categoria"), id: Id.nullish(), nome: Nome("Dê um nome à categoria."), natureza: z.enum(["despesa", "receita"]), orcamento: Centavos, cor: Cor });
 const SalvarConta = z.object({ tipo: z.literal("salvar_conta"), id: Id.nullish(), nome: Nome("Dê um nome à conta."), saldoInicial: z.number().int().min(-1_000_000_000_000).max(1_000_000_000_000), cor: Cor });
 const SalvarCartao = z.object({ tipo: z.literal("salvar_cartao"), id: Id.nullish(), nome: Nome("Dê um nome ao cartão."), limite: Centavos, fechamento: Dia, vencimento: Dia, contaPagamentoId: Id.nullish(), cor: Cor });
+const JuntarTransferencia = z.object({
+  tipo: z.literal("juntar_transferencia"),
+  /** cada par é uma saída numa conta e a entrada na outra, já lançadas; a tela e a voz confirmam com o dono antes */
+  pares: z.array(z.object({ saidaId: Id, entradaId: Id })).min(1).max(200),
+});
+
 const SalvarRegra = z.object({ tipo: z.literal("salvar_regra"), id: Id.nullish(), contem: Nome("Escreva o texto que deve ser procurado."), categoriaId: Id });
 
 const LinhaImportada = z.object({
@@ -185,6 +192,8 @@ export const Comando = z.discriminatedUnion("tipo", [
   }),
   Transferir,
   z.object({ tipo: z.literal("apagar_transferencia"), grupo: Id }),
+  JuntarTransferencia,
+  z.object({ tipo: z.literal("desjuntar_transferencia"), grupos: z.array(Id).min(1).max(200) }),
   z.object({ tipo: z.literal("desfazer"), id: Id.nullish() }),
   z.object({ tipo: z.literal("lancar_atalho"), id: Id }),
   SalvarAtalho,
@@ -236,6 +245,8 @@ export interface Resultado {
   id?: string | null;
   /** alerta que não impede (item que passa do teto da meta) */
   aviso?: string | null;
+  /** transferências marcadas por `juntar_transferencia`: é o que `desjuntar_transferencia` desfaz */
+  grupos?: string[];
 }
 
 // ── utilidades ─────────────────────────────────────────────────────────────
@@ -370,6 +381,19 @@ async function executarNa(tx: Tx, userId: string, cmd: Exclude<Comando, { tipo: 
       const apagados = await tx.delete(finLancamento).where(and(eq(finLancamento.userId, userId), eq(finLancamento.grupoTransferencia, cmd.grupo))).returning({ id: finLancamento.id });
       if (!apagados.length) falha("Transferência não encontrada.");
       return { mensagem: "Transferência apagada." };
+    }
+
+    case "juntar_transferencia":
+      return juntarTransferencias(tx, userId, cmd.pares);
+    case "desjuntar_transferencia": {
+      // volta a ser saída e entrada comuns; a categoria some, e o palpite ou o dono escolhem de novo
+      const soltos = await tx
+        .update(finLancamento)
+        .set({ transferencia: false, grupoTransferencia: null, categoriaId: null })
+        .where(and(eq(finLancamento.userId, userId), inArray(finLancamento.grupoTransferencia, cmd.grupos)))
+        .returning({ id: finLancamento.id });
+      if (!soltos.length) falha("Transferência não encontrada.");
+      return { mensagem: "Deixou de ser transferência." };
     }
 
     case "lancar_atalho": {
@@ -551,6 +575,8 @@ async function executarNa(tx: Tx, userId: string, cmd: Exclude<Comando, { tipo: 
       if (Number(ligadas?.n) || Number(cartoes?.n)) falha("Há contas a pagar ou cartões ligados a esta conta. Mude-os para outra conta antes de apagar.");
       await tx.update(finAtalho).set({ contaId: contas.find((c) => c.id !== cmd.id)!.id }).where(and(eq(finAtalho.userId, userId), eq(finAtalho.contaId, cmd.id)));
       await tx.delete(finConta).where(eq(finConta.id, cmd.id));
+      // a conta do banco que alimentava esta volta a "aguardando vínculo", em vez de apontar para o nada
+      await tx.update(pluggyConta).set({ contaId: null, importadaEm: null }).where(and(eq(pluggyConta.userId, userId), eq(pluggyConta.contaId, cmd.id)));
       return { mensagem: "Conta apagada." };
     }
 
@@ -623,6 +649,9 @@ async function executarNa(tx: Tx, userId: string, cmd: Exclude<Comando, { tipo: 
       // a tabela antiga vai junto: senão o financeiro antigo voltaria na próxima abertura
       const tabelas = [finLancamento, finCompromisso, finPagamentoFatura, finDivida, finMeta, finAtalho, finRegra, finDesfazer, finCartao, finConta, finCategoria, finPerfil, expense] as const;
       for (const t of tabelas) await tx.delete(t).where(eq(t.userId, userId));
+      // zerar o financeiro zera também a memória do que o banco já entregou: a próxima sincronização traz tudo de volta
+      await tx.delete(pluggyTransacao).where(eq(pluggyTransacao.userId, userId));
+      await tx.update(pluggyConta).set({ contaId: null, importadaEm: null }).where(eq(pluggyConta.userId, userId));
       await semearInicio(tx, userId, false);
       return { mensagem: "Tudo apagado." };
     }
@@ -711,6 +740,37 @@ async function transferir(tx: Tx, userId: string, cmd: z.infer<typeof Transferir
   const ids = await inserirLancamentos(tx, userId, pernas);
   const mensagem = "Transferência registrada.";
   return { mensagem, desfazerId: desfazivel && !cmd.grupo ? await registrarDesfazer(tx, userId, mensagem, ids) : null, mes: mesDe(cmd.data), ids };
+}
+
+/**
+ * Marca como transferência entre contas lançamentos que já existiam como saída
+ * e entrada comuns. Não apaga nem cria nada: só liga as duas pernas num grupo,
+ * e por isso não há "desfazer" por exclusão (`desjuntar_transferencia` desliga).
+ */
+async function juntarTransferencias(tx: Tx, userId: string, pares: { saidaId: string; entradaId: string }[]): Promise<Resultado> {
+  const ids = pares.flatMap((p) => [p.saidaId, p.entradaId]);
+  if (new Set(ids).size !== ids.length) falha("Um lançamento aparece em mais de um par.");
+  const grupos: string[] = [];
+  const rows = await tx.select().from(finLancamento).where(and(eq(finLancamento.userId, userId), inArray(finLancamento.id, ids)));
+  const porId = new Map(rows.map((r) => [r.id, r]));
+  const catSaida = await categoriaDoSistema(tx, userId, CATEGORIA_SISTEMA.transferenciaSaida);
+  const catEntrada = await categoriaDoSistema(tx, userId, CATEGORIA_SISTEMA.transferenciaEntrada);
+  for (const p of pares) {
+    const s = porId.get(p.saidaId);
+    const e = porId.get(p.entradaId);
+    if (!s || !e) return falha("Lançamento não encontrado.");
+    if (s.tipo !== "despesa" || e.tipo !== "receita") falha("Um par precisa ter uma saída e uma entrada.");
+    if (s.transferencia || e.transferencia) falha("Um dos lançamentos já é transferência.");
+    if (s.cartaoId || e.cartaoId || !s.contaId || !e.contaId || s.contaId === e.contaId) falha("Uma transferência é entre duas contas diferentes.");
+    if (s.valor !== e.valor) falha("As duas pontas precisam ter o mesmo valor.");
+    if (s.fixo || e.fixo || s.metaId || e.metaId || s.compromissoId || e.compromissoId) falha("Um deles vem de uma conta a pagar ou de um projeto, e não é transferência.");
+    const grupo = crypto.randomUUID();
+    grupos.push(grupo);
+    await tx.update(finLancamento).set({ transferencia: true, grupoTransferencia: grupo, categoriaId: catSaida }).where(eq(finLancamento.id, s.id));
+    await tx.update(finLancamento).set({ transferencia: true, grupoTransferencia: grupo, categoriaId: catEntrada }).where(eq(finLancamento.id, e.id));
+  }
+  const n = pares.length;
+  return { mensagem: `${n} ${plural(n, "transferência marcada", "transferências marcadas")}.`, mes: mesDe(porId.get(pares[0]!.saidaId)!.data), grupos };
 }
 
 async function salvarCompromisso(tx: Tx, userId: string, cmd: z.infer<typeof SalvarCompromisso>): Promise<Resultado> {

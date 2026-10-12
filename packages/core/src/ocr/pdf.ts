@@ -37,9 +37,42 @@ async function unpdf() {
   return import("unpdf");
 }
 
-export async function lerPdf(bytes: Uint8Array): Promise<PaginaPdf[]> {
+/** O pdf.js recusou abrir por falta de senha (código 1) ou por senha errada (código 2). */
+export function ehErroDeSenha(e: unknown): boolean {
+  return (e as { name?: string } | null)?.name === "PasswordException";
+}
+
+/**
+ * Abre o PDF tentando, se ele tiver senha, cada uma das `senhas`. Devolve a
+ * senha que abriu (vazia quando não tinha senha), para a página virar imagem
+ * com a mesma. Nenhuma abriu: `null`, e quem chama diz "tem senha" sem nunca
+ * repetir qual foi tentada.
+ */
+export async function senhaQueAbre(bytes: Uint8Array, senhas: readonly string[]): Promise<string | null> {
+  const { getDocumentProxy } = await unpdf();
+  try {
+    const doc = await getDocumentProxy(new Uint8Array(bytes));
+    await doc.destroy?.();
+    return "";
+  } catch (e) {
+    if (!ehErroDeSenha(e)) throw e;
+  }
+  for (const senha of senhas) {
+    try {
+      const doc = await getDocumentProxy(new Uint8Array(bytes), { password: senha });
+      await doc.destroy?.();
+      return senha;
+    } catch (e) {
+      if (!ehErroDeSenha(e)) throw e;
+    }
+  }
+  return null;
+}
+
+export async function lerPdf(bytes: Uint8Array, senha = ""): Promise<PaginaPdf[]> {
   const { getDocumentProxy, extractText } = await unpdf();
-  const pdf = await getDocumentProxy(bytes);
+  // cópia: o pdf.js transfere o buffer para o worker, e quem chama ainda precisa dos bytes
+  const pdf = await getDocumentProxy(new Uint8Array(bytes), senha ? { password: senha } : undefined);
   const { text, totalPages } = await extractText(pdf, { mergePages: false });
   const textos = Array.isArray(text) ? text : [text];
 
@@ -99,9 +132,11 @@ export function temCamadaDeTexto(texto: string, minChars: number): boolean {
  * Renderiza a página como PNG para o OCR e para o modelo de visão.
  * Requer `@napi-rs/canvas` (binário pronto, sem Cairo nem Poppler).
  */
-export async function paginaComoImagem(bytes: Uint8Array, pagina: number, escala: number): Promise<Buffer> {
-  const { renderPageAsImage } = await unpdf();
-  const buffer = await renderPageAsImage(bytes, pagina, {
+export async function paginaComoImagem(bytes: Uint8Array, pagina: number, escala: number, senha = ""): Promise<Buffer> {
+  const { renderPageAsImage, getDocumentProxy } = await unpdf();
+  // com senha, o documento é aberto antes: o render sozinho não sabe pedir a senha
+  const fonte = senha ? await getDocumentProxy(new Uint8Array(bytes), { password: senha }) : bytes;
+  const buffer = await renderPageAsImage(fonte, pagina, {
     scale: escala,
     canvasImport: () => import("@napi-rs/canvas") as never,
   });

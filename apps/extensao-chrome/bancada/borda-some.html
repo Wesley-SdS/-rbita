@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Página que some com a borda</title>
+<script>
+  // I-11 da auditoria: a página TIRA a borda da Órbita toda vez que ela aparece. Pôr de volta para sempre travaria a
+  // página num laço; a Órbita desiste da borda e pausa a sessão, dizendo por quê
+  new MutationObserver(() => document.querySelectorAll("orbita-borda").forEach((b) => b.remove())).observe(document.documentElement, { childList: true, subtree: true });
+</script>
+<style> body { font: 16px system-ui; } </style></head>
+<body><main><h1>Página que some com a borda</h1></main></body>
+</html>

@@ -31,7 +31,31 @@ export const ICONE_DO_TIPO: Record<TipoDeCartao, string> = {
   trabalho: "flow",
   fontes: "search",
   externo: "flow",
+  controle: "keyboard",
 };
+
+/**
+ * O botão Parar do cartão "Órbita no controle". Quem decide e para é o
+ * servidor (`POST /api/controle/parar`); aqui só o clique e o retorno.
+ */
+function BotaoParar({ rotulo }: { rotulo: string }) {
+  const [estado, setEstado] = useState<"pronto" | "parando" | "parado" | "falhou">("pronto");
+  async function parar() {
+    setEstado("parando");
+    try {
+      const r = await fetch("/api/controle/parar", { method: "POST" });
+      setEstado(r.ok ? "parado" : "falhou");
+    } catch {
+      setEstado("falhou");
+    }
+  }
+  const texto = estado === "parando" ? "Parando…" : estado === "parado" ? "Parado" : estado === "falhou" ? "Não parou, tente de novo" : rotulo;
+  return (
+    <button type="button" className="text-button cartao-parar" onClick={() => void parar()} disabled={estado === "parando" || estado === "parado"}>
+      {texto}
+    </button>
+  );
+}
 
 function Item({ item }: { item: ItemDeCartao }) {
   const corpo = (
@@ -109,6 +133,10 @@ export function CartaoDaTelaView({
               {cartao.destaque.rotulo ? <span>{cartao.destaque.rotulo}</span> : null}
             </div>
           ) : null}
+          {cartao.imagem && cartao.imagem.src.startsWith("data:image/") ? (
+            // eslint-disable-next-line @next/next/no-img-element -- miniatura embutida (data URL), não há o que otimizar
+            <img className="cartao-imagem" src={cartao.imagem.src} alt={cartao.imagem.alt} />
+          ) : null}
           {itens.length ? (
             <ul className="cartao-itens">
               {itens.map((it, i) => (
@@ -118,6 +146,7 @@ export function CartaoDaTelaView({
           ) : !cartao.destaque && cartao.vazio ? (
             <p className="cartao-vazio">{cartao.vazio}</p>
           ) : null}
+          {cartao.botoes?.map((b) => (b.id === "parar_controle" ? <BotaoParar key={b.id} rotulo={b.rotulo} /> : null))}
           {cartao.abrir ? (
             <Link className="text-button cartao-abrir" href={cartao.abrir}>
               Abrir na Órbita <Icone nome="arrow-right" />

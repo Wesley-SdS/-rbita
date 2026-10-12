@@ -6,6 +6,7 @@ import { EventsController } from "./events/events.controller";
 import { ToolsController } from "./tools/tools.controller";
 import { OwnerController } from "./owner/owner.controller";
 import { SchedulerService } from "./scheduler/scheduler.service";
+import { NavegadorService } from "./navegador/navegador.service";
 import { ROUTE_CONTROLLERS } from "./routes/index";
 
 /**
@@ -19,6 +20,6 @@ import { ROUTE_CONTROLLERS } from "./routes/index";
  */
 @Module({
   controllers: [HealthController, SettingsController, RulesController, EventsController, ToolsController, OwnerController, ...ROUTE_CONTROLLERS],
-  providers: [SchedulerService],
+  providers: [SchedulerService, NavegadorService],
 })
 export class AppModule {}

@@ -298,6 +298,18 @@ export function useVoice(p: Params) {
       onError: (msg) => { p.setError(msg || "Falha no modo tempo real."); rt.stop(); rtRef.current = null; setRealtimeOn(false); },
       onTranscript: (role, text) => {
         p.setMessages((m) => [...m, { role, content: text }]);
+        // "para" com a Órbita mexendo no computador: quem decide é o SERVIDOR,
+        // com a fala do dono (curta) e só se houver sessão de controle aberta
+        if (role === "user" && text.length <= 60) {
+          void fetch("/api/controle/falada", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto: text }) })
+            .then((r) => r.json())
+            .then((d: { tratado?: boolean; resposta?: string }) => {
+              if (!d.tratado || !d.resposta) return;
+              p.setMessages((m) => [...m, { role: "assistant", content: d.resposta! }]);
+              rt.avisar?.("O dono mandou parar e a Órbita parou de mexer no computador. Confirme isso em uma frase curta.");
+            })
+            .catch(() => undefined);
+        }
         if (role !== "user" || Date.now() > propostaAte) return;
         void fetch("/api/actions/falada", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texto: text.slice(0, 500) }) })
           .then((r) => r.json())

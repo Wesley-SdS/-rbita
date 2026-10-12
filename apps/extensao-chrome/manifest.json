@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Órbita no Chrome",
+  "short_name": "Órbita",
+  "description": "As mãos da Órbita no seu Chrome: lê e age só dentro da sessão que você aprova, com borda colorida e botão Parar.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "118",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm5Crzx6XmcCiILWWfLzvhAUkd9lMI1ih6a3OjRqtv07zBFJTAj0kFcxf7F6xbwtiZPf1S1U52yaDbhZTkE4U7Mzjoi5ckqGNeruNbLceUrJD13WoXnuCA3yMi7gFF9Z7qZvnjGM89z+UEIgvu26mcjMK9EYLgGEThsNOPv+LT0W+GvS4sidEHDarsDquJFo/Ia0eZA8lyd1qPm0p5I8D37canRVQ5ilobDLemJ3q5Fd8b6yJli/FJj8tYKM+ra5vVTmyHwTw+ppREdbEB89LFn5eEQ6RgKcpLOMHS8OXFoZqFdBN3F0ZUNs+prJNqoYW47MSK7KJY2vB6LpcAwPu6QIDAQAB",
+  "permissions": [
+    "debugger",
+    "tabs",
+    "tabGroups",
+    "scripting",
+    "storage",
+    "sidePanel",
+    "nativeMessaging",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "sw.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Órbita",
+    "default_popup": "popup.html"
+  },
+  "side_panel": {
+    "default_path": "painel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "conteudo.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_origin_as_fallback": true
+    }
+  ],
+  "icons": {
+    "16": "icone-16.png",
+    "48": "icone-48.png",
+    "128": "icone-128.png"
+  }
+}

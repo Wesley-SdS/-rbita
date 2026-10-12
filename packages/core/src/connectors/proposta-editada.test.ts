@@ -25,12 +25,37 @@ const enviar_email = {
   }),
 };
 
+// schema ESTRITO: o `risco` que o registro grava no payload não pode recusar a proposta
+const estrita = { name: "estrita", domain: "teste", risk: "efeito_externo", inputSchema: z.object({ x: z.string() }).strict(), run: vi.fn(async () => "rodou") };
+const terminal = { name: "terminal_y", domain: "terminal", risk: "leitura", inputSchema: z.object({ comando: z.string() }), run: vi.fn(async () => "rodou no terminal") };
+const ferramentas: Record<string, unknown> = { enviar_email, estrita, terminal_y: terminal };
 vi.mock("../tools/index", () => ({
-  getTool: (nome: string) => (nome === "enviar_email" ? enviar_email : undefined),
+  getTool: (nome: string) => ferramentas[nome],
+  isToolRisk: (v: unknown) => ["leitura", "escrita", "efeito_externo", "perigoso"].includes(v as string),
+  maiorRisco: (a: string, b: string) => (["leitura", "escrita", "efeito_externo", "perigoso"].indexOf(b) > ["leitura", "escrita", "efeito_externo", "perigoso"].indexOf(a) ? b : a),
+  riscoDaChamada: async (d: { risk: string }) => d.risk,
+  loadToolOverrides: async () => new Map(),
 }));
 vi.mock("../mcp/client", () => ({ MCP_ACTION_KIND: "mcp_call", callMcpTool: vi.fn() }));
+const executar = vi.fn(async (c: { run: () => Promise<unknown> }) => c.run());
+vi.mock("../controle/guarda", () => ({ guardaDoControle: { executar: (c: { run: () => Promise<unknown> }) => executar(c) } }));
 
-const { validarPropostaEditada } = await import("./execute");
+const { validarPropostaEditada, executeAction } = await import("./execute");
+
+describe("o risco gravado na proposta (PRD-COMPUTADOR F1)", () => {
+  it("sai antes de validar: schema estrito não recusa a proposta por causa dele", async () => {
+    expect(validarPropostaEditada("estrita", { x: "a", risco: "perigoso" })).toEqual({ ok: true, dados: { x: "a" } });
+    expect(await executeAction("u1", "estrita", { x: "a", risco: "efeito_externo" })).toBe("rodou");
+    expect(estrita.run).toHaveBeenCalledWith({ x: "a" }, { userId: "u1" });
+  });
+
+  it("tool do controle do PC aprovada passa pela guarda, com o id da proposta e o risco gravado (nunca menor)", async () => {
+    expect(await executeAction("u1", "terminal_y", { comando: "pnpm i", risco: "efeito_externo" }, "a7")).toBe("rodou no terminal");
+    expect(executar).toHaveBeenCalledWith(expect.objectContaining({ acaoId: "a7", risco: "efeito_externo", entrada: { comando: "pnpm i" } }));
+    // e o run recebe o id da aprovação no ctx (O4): é assim que controle_iniciar liga a sessão à aprovação
+    expect(executar).toHaveBeenCalledWith(expect.objectContaining({ ctx: { userId: "u1", acaoId: "a7" } }));
+  });
+});
 
 describe("validarPropostaEditada", () => {
   it("a correção válida passa, e é ela que vale", () => {
@@ -85,5 +110,20 @@ describe("validarPropostaEditada", () => {
     });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.dados).not.toHaveProperty("cc_secreto");
+  });
+});
+
+describe("recusa depois da aprovação vira falha, não 'Feito' (O1 da revisão)", () => {
+  it("a guarda recusou a execução aprovada: executeAction LANÇA o motivo", async () => {
+    executar.mockResolvedValueOnce({ permitido: false, erro: "O controle do PC está desligado em Ajustes (Controle do PC)." });
+    await expect(executeAction("u1", "terminal_y", { comando: "git push", risco: "efeito_externo" }, "a8")).rejects.toThrow("O controle do PC está desligado");
+    executar.mockResolvedValueOnce({ erro: "A tela mudou entre propor e executar: nada foi feito." });
+    await expect(executeAction("u1", "terminal_y", { comando: "git push", risco: "efeito_externo" }, "a9")).rejects.toThrow("A tela mudou");
+  });
+
+  it("controle: a execução que deu certo continua voltando como resultado; tool comum com `erro` não muda", async () => {
+    expect(await executeAction("u1", "terminal_y", { comando: "git status", risco: "efeito_externo" }, "a10")).toBe("rodou no terminal");
+    estrita.run.mockResolvedValueOnce({ erro: "sem conexão" } as never);
+    expect(await executeAction("u1", "estrita", { x: "a" })).toBe('{"erro":"sem conexão"}');
   });
 });

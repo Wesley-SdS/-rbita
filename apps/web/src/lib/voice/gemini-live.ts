@@ -1,4 +1,5 @@
 import { getOwnDeviceId } from "@/lib/device-id";
+import { comMiniatura } from "@orbita/core/controle/imagem";
 import { capturarUmQuadro, ehCameraDesteAparelho, garantirCameraDoAparelho } from "@/lib/camera/aparelho";
 import type { RealtimeCallbacks, SessaoRealtime } from "./realtime";
 
@@ -272,7 +273,11 @@ export class GeminiLiveSession implements SessaoRealtime {
    * nome pelo registro e deriva o gate do risco (§5.1). É o que segura a
    * garantia mesmo com a config da sessão vindo do navegador.
    */
+  /** A miniatura do cartão da última chamada: vem à parte e só volta para a tela (o modelo recebe a saída sem ela). */
+  private miniatura: string | null = null;
+
   private async chamar(nome: string, args: unknown): Promise<unknown> {
+    this.miniatura = null;
     try {
       const r = await fetch("/api/realtime/tool", {
         method: "POST",
@@ -280,6 +285,7 @@ export class GeminiLiveSession implements SessaoRealtime {
         body: JSON.stringify({ name: nome, arguments: args ?? {}, deviceId: getOwnDeviceId() ?? undefined }),
       });
       const d = await r.json().catch(() => ({}));
+      if (r.ok && typeof d.miniatura === "string") this.miniatura = d.miniatura;
       return r.ok ? d.result : { erro: d.error ?? "falha ao executar" };
     } catch {
       return { erro: "falha ao contatar o servidor" };
@@ -307,7 +313,7 @@ export class GeminiLiveSession implements SessaoRealtime {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ toolResponse: { functionResponses: [{ id, name: nome, response: { result: saida } }] } }));
     }
-    this.cb.onToolCall?.(nome, saida, args);
+    this.cb.onToolCall?.(nome, comMiniatura(saida, this.miniatura), args);
   }
 
   /**

@@ -1,7 +1,8 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@orbita/db";
 import { actionQueue, type ActionQueue } from "@orbita/db/action-schema";
-import { executeAction, validarPropostaEditada } from "../connectors/execute";
+import { executeAction } from "../connectors/execute";
+import { mesclarEdicao } from "./edicao";
 import { events } from "../events/index";
 import { log } from "../observability/logger";
 
@@ -21,18 +22,20 @@ export type ResultadoDaAprovacao = { ok: true; resultado: string } | { ok: false
 
 /**
  * `editado` é a proposta CORRIGIDA por quem aprova (o dono ajustou a ação na
- * tela antes de confirmar). É validada ANTES de executar, para o erro chegar
- * como recado e não como falha depois do clique, e é GRAVADA na linha: a trilha
- * mostra o que de fato saiu, não o que o modelo havia proposto.
+ * tela antes de confirmar). Só os campos editáveis entram, MESCLADOS em cima do
+ * payload gravado na fila (`actions/edicao.ts`): o que o código fixou no
+ * `preparar` nunca é trocado pelo que veio do navegador. É validada ANTES de
+ * executar, para o erro chegar como recado e não como falha depois do clique,
+ * e é GRAVADA na linha: a trilha mostra o que de fato saiu.
  */
 export async function aprovarAcao(userId: string, id: string, editado?: Record<string, unknown>): Promise<ResultadoDaAprovacao> {
   let corrigido: Record<string, unknown> | null = null;
   if (editado) {
-    const [atual] = await db.select({ kind: actionQueue.kind }).from(actionQueue).where(and(eq(actionQueue.id, id), eq(actionQueue.userId, userId), eq(actionQueue.status, "pending"))).limit(1);
+    const [atual] = await db.select({ kind: actionQueue.kind, payload: actionQueue.payload }).from(actionQueue).where(and(eq(actionQueue.id, id), eq(actionQueue.userId, userId), eq(actionQueue.status, "pending"))).limit(1);
     if (!atual) return { ok: false, status: 404, erro: "Ação não encontrada ou já processada" };
-    const v = validarPropostaEditada(atual.kind, editado);
+    const v = mesclarEdicao(atual.kind, (atual.payload ?? {}) as Record<string, unknown>, editado);
     if (!v.ok) return { ok: false, status: 400, erro: v.erro };
-    corrigido = v.dados;
+    corrigido = v.payload;
   }
 
   // a troca pending → done é atômica: dois "manda" seguidos (ou o botão e a
@@ -45,7 +48,7 @@ export async function aprovarAcao(userId: string, id: string, editado?: Record<s
   if (!acao) return { ok: false, status: 404, erro: "Ação não encontrada ou já processada" };
 
   try {
-    const resultado = await executeAction(userId, acao.kind, acao.payload as Record<string, unknown>);
+    const resultado = await executeAction(userId, acao.kind, acao.payload as Record<string, unknown>, acao.id);
     await db.update(actionQueue).set({ result: resultado }).where(eq(actionQueue.id, id));
     log.info("action.executed", { userId, kind: acao.kind, canal: acao.canal });
     // vai para o outbox: o processo persistente lê e dispara as regras

@@ -183,6 +183,22 @@ describe("risco por ferramenta", () => {
     expect(inseridos[0]).toMatchObject({ kind: "mcp_call", canal: "whatsapp", payload: { tool: "tickets_create", risco: "efeito_externo" } });
   });
 
+  it("Regra de Dois: depois de ler dado do dono no turno, até a leitura do servidor vira proposta; turno limpo lê direto", async () => {
+    servidores = [tickets()];
+    const turno = { chave: "dono|tela||conversa-1", leitura: { tool: "arquivos_ler", em: Date.now() } };
+    const { tools } = await buildMcpTools("dono", { canal: "tela", turno });
+    const r = (await executar(tools, "tickets__tickets_list")) as { proposta_enfileirada?: boolean; resumo?: string };
+    expect(r.proposta_enfileirada).toBe(true);
+    expect(r.resumo).toMatch(/leu dado do seu computador/);
+    expect(chamadas).toEqual([]); // o servidor de fora não recebeu nada
+    expect(inseridos[0]).toMatchObject({ kind: "mcp_call", payload: { tool: "tickets_list", risco: "efeito_externo" } });
+
+    // controle: outro turno, sem leitura sensível, lê direto
+    const limpo = await buildMcpTools("dono", { canal: "tela", turno: { chave: "dono|tela||conversa-2" } });
+    await executar(limpo.tools, "tickets__tickets_list");
+    expect(chamadas).toEqual(["tickets_list"]);
+  });
+
   it("a escolha do dono vence a marcação do servidor, para os dois lados", async () => {
     servidores = [tickets({ toolRisks: { tickets_create: "leitura", tickets_list: "perigoso" } })];
     const { tools } = await buildMcpTools("dono");

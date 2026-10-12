@@ -6,6 +6,7 @@ import { settings } from "../settings";
 import { log } from "../observability/logger";
 import { paraNotaDeVoz, sintetizarFala } from "../voice/sintetizar";
 import { agoraLocal, noSilencio } from "../whatsapp/horario";
+import { avisoNoHistorico } from "../whatsapp/conversa";
 import { mandarTexto, mandarVoz, type Botao } from "./api";
 import * as store from "./store";
 import { botoesDaProposta } from "./traduzir";
@@ -134,6 +135,6 @@ export async function conversaDoContato(userId: string, contato: Pick<TgContato,
 
 async function registrarAvisoNoHistorico(userId: string, tipo: "aviso" | "briefing", texto: string): Promise<void> {
   const convId = await conversaDoContato(userId, { papel: "dono", nome: null });
-  const limpo = texto.replace(/<\/?dado_externo[^>]*>/gi, "");
-  await db.insert(message).values({ conversationId: convId, role: "assistant", content: `(${tipo} que a Órbita mandou por conta própria)\n<dado_externo origem="${tipo}">\n${limpo}\n</dado_externo>` });
+  // o mesmo embrulho do WhatsApp: o de antes apagava a tag e deixava `<</dado_externo>/dado_externo>` fechar (I1)
+  await db.insert(message).values({ conversationId: convId, role: "assistant", content: avisoNoHistorico(tipo, texto) });
 }

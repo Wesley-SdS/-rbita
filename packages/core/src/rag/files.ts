@@ -15,6 +15,14 @@ export interface ArquivoIndexado extends IngestResultado {
   title: string;
   source: string;
   leitura: DocumentoLido["resumo"];
+  /** o que a leitura avisou (páginas cortadas no teto, aberto com senha): antes sumia (I7) */
+  avisos?: string[];
+}
+
+/** Senhas do remetente, quando o arquivo é anexo de e-mail (o trabalho de `usar_anexo`). */
+export interface OpcoesDaIndexacao {
+  senhas?: readonly string[];
+  semRemetente?: boolean;
 }
 
 export interface TextoExtraido {
@@ -33,7 +41,7 @@ export async function extractFileText(dataUrl: string, nome: string, progresso?:
   return { text: lido.textos.join("\n\n"), source: origemPrincipal as TextoExtraido["source"], paginas: lido.textos, leitura: lido.resumo };
 }
 
-export async function indexFile(userId: string, dataUrl: string, nome: string, progresso?: Progresso): Promise<ArquivoIndexado> {
+export async function indexFile(userId: string, dataUrl: string, nome: string, progresso?: Progresso, opts: OpcoesDaIndexacao = {}): Promise<ArquivoIndexado> {
   const arquivo = lerDataUrl(dataUrl);
   if (!arquivo) throw new DocumentoIlegivelError("Arquivo inválido.");
 
@@ -43,6 +51,8 @@ export async function indexFile(userId: string, dataUrl: string, nome: string, p
     nome,
     mime: arquivo.mime,
     userId,
+    senhas: opts.senhas,
+    semRemetente: opts.semRemetente,
     // a leitura é a etapa 1 de 3; ela reporta o progresso por página dentro dela
     progresso: progresso ? async (feito, total, passo) => progresso(feito / Math.max(1, total ?? 1), 3, passo) : undefined,
   });
@@ -53,7 +63,7 @@ export async function indexFile(userId: string, dataUrl: string, nome: string, p
     fileHash: hash,
     progresso: progresso ? (feito, _t, passo) => progresso(feito + 1, 3, passo) : undefined,
   });
-  return { title: nome, source: origem, leitura: lido.resumo, ...res };
+  return { title: nome, source: origem, leitura: lido.resumo, ...(lido.avisos?.length ? { avisos: lido.avisos } : {}), ...res };
 }
 
 export { DocumentoIlegivelError };

@@ -38,6 +38,8 @@ const EVENT_HINTS = [
   "identity.consent_granted", "identity.consent_revoked", "identity.voice_enrolled", "identity.face_enrolled",
   // fila de trabalho pesado e acompanhar tarefa passo a passo
   "job.enqueued", "job.finished", "guided.started", "guided.step", "guided.finished",
+  // controle do PC (sessão aprovada, pausa, fim e o "para")
+  "controle.sessao_iniciada", "controle.sessao_pausada", "controle.sessao_encerrada", "controle.parado",
 ];
 const dim = { color: "var(--color-ink-dim)" } as const;
 

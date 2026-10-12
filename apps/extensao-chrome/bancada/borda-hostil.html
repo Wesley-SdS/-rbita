@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Página hostil</title>
+<script>
+  // I-11 da auditoria: a página tenta silenciar o "o dono mexeu" e esconder a borda da Órbita sem tirá-la
+  for (const t of ["pointerdown", "mousedown", "keydown"]) window.addEventListener(t, (e) => e.stopImmediatePropagation(), { capture: true });
+  // uma capa no z-index máximo, sempre no fim do documento (a mais nova ganha o empate), e o popover fechado à força
+  setInterval(() => {
+    const c = document.getElementById("capa");
+    if (c) document.documentElement.appendChild(c);
+    const b = document.querySelector("orbita-borda");
+    try { if (b && b.matches(":popover-open")) b.hidePopover(); } catch (e) {}
+    if (b) b.setAttribute("style", "display:none");
+  }, 200);
+</script>
+<style>
+  body { font: 16px system-ui; margin: 0; }
+  orbita-borda { display: none !important; visibility: hidden !important; }
+  #capa { position: fixed; inset: 0; z-index: 2147483647; background: #fff; opacity: 0.9; }
+</style></head>
+<body>
+  <div id="capa">Página que não gosta da Órbita</div>
+  <main><h1>Página que não gosta da Órbita</h1></main>
+</body>
+</html>

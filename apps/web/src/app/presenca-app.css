@@ -501,6 +501,10 @@ span:has(> svg.icon:only-child) { display: inline-flex; align-items: center; jus
   width: 44px;
   height: 44px;
   min-height: 0;
+  /* Sem isto a coluna (flex, com altura da janela) espreme os itens quando a
+     lista não cabe: a caixa da busca encolhia e o ícone dela ficava por cima
+     do da Visão geral. Quem não cabe rola, não encolhe. */
+  flex-shrink: 0;
   padding: 0;
   margin-left: auto;
   margin-right: auto;
@@ -1582,6 +1586,9 @@ button.noticias-tema { padding: 6px 12px; cursor: pointer; font: inherit; font-s
 .cartao-item.feito .cartao-item-titulo { text-decoration: line-through; color: var(--color-ink-dim); font-weight: 500; }
 .cartao-vazio { font-size: 13px; color: var(--color-ink-dim); padding: 10px 0 2px; margin: 0; }
 .cartao-abrir { margin-top: 8px; font-size: 12.5px; }
+/* "Órbita no controle": a miniatura do último passo e o Parar, que precisa ser achado sem procurar */
+.cartao-imagem { display: block; width: 100%; max-height: 180px; object-fit: contain; border-radius: 8px; border: 1px solid var(--color-line); margin: 6px 0; }
+.cartao-parar { margin-top: 8px; margin-right: 12px; font-size: 13px; font-weight: 600; color: var(--color-danger); }
 .mensagem-cartoes { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* o atalho do cartão dentro da mensagem: o cartão em si abre no painel ao lado */

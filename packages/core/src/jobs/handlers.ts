@@ -14,6 +14,11 @@ import { indexFile } from "../rag/files";
 import { ingestDocument } from "../rag/ingest";
 import { reindexarTudo } from "../rag/reindex";
 import { extrairDaConversa } from "../memory/candidates";
+// as mãos do Windows (PRD A2, A4, A8): o comando que passou da espera, o arquivo que demora para ler e a tarefa delegada
+import { comandoNoTerminal } from "../terminal/trabalho";
+import { lerArquivoDoPc } from "../arquivos-do-pc/trabalho";
+// a tarefa delegada no Windows se registra sozinha ao carregar (como a do Chrome)
+import "../computador/trabalho";
 
 /**
  * Os trabalhos pesados da casa. Cada um é o mesmo código que antes rodava
@@ -130,8 +135,8 @@ export const indexarArquivo: JobDef = {
   run: async (ctx) =>
     semRetentarErroConhecido(async () => {
       const nome = texto(ctx.payload, "nome") || "arquivo";
-      const r = await indexFile(ctx.userId, exigirInput(ctx), nome, ctx.progresso);
-      await avisarSePedido(ctx, "Guardado no conhecimento", `"${nome}" já pode ser consultado.`);
+      const r = await indexFile(ctx.userId, exigirInput(ctx), nome, ctx.progresso, await senhasDoPedido(ctx));
+      await avisarSePedido(ctx, "Guardado no conhecimento", `"${nome}" já pode ser consultado.${comAvisos(r.avisos)}`);
       return { ...r };
     }),
 };
@@ -188,14 +193,33 @@ async function avisarSePedido(ctx: JobRunContext, titulo: string, corpo: string)
   await notifyUser(ctx.userId, titulo, corpo).catch(() => undefined);
 }
 
+/** O que a leitura avisou (páginas cortadas, aberto com senha) vai junto no aviso, em vez de sumir (I7). */
+const comAvisos = (avisos?: string[]) => (avisos?.length ? ` ${avisos.slice(0, 3).join(" ")}` : "");
+
 const reais = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`;
+
+/**
+ * As senhas do remetente para um arquivo que veio de ANEXO DE E-MAIL (o
+ * `usar_anexo` põe o From e a autenticação no pedido, fixados pelo código, e
+ * nunca a senha). Sem isso, o PDF protegido do banco que o dono mandou guardar
+ * ou importar respondia "cadastre a senha", com a senha já cadastrada (I16).
+ * Arquivo do WhatsApp e da tela não tem remetente: nenhuma senha, e a frase diz
+ * por quê.
+ */
+async function senhasDoPedido(ctx: JobRunContext): Promise<{ senhas?: string[]; semRemetente: boolean }> {
+  const remetente = texto(ctx.payload, "remetente");
+  if (!remetente) return { semRemetente: true };
+  const { senhasDoRemetente } = await import("../anexos/senhas");
+  const r = await senhasDoRemetente(ctx.userId, remetente, { autenticacao: texto(ctx.payload, "autenticacao") });
+  return { senhas: r.senhas, semRemetente: false };
+}
 
 export const lerCupom: JobDef = {
   kind: "financas.cupom",
   title: () => "Ler o comprovante",
   run: async (ctx) =>
     semRetentarErroConhecido(async () => {
-      const r = await importReceipt(ctx.userId, exigirInput(ctx), ctx.progresso);
+      const r = await importReceipt(ctx.userId, exigirInput(ctx), ctx.progresso, await senhasDoPedido(ctx));
       await avisarSePedido(ctx, "Comprovante lançado", `${r.lancamento.descricao}, ${reais(r.lancamento.valor)} (${r.lancamento.categoria}).`);
       return { ...r };
     }),
@@ -206,8 +230,8 @@ export const lerExtrato: JobDef = {
   title: (p) => `Importar o extrato "${texto(p, "nome") || "extrato"}"`,
   run: async (ctx) =>
     semRetentarErroConhecido(async () => {
-      const r = await importStatement(ctx.userId, exigirInput(ctx), texto(ctx.payload, "nome") || "extrato", ctx.progresso);
-      await avisarSePedido(ctx, "Extrato importado", `${r.importados} lançamento(s) importado(s).`);
+      const r = await importStatement(ctx.userId, exigirInput(ctx), texto(ctx.payload, "nome") || "extrato", ctx.progresso, await senhasDoPedido(ctx));
+      await avisarSePedido(ctx, "Extrato importado", `${r.importados} lançamento(s) importado(s).${comAvisos(r.avisos)}`);
       return { ...r };
     }),
 };
@@ -222,6 +246,27 @@ export const buscarNoticias: JobDef = {
     const temaId = typeof ctx.payload.temaId === "string" ? ctx.payload.temaId : null;
     const dia = typeof ctx.payload.dia === "string" ? ctx.payload.dia : null;
     return { ...(await atualizarNoticias(ctx.userId, { temaId, dia }, ctx.progresso)) };
+  },
+};
+
+/**
+ * Lê os bancos conectados pela Pluggy. A volta de rotina roda no laço do
+ * processo vivo, sem passar pela fila; este trabalho é o "sincronizar agora" e
+ * a primeira leitura de uma conta recém-vinculada, que pode trazer meses de extrato.
+ */
+export const sincronizarBancos: JobDef = {
+  kind: "pluggy.sincronizar",
+  title: () => "Sincronizando seus bancos",
+  maxAttempts: 2,
+  run: async (ctx) => {
+    const { sincronizarDono, AvisoPluggy } = await import("../pluggy/servico");
+    try {
+      return { ...(await sincronizarDono(ctx.userId, { progresso: ctx.progresso })) };
+    } catch (e) {
+      // sem credencial ou item inválido: tentar de novo não muda nada
+      if (e instanceof AvisoPluggy) throw new JobPermanentError(e.message);
+      throw e;
+    }
   },
 };
 
@@ -252,4 +297,37 @@ export const vigiarTrabalho: JobDef = {
   },
 };
 
-registerJobs([vigiarTrabalho, triarEmails, buscarNoticias, recalcularVoz, recalcularRosto, transcreverReuniao, resumirReuniao, resumirConversa, indexarArquivo, indexarTexto, reindexarAcervo, extrairMemoria, lerCupom, lerExtrato]);
+/**
+ * Anexo de e-mail que não coube na espera da resposta (`anexos.esperarSeg`):
+ * PDF escaneado longo, áudio de meia hora. Lê sem prazo, guarda o texto em
+ * `anexo_lido` e avisa o dono. Arquivo que não se lê (senha, tipo) não é erro
+ * da fila: termina com o motivo, e o aviso diz qual.
+ */
+export const lerAnexoDoEmail: JobDef = {
+  kind: "anexo.ler",
+  title: (p) => `Ler o anexo "${texto(p, "nome") || "do e-mail"}"`,
+  maxAttempts: 2,
+  run: async (ctx) => {
+    const servico = ctx.payload.servico === "outlook" ? "outlook" : ctx.payload.servico === "gmail" ? "gmail" : null;
+    const campos = ["conexaoId", "mensagemId", "anexoId"].map((k) => texto(ctx.payload, k));
+    if (!servico || campos.some((c) => !c)) throw new JobPermanentError("Pedido de leitura de anexo incompleto.");
+    const { lerAnexoEmSegundoPlano } = await import("../anexos/ler");
+    const { EmailNaoEncontradoError } = await import("../anexos/email");
+    try {
+      const r = await semRetentarErroConhecido(() =>
+        lerAnexoEmSegundoPlano(
+          ctx.userId,
+          { servico, conexaoId: campos[0]!, mensagemId: campos[1]!, anexoId: campos[2]!, nome: texto(ctx.payload, "nome") || "anexo", assunto: texto(ctx.payload, "assunto"), de: texto(ctx.payload, "de"), tipo: texto(ctx.payload, "tipo"), autenticacao: texto(ctx.payload, "autenticacao") },
+          (feito, total, passo) => ctx.progresso(feito, total, passo),
+        ),
+      );
+      return { ...r };
+    } catch (e) {
+      // a conta foi desconectada: tentar de novo não a traz de volta
+      if (e instanceof EmailNaoEncontradoError) throw new JobPermanentError(e.message);
+      throw e;
+    }
+  },
+};
+
+registerJobs([comandoNoTerminal, lerArquivoDoPc, lerAnexoDoEmail, vigiarTrabalho, sincronizarBancos, triarEmails, buscarNoticias, recalcularVoz, recalcularRosto, transcreverReuniao, resumirReuniao, resumirConversa, indexarArquivo, indexarTexto, reindexarAcervo, extrairMemoria, lerCupom, lerExtrato]);

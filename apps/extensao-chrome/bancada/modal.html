@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Loja</title>
+<style>
+  body { font: 16px system-ui; margin: 0; }
+  header { position: fixed; top: 0; left: 0; right: 0; height: 90px; background: #222; color: #fff; z-index: 10; }
+  #topo { position: absolute; top: 60px; left: 40px; width: 200px; height: 60px; }
+  #cookies { position: fixed; inset: 0; background: #fff; z-index: 20; display: none; }
+  #cookies.aberto { display: block; }
+  #aceitar { margin: 200px; }
+</style></head>
+<body>
+  <!-- B-2 da auditoria: um cabeçalho fixo cobre metade do botão; um aviso de cookies pode cobrir a página inteira -->
+  <header><b>Loja</b> <button type="button" id="comprar-topo" style="margin-left:300px">Comprar agora</button></header>
+  <button type="button" id="topo">Ver carrinho</button>
+  <main style="padding-top: 200px">
+    <button type="button" id="meio">Ver ofertas</button>
+    <p id="status">nada</p>
+  </main>
+  <div id="cookies"><button type="button" id="aceitar">Aceitar e assinar o plano</button></div>
+  <script>
+    for (const id of ["comprar-topo", "topo", "meio", "aceitar"]) document.getElementById(id).addEventListener("click", () => (document.getElementById("status").textContent = id));
+    window.abrirCookies = () => document.getElementById("cookies").classList.add("aberto");
+  </script>
+</body>
+</html>

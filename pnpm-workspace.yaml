@@ -1,6 +1,8 @@
 packages:
   - "apps/web"
   - "apps/api"
+  # extensão do Chrome (frente B do PRD-COMPUTADOR-E-NAVEGADOR): build com esbuild, sem framework
+  - "apps/extensao-chrome"
   - "packages/*"
   # apps/mobile (Expo) é gerenciado por npm próprio — Metro não convive bem com
   # os symlinks do pnpm. apps/voice é Python (sem package.json).

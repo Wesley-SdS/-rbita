@@ -1,0 +1,15 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Teste//PT
+BEGIN:VEVENT
+UID:abc@exemplo
+DTSTART:20261015T140000Z
+DTEND:20261015T150000Z
+SUMMARY:Reunião de alinhamento
+LOCATION:Sala 3
+DESCRIPTION:Pauta: orçamento\, contratações e
+  próximos passos
+ORGANIZER;CN=Fulana:mailto:fulana@exemplo.com
+ATTENDEE;CN=Wesley:mailto:wesley@exemplo.com
+END:VEVENT
+END:VCALENDAR

@@ -54,13 +54,14 @@ export async function runPromptForUser(
   userId: string,
   prompt: string,
   systemSuffix = "",
-  opts: { fluxo?: string; referencia?: string | null; soLeitura?: boolean; todas?: boolean } = {},
+  opts: { fluxo?: string; referencia?: string | null; soLeitura?: boolean; todas?: boolean; origem?: "rotina" | "regra" } = {},
 ): Promise<string> {
-  const [{ tools, cleanup, skillInstructions }, cfg] = await Promise.all([
+  const [{ tools, cleanup, skillInstructions, turno }, cfg] = await Promise.all([
     // o PEDIDO é a consulta da seleção por relevância: com "" ela escolhia às
     // cegas e a regra do trânsito das 5h rodou sem a tool `rota` ("não tenho
     // uma ferramenta de rota", 28/09/2026)
-    buildAllTools(userId, prompt, undefined, undefined, undefined, { soLeitura: opts.soLeitura, todas: opts.todas }),
+    // `origem`: o Chrome manda a ordem de rotina e regra ao perfil dedicado, nunca ao do dono (PRD B6)
+    buildAllTools(userId, prompt, undefined, undefined, undefined, { soLeitura: opts.soLeitura, todas: opts.todas, origem: opts.origem ?? "rotina" }),
     settings.getMany(["routines.model", "chat.maxSteps"]),
     applyLlmSettings(),
   ]);
@@ -76,6 +77,7 @@ export async function runPromptForUser(
       system: SYSTEM_PROMPT + skillInstructions + systemSuffix,
       prompt,
       tools,
+      turno,
       maxSteps: cfg["chat.maxSteps"],
     });
     return texto || "(sem conteúdo)";
@@ -133,7 +135,7 @@ export async function runDueRoutines(userId: string, opts: { force?: boolean } =
     // limite, não.
     await db.update(routine).set({ lastRunAt: new Date() }).where(eq(routine.id, r.id));
     try {
-      const body = await runPromptForUser(userId, r.prompt, ROUTINE_SUFFIX, { fluxo: FLUXO.rotina, referencia: r.title });
+      const body = await runPromptForUser(userId, r.prompt, ROUTINE_SUFFIX, { fluxo: FLUXO.rotina, referencia: r.title, origem: "rotina" });
       await notifyUser(userId, r.title, body, r.id);
       await events.emit("routine.finished", { routineId: r.id, title: r.title, resultado: body.slice(0, 500) }, { userId });
       criadas++;

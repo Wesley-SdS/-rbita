@@ -84,6 +84,9 @@ const PASTAS_NUVEM = [
   "packages/core/src/ocr",
   // memória que pergunta: manda a conversa para o LLM extrair fatos
   "packages/core/src/memory",
+  // extrator universal e anexos de e-mail: imagem vai ao modelo de visão, áudio à transcrição
+  "packages/core/src/arquivos",
+  "packages/core/src/anexos",
 ];
 
 describe("NV.1: guard de saída de biometria", () => {

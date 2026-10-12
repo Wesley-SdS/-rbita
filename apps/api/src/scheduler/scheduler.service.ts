@@ -199,6 +199,18 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
         await podarComigo(userId).catch(() => undefined);
       }
     });
+    // Open Finance: lê o que a Pluggy já tem dos bancos do dono e lança o que for novo
+    this.loop("pluggy", () => settings.get("pluggy.intervaloMinutos").then((m) => m * 60_000), async () => {
+      if (!(await settings.get("pluggy.sincronizar"))) return;
+      const { donosComPluggy, sincronizarDono } = await import("@orbita/core/pluggy/servico");
+      for (const userId of await donosComPluggy()) {
+        const r = await sincronizarDono(userId, { notificar: true }).catch((e) => {
+          log.warn("pluggy.volta_falhou", { erro: e instanceof Error ? e.message : String(e) });
+          return null;
+        });
+        if (r?.lancadas || r?.transferencias) log.info("pluggy.novidades", { lancadas: r.lancadas, transferencias: r.transferencias });
+      }
+    });
     this.loop("noticias", async () => 60_000, async () => {
       const { donosComBuscaDevida } = await import("@orbita/core/noticias/servico");
       for (const { userId, dia } of await donosComBuscaDevida()) {
@@ -211,6 +223,43 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       // quem tem WhatsApp OU o bot do Telegram: o briefing escolhe o canal
       const donos = new Set([...(await usuariosComSessao()), ...(await todosOsBots()).map((b) => b.userId)]);
       for (const userId of donos) await briefingSeDevido(userId);
+    });
+    // o texto já lido de anexos de e-mail: some com a retenção (zero guarda para sempre)
+    this.loop("anexos-retencao", pruneEvery, async () => {
+      const { purgarAnexosLidos } = await import("@orbita/core/anexos/ler");
+      const apagados = await purgarAnexosLidos(await settings.get("anexos.retencaoDias"));
+      if (apagados) log.info("anexos.retencao", { apagados });
+    });
+    // controle do PC: sessão cujo tempo passou pausa sozinha, para as mãos
+    // tirarem a borda e recusarem mesmo sem nenhuma ação tentando agir
+    this.loop("controle-sessoes", async () => 15_000, async () => {
+      const { pausarSessoesVencidas } = await import("@orbita/core/controle/sessao");
+      const n = await pausarSessoesVencidas();
+      if (n) log.info("controle.sessoes_vencidas", { pausadas: n });
+    });
+    // as mãos do Windows (frente A): o espelho do envelope e o estado da tela
+    // ligados no boot, e o /health guardado em memória porque o
+    // `requires.available` das tools é síncrono. Também empurra a config que as
+    // mãos aplicam sozinhas (atalho, apps ocultos) e trata o aviso que ficou
+    // pendente enquanto este processo reiniciava (o dono apertou o atalho).
+    const { instalarMaos, voltaDoLacoMaos } = await import("@orbita/core/maos/servico");
+    instalarMaos();
+    this.loop("maos", () => settings.get("maos.saudeSegundos").then((s) => s * 1000), () => voltaDoLacoMaos());
+    // a trilha do controle do PC some com a retenção (zero guarda para sempre)
+    this.loop("controle-retencao", pruneEvery, async () => {
+      const dias = await settings.get("controle.retencaoDias");
+      const { purgarPassos } = await import("@orbita/core/controle/trilha");
+      const { purgarSessoes } = await import("@orbita/core/controle/sessao");
+      const passos = await purgarPassos(dias);
+      const sessoes = await purgarSessoes(dias);
+      if (passos || sessoes) log.info("controle.retencao", { passos, sessoes });
+    });
+    // sugestão de memória que o dono nunca decidiu some (`memory.candidateRetentionDays`):
+    // a chave existia, a função também, e nenhum laço a chamava (auditoria de 11/10/2026)
+    this.loop("memoria-candidatos", pruneEvery, async () => {
+      const { limparCandidatosVelhos } = await import("@orbita/core/memory/candidates");
+      const apagados = await limparCandidatosVelhos(await settings.get("memory.candidateRetentionDays"));
+      if (apagados) log.info("memoria.candidatos_expirados", { apagados });
     });
     this.loop("whatsapp-retencao", pruneEvery, async () => {
       // reconfere logo antes do rm: a mesma mídia pode ter chegado de novo no meio

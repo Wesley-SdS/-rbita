@@ -1,7 +1,8 @@
 import { settings } from "../settings";
 import { log } from "../observability/logger";
-import { DocumentoIlegivelError } from "../arquivos";
-import { lerPdf, paginaComoImagem, temCamadaDeTexto } from "./pdf";
+import { ArquivoProtegidoError, DocumentoIlegivelError } from "../arquivos";
+import { LeituraInterrompidaError, motivoDaSenha } from "../arquivos/tipos";
+import { lerPdf, paginaComoImagem, senhaQueAbre, temCamadaDeTexto } from "./pdf";
 import { ocrImagem } from "./tesseract";
 import { textoComTabelas } from "./tabela";
 import { lerComVisao } from "./visao";
@@ -39,6 +40,16 @@ export interface DocumentoLido {
   /** texto por página, na ordem, pronto para a indexação */
   textos: string[];
   resumo: { nativas: number; ocr: number; visao: number; vazias: number; confiancaMedia: number | null };
+  /** o PDF tinha senha e uma das cadastradas abriu (qual, nunca se diz) */
+  abertoComSenha?: boolean;
+  /** a POSIÇÃO, na lista recebida, da senha que abriu: só ela é marcada como usada (M17) */
+  senhaUsada?: number;
+  /**
+   * O que o leitor avisou: páginas cortadas no teto, HEIC sem OCR, aberto com
+   * senha, macros ignoradas, tabela cortada. Antes o `lerDocumento` jogava isso
+   * fora, e um extrato de 3.000 linhas virava 2.000 sem ninguém saber (I7).
+   */
+  avisos?: string[];
 }
 
 export type Progresso = (feito: number, total: number | null, passo: string) => Promise<void>;
@@ -68,9 +79,55 @@ interface Opcoes {
   progresso?: Progresso;
   /** de quem é a conta quando a página precisa ser relida por um modelo de visão */
   userId?: string;
+  /** senhas a tentar num arquivo protegido (as do remetente, cadastradas na tela) */
+  senhas?: readonly string[];
+  /** o arquivo não veio de e-mail: a frase de "tem senha" não manda cadastrar (I16) */
+  semRemetente?: boolean;
+  /** quem pediu desistiu de esperar: para na próxima página */
+  sinal?: AbortSignal;
 }
 
+/**
+ * Qualquer arquivo vira páginas de texto.
+ *
+ * O tipo é decidido pelos BYTES (armadilha 16 do PRD de anexos): um DOCX
+ * renomeado para ".pdf" é lido como Word, e um ".pdf" que é executável nunca
+ * é aberto. PDF e imagem seguem o pipeline do R5 (texto, OCR, visão); todo o
+ * resto vai para o extrator universal (`arquivos/extrair.ts`). Antes disso,
+ * qualquer coisa que não fosse PDF nem imagem virava `toString("utf-8")`: um
+ * DOCX chegava ao modelo e ao índice como lixo binário, sem erro nenhum.
+ */
 export async function lerDocumento(bytes: Buffer, opcoes: Opcoes): Promise<DocumentoLido> {
+  // import tardio: o extrator usa este módulo para PDF e imagem
+  const { detectarTipo } = await import("../arquivos/detectar");
+  const tipo = await detectarTipo(bytes, opcoes.nome, opcoes.mime);
+
+  // TUDO numa thread com teto (B5), PDF e imagem inclusive: antes os dois rodavam no
+  // laço principal (pdfjs, tesseract), e um PDF montado para travar o parser parava o
+  // api pelo indexar, pelo cupom e pelo extrato (I7 da auditoria). Fora do e-mail não
+  // há remetente para escolher senha (`semRemetente`, I16), a menos que quem chama traga as dele.
+  const { extrairIsolado } = await import("../arquivos/isolado");
+  const ex = await extrairIsolado(bytes, { nome: opcoes.nome, mimeDeclarado: opcoes.mime, userId: opcoes.userId, senhas: opcoes.senhas, semRemetente: opcoes.semRemetente ?? !opcoes.senhas?.length, progresso: opcoes.progresso, sinal: opcoes.sinal, tipo });
+  if (ex.protegido) throw new ArquivoProtegidoError(ex.protegido.motivo);
+  if (!ex.lido || !ex.texto.trim()) throw new DocumentoIlegivelError(ex.resumo);
+  const avisos = ex.avisos.length ? { avisos: ex.avisos } : {};
+  const senha = ex.senhaUsada !== undefined ? { abertoComSenha: true, senhaUsada: ex.senhaUsada } : {};
+  if (ex.documento) {
+    // PDF e imagem: o detalhe por página do pipeline do R5, como sempre foi
+    return { paginas: ex.documento.paginas, textos: ex.documento.paginas.map((p) => p.texto), resumo: ex.documento.resumo, ...senha, ...avisos };
+  }
+  const partes = ex.partes.filter((p) => p.trim()).length ? ex.partes.filter((p) => p.trim()) : [ex.texto];
+  return {
+    paginas: partes.map((texto, i) => ({ numero: i + 1, texto, origem: "texto" as const, confianca: null, tabelas: 0 })),
+    textos: partes,
+    resumo: { nativas: partes.length, ocr: 0, visao: 0, vazias: 0, confiancaMedia: null },
+    ...senha,
+    ...avisos,
+  };
+}
+
+/** O pipeline do R5 para PDF e imagem. O extrator universal também chama este, nunca o `lerDocumento`. */
+export async function lerPdfOuImagem(bytes: Buffer, opcoes: Opcoes & { ehPdf: boolean }): Promise<DocumentoLido> {
   const cfg = await settings.getMany([
     "ocr.enabled", "ocr.minPageConfidence", "ocr.minChars", "ocr.maxLowWordRatio",
     "ocr.renderScale", "ocr.maxPages", "ocr.languages", "ocr.tableMinRows", "ocr.tableMinColumns",
@@ -80,24 +137,18 @@ export async function lerDocumento(bytes: Buffer, opcoes: Opcoes): Promise<Docum
     minChars: cfg["ocr.minChars"],
     maxFracaoRuim: cfg["ocr.maxLowWordRatio"],
   };
-  const ehPdf = opcoes.mime === "application/pdf" || opcoes.nome.toLowerCase().endsWith(".pdf");
+  const ehPdf = opcoes.ehPdf;
   const paginas: PaginaLida[] = [];
 
-  if (!ehPdf && !opcoes.mime.startsWith("image/")) {
-    // texto puro: uma página só, sem OCR nenhum
-    const texto = bytes.toString("utf-8");
-    if (!texto.trim()) throw new DocumentoIlegivelError("Arquivo de texto vazio.");
-    return {
-      paginas: [{ numero: 1, texto, origem: "texto", confianca: null, tabelas: 0 }],
-      textos: [texto],
-      resumo: { nativas: 1, ocr: 0, visao: 0, vazias: 0, confiancaMedia: null },
-    };
-  }
-
   if (!ehPdf) {
+    // HEIC (a foto do iPhone): o Tesseract não decodifica o formato, e não há conversor
+    // instalado aqui. Quem lê é só o modelo de visão, e só se o provedor aceitar HEIC
+    // (o Gemini aceita; OpenAI e Claude recusam). O limite vai DITO, nunca em silêncio (M8).
+    const heic = /hei[cf]/i.test(opcoes.mime);
+    const avisosDaImagem = heic ? [AVISO_HEIC] : [];
     // imagem solta (foto de cupom, print): OCR e, se ficou ruim, visão
     await opcoes.progresso?.(0, 2, "lendo o texto da imagem");
-    const r = cfg["ocr.enabled"] ? await ocrImagem(bytes, { idiomas: cfg["ocr.languages"] }).catch(() => null) : null;
+    const r = cfg["ocr.enabled"] && !heic ? await ocrImagem(bytes, { idiomas: cfg["ocr.languages"] }).catch(() => null) : null;
     let texto = r?.texto?.trim() ?? "";
     let origem: OrigemDaPagina = r ? "ocr" : "imagem";
     let aviso: string | undefined;
@@ -114,21 +165,29 @@ export async function lerDocumento(bytes: Buffer, opcoes: Opcoes): Promise<Docum
         origem = "visao";
       }
     }
-    if (!texto) throw new DocumentoIlegivelError("Não consegui ler texto nesta imagem.");
+    if (!texto) throw new DocumentoIlegivelError(heic ? `Não consegui ler texto nesta imagem. ${AVISO_HEIC}` : "Não consegui ler texto nesta imagem.");
     paginas.push({ numero: 1, texto, origem, confianca: r?.confianca ?? null, tabelas: 0, ...(aviso ? { aviso } : {}) });
     return {
       paginas,
       textos: [texto],
       resumo: { nativas: 0, ocr: origem === "ocr" ? 1 : 0, visao: origem === "visao" ? 1 : 0, vazias: 0, confiancaMedia: r?.confianca ?? null },
+      ...(avisosDaImagem.length ? { avisos: avisosDaImagem } : {}),
     };
   }
 
-  const doPdf = await lerPdf(new Uint8Array(bytes));
+  // PDF de banco costuma vir com senha (dígitos do CPF): tenta as do remetente,
+  // e a senha que abriu nunca sai daqui (nem no erro, nem no log)
+  const senha = await senhaQueAbre(new Uint8Array(bytes), opcoes.senhas ?? []);
+  if (senha === null) throw new ArquivoProtegidoError(motivoDaSenha("Este PDF", opcoes.senhas, opcoes.semRemetente));
+  const doPdf = await lerPdf(new Uint8Array(bytes), senha);
   const total = Math.min(doPdf.length, cfg["ocr.maxPages"]);
+  // o teto de páginas corta, e o corte é DITO: antes a página 101 sumia sem aviso (M7)
+  const avisos = doPdf.length > total ? [`O PDF tem ${doPdf.length} páginas; li as primeiras ${total} (Ajustes, OCR, "Teto de páginas por documento").`] : [];
   const confiancas: number[] = [];
 
   for (let i = 0; i < total; i++) {
     const pagina = doPdf[i]!;
+    if (opcoes.sinal?.aborted) throw new LeituraInterrompidaError();
     await opcoes.progresso?.(i, total, `lendo a página ${i + 1} de ${total}`);
 
     if (temCamadaDeTexto(pagina.texto, limites.minChars)) {
@@ -148,7 +207,7 @@ export async function lerDocumento(bytes: Buffer, opcoes: Opcoes): Promise<Docum
     // página escaneada: vira imagem e passa pelo OCR
     let imagem: Buffer | null = null;
     try {
-      imagem = await paginaComoImagem(new Uint8Array(bytes), pagina.numero, cfg["ocr.renderScale"]);
+      imagem = await paginaComoImagem(new Uint8Array(bytes), pagina.numero, cfg["ocr.renderScale"], senha);
     } catch (e) {
       log.error("ocr.render", { pagina: pagina.numero, error: e instanceof Error ? e.message : String(e) });
     }
@@ -195,8 +254,12 @@ export async function lerDocumento(bytes: Buffer, opcoes: Opcoes): Promise<Docum
       vazias: paginas.filter((p) => !p.texto.trim()).length,
       confiancaMedia: confiancas.length ? confiancas.reduce((s, c) => s + c, 0) / confiancas.length : null,
     },
+    ...(senha ? { abertoComSenha: true, senhaUsada: (opcoes.senhas ?? []).indexOf(senha) } : {}),
+    ...(avisos.length ? { avisos } : {}),
   };
 }
+
+const AVISO_HEIC = "É uma foto HEIC (formato do iPhone): o OCR local não lê HEIC, só o modelo de visão, e só se o provedor aceitar o formato (o Gemini aceita; OpenAI e Claude não). Se não sair texto, mande a foto como JPG.";
 
 export { ocrImagem, ocrImage, encerrarOcr, confiancaDaPagina } from "./tesseract";
 export { temCamadaDeTexto } from "./pdf";

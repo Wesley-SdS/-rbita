@@ -55,7 +55,7 @@ const SUFIXO_WHATSAPP =
   "\n\nVocê está falando com o dono pelo WhatsApp, na conversa dele com ele mesmo. Responda curto e direto, como numa conversa de WhatsApp, sem títulos nem tabelas. " +
   "Quando o dono pedir para mandar algo a alguém, chame a ferramenta de envio JÁ, sem perguntar se pode: ela não envia, cria a proposta, e a proposta é a confirmação. Mostre o texto exato que vai sair; o dono aprova respondendo *manda* ou desiste com *cancela*. " +
   "Por aqui o dono faz TUDO que faz no app (finanças, tarefas, memória, agenda, e-mail, casa, câmeras, conhecimento): use as ferramentas como no chat. " +
-  "Foto ou arquivo que ele mandar chega com um id: cupom ou nota vira gasto, extrato vira lançamentos, boleto vira conta e documento vai para o conhecimento, com usar_arquivo_whatsapp; se não estiver claro o que ele quer com o arquivo, pergunte.";
+  "Foto ou arquivo que ele mandar chega com um id: cupom ou nota vira gasto, extrato vira lançamentos, boleto vira conta e documento vai para o conhecimento, com usar_arquivo_whatsapp; para responder sobre o que está escrito no arquivo (contrato, planilha, PDF), use como=ler; se não estiver claro o que ele quer com o arquivo, pergunte.";
 
 /** O que o dono mandou, em texto: o áudio já chega transcrito; a imagem é descrita. */
 async function pedidoDe(userId: string, m: WaMensagem): Promise<string> {
@@ -157,6 +157,7 @@ export async function turnoDoDono(userId: string, meuJid: string, m: WaMensagem)
       prompt: pedido,
       messages: mensagens,
       tools: ferramentas.tools,
+      turno: ferramentas.turno,
       maxSteps: cfg["chat.maxSteps"],
     });
     texto = r.texto || "Pronto.";

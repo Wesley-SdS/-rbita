@@ -38,6 +38,9 @@ export function origemDe(url: string | null | undefined): string | null {
   }
 }
 
+const PLUGGY_SCRIPT = "https://cdn.pluggy.ai";
+const PLUGGY_FRAME = "https://connect.pluggy.ai";
+
 export function buildCsp(o: CspOpcoes): string {
   // Destinos do modo de voz em tempo real: o navegador fala DIRETO com o
   // provedor (é o que mantém a latência baixa), então a CSP precisa liberar
@@ -58,7 +61,13 @@ export function buildCsp(o: CspOpcoes): string {
     // detector de fala (silero, em .wasm) morre silenciosamente em produção e
     // a voz cai para a energia sem ninguém entender por quê. Ele NÃO libera
     // `eval` de JavaScript: é a permissão estreita, feita para este caso.
-    "script-src": ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", ...(o.dev ? ["'unsafe-eval'"] : [])],
+    // A Pluggy (Open Finance) é a exceção: o widget de conectar banco é um
+    // script do CDN dela que abre um iframe no connect.pluggy.ai. Sem estas duas
+    // origens o botão "Conectar um banco" pedia o token e não abria nada
+    // (12/10/2026). O `pluggy.widgetUrl` só aceita cdn.pluggy.ai, então liberar
+    // essa origem não abre espaço para script de outro lugar.
+    "script-src": ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", PLUGGY_SCRIPT, ...(o.dev ? ["'unsafe-eval'"] : [])],
+    "frame-src": ["'self'", PLUGGY_FRAME],
     "style-src": ["'self'", "'unsafe-inline'"],
     "img-src": ["'self'", "data:", "blob:"],
     "media-src": ["'self'", "data:", "blob:"],

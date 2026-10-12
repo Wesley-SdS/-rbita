@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { runRealtimeTool } from "@orbita/core/tools/index";
 import { ehFuncaoMcpDeVoz, executarFuncaoMcpDeVoz } from "@orbita/core/mcp/voz";
+import { ehFuncaoDoPcDeVoz, executarFuncaoDoPcDeVoz } from "@orbita/core/controle/voz";
 import { requesterResolver } from "@orbita/core/identity/requester";
+import { separarMiniatura } from "@orbita/core/controle/imagem";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { log } from "@orbita/core/observability/logger";
@@ -25,11 +27,17 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const quem = requesterResolver(session.user.id, null, parsed.data.deviceId ?? null);
   // as funções do MCP não estão no registro: o risco e a aprovação vêm do
   // catálogo do servidor, no mesmo caminho do chat (`executarFerramentaMcp`)
+  // as do controle do PC chegam pelo despacho (`controle/voz.ts`), que executa
+  // pelo registro com canal "voz", igual a `runRealtimeTool`
   const result = ehFuncaoMcpDeVoz(parsed.data.name)
     ? await executarFuncaoMcpDeVoz(session.user.id, parsed.data.name, parsed.data.arguments)
-    : await runRealtimeTool(session.user.id, parsed.data.name, parsed.data.arguments, quem.resolve, quem.origin);
+    : ehFuncaoDoPcDeVoz(parsed.data.name)
+      ? await executarFuncaoDoPcDeVoz(session.user.id, parsed.data.name, parsed.data.arguments, quem.resolve, quem.origin)
+      : await runRealtimeTool(session.user.id, parsed.data.name, parsed.data.arguments, quem.resolve, quem.origin);
   // o NOME da tool no log: sem ele, "POST /api/realtime/tool 200" não diz nada
   // e diagnosticar uma conversa por voz vira adivinhação
   log.info("realtime.tool", { userId: session.user.id, tool: parsed.data.name });
-  return Response.json({ result });
+  // o navegador repassa `result` ao modelo de voz: a miniatura do cartão vai à parte, só para a tela (I10)
+  const { saida, miniatura } = separarMiniatura(result);
+  return Response.json({ result: saida, ...(miniatura ? { miniatura } : {}) });
 }

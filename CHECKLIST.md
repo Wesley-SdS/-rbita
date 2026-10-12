@@ -561,8 +561,8 @@ HTTPS, porque app nativo pede microfone ao sistema, não ao navegador.
 
 ## 🟠 Começado e parado pela metade
 
-- [ ] **Vídeo dentro da sessão do Gemini Live.** As configs existem
-  (`realtime.videoFps`, `realtime.videoLargura`) e o cliente já contabiliza tokens de
+- [ ] **Vídeo dentro da sessão do Gemini Live.** As configs existiam
+  (`realtime.videoFps`, `realtime.videoLargura`; tiradas em 11/10/2026 por não mudarem nada, voltam com o envio) e o cliente já contabiliza tokens de
   vídeo, mas **nenhum quadro é enviado**. É a "palestra assistida em tempo real".
   Custo medido: US$ 0,70 a 1,40 por hora de câmera aberta.
 - [ ] **Quadros do navegador para o `apps/perception`.** Gestos e rosto a 30fps, local

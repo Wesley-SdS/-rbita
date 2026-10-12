@@ -14,10 +14,12 @@ import { sessionOf } from "../http/web-route";
 import { retrieveContext, type RagHit } from "@orbita/core/rag/retrieve";
 import { buildAllTools, SYSTEM_PROMPT, buildTemporalContext, buildPersonaContext } from "@orbita/core/chat/tools";
 import { consultaDasTools } from "@orbita/core/tools/consulta";
+import { comVisao } from "@orbita/core/tools/registry";
+import { modeloRecebeImagem } from "@orbita/core/controle/imagem";
 import { fontesDoResultado } from "@orbita/core/chat/cartoes";
 import { cartoesDoResultado } from "@orbita/core/chat/cartoes-da-tela";
 import { composeSystem, type Chunk } from "@orbita/core/chat/compose";
-import { comBuscaNativa, configDaBusca } from "@orbita/core/chat/busca-nativa";
+import { comBuscaNativa, configDaBusca, semBuscaNativaAposLeituraSensivel } from "@orbita/core/chat/busca-nativa";
 import { log } from "@orbita/core/observability/logger";
 import { rateLimit, tooMany } from "@orbita/core/ratelimit";
 import { settings } from "@orbita/core/settings/index";
@@ -26,6 +28,7 @@ import { parseVoiceClip, requesterResolver } from "@orbita/core/identity/request
 import { ehComandoDaCasa, vocabularioDaCasa } from "@orbita/core/chat/fast-path";
 import { blocoDoResumo, inicioDoHistorico, quantasDobrar } from "@orbita/core/chat/conversation-summary";
 import { enqueueJob } from "@orbita/core/jobs/queue";
+import { vistaDaProposta } from "@orbita/core/actions/edicao";
 import { alternativas, classeDaChave, classesPermitidas, filtrarCadeia, motivoDaFalha } from "@orbita/llm";
 import { registrarUso, FLUXO } from "@orbita/core/usage/registrar";
 
@@ -81,7 +84,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
     "rag.topK", "identity.commandClipMaxKB",
     "chat.fastPathEnabled", "chat.fastPathMaxChars", "chat.fastPathHistory",
     "chat.summaryEnabled", "chat.summaryMaxPending", "prompt.prioritySummary",
-    "llm.quandoFalhar", "tools.turnosDeContexto",
+    "llm.quandoFalhar", "tools.turnosDeContexto", "controle.capturaParaNuvem",
   ]);
   await applyLlmSettings();
   const OUT_CAP: Record<string, number> = { small: cfg["chat.outputCapSmall"], medium: cfg["chat.outputCapMedium"], large: cfg["chat.outputCapLarge"] };
@@ -236,7 +239,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
 
   const [personaCtx, toolsRes, ragHits, busca] = await Promise.all([
     rapido ? Promise.resolve("") : buildPersonaContext(userId).catch(() => ""),
-    buildAllTools(userId, consultaDasTools(content, history, cfg["tools.turnosDeContexto"]), quemPede.resolve, quemPede.origin, quemPede.voiceRef, rapido ? { dominios: ["casa"] } : {}),
+    buildAllTools(userId, consultaDasTools(content, history, cfg["tools.turnosDeContexto"]), quemPede.resolve, quemPede.origin, quemPede.voiceRef, rapido ? { dominios: ["casa"], pedido: content, conversaId: conv.id } : { pedido: content, conversaId: conv.id }),
     ragTask,
     configDaBusca(),
   ]);
@@ -284,12 +287,18 @@ export async function POST(req: Request, ctx: RouteCtx) {
     const model = image ? resolveVisionModel() : resolveModel(key);
     const persistKey = image ? "vision" : key;
     const started = Date.now();
+    // visão local não faz function-calling; com Claude, a busca na web é a nativa dele
+    // a imagem de uma tool (screenshot) só vai a modelo que enxerga e que
+    // pode recebê-la (`controle.capturaParaNuvem`); os outros leem a alternativa
+    const toolsDoModelo = image ? undefined : comBuscaNativa(comVisao(tools, modeloRecebeImagem(getModelInfo(key), cfg["controle.capturaParaNuvem"])), key, busca);
     return streamText({
       model,
       system: systemFor(key),
       messages: modelMessages,
-      // visão local não faz function-calling; com Claude, a busca na web é a nativa dele
-      tools: image ? undefined : comBuscaNativa(tools, key, busca),
+      tools: toolsDoModelo,
+      // a busca nativa do Claude roda na Anthropic, fora do registro: depois de uma
+      // leitura de dado do dono neste turno, ela sai das tools ativas (Regra de Dois)
+      prepareStep: semBuscaNativaAposLeituraSensivel(toolsDoModelo, { userId, turno: toolsRes.turno }),
       stopWhen: stepCountIs(cfg["chat.maxSteps"]),
       maxOutputTokens: maxTokensFor(key),
       maxRetries: cfg["chat.maxRetries"],
@@ -416,9 +425,11 @@ export async function POST(req: Request, ctx: RouteCtx) {
                     id: proposta.id,
                     kind: part.toolName,
                     resumo: proposta.resumo ?? "",
-                    // o payload vai junto para a tela poder MOSTRAR e deixar
-                    // corrigir sem uma segunda ida ao servidor
-                    payload: (part as { input?: unknown }).input ?? {},
+                    // o que a tela mostra e deixa corrigir sai da FILA, e só os
+                    // campos editáveis: a entrada crua do modelo (`part.input`)
+                    // não tem o que o `preparar` fixou, e voltava do cartão
+                    // por cima dele (B1 da revisão de 11/10/2026)
+                    payload: await vistaDaProposta(userId, proposta.id).catch(() => ({})),
                   };
                   gotText ? send(ev) : buffered.push(ev);
                 }

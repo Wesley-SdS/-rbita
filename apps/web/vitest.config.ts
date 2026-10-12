@@ -20,6 +20,8 @@ export default defineConfig({
       "apps/web/src/**/*.test.ts",
       "apps/api/src/**/*.test.ts",
       "apps/mobile/lib/**/*.test.ts",
+      // a extensão do Chrome e a ponte de native messaging (frente B do controle do PC)
+      "apps/extensao-chrome/test/**/*.test.ts",
       "packages/*/src/**/*.test.ts",
     ],
     // O client do @orbita/db exige DATABASE_URL no import (e só conecta no

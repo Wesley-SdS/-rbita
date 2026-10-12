@@ -1,4 +1,5 @@
 import type { WaMensagem } from "@orbita/db/whatsapp-schema";
+import { semEmbrulho } from "../texto/dado-externo";
 
 /**
  * Como uma mensagem do WhatsApp vira texto para o modelo ler. PURO.
@@ -7,8 +8,12 @@ import type { WaMensagem } from "@orbita/db/whatsapp-schema";
  * WhatsApp não dá ordem à Órbita.
  */
 
-/** O texto do terceiro não pode fechar o embrulho por conta própria. */
-const semFechar = (s: string) => s.replace(/<\/?dado_externo[^>]*>/gi, "");
+/**
+ * O texto do terceiro não pode fechar o embrulho por conta própria. É a mesma
+ * regra do embrulho de anexo e de página: a troca antiga daqui apagava a tag
+ * numa passada só, e `<</dado_externo>/dado_externo>` sobrava fechado.
+ */
+const semFechar = semEmbrulho;
 
 export function hora(d: Date): string {
   return d.toLocaleString("pt-BR", { timeZone: process.env.TZ || "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });

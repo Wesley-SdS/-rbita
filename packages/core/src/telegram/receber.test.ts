@@ -75,12 +75,19 @@ vi.mock("../whatsapp/processar", () => ({ nuvemParaTranscrever: () => null }));
 
 // ── aprovação simulada ──
 const PROPOSTA = "5f0c2c7e-6d8f-4d38-9a36-1c1d5b9d2a11";
-let pendentes: { id: string; kind: string; summary: string; expiraEm: Date | null }[] = [];
+let pendentes: { id: string; kind: string; summary: string; expiraEm: Date | null; payload?: unknown }[] = [];
 const aprovarAcao = vi.fn(async (..._a: unknown[]) => ({ ok: true as const, resultado: "Enviado." }));
 const cancelarAcao = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock("../actions/aprovar", () => ({ aprovarAcao: (...a: unknown[]) => aprovarAcao(...a), cancelarAcao: (...a: unknown[]) => cancelarAcao(...a), pendentesDoCanal: async (_u: string, canal: string) => (canal === "telegram" ? pendentes : []) }));
 const riscos: Record<string, string> = { enviar_whatsapp: "efeito_externo", destrancar_porta: "perigoso" };
-vi.mock("../tools/index", () => ({ getTool: (k: string) => (riscos[k] ? { name: k } : undefined), effectiveRisk: (d: { name: string }) => riscos[d.name], loadToolOverrides: async () => ({}) }));
+const ORDEM = ["leitura", "escrita", "efeito_externo", "perigoso"];
+vi.mock("../tools/index", () => ({
+  getTool: (k: string) => (riscos[k] ? { name: k } : undefined),
+  effectiveRisk: (d: { name: string }) => riscos[d.name],
+  loadToolOverrides: async () => ({}),
+  isToolRisk: (v: unknown) => ORDEM.includes(v as string),
+  maiorRisco: (a: string, b: string) => (ORDEM.indexOf(b) > ORDEM.indexOf(a) ? b : a),
+}));
 
 const { ouvirTelegram } = await import("./receber");
 
@@ -190,5 +197,19 @@ describe("botões de aprovação", () => {
     await ouvirTelegram();
     expect(aprovarAcao).not.toHaveBeenCalled();
     expect(respondidos.map((r) => r.texto)).toEqual(expect.arrayContaining(["Isto só se aprova pela tela.", "Venceu. Aprove pela tela, em Ações a confirmar."]));
+  });
+
+  it("risco ELEVADO pelo alvo e gravado na proposta também só sai pela tela (PRD-COMPUTADOR F1)", async () => {
+    // a tool é efeito_externo, mas ESTA chamada subiu para perigoso (`payload.risco`)
+    pendentes = [{ id: PROPOSTA, kind: "enviar_whatsapp", summary: "Comando com efeito", expiraEm: null, payload: { para: "x", risco: "perigoso" } }];
+    updates = [botao(1, 42, `ap:${PROPOSTA}`)];
+    await ouvirTelegram();
+    expect(aprovarAcao).not.toHaveBeenCalled();
+    expect(respondidos.at(-1)?.texto).toBe("Isto só se aprova pela tela.");
+    // e um risco gravado MENOR que o da tool não desce: a tool perigosa continua perigosa
+    pendentes = [{ id: PROPOSTA, kind: "destrancar_porta", summary: "Destrancar", expiraEm: null, payload: { risco: "leitura" } }];
+    updates = [botao(2, 42, `ap:${PROPOSTA}`)];
+    await ouvirTelegram();
+    expect(aprovarAcao).not.toHaveBeenCalled();
   });
 });

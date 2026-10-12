@@ -6,7 +6,8 @@ import { db } from "@orbita/db";
 import { profile } from "@orbita/db/profile-schema";
 import { skill } from "@orbita/db/extension-schema";
 import { buildMcpTools } from "../mcp/client";
-import { buildToolSet, type ActionCanal } from "../tools/index";
+import { novoTurno, type TurnoDeContaminacao } from "../controle/contaminacao";
+import { buildToolSet, type ActionCanal, type RestricoesDoTurno } from "../tools/index";
 import { settings } from "../settings";
 import { log } from "../observability/logger";
 
@@ -18,8 +19,8 @@ import { log } from "../observability/logger";
  * humano é derivado do risco pelo registro (CLAUDE.md §5.7). Aqui só resta a
  * montagem do ToolSet do turno, com seleção por relevância ao pedido.
  */
-export async function buildTools(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"], dominios?: readonly string[], canal: ActionCanal = "tela"): Promise<ToolSet> {
-  return buildToolSet(userId, query, requester, origin, voiceRef, dominios, canal);
+export async function buildTools(userId: string, query = "", requester?: ToolContext["requester"], origin?: ToolContext["origin"], voiceRef?: ToolContext["voiceRef"], dominios?: readonly string[], canal: ActionCanal = "tela", turno: RestricoesDoTurno & { pedido?: string; contaminacao?: TurnoDeContaminacao } = {}): Promise<ToolSet> {
+  return buildToolSet(userId, query, requester, origin, voiceRef, dominios, canal, false, false, turno);
 }
 
 /** Contexto temporal: injeta a data/hora atual (combate alucinação de "hoje/atual"). */
@@ -121,24 +122,35 @@ export async function buildAllTools(
   requester?: ToolContext["requester"],
   origin?: ToolContext["origin"],
   voiceRef?: ToolContext["voiceRef"],
-  /** `canal`: de onde o pedido veio; é por ele que "manda" aprova sem tela (PRD-WHATSAPP W6) */
-  opts: { dominios?: readonly string[]; canal?: ActionCanal; soLeitura?: boolean; todas?: boolean } = {},
-): Promise<{ tools: ToolSet; cleanup: () => Promise<void>; skillInstructions: string }> {
+  /**
+   * `canal`: de onde o pedido veio; é por ele que "manda" aprova sem tela (PRD-WHATSAPP W6).
+   * `pedido`: a fala LITERAL do dono, quando difere da `query` (no chat, a
+   * consulta leva o histórico); sem ele vale a `query`, que no WhatsApp, no
+   * Telegram e nas rotinas já é o pedido. `pessoaDaCasa`: turno de quem não é
+   * o dono, que nunca recebe as tools do controle do PC. `conversaId`: a
+   * conversa do chat, para a Regra de Dois (`controle/contaminacao.ts`) não
+   * misturar duas conversas abertas ao mesmo tempo.
+   */
+  opts: { dominios?: readonly string[]; canal?: ActionCanal; soLeitura?: boolean; todas?: boolean; pedido?: string; pessoaDaCasa?: boolean; origem?: ToolContext["origem"]; conversaId?: string } = {},
+): Promise<{ tools: ToolSet; cleanup: () => Promise<void>; skillInstructions: string; turno: TurnoDeContaminacao }> {
+  // UM objeto de turno para as nativas e as do MCP: a leitura sensível de uma trava a saída da outra
+  const contaminacao = novoTurno(userId, opts.canal ?? "tela", { origem: opts.origem, id: opts.conversaId });
+  const turno = { pedido: opts.pedido ?? query, pessoaDaCasa: opts.pessoaDaCasa, origem: opts.origem, contaminacao };
   // Só leitura (regra disparada por texto de terceiro): nada de MCP, cujo
   // risco o registro não conhece, e nenhuma tool que escreva ou proponha.
   if (opts.soLeitura) {
-    return { tools: await buildToolSet(userId, query, requester, origin, voiceRef, undefined, opts.canal, true, Boolean(opts.todas)), cleanup: async () => {}, skillInstructions: "" };
+    return { tools: await buildToolSet(userId, query, requester, origin, voiceRef, undefined, opts.canal, true, Boolean(opts.todas), turno), cleanup: async () => {}, skillInstructions: "", turno: contaminacao };
   }
   // caminho rápido (comando da casa): só as tools do domínio, sem MCP nem skills
   if (opts.dominios?.length) {
-    return { tools: await buildTools(userId, query, requester, origin, voiceRef, opts.dominios, opts.canal), cleanup: async () => {}, skillInstructions: "" };
+    return { tools: await buildTools(userId, query, requester, origin, voiceRef, opts.dominios, opts.canal, turno), cleanup: async () => {}, skillInstructions: "", turno: contaminacao };
   }
   const [base, mcp, skillInstructions] = await Promise.all([
-    buildToolSet(userId, query, requester, origin, voiceRef, undefined, opts.canal ?? "tela", false, Boolean(opts.todas)),
-    buildMcpTools(userId, { canal: opts.canal, query: opts.todas ? undefined : query }),
+    buildToolSet(userId, query, requester, origin, voiceRef, undefined, opts.canal ?? "tela", false, Boolean(opts.todas), turno),
+    buildMcpTools(userId, { canal: opts.canal, query: opts.todas ? undefined : query, turno: contaminacao }),
     getSkillInstructions(userId, query),
   ]);
-  return { tools: comTeto(base, mcp.tools, opts.todas ? await settings.get("tools.maxTodas") : Infinity), cleanup: mcp.cleanup, skillInstructions };
+  return { tools: comTeto(base, mcp.tools, opts.todas ? await settings.get("tools.maxTodas") : Infinity), cleanup: mcp.cleanup, skillInstructions, turno: contaminacao };
 }
 
 /**

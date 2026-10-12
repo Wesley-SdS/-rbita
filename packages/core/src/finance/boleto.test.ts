@@ -77,6 +77,8 @@ describe("acharLinhaNoTexto", () => {
     const r = acharLinhaNoTexto(texto, HOJE);
     expect(r?.leitura).toEqual({ valor: 4590, vencimento: "2026-10-15", tipo: "bancario" });
     expect(r?.beneficiario).toBe("Empresa Teste Ltda");
+    // os dígitos lidos voltam, para a aprovação mostrar o código que vai ser pago
+    expect(r?.linha).toBe(D47_VALIDO.replace(/\D/g, ""));
   });
 
   it("sem nenhuma sequência de dígitos válida, devolve null", () => {

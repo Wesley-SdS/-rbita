@@ -39,6 +39,31 @@ const ehLongo = (chave: string, valor: string) =>
 
 type Valores = Record<string, unknown>;
 
+/**
+ * Campos que o código grava na proposta e nunca se mostram nem se editam. O
+ * servidor já manda só os editáveis (lidos da fila); isto é a segunda trava,
+ * para um payload antigo não exibir o risco nem o alvo fixado como se fossem
+ * do dono.
+ */
+const RESERVADOS = new Set(["risco", "camposFixados", "fixado", "pedidoLiteral", "pedidoOriginal", "canal", "maquina", "sha256", "perfil", "origem", "sessaoId", "acaoId", "urlEsperada"]);
+
+/** O valor digitado de volta no tipo que estava (número e sim/não chegam como texto do campo). */
+function noTipoDe(original: unknown, digitado: unknown): unknown {
+  if (typeof original === "number" && typeof digitado === "string" && digitado.trim() !== "" && Number.isFinite(Number(digitado))) return Number(digitado);
+  if (typeof original === "boolean" && typeof digitado === "string") return digitado.trim().toLowerCase() === "true";
+  return digitado;
+}
+
+/** Só o que o dono mudou: o resto vale como está na fila, e o servidor mescla por cima dela. */
+function alterados(original: Valores, valores: Valores): Valores {
+  const out: Valores = {};
+  for (const [k, v] of Object.entries(valores)) {
+    const novo = noTipoDe(original[k], v);
+    if (novo !== original[k]) out[k] = novo;
+  }
+  return out;
+}
+
 export function PropostaCard({
   proposta,
   aoDecidir,
@@ -55,7 +80,7 @@ export function PropostaCard({
   // só o que dá para editar como texto. Um campo aninhado (lista de anexos)
   // continua indo como veio: mostrar um JSON cru para editar seria pior do que
   // não mostrar, e o servidor valida o conjunto de qualquer jeito.
-  const campos = Object.entries(valores).filter(([, v]) => v === null || ["string", "number", "boolean"].includes(typeof v));
+  const campos = Object.entries(valores).filter(([k, v]) => !RESERVADOS.has(k) && (v === null || ["string", "number", "boolean"].includes(typeof v)));
 
   if (proposta.estado) {
     const feita = proposta.estado === "confirmada";
@@ -90,12 +115,12 @@ export function PropostaCard({
         aoDecidir(proposta.id, "descartada");
         return;
       }
+      // só o que foi mexido vai: sem edição, quem vale é a proposta gravada na fila
+      const mudou = editando ? alterados(proposta.payload ?? {}, valores) : {};
       const r = await fetch("/api/actions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // o payload só vai quando foi mexido: sem edição, quem vale é a
-        // proposta que já está gravada na fila
-        body: JSON.stringify({ id: proposta.id, ...(editando ? { payload: valores } : {}) }),
+        body: JSON.stringify({ id: proposta.id, ...(Object.keys(mudou).length ? { payload: mudou } : {}) }),
       });
       const d = (await r.json().catch(() => ({}))) as { error?: string; result?: string };
       if (!r.ok) {

@@ -72,6 +72,11 @@ import * as gestao from "./gestao";
 import * as ingest from "./ingest";
 import * as financas from "./financas";
 import * as noticias from "./noticias";
+import * as pluggy from "./pluggy";
+import * as anexos from "./anexos";
+import * as controle from "./controle";
+import * as navegador from "./navegador";
+import * as maos from "./maos";
 import * as emails from "./emails";
 import * as trabalho from "./trabalho";
 import * as comigo from "./comigo";
@@ -163,6 +168,34 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/noticias/temas", { POST: noticias.POST_TEMA, DELETE: noticias.DELETE_TEMA }),
   webRoute("api/noticias/atualizar", { POST: noticias.POST_ATUALIZAR }),
   webRoute("api/noticias/lida", { POST: noticias.POST_LIDA }),
+  webRoute("api/pluggy", { GET: pluggy.GET }),
+  webRoute("api/pluggy/itens", { POST: pluggy.POST_ITEM, DELETE: pluggy.DELETE_ITEM }),
+  webRoute("api/pluggy/vincular", { POST: pluggy.POST_VINCULAR }),
+  webRoute("api/pluggy/ativa", { POST: pluggy.POST_ATIVA }),
+  webRoute("api/pluggy/saldo", { POST: pluggy.POST_SALDO }),
+  webRoute("api/pluggy/token", { POST: pluggy.POST_TOKEN }),
+  webRoute("api/pluggy/sincronizar", { POST: pluggy.POST_SINCRONIZAR }),
+  webRoute("api/anexos/senhas", { GET: anexos.GET, POST: anexos.POST, DELETE: anexos.DELETE }),
+  webRoute("api/controle/estado", { GET: controle.GET_ESTADO }),
+  webRoute("api/controle/passos", { GET: controle.GET_PASSOS }),
+  webRoute("api/controle/passos/:id/miniatura", { GET: controle.GET_MINIATURA }),
+  webRoute("api/controle/parar", { POST: controle.POST_PARAR }),
+  webRoute("api/controle/falada", { POST: controle.POST_FALADA }),
+  // as mãos do Windows: o aviso autentica pelo MAOS_TOKEN (sem sessão); o resto é tela do dono
+  webRoute("api/maos/aviso", { POST: maos.POST_AVISO }),
+  webRoute("api/maos/pastas", { GET: maos.GET_PASTAS }),
+  webRoute("api/maos/apps", { GET: maos.GET_APPS }),
+  webRoute("api/maos/comandos", { GET: maos.GET_COMANDOS }),
+  webRoute("api/maos/classificar", { POST: maos.POST_CLASSIFICAR }),
+  webRoute("api/navegador/extensoes", { GET: navegador.GET_EXTENSOES }),
+  webRoute("api/navegador/extensoes/:id", { DELETE: navegador.DELETE_EXTENSAO }),
+  webRoute("api/navegador/parear", { POST: navegador.POST_PAREAR }),
+  webRoute("api/navegador/sites", { GET: navegador.GET_SITES, POST: navegador.POST_SITE }),
+  webRoute("api/navegador/sites/:id", { DELETE: navegador.DELETE_SITE }),
+  webRoute("api/navegador/roteiros", { GET: navegador.GET_ROTEIROS }),
+  webRoute("api/navegador/roteiros/:id", { DELETE: navegador.DELETE_ROTEIRO }),
+  webRoute("api/navegador/dedicado", { POST: navegador.POST_DEDICADO }),
+  webRoute("api/navegador/ponte", { GET: navegador.GET_PONTE, POST: navegador.POST_PONTE }),
   webRoute("api/financas", { POST: financas.POST }),
   webRoute("api/financas/fotos", { GET: financas.GET_FOTOS }),
   webRoute("api/financas/entrada", { POST: financas.POST_ENTRADA }),

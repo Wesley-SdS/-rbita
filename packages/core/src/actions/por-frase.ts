@@ -1,8 +1,9 @@
 import { settings } from "../settings";
-import { effectiveRisk, getTool, loadToolOverrides } from "../tools/index";
+import { loadToolOverrides } from "../tools/index";
 import { escolherProposta, interpretarResposta } from "../whatsapp/regras";
-import { MCP_ACTION_KIND } from "../mcp/pool-rules";
+import { pararPorFrase } from "../controle/parar";
 import { aprovarAcao, cancelarAcao, pendentesDoCanal } from "./aprovar";
+import { riscoDaProposta } from "./risco";
 
 /**
  * Aprovar FALANDO (PRD-WHATSAPP W6): o dono diz "manda" na conversa "Eu" do
@@ -22,7 +23,7 @@ import { aprovarAcao, cancelarAcao, pendentesDoCanal } from "./aprovar";
  *     perigosa (decisão 9.5). Essa só sai pela tela.
  */
 
-export type EstadoDaFrase = "enviado" | "cancelado" | "lista" | "falhou" | "so_na_tela";
+export type EstadoDaFrase = "enviado" | "cancelado" | "lista" | "falhou" | "so_na_tela" | "parado";
 export interface RespostaDaFrase {
   estado: EstadoDaFrase;
   /** o que dizer ao dono (pode conter o resumo das propostas) */
@@ -30,22 +31,21 @@ export interface RespostaDaFrase {
 }
 
 export async function aprovarPorFrase(userId: string, canal: "whatsapp" | "voz" | "telegram", fala: string, desde?: Date | null): Promise<RespostaDaFrase | null> {
+  // "para" com a Órbita mexendo no computador vem ANTES de tudo: parar não
+  // espera proposta nem modelo (PRD-COMPUTADOR-E-NAVEGADOR F6). Sem sessão
+  // aberta, a frase segue como conversa.
+  const parou = await pararPorFrase(userId, canal, fala);
+  if (parou) return parou;
+
   const cfg = await settings.getMany(["whatsapp.frasesConfirmar", "whatsapp.frasesCancelar"]);
   const r = interpretarResposta(fala, cfg["whatsapp.frasesConfirmar"], cfg["whatsapp.frasesCancelar"]);
   if (!r.acao) return null;
 
   const overrides = await loadToolOverrides();
-  const naoPerigosa = (p: { kind: string; payload: unknown }) => {
-    // tool MCP não está no registro: o risco dela foi gravado na proposta pelo
-    // código que a enfileirou (`mcp/client.ts`), nunca pelo modelo. Proposta
-    // MCP antiga, sem risco gravado, só sai pela tela
-    if (p.kind === MCP_ACTION_KIND) {
-      const risco = (p.payload as { risco?: unknown } | null)?.risco;
-      return risco === "efeito_externo";
-    }
-    const def = getTool(p.kind);
-    return def ? effectiveRisk(def, overrides) !== "perigoso" : false;
-  };
+  // o risco GRAVADO na proposta (o efetivo, já elevado pelo alvo) vale junto
+  // com o da tool: `git status` e `rm -r` são a mesma tool de terminal, e só o
+  // segundo é perigoso. MCP sem risco gravado e tool sumida só saem pela tela
+  const naoPerigosa = (p: { kind: string; payload: unknown }) => riscoDaProposta(p, overrides) !== "perigoso";
   // Com NÚMERO ("manda 1") ou "tudo", o dono aponta para a lista que a Órbita
   // acabou de mostrar, e essas propostas são de ANTES da fala anterior dele (a
   // lista veio em resposta a ela). A trava do "desde" é para o "manda" solto,

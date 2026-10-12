@@ -79,3 +79,11 @@ export * from "./noticias-schema";
 export * from "./email-schema";
 export * from "./trabalho-schema";
 export * from "./comigo-schema";
+// Open Finance pela Pluggy: itens, contas e a proveniência de cada transação.
+export * from "./pluggy-schema";
+// Anexos: o texto já lido de cada anexo de e-mail e as senhas por remetente.
+export * from "./anexo-schema";
+// Controle do PC (PRD-COMPUTADOR-E-NAVEGADOR F2 e F3): a sessão aprovada e a trilha de cada passo.
+export * from "./controle-schema";
+// Chrome do dono (frente B): extensões pareadas, modo de cada site e os roteiros que se repetem.
+export * from "./navegador-schema";

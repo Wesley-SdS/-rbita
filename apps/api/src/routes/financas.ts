@@ -15,13 +15,14 @@ import { proporDitado, lerBoleto, prepararImportacao, csvDoFinanceiro, extratoPd
 import { lerDataUrl } from "@orbita/core/arquivos";
 import { lerPdf } from "@orbita/core/ocr/pdf";
 import { backupDoDono, restaurarBackup } from "@orbita/core/finance/restauracao";
+import { paresSugeridosDoDono } from "@orbita/core/finance/transferencias";
 
 /**
  * Financeiro (PRD "Freio de Mão"). Controller fino (CLAUDE.md §6): o cálculo
  * mora em `finance/visoes.ts` e a escrita em `finance/comandos.ts`, os
  * MESMOS que as tools do chat e da voz usam.
  *
- *   GET  /api/financas/:vista?mes=YYYY-MM   painel · extrato · contas · cartoes · metas · meta · previsao · historico · cadastros
+ *   GET  /api/financas/:vista?mes=YYYY-MM   painel · extrato · contas · cartoes · metas · meta · previsao · historico · cadastros · pares
  *   GET  /api/financas/foto/:id             uma foto de item de meta (fora do painel: pesa)
  *   POST /api/financas                      { tipo: "lancar", … }  (ver `Comando`)
  *
@@ -30,7 +31,7 @@ import { backupDoDono, restaurarBackup } from "@orbita/core/finance/restauracao"
  */
 
 const Mes = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
-const Vista = z.enum(["painel", "extrato", "contas", "cartoes", "metas", "meta", "previsao", "historico", "cadastros"]);
+const Vista = z.enum(["painel", "extrato", "contas", "cartoes", "metas", "meta", "previsao", "historico", "cadastros", "pares"]);
 
 export async function GET(req: Request, ctx: RouteCtx) {
   const session = sessionOf(ctx);
@@ -60,6 +61,8 @@ export async function GET(req: Request, ctx: RouteCtx) {
       }
       case "previsao": return visoes.previsao(dados, hoje, lim);
       case "historico": return visoes.historico(dados, hoje);
+      // saída numa conta e entrada na outra que podem ser a mesma transferência: só sugestão, quem confirma é o dono
+      case "pares": return { pares: await paresSugeridosDoDono(userId, hoje) };
       case "cadastros": {
         const [f] = await db.select({ b: sql<number>`coalesce(sum(${finMetaFoto.bytes}),0)` }).from(finMetaFoto).where(eq(finMetaFoto.userId, userId));
         return visoes.cadastros(dados, mes, hoje, Number(f?.b ?? 0));

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Verificação</title>
+<style> body { font: 16px system-ui; } label { display: block; margin: 8px 0; } </style></head>
+<body>
+  <main>
+    <h1>Confirme que é você</h1>
+    <!-- I-5 da auditoria: campos de código e de cartão que saíam como comuns (marcadores ORBITA-SENSIVEL-n) -->
+    <label>Código recebido por SMS <input id="s1" value="ORBITA-SENSIVEL-1"></label>
+    <label>Seu código <input id="s2" name="codigo" value="ORBITA-SENSIVEL-2"></label>
+    <label>Código <input id="s3" name="sms_code" value="ORBITA-SENSIVEL-3"></label>
+    <input id="s4" placeholder="Enter the 6-digit code" value="ORBITA-SENSIVEL-4">
+    <input id="s5" name="pinCode" value="ORBITA-SENSIVEL-5">
+    <label>Token <input id="s6" name="token" value="ORBITA-SENSIVEL-6"></label>
+    <label>Validade MM/AA <input id="s7" value="ORBITA-SENSIVEL-7"></label>
+    <div id="caixas">
+      <input id="o1" maxlength="1" inputmode="numeric" value="9"><input maxlength="1" inputmode="numeric" value="8"><input maxlength="1" inputmode="numeric" value="7">
+      <input maxlength="1" inputmode="numeric" value="6"><input maxlength="1" inputmode="numeric" value="5"><input maxlength="1" inputmode="numeric" value="4">
+    </div>
+    <label>Número <input id="s8" value="4111 1111 1111 1111"></label>
+    <div id="s9" contenteditable="true" aria-label="Senha do cofre">ORBITA-SENSIVEL-9</div>
+    <textarea id="s10" name="security_code">ORBITA-SENSIVEL-10</textarea>
+    <!-- controles: códigos que não são segredo, e campos comuns -->
+    <label>Código postal <input id="c1" value="01310-100"></label>
+    <label>Cupom de desconto (código promocional) <input id="c2" value="BLACK10"></label>
+    <label>Nome <input id="c3" value="Wesley"></label>
+    <label>Buscar <input id="c4" type="search" value="chuva"></label>
+    <label>Comentário <textarea id="c5">Texto visível do comentário</textarea></label>
+  </main>
+</body>
+</html>

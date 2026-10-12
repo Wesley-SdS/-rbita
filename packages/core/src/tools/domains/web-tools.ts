@@ -11,6 +11,8 @@ export const pesquisar_web: ToolDef<z.ZodObject<{ consulta: z.ZodString }>> = {
   risk: "leitura",
   keywords: ["pesquisar", "buscar", "internet", "notícia", "cotação", "atual", "quem é", "o que é", "preço"],
   inputSchema: z.object({ consulta: z.string().min(1).max(400) }),
+  // na fila (Regra de Dois, `controle/contaminacao.ts`) o dono aprova a consulta INTEIRA, que é o que sai
+  summarize: ({ consulta }) => `Pesquisar na internet: "${consulta}"`,
   run: async ({ consulta }) => searchWeb(consulta, 5),
 };
 
@@ -21,6 +23,8 @@ export const ler_pagina: ToolDef<z.ZodObject<{ url: z.ZodString }>> = {
   risk: "leitura",
   keywords: ["ler", "página", "site", "link", "url", "artigo"],
   inputSchema: z.object({ url: z.string().url() }),
+  // o endereço inteiro, com a consulta: é nela que um dado do dono sairia
+  summarize: ({ url }) => `Abrir a página ${url.slice(0, 2000)}`,
   run: async ({ url }) => ({ conteudo: await fetchPage(url) }),
 };
 

@@ -8,6 +8,8 @@ import { assertPublicUrl } from "../net/ssrf";
 import { events } from "../events/index";
 import { settings } from "../settings";
 import { needsApproval, selectRelevant } from "../tools/registry";
+import { motivoDaContaminacao, type TurnoDeContaminacao } from "../controle/contaminacao";
+import { contaminacaoDaCasa } from "../controle/contaminacao-da-casa";
 import type { ActionCanal } from "../tools/index";
 import { lerCabecalhos } from "./cabecalhos";
 import { conexaoOciosa, impressaoDoServidor, MCP_ACTION_KIND, podeRepetirChamada, precisaBuscarCatalogo, riscoDaTool } from "./pool-rules";
@@ -211,12 +213,17 @@ export async function ferramentasMcpDoDono(userId: string): Promise<FerramentaMc
  * o "manda" do WhatsApp e da voz acha a proposta) e o risco gravado pelo
  * código, que o `por-frase` confere.
  */
-export async function executarFerramentaMcp(userId: string, f: FerramentaMcp, args: Record<string, unknown>, canal: ActionCanal = "tela"): Promise<unknown> {
-  if (needsApproval(f.risco)) {
-    const summary = `MCP ${f.servidor}: ${f.tool}(${JSON.stringify(args).slice(0, 80)})`;
+export async function executarFerramentaMcp(userId: string, f: FerramentaMcp, args: Record<string, unknown>, canal: ActionCanal = "tela", turno?: TurnoDeContaminacao): Promise<unknown> {
+  // Regra de Dois (`controle/contaminacao.ts`): a consulta a um servidor de fora
+  // leva argumentos que o modelo escreveu. Depois de uma leitura de dado do dono
+  // neste turno, até a de leitura passa pela fila, com o argumento inteiro à vista.
+  const leitura = f.risco === "leitura" ? await contaminacaoDaCasa.consultar({ userId, canal, turno }) : null;
+  const risco = leitura ? "efeito_externo" : f.risco;
+  if (needsApproval(risco)) {
+    const summary = `MCP ${f.servidor}: ${f.tool}(${JSON.stringify(args).slice(0, leitura ? 1000 : 80)})${leitura ? motivoDaContaminacao(leitura) : ""}`;
     const [row] = await db
       .insert(actionQueue)
-      .values({ userId, kind: MCP_ACTION_KIND, summary, canal, payload: { serverId: f.s.id, tool: f.tool, args, risco: f.risco } })
+      .values({ userId, kind: MCP_ACTION_KIND, summary, canal, payload: { serverId: f.s.id, tool: f.tool, args, risco } })
       .returning({ id: actionQueue.id });
     return { proposta_enfileirada: true, aguardando_aprovacao: true, id: row?.id, resumo: summary };
   }
@@ -312,7 +319,7 @@ export function escolherFerramentasMcp(fs: FerramentaMcp[], pedido: string, max:
  * encostava no limite de ~128 dos provedores. Sem `query` (conversa "Eu", que
  * pede "todas"), vão todas e quem corta é o teto.
  */
-export async function buildMcpTools(userId: string, opts: { canal?: ActionCanal; query?: string } = {}): Promise<{ tools: ToolSet; cleanup: () => Promise<void> }> {
+export async function buildMcpTools(userId: string, opts: { canal?: ActionCanal; query?: string; turno?: TurnoDeContaminacao } = {}): Promise<{ tools: ToolSet; cleanup: () => Promise<void> }> {
   let fs = await ferramentasMcpDoDono(userId);
   if (opts.query !== undefined) fs = escolherFerramentasMcp(fs, opts.query, await settings.get("mcp.maxPerTurn"));
   const tools: ToolSet = {};
@@ -320,7 +327,7 @@ export async function buildMcpTools(userId: string, opts: { canal?: ActionCanal;
     tools[f.chave] = tool({
       description: needsApproval(f.risco) ? f.descricao + " (Não executa direto: enfileira uma proposta para o usuário aprovar.)" : f.descricao,
       inputSchema: jsonSchema((f.inputSchema as object) ?? { type: "object", properties: {} }),
-      execute: async (args) => executarFerramentaMcp(userId, f, (args ?? {}) as Record<string, unknown>, opts.canal ?? "tela"),
+      execute: async (args) => executarFerramentaMcp(userId, f, (args ?? {}) as Record<string, unknown>, opts.canal ?? "tela", opts.turno),
     });
   }
   // a conexão fica viva para as próximas mensagens; quem fecha é a faxina de

@@ -24,7 +24,8 @@ describe("preparar", () => {
     const enqueue = vi.fn(async (_d, _i, resumo: string) => ({ proposta_enfileirada: true as const, aguardando_aprovacao: true as const, resumo }));
     const set = toToolSet([enviar], { userId: "u1" }, { enqueue });
     const r = await set.enviar_teste!.execute!({ para: "maria" }, { toolCallId: "t", messages: [] });
-    expect(enqueue).toHaveBeenCalledWith(enviar, { para: "5511922222222@s.whatsapp.net", para_nome: "Maria" }, "Enviar para Maria (5511922222222@s.whatsapp.net)");
+    // na fila vão também o risco efetivo e QUAIS campos o código fixou (o que a edição no cartão não troca)
+    expect(enqueue).toHaveBeenCalledWith(enviar, { para: "5511922222222@s.whatsapp.net", para_nome: "Maria", risco: "efeito_externo", camposFixados: ["para", "para_nome"] }, "Enviar para Maria (5511922222222@s.whatsapp.net)");
     expect(r).toMatchObject({ resumo: "Enviar para Maria (5511922222222@s.whatsapp.net)" });
   });
 

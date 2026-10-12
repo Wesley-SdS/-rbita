@@ -207,22 +207,58 @@ export const ver_imagem_whatsapp: ToolDef<typeof VerImagem> = {
 
 // ── arquivo que o DONO mandou vira ação (cupom, extrato, boleto, documento, reunião) ──
 
+/**
+ * "O que diz esse contrato que te mandei?": o arquivo passa pelo extrator
+ * universal AGORA, com o prazo de `anexos.esperarSeg`. Passando disso (PDF
+ * escaneado longo), a resposta sugere guardar no conhecimento, que lê em
+ * segundo plano. O texto volta embrulhado: o arquivo pode ser de terceiro
+ * encaminhado pelo dono (§5.2).
+ */
+async function lerArquivoAgora(userId: string, bytes: Buffer, nome: string, mime: string, parte?: number): Promise<string> {
+  // numa thread com teto (B5): o arquivo pode ser de terceiro, e um parser preso não pode parar o api
+  const { extrairIsolado: extrair } = await import("../../arquivos/isolado");
+  const { partesDoTexto, resumoParaOModelo } = await import("../../arquivos/texto");
+  const cfg = await settings.getMany(["anexos.esperarSeg", "anexos.caracteresMax"]);
+  const parar = new AbortController();
+  const relogio = setTimeout(() => parar.abort(), cfg["anexos.esperarSeg"] * 1000);
+  try {
+    // fora do e-mail não há remetente para escolher a senha: a frase de "tem senha" diz isso (I16)
+    const ex = await extrair(bytes, { nome, mimeDeclarado: mime, userId, sinal: parar.signal, semRemetente: true });
+    // o resumo do e-mail anexado, do convite, do ZIP traz texto de DENTRO do arquivo: vai embrulhado (I2)
+    const resumo = resumoParaOModelo({ resumo: ex.resumo, familia: ex.tipo.familia, estruturado: ex.estruturado, arquivos: ex.arquivos }, "whatsapp");
+    if (!ex.lido) return resumo;
+    const pedacos = partesDoTexto(ex.texto, cfg["anexos.caracteresMax"]);
+    const n = Math.min(Math.max(1, parte ?? 1), pedacos.length);
+    const mais = pedacos.length > n ? `\n(Há mais texto: peça parte=${n + 1} de ${pedacos.length}.)` : "";
+    return `${resumo}${ex.avisos.length ? ` ${ex.avisos.join(" ")}` : ""}\n${embrulhar([pedacos[n - 1]!])}${mais}`;
+  } catch (e) {
+    if (parar.signal.aborted) return "Esse arquivo é demorado de ler. Se quiser, eu guardo no conhecimento (como=conhecimento): leio em segundo plano e aviso quando puder perguntar sobre ele.";
+    throw e;
+  } finally {
+    clearTimeout(relogio);
+  }
+}
+
 const UsarArquivo = z.object({
   mensagem_id: z.string().uuid().describe("O id do arquivo ou imagem que o DONO mandou na conversa com ele mesmo, como aparece em [imagem id=...] ou [documento id=...]."),
   como: z
-    .enum(["cupom", "extrato", "boleto", "conhecimento", "reuniao"])
-    .describe("cupom: foto/PDF de compra vira gasto lançado; extrato: PDF/CSV/OFX do banco vira lançamentos; boleto: lê valor e vencimento para cadastrar a conta; conhecimento: guarda o documento (ou a transcrição do áudio) para consultas futuras; reuniao: áudio de reunião vira transcrição com quem falou, resumo, compromissos e tarefas."),
+    .enum(["cupom", "extrato", "boleto", "conhecimento", "reuniao", "ler"])
+    .describe("cupom: foto/PDF de compra vira gasto lançado; extrato: PDF/CSV/OFX do banco vira lançamentos; boleto: lê valor e vencimento para cadastrar a conta; conhecimento: guarda o documento (ou a transcrição do áudio) para consultas futuras; reuniao: áudio de reunião vira transcrição com quem falou, resumo, compromissos e tarefas; ler: devolve o que está escrito no arquivo (PDF, Word, planilha, apresentação, ZIP, e-mail…) para responder sobre ele agora."),
+  parte: z.number().int().min(1).max(500).optional().describe("só com ler: texto longo vem em partes; peça a seguinte quando a resposta disser que há mais"),
 });
 
 type Como = z.infer<typeof UsarArquivo>["como"];
 
 const MIME_DE_TEXTO = /^(text\/|application\/(json|xml|csv|x-ofx|ofx|vnd\.intu\.qfx))/;
+const MIME_DE_PLANILHA = /^application\/(vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|vnd\.ms-excel|vnd\.oasis\.opendocument\.spreadsheet)/;
 const ehPdf = (mime: string) => mime.includes("pdf");
 
 /**
- * O arquivo serve para aquele uso? PURA. O leitor de documento trata qualquer
- * mime desconhecido como TEXTO: sem esta conferência, um OGG "guardado no
- * conhecimento" virava bytes de áudio indexados como se fossem palavras.
+ * O arquivo serve para aquele uso? PURA. Para guardar e ler, qualquer
+ * documento serve: quem decide se dá para ler é o extrator universal, pelos
+ * BYTES (`arquivos/extrair.ts`), que sabe DOCX, planilha, ZIP e e-mail e
+ * recusa executável. Antes o leitor tratava todo o resto como texto, e esta
+ * conferência por mime era a única coisa entre um OGG e o índice.
  */
 export function arquivoServe(como: Como, m: { tipo: string; midiaMime: string | null; transcricao: string | null }): string | null {
   const mime = (m.midiaMime ?? "").split(";")[0].toLowerCase();
@@ -231,10 +267,12 @@ export function arquivoServe(como: Como, m: { tipo: string; midiaMime: string | 
     case "boleto":
       return m.tipo === "imagem" || ehPdf(mime) ? null : "Para cupom ou boleto, preciso de uma foto ou de um PDF.";
     case "extrato":
-      return ehPdf(mime) || MIME_DE_TEXTO.test(mime) || m.tipo === "imagem" ? null : "Para extrato, preciso de PDF, CSV, OFX ou foto.";
+      // planilha também: o extrato em XLSX é lido pelo motor (`finance/extrato.ts`), como o CSV (I8)
+      return ehPdf(mime) || MIME_DE_TEXTO.test(mime) || MIME_DE_PLANILHA.test(mime) || m.tipo === "imagem" ? null : "Para extrato, preciso de PDF, CSV, OFX, planilha ou foto.";
+    case "ler":
     case "conhecimento":
-      if (m.tipo === "audio" || m.tipo === "video") return m.transcricao ? null : "Esse áudio não tem transcrição para guardar.";
-      return m.tipo === "imagem" || ehPdf(mime) || MIME_DE_TEXTO.test(mime) ? null : "Esse tipo de arquivo eu ainda não sei ler (PDF, imagem ou texto, sim).";
+      if (m.tipo === "audio" || m.tipo === "video") return m.transcricao ? null : "Esse áudio não tem transcrição.";
+      return m.tipo === "imagem" || m.tipo === "documento" ? null : "Essa mensagem não tem um arquivo para eu ler.";
     case "reuniao":
       return m.tipo === "audio" || m.tipo === "video" ? null : "Para resumir como reunião, preciso de um áudio ou vídeo.";
   }
@@ -258,12 +296,12 @@ export const usar_arquivo_whatsapp: ToolDef<typeof UsarArquivo> = {
   name: "usar_arquivo_whatsapp",
   domain: "whatsapp",
   description:
-    "Usa um arquivo ou foto que o DONO mandou na conversa com ele mesmo no WhatsApp: lança o cupom como gasto, importa o extrato, lê um boleto para cadastrar a conta, guarda o documento na base de conhecimento ou resume um áudio de reunião. Arquivo que outra pessoa mandou só vale se o dono o encaminhar para a conversa com ele mesmo.",
+    "Usa um arquivo ou foto que o DONO mandou na conversa com ele mesmo no WhatsApp: lê o que está escrito nele (PDF, Word, planilha, apresentação, ZIP, e-mail), lança o cupom como gasto, importa o extrato, lê um boleto para cadastrar a conta, guarda o documento na base de conhecimento ou resume um áudio de reunião. Arquivo que outra pessoa mandou só vale se o dono o encaminhar para a conversa com ele mesmo.",
   risk: "escrita",
-  keywords: ["cupom", "nota", "comprovante", "extrato", "boleto", "fatura", "documento", "pdf", "arquivo", "guardar", "lancar", "reuniao", "gravacao", "resumir"],
+  keywords: ["cupom", "nota", "comprovante", "extrato", "boleto", "fatura", "documento", "pdf", "arquivo", "guardar", "lancar", "reuniao", "gravacao", "resumir", "ler", "planilha", "word", "contrato", "o que diz"],
   requires: { whatsappPessoal: true },
   inputSchema: UsarArquivo,
-  run: async ({ mensagem_id, como }, { userId }) => {
+  run: async ({ mensagem_id, como, parte }, { userId }) => {
     const m = await store.mensagemPorId(userId, mensagem_id);
     if (!m) return "Não encontrei esse arquivo.";
     if (!m.deMim) return "Esse arquivo foi mandado por outra pessoa. Para eu usar, encaminhe-o para a sua conversa com você mesmo e me diga o que fazer.";
@@ -271,6 +309,7 @@ export const usar_arquivo_whatsapp: ToolDef<typeof UsarArquivo> = {
     if (recusa) return recusa;
 
     const nome = m.texto?.slice(0, 80) || `whatsapp-${m.tipo}`;
+    if (como === "ler" && (m.tipo === "audio" || m.tipo === "video")) return embrulhar([m.transcricao!]);
     const { enqueueJob } = await import("../../jobs/queue");
     // áudio guardado no conhecimento é a TRANSCRIÇÃO, não o arquivo
     if (como === "conhecimento" && (m.tipo === "audio" || m.tipo === "video")) {
@@ -287,7 +326,14 @@ export const usar_arquivo_whatsapp: ToolDef<typeof UsarArquivo> = {
 
     try {
       const mime = (m.midiaMime ?? "application/octet-stream").split(";")[0];
-      const dataUrl = `data:${mime};base64,${Buffer.from(await lerMidia(m.midiaCaminho)).toString("base64")}`;
+      const bytes = Buffer.from(await lerMidia(m.midiaCaminho));
+      if (como === "ler") return lerArquivoAgora(userId, bytes, nome, mime, parte);
+      if (como === "conhecimento") {
+        // o tipo vem dos BYTES: um ".pdf" que é executável não vai para o índice
+        const { detectarTipo } = await import("../../arquivos/detectar");
+        if ((await detectarTipo(bytes, m.texto, mime)).familia === "executavel") return "Esse arquivo é um executável ou instalador: a Órbita nunca abre nem guarda esse tipo de arquivo.";
+      }
+      const dataUrl = `data:${mime};base64,${bytes.toString("base64")}`;
       // a mesma chave da tela (sha curto): a mesma gravação pela tela e pelo WhatsApp é UM trabalho
       const sha = (m.midiaSha256 ?? m.id).slice(0, 24);
       if (como === "reuniao") {
@@ -362,7 +408,7 @@ const conferirDestino = async (input: { para: string }, ctx: { userId: string })
   return alvo.ok ? null : alvo.erro;
 };
 
-const EnviarTexto = z.object({ para: z.string().min(1).max(200), texto: z.string().min(1).max(4000), para_nome: z.string().max(200).nullish() });
+const EnviarTexto = z.object({ para: z.string().min(1).max(200), texto: z.string().min(1).max(4000), para_nome: z.string().max(200).nullish().describe("Preenchido pela Órbita; não informe.") });
 
 export const enviar_whatsapp: ToolDef<typeof EnviarTexto> = {
   name: "enviar_whatsapp",
@@ -372,6 +418,8 @@ export const enviar_whatsapp: ToolDef<typeof EnviarTexto> = {
   keywords: ["whatsapp", "zap", "mensagem", "mandar", "avisar"],
   requires: { whatsapp: true },
   inputSchema: EnviarTexto,
+  // o destino é o que o preparar resolveu e o resumo mostra (nome e número): no cartão, só o conteúdo se corrige
+  camposEditaveis: ["texto"],
   summarize: (i) => resumoDe("Enviar WhatsApp", i, i.texto),
   authorize: conferirDestino,
   preparar: fixarDestino,
@@ -396,6 +444,8 @@ export const responder_whatsapp: ToolDef<typeof Responder> = {
   keywords: ["whatsapp", "zap", "responder", "resposta", "mandar", "dizer"],
   requires: { whatsappPessoal: true },
   inputSchema: Responder,
+  // o destino é o que o preparar resolveu e o resumo mostra (nome e número): no cartão, só o conteúdo se corrige
+  camposEditaveis: ["texto"],
   summarize: (i) => resumoDe("Responder no WhatsApp", i, i.texto),
   authorize: conferirDestino,
   preparar: fixarDestino,
@@ -419,6 +469,8 @@ export const enviar_audio_whatsapp: ToolDef<typeof Audio> = {
   keywords: ["whatsapp", "zap", "audio", "voz", "falar", "nota"],
   requires: { whatsappPessoal: true },
   inputSchema: Audio,
+  // o destino é o que o preparar resolveu e o resumo mostra (nome e número): no cartão, só o conteúdo se corrige
+  camposEditaveis: ["texto"],
   summarize: (i) => resumoDe("Mandar áudio no WhatsApp", i, i.texto),
   // o dono pediu áudio para ELE e o modelo pegou esta tool: pedia o número dele
   // e depois aprovação para falar com ele mesmo (08/10/2026). Recusar aqui faz o
@@ -475,6 +527,8 @@ export const enviar_imagem_whatsapp: ToolDef<typeof Imagem> = {
   keywords: ["whatsapp", "zap", "foto", "imagem", "mandar", "encaminhar"],
   requires: { whatsappPessoal: true },
   inputSchema: Imagem,
+  // o destino é o que o preparar resolveu e o resumo mostra (nome e número): no cartão, só o conteúdo se corrige
+  camposEditaveis: ["legenda"],
   summarize: (i) => `Mandar imagem no WhatsApp para ${destinoLegivel(i.para, i.para_nome)}` + (i.legenda ? `: "${i.legenda.slice(0, 300)}"` : ""),
   authorize: conferirDestino,
   preparar: fixarDestino,

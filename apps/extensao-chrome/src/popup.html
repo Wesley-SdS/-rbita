@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Órbita</title>
+<link rel="stylesheet" href="estilo.css" />
+</head>
+<body>
+  <h1>Órbita no Chrome</h1>
+  <p id="estado" class="estado">Lendo…</p>
+  <p id="sessao" class="dim"></p>
+  <section id="parear">
+    <label for="codigo">Código de pareamento (Ajustes, Controle do PC)</label>
+    <div class="linha">
+      <input id="codigo" inputmode="numeric" maxlength="6" pattern="\d{6}" autocomplete="off" placeholder="000000" />
+      <button id="botao-parear" type="button">Parear</button>
+    </div>
+  </section>
+  <div class="linha">
+    <button id="parar" type="button" class="perigo">Parar a Órbita</button>
+    <button id="painel" type="button">Abrir painel</button>
+  </div>
+  <details>
+    <summary>Avançado</summary>
+    <label for="endereco">Endereço da Órbita</label>
+    <div class="linha">
+      <input id="endereco" />
+      <button id="botao-endereco" type="button">Salvar</button>
+    </div>
+    <button id="esquecer" type="button">Esquecer o pareamento</button>
+  </details>
+  <p id="aviso" class="aviso" role="alert"></p>
+  <script src="popup.js"></script>
+</body>
+</html>

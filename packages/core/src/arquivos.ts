@@ -15,6 +15,21 @@ export class DocumentoIlegivelError extends Error {
   }
 }
 
+/**
+ * O arquivo tem senha e nenhuma das cadastradas abriu. É um "não consegui ler"
+ * (a fila não retenta: tentar de novo dá o mesmo resultado até o dono cadastrar
+ * a senha na tela), com a mensagem que diz onde cadastrar.
+ *
+ * A senha nunca aparece na mensagem: este texto vai para o modelo, para o
+ * histórico e para a tela de trabalhos.
+ */
+export class ArquivoProtegidoError extends DocumentoIlegivelError {
+  constructor(message = "Este arquivo tem senha. Cadastre a senha do remetente em Ajustes, Anexos, e peça de novo.") {
+    super(message);
+    this.name = "ArquivoProtegidoError";
+  }
+}
+
 /** Data URL "data:image/png;base64,..." → bytes + mime. */
 export function lerDataUrl(dataUrl: string): { bytes: Buffer; mime: string } | null {
   const m = /^data:([\w/+.-]+)(?:;[\w=.-]+)*;base64,(.+)$/s.exec(dataUrl);

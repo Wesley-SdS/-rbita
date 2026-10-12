@@ -1,6 +1,7 @@
 /** Cliente REST do Microsoft Graph (Teams + Outlook). Recebe um access token válido. */
 import { settings } from "../settings";
 import type { EventoDaAgenda } from "./google";
+import { nomesDeAnexoParaOModelo } from "../texto/dado-externo";
 
 /**
  * O fuso que o Graph exige separado do horário.
@@ -77,6 +78,8 @@ export interface EmailSummary {
   subject: string;
   date: string;
   snippet: string;
+  tem_anexo?: boolean;
+  anexos?: string[];
 }
 
 export interface CalEvent {
@@ -118,12 +121,170 @@ function paraEmail(m: GraphMessage): EmailSummary {
  * um parâmetro a mais.
  */
 export async function listRecentMessages(token: string, max = 5, busca?: string): Promise<EmailSummary[]> {
-  const campos = "$select=id,subject,bodyPreview,receivedDateTime,from";
+  // os nomes dos anexos vêm junto (`$expand` só com nome e se é embutido, nunca o conteúdo)
+  const campos = "$select=id,subject,bodyPreview,receivedDateTime,from,hasAttachments&$expand=attachments($select=name,isInline)";
   const path = busca?.trim()
     ? `/me/messages?$top=${max}&${campos}&$search=${encodeURIComponent(`"${busca.trim()}"`)}`
     : `/me/mailFolders/inbox/messages?$top=${max}&${campos}&$orderby=receivedDateTime desc`;
-  const r = await graph<GraphList<GraphMessage>>(token, path, busca?.trim() ? { headers: { ConsistencyLevel: "eventual" } } : undefined);
-  return r.value.map(paraEmail);
+  const r = await graph<GraphList<GraphMessage & { hasAttachments?: boolean; attachments?: { name?: string; isInline?: boolean }[] }>>(token, path, busca?.trim() ? { headers: { ConsistencyLevel: "eventual" } } : undefined);
+  return r.value.map((m) => {
+    const nomes = (m.attachments ?? []).filter((a) => !a.isInline && a.name).map((a) => a.name!);
+    // o nome do anexo é escolha de quem mandou: vai embrulhado como dado (I2 da auditoria)
+    return { ...paraEmail(m), tem_anexo: Boolean(m.hasAttachments) || nomes.length > 0, anexos: nomesDeAnexoParaOModelo(nomes) };
+  });
+}
+
+/* --- Outlook: o e-mail inteiro e os anexos (C1, C2) ------------------------ */
+
+export interface AnexoDoOutlook {
+  id: string;
+  nome: string;
+  tipo: string;
+  tamanho: number;
+  embutido: boolean;
+  /** e-mail ou evento anexado (o Graph entrega o MIME dele em `$value`) */
+  item: boolean;
+  /** anexo que é LINK para um documento no OneDrive/SharePoint: listado, não baixado (C6) */
+  link: string | null;
+  /**
+   * É um `referenceAttachment` (link do OneDrive), com ou sem a URL. Decidido pelo
+   * `@odata.type`, ANTES de qualquer download: o `/$value` dele falha com erro do
+   * Graph, e a URL (`sourceUrl`) só existe no endpoint beta (I15).
+   */
+  referencia: boolean;
+}
+
+export interface MensagemCompletaDoOutlook {
+  id: string;
+  de: string;
+  para: string[];
+  cc: string[];
+  data: string;
+  assunto: string;
+  textoPuro: string;
+  html: string;
+  anexos: AnexoDoOutlook[];
+  link: string | null;
+  autenticacao?: string;
+}
+
+interface GraphAnexo {
+  "@odata.type"?: string;
+  id: string;
+  name?: string;
+  contentType?: string;
+  size?: number;
+  isInline?: boolean;
+  sourceUrl?: string;
+}
+
+const pessoaDoGraph = (r?: { emailAddress?: { name?: string; address?: string } }) => {
+  const e = r?.emailAddress;
+  return e?.name && e.address ? `${e.name} <${e.address}>` : e?.address ?? e?.name ?? "";
+};
+
+/** Anexos de uma mensagem do Graph na forma da Órbita. PURO. */
+export function anexosDoGraph(lista: GraphAnexo[]): AnexoDoOutlook[] {
+  return lista.map((a) => {
+    const tipo = (a["@odata.type"] ?? "").toLowerCase();
+    return {
+      id: a.id,
+      nome: a.name?.trim() || "anexo",
+      tipo: (a.contentType ?? (tipo.includes("itemattachment") ? "message/rfc822" : "application/octet-stream")).toLowerCase(),
+      tamanho: a.size ?? 0,
+      embutido: Boolean(a.isInline),
+      item: tipo.includes("itemattachment"),
+      link: tipo.includes("referenceattachment") ? a.sourceUrl ?? null : null,
+      referencia: tipo.includes("referenceattachment"),
+    };
+  });
+}
+
+/**
+ * Lê UM e-mail inteiro do Outlook. O corpo vem em HTML (como foi escrito) e é
+ * convertido aqui mesmo, sem recurso remoto: pedir texto ao Graph
+ * (`outlook.body-content-type="text"`) perderia os links, e é deles que sai a
+ * lista de documentos compartilhados.
+ */
+export async function lerMensagemCompletaOutlook(token: string, id: string): Promise<MensagemCompletaDoOutlook> {
+  const m = await graph<GraphMessage & { body?: { contentType?: string; content?: string }; toRecipients?: { emailAddress?: { name?: string; address?: string } }[]; ccRecipients?: { emailAddress?: { name?: string; address?: string } }[]; webLink?: string; internetMessageHeaders?: { name: string; value: string }[] }>(
+    token,
+    `/me/messages/${encodeURIComponent(id)}?$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,body,webLink,internetMessageHeaders`,
+  );
+  const anexos = await graph<GraphList<GraphAnexo>>(token, `/me/messages/${encodeURIComponent(id)}/attachments?$select=id,name,contentType,size,isInline`);
+  const lista = await comUrlDasReferencias(token, id, anexosDoGraph(anexos.value));
+  const ehHtml = (m.body?.contentType ?? "").toLowerCase() === "html";
+  return {
+    id: m.id,
+    de: pessoaDoGraph(m.from),
+    para: (m.toRecipients ?? []).map(pessoaDoGraph).filter(Boolean),
+    cc: (m.ccRecipients ?? []).map(pessoaDoGraph).filter(Boolean),
+    data: m.receivedDateTime ?? "",
+    assunto: m.subject?.trim() || "(sem assunto)",
+    textoPuro: ehHtml ? "" : m.body?.content ?? "",
+    html: ehHtml ? m.body?.content ?? "" : "",
+    anexos: lista,
+    link: m.webLink ?? null,
+    // só o PRIMEIRO: é o que o Exchange escreveu ao receber; os de baixo podem ter vindo do remetente
+    autenticacao: (m.internetMessageHeaders ?? []).find((h) => h.name.toLowerCase() === "authentication-results")?.value ?? "",
+  };
+}
+
+/**
+ * A URL de cada anexo que é link (`referenceAttachment`). O `sourceUrl` existe
+ * só no Graph BETA: o v1.0 nem devolve o campo. LIMITE assumido: o beta pode
+ * mudar sem aviso; se a chamada falhar, o anexo continua marcado como link (e
+ * nunca é baixado) e o dono abre pelo próprio e-mail no Outlook. Uma chamada por
+ * anexo-link, e só quando há algum (o caso comum não paga nada a mais).
+ */
+async function comUrlDasReferencias(token: string, mensagemId: string, anexos: AnexoDoOutlook[]): Promise<AnexoDoOutlook[]> {
+  return Promise.all(
+    anexos.map(async (a) => {
+      if (!a.referencia || a.link) return a;
+      try {
+        const res = await fetch(`https://graph.microsoft.com/beta/me/messages/${encodeURIComponent(mensagemId)}/attachments/${encodeURIComponent(a.id)}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return a;
+        const j = (await res.json()) as { sourceUrl?: string };
+        return typeof j.sourceUrl === "string" && /^https:\/\//i.test(j.sourceUrl) ? { ...a, link: j.sourceUrl.slice(0, 2048) } : a;
+      } catch {
+        return a;
+      }
+    }),
+  );
+}
+
+/**
+ * O `sendMail` do Graph aceita anexo embutido só até 3 MB (o pedido inteiro
+ * para em 4 MB). Acima disso o Graph exige sessão de upload num rascunho; aqui
+ * a recusa é dita antes de propor, para o dono não aprovar um envio que falha.
+ */
+export const OUTLOOK_ANEXO_MAX_BYTES = 3 * 1024 * 1024;
+
+/** Manda um e-mail com UM arquivo anexado pelo Outlook. Chamar só depois da aprovação. */
+export async function enviarEmailComAnexoOutlook(token: string, para: string, assunto: string, corpo: string, anexo: { nome: string; mime: string; bytes: Buffer }): Promise<void> {
+  if (anexo.bytes.length > OUTLOOK_ANEXO_MAX_BYTES) throw new Error("O Outlook manda por aqui anexo de até 3 MB.");
+  await graph<void>(token, "/me/sendMail", {
+    method: "POST",
+    body: JSON.stringify({
+      message: {
+        ...corpoDeMensagem(para, assunto, corpo),
+        attachments: [{ "@odata.type": "#microsoft.graph.fileAttachment", name: anexo.nome, contentType: anexo.mime, contentBytes: anexo.bytes.toString("base64") }],
+      },
+      saveToSentItems: true,
+    }),
+  });
+}
+
+/** Os bytes de um anexo. E-mail anexado vem como o MIME dele (EML), que o extrator lê. */
+export async function baixarAnexoOutlook(token: string, mensagemId: string, anexoId: string): Promise<{ bytes: Buffer; anexo: AnexoDoOutlook }> {
+  const lista = await graph<GraphList<GraphAnexo>>(token, `/me/messages/${encodeURIComponent(mensagemId)}/attachments?$select=id,name,contentType,size,isInline`);
+  const anexo = anexosDoGraph(lista.value).find((a) => a.id === anexoId);
+  if (!anexo) throw new Error("Esse anexo não está mais no e-mail.");
+  // o tipo decide, não a URL: referência sem `sourceUrl` (v1.0) também não tem `/$value`
+  if (anexo.referencia || anexo.link) throw new Error("Esse anexo é um link para um documento compartilhado: abra pelo link (ou pelo e-mail no Outlook).");
+  const res = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(mensagemId)}/attachments/${encodeURIComponent(anexoId)}/$value`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Microsoft Graph ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  return { bytes: Buffer.from(await res.arrayBuffer()), anexo: anexo.item ? { ...anexo, tipo: "message/rfc822", nome: /\.(eml|msg)$/i.test(anexo.nome) ? anexo.nome : `${anexo.nome}.eml` } : anexo };
 }
 
 interface GraphMensagemDaCaixa extends GraphMessage {

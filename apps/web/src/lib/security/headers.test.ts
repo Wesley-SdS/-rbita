@@ -41,6 +41,13 @@ describe("CSP", () => {
     expect(prod).toContain("wss://generativelanguage.googleapis.com"); // WebSocket do Gemini Live
   });
 
+  it("libera o widget da Pluggy (script do CDN e iframe do connect), e só ele", () => {
+    // sem isto o "Conectar um banco" pedia o token e não abria nada (12/10/2026)
+    expect(prod).toMatch(/script-src[^;]* https:\/\/cdn\.pluggy\.ai/);
+    expect(prod).toContain("frame-src 'self' https://connect.pluggy.ai");
+    expect(prod).not.toMatch(/script-src[^;]*https:\/\/\*/);
+  });
+
   it("fecha plugin, embutir em outro site, base e formulário", () => {
     for (const d of ["object-src 'none'", "frame-ancestors 'self'", "base-uri 'self'", "form-action 'self'"]) expect(prod).toContain(d);
   });

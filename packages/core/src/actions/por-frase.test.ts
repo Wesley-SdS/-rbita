@@ -21,12 +21,18 @@ vi.mock("../settings", () => ({
     getMany: async () => ({ "whatsapp.frasesConfirmar": ["manda", "pode mandar"], "whatsapp.frasesCancelar": ["cancela", "não manda"] }),
   },
 }));
-const riscos: Record<string, string> = { responder_whatsapp: "efeito_externo", casa_acionar_com_aprovacao: "perigoso" };
+const riscos: Record<string, string> = { responder_whatsapp: "efeito_externo", casa_acionar_com_aprovacao: "perigoso", controle_iniciar: "efeito_externo", terminal_executar: "leitura" };
+const ORDEM = ["leitura", "escrita", "efeito_externo", "perigoso"];
 vi.mock("../tools/index", () => ({
   getTool: (k: string) => (riscos[k] ? { name: k, risk: riscos[k] } : undefined),
   effectiveRisk: (d: { risk: string }) => d.risk,
   loadToolOverrides: async () => new Map(),
+  isToolRisk: (v: unknown) => ORDEM.includes(v as string),
+  maiorRisco: (a: string, b: string) => (ORDEM.indexOf(b) > ORDEM.indexOf(a) ? b : a),
 }));
+// "para" com sessão de controle aberta é decidido pelo código ANTES do "manda" (PRD-COMPUTADOR F6)
+const pararPorFrase = vi.fn(async (..._a: unknown[]): Promise<{ estado: "parado"; texto: string } | null> => null);
+vi.mock("../controle/parar", () => ({ pararPorFrase: (...a: unknown[]) => pararPorFrase(...a) }));
 
 const { aprovarPorFrase } = await import("./por-frase");
 
@@ -132,6 +138,30 @@ describe("aprovar por frase", () => {
   it("pedido novo com cara de resposta não aprova", async () => {
     pendentes = [p("a")];
     expect(await aprovarPorFrase("u1", "whatsapp", "manda um oi pra Maria também")).toBeNull();
+    expect(aprovarAcao).not.toHaveBeenCalled();
+  });
+
+  it("risco ELEVADO pelo alvo e gravado na proposta (payload.risco) também não sai por frase", async () => {
+    // a tool de terminal é `leitura`, mas ESTA chamada (`rm -r`) subiu para perigoso
+    pendentes = [{ ...p("rm", "whatsapp", 20, -1, "terminal_executar"), payload: { comando: "Remove-Item -Recurse x", risco: "perigoso" } }];
+    expect(await aprovarPorFrase("u1", "whatsapp", "manda")).toMatchObject({ estado: "so_na_tela" });
+    // e o mesmo comando elevado só até efeito_externo sai falando
+    pendentes = [{ ...p("install", "whatsapp", 20, -1, "terminal_executar"), payload: { comando: "pnpm install", risco: "efeito_externo" } }];
+    expect(await aprovarPorFrase("u1", "whatsapp", "manda")).toMatchObject({ estado: "enviado" });
+    expect(aprovarAcao.mock.calls.map((c) => c[1])).toEqual(["install"]);
+  });
+
+  it("'manda' ABRE uma sessão de controle (efeito_externo), decisão do dono de 10/10", async () => {
+    pendentes = [{ ...p("sessao", "voz", 20, -1, "controle_iniciar"), payload: { objetivo: "rodar os testes", alvo: "computador", apps: ["VS Code"], risco: "efeito_externo" } }];
+    expect(await aprovarPorFrase("u1", "voz", "manda")).toMatchObject({ estado: "enviado" });
+    expect(aprovarAcao).toHaveBeenCalledWith("u1", "sessao");
+  });
+
+  it("'para' com sessão aberta para tudo e nem olha a fila", async () => {
+    pararPorFrase.mockResolvedValueOnce({ estado: "parado", texto: "Parei." });
+    pendentes = [p("a")];
+    expect(await aprovarPorFrase("u1", "whatsapp", "para")).toEqual({ estado: "parado", texto: "Parei." });
+    expect(pararPorFrase).toHaveBeenCalledWith("u1", "whatsapp", "para");
     expect(aprovarAcao).not.toHaveBeenCalled();
   });
 

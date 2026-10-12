@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ConnectorId } from "./registry";
+import { obterChave } from "../pluggy/cliente";
 
 /**
  * Conectar COLANDO UM TOKEN, sem aplicativo OAuth.
@@ -142,6 +143,20 @@ export async function validarToken(cid: ConnectorId, valores: Record<string, str
     if (!r.ok || !r.team_id) throw new TokenRecusado(`O Slack recusou o token (${r.error ?? "sem motivo"}).`);
     // o mesmo id da conexão por OAuth (`team.id`): reconectar por token atualiza em vez de duplicar
     return { externalId: r.team_id, label: r.team ?? "Slack", segredo: token };
+  }
+
+  if (cid === "pluggy") {
+    const clientId = valores.clientId?.trim() ?? "";
+    const clientSecret = valores.clientSecret?.trim() ?? "";
+    if (!/^[0-9a-f-]{30,40}$/i.test(clientId)) throw new TokenRecusado("O Client ID da Pluggy é um código no formato 00000000-0000-0000-0000-000000000000.");
+    if (clientSecret.length < 10) throw new TokenRecusado("Cole o Client Secret inteiro da Pluggy.");
+    try {
+      // confere de verdade: um par errado não vira uma conexão que falha calada depois
+      await obterChave({ clientId, clientSecret }, true);
+    } catch (e) {
+      throw new TokenRecusado(e instanceof Error ? e.message : "A Pluggy recusou as credenciais.");
+    }
+    return { externalId: clientId, label: `Pluggy ${clientId.slice(0, 8)}`, segredo: JSON.stringify({ clientId, clientSecret }) };
   }
 
   throw new TokenRecusado("Este serviço não conecta por token.");

@@ -4,6 +4,7 @@ import { normalizarNome } from "../../contatos/casar";
 import { getPerson } from "../../identity/people";
 import * as store from "../../telegram/store";
 import { mandarTextoPara, mandarVozPara } from "../../telegram/enviar";
+import { embrulharDadoExterno } from "../../texto/dado-externo";
 
 /**
  * Domínio: Telegram, o canal DA Órbita. Mandar é `efeito_externo` (o registro
@@ -78,8 +79,9 @@ export const ler_telegram: ToolDef<typeof Ler> = {
     const msgs = await store.mensagensDoContato(userId, r.id, quantidade ?? 20);
     if (!msgs.length) return `Nenhuma conversa com ${r.nome} no Telegram.`;
     // o que a pessoa escreveu é DADO (§5.2); o que a Órbita respondeu, também, por coerência
-    const linhas = msgs.map((m) => `${m.em.toISOString().slice(0, 16).replace("T", " ")} ${m.doBot ? "Órbita" : r.nome}: ${(m.transcricao ?? m.texto ?? `[${m.tipo}]`).replace(/<\/?dado_externo[^>]*>/gi, "")}`);
-    return `Conversa com ${r.nome} no Telegram:\n<dado_externo origem="telegram">\n${linhas.join("\n")}\n</dado_externo>`;
+    // o embrulho neutraliza em vez de apagar: apagar juntava `<</dado_externo>/dado_externo>` num fechamento (I1)
+    const linhas = msgs.map((m) => `${m.em.toISOString().slice(0, 16).replace("T", " ")} ${m.doBot ? "Órbita" : r.nome}: ${m.transcricao ?? m.texto ?? `[${m.tipo}]`}`);
+    return `Conversa com ${r.nome} no Telegram:\n${embrulharDadoExterno("telegram", linhas.join("\n"))}`;
   },
 };
 

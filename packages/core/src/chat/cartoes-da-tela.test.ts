@@ -157,3 +157,38 @@ describe("cartão de servidor MCP (formato genérico)", () => {
     expect(c!.itens[0]).toMatchObject({ titulo: "Há 2 chamados críticos." });
   });
 });
+
+describe("Órbita no controle (PRD-COMPUTADOR F5)", () => {
+  const controle = {
+    sessaoId: "s1", objetivo: "rodar os testes", alvo: "computador", status: "ativa", motivo: null, passosUsados: 3, tetoPassos: 30,
+    expiraEm: "2026-10-06T15:15:00", apps: ["VS Code"], sites: [],
+    ultimoPasso: { tool: "computador_agir", acao: "clicar", decisao: "vetado", quando: "2026-10-06T15:02:00" },
+    miniatura: "data:image/png;base64,iVBORw0KGgo=",
+  };
+
+  it("objetivo, passo X de Y, último passo, miniatura e o botão Parar", () => {
+    const [c] = cartoesDoResultado("controle_status", { controle, mensagem: "x" }, {}, AGORA);
+    expect(c).toMatchObject({ id: "controle", tipo: "controle", titulo: "Órbita no controle", resumo: "passo 3 de 30", destaque: { valor: "3/30" } });
+    expect(c!.itens[0]).toMatchObject({ titulo: "rodar os testes", detalhe: "VS Code" });
+    expect(c!.itens[1]).toMatchObject({ titulo: "Último passo: computador agir · clicar", detalhe: "vetado pelo crítico", marca: "importante" });
+    expect(c!.imagem?.src).toBe(controle.miniatura);
+    expect(c!.botoes).toEqual([{ id: "parar_controle", rotulo: "Parar" }]);
+  });
+
+  it("vem junto de qualquer tool de computador ou navegador, e atualiza o mesmo cartão", () => {
+    const [c] = cartoesDoResultado("computador_agir", { mensagem: "cliquei", controle: { ...controle, passosUsados: 4 } }, {}, AGORA);
+    expect(c?.id).toBe("controle");
+    expect(c?.resumo).toBe("passo 4 de 30");
+  });
+
+  it("imagem que não é embutida não entra; sessão parada não tem Parar", () => {
+    const [c] = cartoesDoResultado("controle_status", { controle: { ...controle, miniatura: "https://evil.example/x.png", status: "parada", motivo: "parada pelo dono (voz)" } }, {}, AGORA);
+    expect(c!.imagem).toBeUndefined();
+    expect(c!.botoes).toBeUndefined();
+    expect(c!.resumo).toBe("passo 3 de 30 · parada (parada pelo dono (voz))");
+  });
+
+  it("sem sessão, nenhum cartão", () => {
+    expect(cartoesDoResultado("controle_status", { controle: null, mensagem: "Não há sessão" }, {}, AGORA)).toEqual([]);
+  });
+});

@@ -36,6 +36,9 @@ export const FLUXO = {
   whatsappAutomatico: "whatsapp_automatico",
   telegram: "telegram",
   briefing: "briefing",
+  controleCritico: "controle_critico",
+  navegador: "navegador",
+  computador: "computador",
 } as const;
 
 export interface RegistroDeUso {

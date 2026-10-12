@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Cards</title>
+<style>
+  body { font: 16px system-ui; margin: 0; }
+  .card { margin: 40px; width: 420px; height: 160px; border: 1px solid #999; border-radius: 8px; position: relative; display: flex; align-items: center; justify-content: center; }
+  .card button { width: 140px; height: 48px; }
+</style></head>
+<body>
+  <main>
+    <h1>Seus relatórios</h1>
+    <!-- B-2 da auditoria: o card clicável com o botão perigoso bem no meio -->
+    <div class="card" id="card" tabindex="0" aria-label="Ver detalhes">
+      <button type="button" id="excluir">Excluir</button>
+    </div>
+    <p id="status">nada</p>
+  </main>
+  <script>
+    document.getElementById("card").addEventListener("click", (e) => { if (e.target.id !== "excluir") document.getElementById("status").textContent = "detalhes abertos"; });
+    document.getElementById("excluir").addEventListener("click", (e) => { e.stopPropagation(); document.getElementById("status").textContent = "EXCLUIDO"; });
+  </script>
+</body>
+</html>

@@ -3,16 +3,15 @@ import { z } from "zod";
 import type { RouteCtx } from "../http/web";
 import { sessionOf } from "../http/web-route";
 import { SYSTEM_PROMPT } from "@orbita/core/chat/tools";
-import { toolDefsForRealtime } from "@orbita/core/tools/index";
-import { funcoesMcpDeVoz } from "@orbita/core/mcp/voz";
+import { funcoesDaVoz, type FuncaoDaVoz } from "@orbita/core/realtime/funcoes";
 import { log } from "@orbita/core/observability/logger";
 import { settings } from "@orbita/core/settings/index";
 import { escolherProvedorRealtime, type ChavesRealtime } from "@orbita/core/realtime/provider";
 import { montarSetupGemini, urlSessaoGemini, type FuncaoDeclarada } from "@orbita/core/realtime/gemini";
 import { criarTokenEfemeroGemini } from "@orbita/core/realtime/token";
 
-/** O que vira função declarada na sessão: tool nativa do registro ou função do MCP. */
-type Declaravel = { name: string; description: string; inputSchema: z.ZodType };
+/** O que vira função declarada na sessão: tool nativa do registro ou função de despacho (MCP, controle do PC). */
+type Declaravel = FuncaoDaVoz;
 
 /** Quais provedores de voz em tempo real têm credencial. Exportada para a rota de config não repetir a regra. */
 export function chavesRealtime(): ChavesRealtime {
@@ -61,8 +60,9 @@ export async function POST(_req: Request, ctx: RouteCtx) {
   // nada (briefing §7.2). O gate humano continua: uma tool arriscada
   // enfileira em vez de executar (ver runRealtimeTool em packages/core).
   // mais as duas funções que dão acesso aos servidores MCP do dono (`mcp/voz.ts`)
-  const [nativas, externas] = await Promise.all([toolDefsForRealtime(session.user.id), funcoesMcpDeVoz(session.user.id)]);
-  const defs: Declaravel[] = [...nativas, ...externas];
+  // e as duas do controle do PC (`controle/voz.ts`), que ficam fora das nativas
+  // para a lista caber no teto de 128 funções da OpenAI Realtime
+  const defs: Declaravel[] = await funcoesDaVoz(session.user.id);
   const instrucoes = SYSTEM_PROMPT + INSTRUCAO_DE_VOZ;
 
   if (provider === "gemini") return sessaoGemini(defs, instrucoes, cfg["realtime.geminiModel"], cfg["realtime.geminiVoice"], session.user.id);

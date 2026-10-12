@@ -1,0 +1,13 @@
+:root { color-scheme: light dark; --fundo: #fff; --texto: #1b1b1f; --dim: #5f6368; --perigo: #d93025; --borda: #dadce0; }
+@media (prefers-color-scheme: dark) { :root { --fundo: #1b1b1f; --texto: #e8eaed; --dim: #9aa0a6; --borda: #3c4043; } }
+body { font: 14px/1.4 system-ui, sans-serif; margin: 0; padding: 14px; min-width: 300px; background: var(--fundo); color: var(--texto); }
+h1 { font-size: 16px; margin: 0 0 8px; }
+.estado { font-weight: 600; }
+.dim { color: var(--dim); font-size: 13px; }
+.aviso { color: var(--perigo); font-size: 13px; min-height: 1em; }
+.linha { display: flex; gap: 8px; margin: 8px 0; }
+input { flex: 1; padding: 6px 8px; border: 1px solid var(--borda); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
+button { padding: 6px 12px; border: 1px solid var(--borda); border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+button.perigo { background: var(--perigo); border-color: var(--perigo); color: #fff; font-weight: 700; }
+label { display: block; font-size: 13px; color: var(--dim); margin-top: 8px; }
+details { margin-top: 10px; }

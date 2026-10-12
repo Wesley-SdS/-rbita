@@ -1,0 +1,9 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Maria Souza
+N:Souza;Maria;;;
+TEL;TYPE=CELL:+55 11 99999-8888
+EMAIL;TYPE=INTERNET:maria@exemplo.com
+ORG:Exemplo Ltda
+BDAY:1990-04-12
+END:VCARD
