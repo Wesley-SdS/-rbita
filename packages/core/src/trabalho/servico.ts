@@ -10,6 +10,7 @@ import { minhasIssues, type JiraIssue } from "../connectors/jira";
 import { settings } from "../settings";
 import { log } from "../observability/logger";
 import { notifyUser } from "../routines/run";
+import { lerApelidos } from "./apelidos";
 import { textoDoAvisoDeTrabalho, type NovidadeParaAviso } from "./aviso";
 
 /**
@@ -118,6 +119,10 @@ export interface TrabalhoDoDono {
   conectados: { jira: number; github: number; slack: number };
   jira: (JiraIssue & { site: string })[];
   jiraFalhas: string[];
+  /** os sites lidos, com ou sem issue: é deles que a tela faz as abas */
+  sitesJira: string[];
+  /** site -> nome que o dono escolheu (lápis da tela inicial) */
+  apelidos: Record<string, string>;
   github: TrabalhoNovidade[];
   slack: TrabalhoNovidade[];
 }
@@ -137,15 +142,17 @@ export async function trabalhoDe(userId: string): Promise<TrabalhoDoDono> {
   const [contasJira, contasGithub, contasSlack] = await Promise.all([listarContas(userId, "jira"), listarContas(userId, "github"), listarContas(userId, "slack")]);
   let jira: TrabalhoDoDono["jira"] = [];
   let jiraFalhas: string[] = [];
+  let sitesJira: string[] = [];
   if (contasJira.length) {
     // import tardio: o domínio de tools do Jira registra tools ao ser carregado
     const { lerEmTodosOsSites } = await import("../tools/domains/jira");
     const r = await lerEmTodosOsSites(userId, (t, s) => minhasIssues(t, s.cloudId, 25, s.url));
     jira = r.issues;
     jiraFalhas = r.falhas;
+    sitesJira = r.nomesDosSites;
   }
   const [github, slack] = await Promise.all([novidades(userId, "github"), novidades(userId, "slack")]);
-  return { conectados: { jira: contasJira.length, github: contasGithub.length, slack: contasSlack.length }, jira, jiraFalhas, github, slack };
+  return { conectados: { jira: contasJira.length, github: contasGithub.length, slack: contasSlack.length }, jira, jiraFalhas, sitesJira, apelidos: lerApelidos(await settings.get("trabalho.apelidosJira")), github, slack };
 }
 
 export async function marcarVisto(userId: string, ids: string[]): Promise<number> {

@@ -158,6 +158,7 @@ export const ROUTE_CONTROLLERS = [
   webRoute("api/trabalho", { GET: trabalho.GET }),
   webRoute("api/trabalho/atualizar", { POST: trabalho.POST_ATUALIZAR }),
   webRoute("api/trabalho/visto", { POST: trabalho.POST_VISTO }),
+  webRoute("api/trabalho/apelido", { POST: trabalho.POST_APELIDO }),
   webRoute("api/comigo", { GET: comigo.GET }),
   webRoute("api/quadro", { GET: quadro.GET }),
   webRoute("api/quadro/mover", { POST: quadro.POST_MOVER }),

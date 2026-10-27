@@ -4,6 +4,9 @@ import { sessionOf } from "../http/web-route";
 import { jobAccepted } from "../http/job-response";
 import { enqueueJob } from "@orbita/core/jobs/queue";
 import { marcarVisto, trabalhoDe } from "@orbita/core/trabalho/servico";
+import { APELIDO_MAX, gravarApelido } from "@orbita/core/trabalho/apelidos";
+import { isOwner } from "@orbita/core/owner";
+import { settings } from "@orbita/core/settings/index";
 
 /**
  * O trabalho do dono num lugar só (painel da tela inicial): as pendências dos
@@ -13,6 +16,7 @@ import { marcarVisto, trabalhoDe } from "@orbita/core/trabalho/servico";
  *   GET  /api/trabalho              tudo consolidado
  *   POST /api/trabalho/atualizar    olha GitHub e Slack agora (202 + trabalho)
  *   POST /api/trabalho/visto {ids}  tira do destaque
+ *   POST /api/trabalho/apelido {site, apelido}  nome do Jira (vazio remove)
  */
 
 export async function GET(_req: Request, ctx: RouteCtx) {
@@ -36,4 +40,18 @@ export async function POST_VISTO(req: Request, ctx: RouteCtx) {
   const parsed = Visto.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Pedido inválido." }, { status: 400 });
   return Response.json({ ok: true, marcados: await marcarVisto(session.user.id, parsed.data.ids) });
+}
+
+const Apelido = z.object({ site: z.string().trim().min(1).max(200), apelido: z.string().trim().max(APELIDO_MAX) });
+
+/** O nome mora na configuração da casa (uma só), então só o dono muda: o mesmo critério da tela de Ajustes. */
+export async function POST_APELIDO(req: Request, ctx: RouteCtx) {
+  const session = sessionOf(ctx);
+  if (!session) return Response.json({ error: "Não autenticado" }, { status: 401 });
+  if (!(await isOwner(session.user.id))) return Response.json({ error: "Só o dono da instância muda isto." }, { status: 403 });
+  const parsed = Apelido.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return Response.json({ error: "Pedido inválido." }, { status: 400 });
+  const atual = await settings.get("trabalho.apelidosJira");
+  await settings.set("trabalho.apelidosJira", gravarApelido(atual, parsed.data.site, parsed.data.apelido));
+  return Response.json({ ok: true });
 }

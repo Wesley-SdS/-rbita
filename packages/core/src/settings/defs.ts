@@ -656,6 +656,7 @@ export const SETTING_DEFS = {
   "navegador.tokenValidadeDias": num("navegador", "Validade do pareamento da extensão", "Depois deste tempo o token da extensão vence e ela pede um código novo. Parear de novo revoga os tokens anteriores da mesma extensão.", 90, 1, 3650, { unit: "dias" }),
   "navegador.sufixosPublicos": list("navegador", "Sufixos que não são um site", "Um envelope ou uma linha de site com só isto (com.br, github.io, atlassian.net) liberaria milhares de sites de gente diferente, então é recusado. Acrescente aqui outros sufixos assim.", [...SUFIXOS_PUBLICOS]),
   // ── trabalho: Jira, GitHub e Slack ──
+  "trabalho.apelidosJira": text("trabalho", "Nomes dos Jiras", "Um por linha, no formato site=Nome. O lápis do painel 'Seu trabalho', na tela inicial, grava aqui.", "", 2000, true),
   "trabalho.avisar": bool("trabalho", "Avisar o que chegou", "Review e comentário nas suas PRs, pedido de review, menção e mensagem direta no Slack viram um aviso (um por volta, agrupado).", true),
   "trabalho.intervaloMinutos": num("trabalho", "Olhar GitHub e Slack a cada", "De quanto em quanto tempo a Órbita procura novidades.", 5, 1, 60, { unit: "min" }),
   "trabalho.diasOlhar": num("trabalho", "Olhar para trás", "Quanto a primeira leitura de uma conta pega, e por quanto tempo uma novidade não vista continua na tela.", 7, 1, 60, { unit: "dias" }),

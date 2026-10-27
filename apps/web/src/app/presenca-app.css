@@ -1865,3 +1865,6 @@ a.email-assunto:focus-visible { outline: 2px solid var(--color-forest); outline-
   .fin-hist-rosca { margin: 0 auto; }
 }
 @media (prefers-reduced-motion: reduce) { .fin-hist-barra { transition: none; } }
+
+.trabalho-nome { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 10px; }
+.trabalho-nome .inline-input { max-width: 220px; }

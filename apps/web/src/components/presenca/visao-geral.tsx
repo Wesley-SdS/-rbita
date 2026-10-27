@@ -24,6 +24,32 @@ const Widgets = dynamic(() => import("@/components/widgets").then((m) => m.Widge
   loading: () => <div className="panel empty-state">Carregando seus cards…</div>,
 });
 
+/* Seção que o dono recolhe. Fica no navegador (é preferência de tela, não dado da casa) e falha em silêncio: sem storage, a seção só começa aberta. */
+function useRecolhida(chave: string): [boolean, () => void] {
+  const [recolhida, setRecolhida] = useState(false);
+  useEffect(() => {
+    try {
+      setRecolhida(localStorage.getItem(`orbita.visaoGeral.${chave}`) === "1");
+    } catch {}
+  }, [chave]);
+  const alternar = () =>
+    setRecolhida((atual) => {
+      try {
+        localStorage.setItem(`orbita.visaoGeral.${chave}`, atual ? "0" : "1");
+      } catch {}
+      return !atual;
+    });
+  return [recolhida, alternar];
+}
+
+function BotaoRecolher({ recolhida, aoAlternar, secao }: { recolhida: boolean; aoAlternar: () => void; secao: string }) {
+  return (
+    <button type="button" className="text-button" aria-expanded={!recolhida} aria-label={`${recolhida ? "Mostrar" : "Recolher"} ${secao}`} onClick={aoAlternar}>
+      {recolhida ? "Mostrar" : "Recolher"}
+    </button>
+  );
+}
+
 /* Os e-mails de todas as caixas, já separados: o que pede você vem primeiro. */
 const EmailsPainel = dynamic(() => import("./emails-painel").then((m) => m.EmailsPainel), {
   ssr: false,
@@ -98,6 +124,8 @@ export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
   // A data só é calculada no cliente: renderizar no servidor daria o dia do
   // fuso do servidor, e a hidratação reclamaria da diferença.
   const [agora, setAgora] = useState<Date | null>(null);
+  const [emailsRecolhidos, alternarEmails] = useRecolhida("emails");
+  const [trabalhoRecolhido, alternarTrabalho] = useRecolhida("trabalho");
 
   useEffect(() => {
     setAgora(new Date());
@@ -325,20 +353,26 @@ export function VisaoGeral({ nomeUsuario }: { nomeUsuario: string }) {
           <h2>Seus e-mails</h2>
           <p>Todas as caixas, separadas: o que pede você, o que vale ler e o ruído.</p>
         </div>
+        <BotaoRecolher recolhida={emailsRecolhidos} aoAlternar={alternarEmails} secao="Seus e-mails" />
       </div>
-      <BlocoObservado>
-        <EmailsPainel />
-      </BlocoObservado>
+      {!emailsRecolhidos && (
+        <BlocoObservado>
+          <EmailsPainel />
+        </BlocoObservado>
+      )}
 
       <div className="section-heading quick-heading">
         <div>
           <h2>Seu trabalho</h2>
           <p>Pendências dos seus Jiras, o que chegou nas suas PRs e quem te chamou no Slack.</p>
         </div>
+        <BotaoRecolher recolhida={trabalhoRecolhido} aoAlternar={alternarTrabalho} secao="Seu trabalho" />
       </div>
-      <BlocoObservado>
-        <TrabalhoPainel />
-      </BlocoObservado>
+      {!trabalhoRecolhido && (
+        <BlocoObservado>
+          <TrabalhoPainel />
+        </BlocoObservado>
+      )}
 
       <div className="section-heading quick-heading">
         <div>

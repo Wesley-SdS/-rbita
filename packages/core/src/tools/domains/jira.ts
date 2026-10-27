@@ -34,7 +34,7 @@ export async function lerEmTodosOsSites(userId: string, ler: (token: string, sit
   });
   const unicos = sitesSemRepetir(r.itens);
   const issues = unicos.flatMap((x) => (x.issues ?? []).map((i) => ({ ...i, site: x.site.nome })));
-  return { contas: r.contas, sites: unicos.length, issues, falhas: [...r.falhas, ...unicos.filter((x) => !x.issues).map((x) => x.site.nome)] };
+  return { contas: r.contas, sites: unicos.length, nomesDosSites: unicos.map((x) => x.site.nome), issues, falhas: [...r.falhas, ...unicos.filter((x) => !x.issues).map((x) => x.site.nome)] };
 }
 
 export const jira_minhas_tarefas: ToolDef<z.ZodObject<{ quantidade: z.ZodDefault<z.ZodNumber> }>> = {
