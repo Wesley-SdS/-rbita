@@ -31,18 +31,31 @@ A Órbita funciona sem Ollama: ele é uma opção de quem quer privacidade total
 | AssemblyAI | nuvem | É a IA dela mesma; `ASSEMBLYAI_API_KEY`. |
 | Saúde (`/api/health`) | responde `ok` | Serviço que nenhum caminho usa aparece como `nao_usado`, não como `down`. |
 
+> ⚠️ **Este guia está parcialmente desatualizado.** Hoje o `apps/web` só serve a UI, o login e o
+> callback OAuth. TODAS as rotas `/api` e o processo vivo (cron, regras, eventos, refresh de token,
+> WhatsApp) moram no `apps/api` (NestJS, porta 3010), que precisa rodar 24/7 e por isso **não cabe
+> na Vercel**. Onde as etapas abaixo falam em "Vercel", leia "web", e suba também o api. Falta um
+> `apps/api/Dockerfile`. O roteiro para configurar tudo pelos painéis está em
+> `PROMPT-DEPLOY-PROD.md`.
+
 A arquitetura na nuvem fica assim:
 
 ```
    [ Celular / Navegador ]
             │
-   Vercel  ─┤  apps/web  (Next.js: UI + API)
+   Render  ─┤  apps/web  (Next.js: UI, login)  ── /api/* ──┐
+            │                                               ▼
+   Render  ─┤  apps/api  (NestJS :3010, 24/7: cron, regras, rotas /api)
+            │
+   Render  ─┤  GOWA  (ponte do WhatsApp, disco persistente, privado)
             │
    Neon    ─┤  Postgres + pgvector
             │
-   Provedor ┤  Groq / Gemini / OpenAI  (chat)
+   Provedor ┤  Groq / Gemini / OpenAI  (chat e embedding)
             │
    Render  ─┤  apps/voice  (opcional: voz/wake word)
+
+   Fica em casa: apps/perception, mãos do Windows, extensão do Chrome.
 ```
 
 ---

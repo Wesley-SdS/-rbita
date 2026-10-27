@@ -21,6 +21,11 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@orbita/llm", "@orbita/db", "@orbita/core"],
   // Imagem Docker enxuta: empacota só o necessário (traça a raiz do monorepo pnpm).
   output: "standalone",
+  // Acesso pelo Tailscale (`tailscale serve`): em dev o Next 16 bloqueia recursos
+  // internos (HMR) quando o Host não é localhost, e a tela fica sem hidratar.
+  // O host do Tailscale tem dois níveis (maquina.tailnet.ts.net), e "*.ts.net"
+  // cobre só um: sem o segundo padrão a página aparece mas não hidrata.
+  allowedDevOrigins: ["*.ts.net", "*.*.ts.net"],
   outputFileTracingRoot: fileURLToPath(new URL("../..", import.meta.url)),
   // Tree-shaking de pacotes de barril no client → bundle menor / boot mais rápido.
   // NÃO incluir "better-auth" aqui: tem subpaths (better-auth/next-js) que o
