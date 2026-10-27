@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useRecurso } from "@/lib/dados/recurso";
 import { Icone } from "./icones";
 
@@ -47,10 +48,20 @@ function comQuem(p: string[]): string {
 /** Agora entre início e fim: a reunião que está acontecendo ganha destaque. */
 const acontecendo = (e: Evento, agora = Date.now()) => !e.diaInteiro && Date.parse(e.inicio) <= agora && agora < Date.parse(e.fim);
 
-function Linha({ e, mostrarConta }: { e: Evento; mostrarConta: boolean }) {
+/** Hora atual que se renova sozinha: sem isso o bloco só muda quando algo o re-renderiza. */
+function useRelogio(cadaMs: number): number {
+  const [agora, setAgora] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setAgora(Date.now()), cadaMs);
+    return () => clearInterval(t);
+  }, [cadaMs]);
+  return agora;
+}
+
+function Linha({ e, mostrarConta, agora }: { e: Evento; mostrarConta: boolean; agora: number }) {
   const detalhes = [comQuem(e.pessoas), e.local && !e.local.startsWith("http") ? e.local : ""].filter(Boolean).join(" · ");
   return (
-    <div className={`agenda-evento ${acontecendo(e) ? "agora" : ""}`}>
+    <div className={`agenda-evento ${acontecendo(e, agora) ? "agora" : ""}`}>
       <span className="agenda-time">{e.diaInteiro ? "Dia todo" : hora(e.inicio)}</span>
       <span className={`agenda-line ${e.pessoas.length || e.entrar ? "lavender" : "mint"}`} />
       <span className="agenda-evento-texto">
@@ -91,7 +102,14 @@ function Linha({ e, mostrarConta }: { e: Evento; mostrarConta: boolean }) {
  * A etiqueta da conta só aparece com mais de uma agenda: com uma só é ruído.
  */
 export function AgendaProxima({ modo, limite = 4 }: { modo: "hoje" | "proximas"; limite?: number }) {
-  const { dado, carregando, erro } = useRecurso<Agenda>(CHAVE);
+  const { dado, carregando, erro, recarregar } = useRecurso<Agenda>(CHAVE);
+  const agora = useRelogio(30_000);
+  // a agenda em si muda pouco, mas um compromisso criado em outro aparelho
+  // não pode esperar o dono recarregar a tela
+  useEffect(() => {
+    const t = setInterval(recarregar, 5 * 60_000);
+    return () => clearInterval(t);
+  }, [recarregar]);
   const eventos = dado?.eventos ?? [];
   const mostrarConta = new Set(eventos.flatMap((e) => e.contas)).size > 1;
 
@@ -116,14 +134,16 @@ export function AgendaProxima({ modo, limite = 4 }: { modo: "hoje" | "proximas";
   const falhou = dado?.falhas.length ? <p className="agenda-aviso">Faltou a agenda de {dado.falhas.join(", ")} (reconecte em Conexões).</p> : null;
 
   if (modo === "hoje") {
-    const hoje = dia(new Date());
-    const deHoje = eventos.filter((e) => diaDoEvento(e) === hoje);
-    const mostrar = (deHoje.length ? deHoje : eventos.slice(0, 1)).slice(0, limite);
+    const hoje = dia(new Date(agora));
+    // "A seguir" é o que falta: o que já terminou sai, o que está rolando fica
+    const faltam = eventos.filter((e) => e.diaInteiro || Date.parse(e.fim) > agora);
+    const deHoje = faltam.filter((e) => diaDoEvento(e) === hoje);
+    const mostrar = (deHoje.length ? deHoje : faltam.slice(0, 1)).slice(0, limite);
     return (
       <>
         {!deHoje.length && <p className="agenda-aviso">Nada mais hoje.{mostrar.length ? ` O próximo é ${rotuloDoDia(diaDoEvento(mostrar[0])).toLowerCase()}:` : ""}</p>}
         {mostrar.map((e) => (
-          <Linha key={e.id} e={e} mostrarConta={mostrarConta} />
+          <Linha key={e.id} e={e} mostrarConta={mostrarConta} agora={agora} />
         ))}
         {deHoje.length > limite && (
           <Link className="text-button" href="/app/reunioes">
@@ -147,7 +167,7 @@ export function AgendaProxima({ modo, limite = 4 }: { modo: "hoje" | "proximas";
         <section key={d}>
           <h4 className="agenda-dia">{rotuloDoDia(d)}</h4>
           {lista.map((e) => (
-            <Linha key={e.id} e={e} mostrarConta={mostrarConta} />
+            <Linha key={e.id} e={e} mostrarConta={mostrarConta} agora={agora} />
           ))}
         </section>
       ))}
